@@ -63,7 +63,10 @@ export async function getUserAccessToken(): Promise<string | null> {
     // First fallback: read current session directly if cache is empty.
     if (!_cachedToken) {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const getSessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 1500));
+        const raceResult = await Promise.race([getSessionPromise, timeoutPromise]) as any;
+        const session = raceResult?.data?.session || raceResult?.session;
         if (session?.access_token) {
           _cachedToken = session.access_token;
           _cachedTokenExpiresAtMs = session.expires_at ? session.expires_at * 1000 : null;
@@ -84,7 +87,11 @@ export async function getUserAccessToken(): Promise<string | null> {
     if (now - _lastRefreshAttemptMs >= REFRESH_COOLDOWN_MS) {
       _lastRefreshAttemptMs = now;
       try {
-        const { data: { session: refreshed }, error: refreshError } = await supabase.auth.refreshSession();
+        const refreshPromise = supabase.auth.refreshSession();
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2000));
+        const raceResult = await Promise.race([refreshPromise, timeoutPromise]) as any;
+        const refreshed = raceResult?.data?.session || raceResult?.session;
+        const refreshError = raceResult?.error;
         if (!refreshError && refreshed?.access_token) {
           _cachedToken = refreshed.access_token;
           _cachedTokenExpiresAtMs = refreshed.expires_at ? refreshed.expires_at * 1000 : null;

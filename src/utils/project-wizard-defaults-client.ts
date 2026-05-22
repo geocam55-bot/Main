@@ -72,6 +72,9 @@ function getPlannerDefaultsStorageKey(organizationId: string, userId: string): s
 }
 
 async function resolveEffectiveUserId(fallbackUserId: string): Promise<string> {
+  if (fallbackUserId && fallbackUserId !== 'undefined' && fallbackUserId !== 'null') {
+    return fallbackUserId;
+  }
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
