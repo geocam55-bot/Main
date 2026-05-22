@@ -81,6 +81,20 @@ async function resolveEffectiveUserId(fallbackUserId: string): Promise<string> {
   }
 }
 
+async function resolveOrganizationId(userId: string): Promise<string> {
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).maybeSingle();
+      if (profile?.organization_id) return profile.organization_id;
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
 function readPlannerDefaultsFromLocalStorageWithFallback(
   organizationId: string,
   preferredUserId: string,
@@ -182,15 +196,17 @@ export async function getUserDefaults(userId: string, organizationId: string): P
   
   try {
     const effectiveUserId = await resolveEffectiveUserId(userId);
+    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : await resolveOrganizationId(userId);
+    const safeOrgId = resolvedOrgId || 'default-org';
     const token = await getUserAccessToken();
 
     if (!token) {
       // No session, fall back to local cache
-      return readPlannerDefaultsFromLocalStorageWithFallback(organizationId, effectiveUserId, userId);
+      return readPlannerDefaultsFromLocalStorageWithFallback(safeOrgId, effectiveUserId, userId);
     }
 
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${organizationId}/${effectiveUserId}`,
+      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${encodeURIComponent(safeOrgId)}/${encodeURIComponent(effectiveUserId)}`,
       {
         method: 'GET',
         headers: await getServerHeaders({ 'X-User-Token': token }),
@@ -200,23 +216,24 @@ export async function getUserDefaults(userId: string, organizationId: string): P
     if (!response.ok) {
       if (response.status === 404 || response.status === 500) {
         // Server has no defaults (or not reachable); use local cache fallback
-        return readPlannerDefaultsFromLocalStorageWithFallback(organizationId, effectiveUserId, userId);
+        return readPlannerDefaultsFromLocalStorageWithFallback(safeOrgId, effectiveUserId, userId);
       }
       // Error fetching user defaults
-      return readPlannerDefaultsFromLocalStorageWithFallback(organizationId, effectiveUserId, userId);
+      return readPlannerDefaultsFromLocalStorageWithFallback(safeOrgId, effectiveUserId, userId);
     }
 
     const data = await response.json();
     // User defaults fetched successfully
     const defaults = data.defaults || {};
-    writePlannerDefaultsToLocalStorage(organizationId, effectiveUserId, defaults);
+    writePlannerDefaultsToLocalStorage(safeOrgId, effectiveUserId, defaults);
     if (effectiveUserId !== userId) {
-      writePlannerDefaultsToLocalStorage(organizationId, userId, defaults);
+      writePlannerDefaultsToLocalStorage(safeOrgId, userId, defaults);
     }
     return defaults;
   } catch (error) {
     // Unexpected error loading user defaults
-    return readPlannerDefaultsFromLocalStorage(organizationId, userId);
+    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : 'default-org';
+    return readPlannerDefaultsFromLocalStorage(resolvedOrgId, userId);
   }
 }
 
@@ -228,22 +245,25 @@ export async function saveUserDefaults(userId: string, organizationId: string, d
   
   try {
     const effectiveUserId = await resolveEffectiveUserId(userId);
+    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : await resolveOrganizationId(userId);
+    const safeOrgId = resolvedOrgId || 'default-org';
 
     // Keep a local cache so planner pricing can still resolve defaults if API read fails.
-    writePlannerDefaultsToLocalStorage(organizationId, effectiveUserId, defaults);
+    writePlannerDefaultsToLocalStorage(safeOrgId, effectiveUserId, defaults);
     if (effectiveUserId !== userId) {
-      writePlannerDefaultsToLocalStorage(organizationId, userId, defaults);
+      writePlannerDefaultsToLocalStorage(safeOrgId, userId, defaults);
     }
 
     const token = await getUserAccessToken();
 
     if (!token) {
+      console.warn('[project-wizard-defaults] Cannot save defaults to server: missing user session token.');
       // No session, cannot save user defaults
       return false;
     }
 
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${organizationId}/${effectiveUserId}`,
+      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${encodeURIComponent(safeOrgId)}/${encodeURIComponent(effectiveUserId)}`,
       {
         method: 'POST',
         headers: await getServerHeaders({ 'X-User-Token': token }),
@@ -252,14 +272,16 @@ export async function saveUserDefaults(userId: string, organizationId: string, d
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorText = await response.text();
+      console.error('[project-wizard-defaults] Failed to sync user defaults to server. Status:', response.status, 'Error Body:', errorText);
       // Error saving user defaults
       return false;
     }
 
     // User defaults saved successfully
     return true;
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[project-wizard-defaults] Unexpected error inside saveUserDefaults:', error?.message || error);
     // Unexpected error saving user defaults
     return false;
   }
@@ -273,6 +295,8 @@ export async function deleteUserDefaults(userId: string, organizationId: string)
   
   try {
     const effectiveUserId = await resolveEffectiveUserId(userId);
+    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : await resolveOrganizationId(userId);
+    const safeOrgId = resolvedOrgId || 'default-org';
     const token = await getUserAccessToken();
 
     if (!token) {
@@ -281,7 +305,7 @@ export async function deleteUserDefaults(userId: string, organizationId: string)
     }
 
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${organizationId}/${effectiveUserId}`,
+      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${encodeURIComponent(safeOrgId)}/${encodeURIComponent(effectiveUserId)}`,
       {
         method: 'DELETE',
         headers: await getServerHeaders({ 'X-User-Token': token }),
@@ -289,22 +313,24 @@ export async function deleteUserDefaults(userId: string, organizationId: string)
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorText = await response.text();
+      console.error('[project-wizard-defaults] Failed to delete user defaults. Status:', response.status, 'Error Body:', errorText);
       // Error deleting user defaults
       return false;
     }
 
     // User defaults deleted successfully
     try {
-      localStorage.removeItem(getPlannerDefaultsStorageKey(organizationId, effectiveUserId));
+      localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, effectiveUserId));
       if (effectiveUserId !== userId) {
-        localStorage.removeItem(getPlannerDefaultsStorageKey(organizationId, userId));
+        localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, userId));
       }
     } catch {
       // ignore cache cleanup errors
     }
     return true;
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[project-wizard-defaults] Unexpected error inside deleteUserDefaults:', error?.message || error);
     // Unexpected error deleting user defaults
     return false;
   }
