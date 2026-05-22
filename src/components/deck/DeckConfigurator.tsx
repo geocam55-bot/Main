@@ -306,6 +306,59 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
           </select>
         </div>
 
+        {/* Support Post & Footing Details */}
+        <div className="border-t border-border pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-purple-700 mb-2">Footing & Post Options</p>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="block text-foreground text-xs font-medium mb-1.5 flex items-center justify-between">
+                <span>Support Post Size</span>
+                <span className="text-[10px] text-muted-foreground font-mono">6x6 posts require 8" Formtubes minimum</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {(['4x4', '6x6'] as const).map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => {
+                      const nextConfig: Partial<DeckConfig> = { postSize: size };
+                      if (size === '6x6' && (!config.formtubeSize || config.formtubeSize === '8"')) {
+                        nextConfig.formtubeSize = '8"';
+                      }
+                      updateConfig(nextConfig);
+                    }}
+                    className={`px-3 py-1.5 text-xs rounded-lg border-2 transition-colors font-medium ${
+                      (config.postSize || '4x4') === size
+                        ? 'border-purple-600 bg-purple-50 text-purple-700'
+                        : 'border-border text-foreground hover:border-slate-400 bg-background'
+                    }`}
+                  >
+                    {size} PT Posts
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-foreground text-xs font-medium mb-1">
+                Concrete Formtube Diameter (4' depth)
+              </label>
+              <select
+                value={config.formtubeSize || '8"'}
+                onChange={(e) => updateConfig({ formtubeSize: e.target.value as any })}
+                className="w-full px-3 py-1.5 text-xs border border-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-background text-foreground"
+              >
+                <option value="8&quot;">8" Cardboard Tube (~3 bags of concrete per post)</option>
+                <option value="10&quot;">10" Cardboard Tube (~4 bags of concrete per post)</option>
+                <option value="12&quot;">12" Cardboard Tube (~6 bags of concrete per post)</option>
+                <option value="14&quot;">14" Cardboard Tube (~7 bags of concrete per post)</option>
+                <option value="16&quot;">16" Cardboard Tube (~9 bags of concrete per post)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* Stairs */}
         <div className="border-t border-border pt-4">
           <div className="flex items-center justify-between mb-3">
@@ -510,8 +563,12 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
                 );
               })()}
               <div className="flex justify-between">
-                <span>Posts ({Math.ceil(config.height + 1)}' height):</span>
+                <span>Posts ({config.postSize || '4x4'} PT @ {Math.ceil(config.height + 1)}' ht):</span>
                 <span className="font-medium text-foreground">{selectLumberLength(Math.ceil(config.height + 1))}'</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Formtube & Depth:</span>
+                <span className="font-medium text-foreground">{config.formtubeSize || '8"'} @ 4' Deep</span>
               </div>
             </div>
           </div>

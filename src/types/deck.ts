@@ -45,6 +45,8 @@ export interface DeckConfig {
   deckingPattern: DeckingPattern;
   joistSpacing: 12 | 16 | 24; // inches on center
   deckingType: DeckingMaterialType; // Material type for decking
+  postSize?: '4x4' | '6x6'; // Main support post size
+  formtubeSize?: '8"' | '10"' | '12"' | '14"' | '16"'; // Formtube size for footing
   
   // Unit
   unit: Unit;

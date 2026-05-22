@@ -301,10 +301,11 @@ export function calculateMaterials(config: DeckConfig): DeckMaterials {
   const postCount = beamCount * Math.ceil(config.width / 8);
   const postHeight = Math.ceil(config.height + 1);
   const postLumberLength = selectLumberLength(postHeight);
+  const ptSize = config.postSize || '4x4';
 
   framing.push({
     category: 'Framing',
-    description: `Pressure Treated Posts (${postLumberLength}')`,
+    description: `${ptSize} Pressure Treated Posts (${postLumberLength}')`,
     quantity: postCount,
     unit: 'pcs',
     notes: 'Support posts with concrete footings',
@@ -637,20 +638,39 @@ export function calculateMaterials(config: DeckConfig): DeckMaterials {
     notes: 'For framing connections',
   });
   
+  const ptSizeForHardware = config.postSize || '4x4';
+  const tubeSize = config.formtubeSize || '8"';
+  
+  // Calculate bags based on Formtube size (4' depth)
+  let concreteBagsPerFooting = 3;
+  if (tubeSize === '10"') concreteBagsPerFooting = 4;
+  else if (tubeSize === '12"') concreteBagsPerFooting = 6;
+  else if (tubeSize === '14"') concreteBagsPerFooting = 7;
+  else if (tubeSize === '16"') concreteBagsPerFooting = 9;
+
   hardware.push({
     category: 'Hardware',
-    description: 'Post Anchors',
+    description: `${ptSizeForHardware} Post Anchors`,
     quantity: postCount,
     unit: 'pcs',
     notes: 'Concrete footing anchors',
   });
 
+  // Adding Formtubes as requested
+  hardware.push({
+    category: 'Hardware',
+    description: `${tubeSize} × 4' Formtube`,
+    quantity: postCount,
+    unit: 'pcs',
+    notes: `Formtube cardboard casing for pouring 4' deep concrete footings`,
+  });
+
   hardware.push({
     category: 'Hardware',
     description: 'Concrete Mix (80lb)',
-    quantity: postCount,
+    quantity: postCount * concreteBagsPerFooting,
     unit: 'bags',
-    notes: 'For post footings',
+    notes: `For pouring concrete footings (4' deep, using ${tubeSize} Formtubes with ~${concreteBagsPerFooting} bags per footing)`,
   });
   
   if (config.railingStyle === 'Aluminum') {
