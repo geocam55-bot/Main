@@ -1,0 +1,1075 @@
+ Running frontend commit 68a678d5ef4e7daa71b2bed3b14f62b8a3691d55
+vendor-core-ade2edecaf4781c7.min.js.br:54 Statsig is not ready to log exposures, will retry in 1 seconds
+(anonymous) @ vendor-core-ade2edecaf4781c7.min.js.br:54
+vendor-core-ade2edecaf4781c7.min.js.br:54 Loaded 32 scripts (5990110b), 0 from cache (0b)
+ The powerPreference option is currently ignored when calling requestAdapter() on Windows. See https://crbug.com/369219127
+initialize @ 6005-316f94e648742cad.min.js.br:358
+vendor-core-ade2edecaf4781c7.min.js.br:54 [import] git: 48589f4cb70c6245ed05d8f4e8e56d36d6b05fb3, stamp: 594A0F27E5DEFE4C
+vendor-core-ade2edecaf4781c7.min.js.br:54 Statsig is not ready to log exposures, will retry in 1 seconds
+(anonymous) @ vendor-core-ade2edecaf4781c7.min.js.br:54
+vendor-core-ade2edecaf4781c7.min.js.br:54 Autosave Changes not available or already claimed by another tab undefined
+(index):1  Failed to load resource: net::ERR_FAILED
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Fullscreen] Booting... (emscripten version 4.0.21)
+vendor-core-ade2edecaf4781c7.min.js.br:54 [GPU] graphicsAPI:"WebGPU", vendor:"Google Inc. (Intel)" renderer:"ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)" deviceArchitecture:"gen-9" deviceDescription:"" webGPUDevice:"" webGPUVendor:"intel" bindings:"emdawnwebgpu"
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Fullscreen] Ready in 2012.1ms
+vendor-core-ade2edecaf4781c7.min.js.br:54 [FullscreenApp] calling setEditorTheme and setting preference light
+vendor-core-ade2edecaf4781c7.min.js.br:54 [MultiplayerSession] connecting to wss://www.figma.com/api/multiplayer/0NIWxaPFaVcCTCDFcePevZ?role=editor&tracking_session_id=wclAxBLNUPgdi9Wf&version=151&recentReload=0&file-load-streaming-compression&user-id=899069755560023552&client_release=68a678d5ef4e7daa71b2bed3b14f62b8a3691d55
+vendor-core-ade2edecaf4781c7.min.js.br:54 [FullscreenApp] calling setEditorTheme and setting preference light
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Sprigma] Sprig SDK is ready
+vendor-core-ade2edecaf4781c7.min.js.br:54 [MultiplayerSession] Joining file version 106 (initial load)
+vendor-core-ade2edecaf4781c7.min.js.br:54 Migration succeeded: context: fullscreen_migrate_SceneGraphManager, version: 106, duration: 0ms.
+ProSpaces-CRM?p=f&t=jo9d7ztSK0EYzG7h-0:1 Access to image at 'https://www.gravatar.com/avatar/146e0560555de63a72928201c83f3a4a?size=240&default=https%3A%2F%2Fs3-alpha.figma.com%2Fstatic%2Fuser_g_v2.png?c=1' from origin 'https://www.figma.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+www.gravatar.com/avatar/146e0560555de63a72928201c83f3a4a?size=240&default=https%3A%2F%2Fs3-alpha.figma.com%2Fstatic%2Fuser_g_v2.png?c=1:1  Failed to load resource: net::ERR_FAILED
+/api/make/0NIWxaPFaVcCTCDFcePevZ/cached_preview_urls?source_code_hash=7c6f11f27627a6d1d88a6420b5c16445d543c348:1  Failed to load resource: the server responded with a status of 404 ()
+/api/make/fetch_ds_code_gen_status:1  Failed to load resource: the server responded with a status of 400 ()
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Fullscreen] loadtime=15.48s maxmem=656154280
+vendor-core-ade2edecaf4781c7.min.js.br:54 [devtools] Initialized LS
+vendor-core-ade2edecaf4781c7.min.js.br:54 [devtools] Initialized LS
+vendor-core-ade2edecaf4781c7.min.js.br:54 Too many elapsed hits of react since last report
+(anonymous) @ vendor-core-ade2edecaf4781c7.min.js.br:54
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+devtools_worker-842e3c39370a3f94.min.js.br:1190 [esbuild-wasm] Initializing from URL: /webpack-artifacts/assets/2b68f2d3d5e8b3d6.wasm
+devtools_worker-842e3c39370a3f94.min.js.br:1190 [esbuild-wasm] Initialized
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [bundleCode] Found 2 CSS files in VFS
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [bundleCode] Total CSS size to be processed by lightningcss: 0.01MB
+devtools_worker-842e3c39370a3f94.min.js.br:1190 [lightningcss-wasm] Initialized
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [lightningCSS] Processing 0.21MB of CSS (environment: browser)
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [lightningCSS] Encoded size: 0.21MB
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [lightningCSS] Transform completed successfully
+vendor-core-ade2edecaf4781c7.min.js.br:54 [MultiplayerSession] connecting to wss://www.figma.com/api/multiplayer/0NIWxaPFaVcCTCDFcePevZ?role=editor&tracking_session_id=wclAxBLNUPgdi9Wf&version=151&recentReload=0&file-load-streaming-compression=&user-id=899069755560023552&client_release=68a678d5ef4e7daa71b2bed3b14f62b8a3691d55&reconnect-key=1ef9bb7ad27c010b868fddcc4e00610d2e8ddae9&reconnect-sequence-number=12049&initialFileVersion=106&previousLoadMode=full&incremental-loading-validation=0
+vendor-core-ade2edecaf4781c7.min.js.br:54 [MultiplayerSession] Joining file version 106 (skip_reload reconnect)
+ProSpaces-CRM?p=f&t=jo9d7ztSK0EYzG7h-0:1 Access to image at 'https://www.gravatar.com/avatar/146e0560555de63a72928201c83f3a4a?size=240&default=https%3A%2F%2Fs3-alpha.figma.com%2Fstatic%2Fuser_g_v2.png?c=1' from origin 'https://www.figma.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+www.gravatar.com/avatar/146e0560555de63a72928201c83f3a4a?size=240&default=https%3A%2F%2Fs3-alpha.figma.com%2Fstatic%2Fuser_g_v2.png?c=1:1  Failed to load resource: net::ERR_FAILED
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/inventory?select=id%2Citem_name%2Csku%2Cunit_price%2Ccost&id=in.%282ca48b19-b5d5-4f24-9113-b19d53d02d4a%2Ccf0e48e0-4f96-4449-a913-a7873ddbc8fc%2Cc3fd65c9-5f3b-429d-b03c-a448f6dfd777%2Cf38fdd6d-632f-4a06-bc18-e32b838f7c06%2Ce3f3754f-a746-4f9d-a22d-aeeb402f1349%2C09877dba-d2c3-4546-b4cf-d16e558b3c7b%2C23c8e546-5bd5-414e-9efa-2fde34256d1d%2C795b467a-93b6-433c-be6e-a5ab0e43d21f%2Ca1926667-d3b1-4857-aff1-c66d98cf47d8%2Cc72001e2-6ab5-4c09-a723-24187aa8cbf2%2Cca5f2181-12ce-4ada-af3c-dd532617fcec%2Ce35a7768-1479-4992-8ddc-471a859b4851%2Cc9f19771-354d-47af-b51d-fcedfbf343ce%2C230c417c-d6f3-4819-ade0-89baed62964d%2Cbdf30988-3875-4a24-9db1-0fb2217c2df8%2C69b4dc74-b416-4aa0-81da-ed01d5250368%2C2e848bc1-04b7-4699-ba01-cd9e48c3ff2d%2C60f48334-ae5b-47a4-a03b-1413a8cef308%2C446baed3-c419-473f-8c86-3926892c462c%2C7bd30096-9c5f-4a32-9e40-9fbac7cde864%2C063200ea-c1d2-473a-aa9f-e81a0a27740b%2Ce68eeec4-fac8-4845-b237-27b9ecf1c164%2C7c10c902-6735-406f-9cd6-26da7ba016d1%2C9013cdf0-dee8-430a-a86a-64e61cf4a0b2%2C7335c4ea-02a2-4f3d-9444-2ed2744d01b4%2C892dbb0f-d166-4f9e-be72-026efd02cf2d%2Ce2048cee-e9cf-4b5b-962e-12b1edef735e%2C5bd7b570-b1bc-47de-a4c7-139b9c05f46f%2C011beae3-7796-4511-85f6-babf49632c29%2C339a8249-4bf4-4913-849b-b129235b38b5%2C4a35d647-8cb3-4a02-9c53-359a047af8ee%2Cf3a19893-902f-4e2e-8001-aaabac879964%2C4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4%2Cad77fb0f-eddd-44da-8ade-3e5374bbfe6c%29&organization_id=eq.34638283-7b3d-47e2-bec8-a9e600e28c4a:1  Failed to load resource: the server responded with a status of 400 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/inventory?select=id%2Citem_name%2Csku%2Cunit_price%2Ccost&id=in.%282ca48b19-b5d5-4f24-9113-b19d53d02d4a%2Ccf0e48e0-4f96-4449-a913-a7873ddbc8fc%2Cc3fd65c9-5f3b-429d-b03c-a448f6dfd777%2Cf38fdd6d-632f-4a06-bc18-e32b838f7c06%2Ce3f3754f-a746-4f9d-a22d-aeeb402f1349%2C09877dba-d2c3-4546-b4cf-d16e558b3c7b%2C23c8e546-5bd5-414e-9efa-2fde34256d1d%2C795b467a-93b6-433c-be6e-a5ab0e43d21f%2Ca1926667-d3b1-4857-aff1-c66d98cf47d8%2Cc72001e2-6ab5-4c09-a723-24187aa8cbf2%2Cca5f2181-12ce-4ada-af3c-dd532617fcec%2Ce35a7768-1479-4992-8ddc-471a859b4851%2Cc9f19771-354d-47af-b51d-fcedfbf343ce%2C230c417c-d6f3-4819-ade0-89baed62964d%2Cbdf30988-3875-4a24-9db1-0fb2217c2df8%2C69b4dc74-b416-4aa0-81da-ed01d5250368%2C2e848bc1-04b7-4699-ba01-cd9e48c3ff2d%2C60f48334-ae5b-47a4-a03b-1413a8cef308%2C446baed3-c419-473f-8c86-3926892c462c%2C7bd30096-9c5f-4a32-9e40-9fbac7cde864%2C063200ea-c1d2-473a-aa9f-e81a0a27740b%2Ce68eeec4-fac8-4845-b237-27b9ecf1c164%2C7c10c902-6735-406f-9cd6-26da7ba016d1%2C9013cdf0-dee8-430a-a86a-64e61cf4a0b2%2C7335c4ea-02a2-4f3d-9444-2ed2744d01b4%2C892dbb0f-d166-4f9e-be72-026efd02cf2d%2Ce2048cee-e9cf-4b5b-962e-12b1edef735e%2C5bd7b570-b1bc-47de-a4c7-139b9c05f46f%2C011beae3-7796-4511-85f6-babf49632c29%2C339a8249-4bf4-4913-849b-b129235b38b5%2C4a35d647-8cb3-4a02-9c53-359a047af8ee%2Cf3a19893-902f-4e2e-8001-aaabac879964%2C4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4%2Cad77fb0f-eddd-44da-8ade-3e5374bbfe6c%29&organization_id=eq.34638283-7b3d-47e2-bec8-a9e600e28c4a:1  Failed to load resource: the server responded with a status of 400 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/inventory?select=id%2Citem_name%2Csku%2Cunit_price%2Ccost&id=in.%282ca48b19-b5d5-4f24-9113-b19d53d02d4a%2Ccf0e48e0-4f96-4449-a913-a7873ddbc8fc%2Cc3fd65c9-5f3b-429d-b03c-a448f6dfd777%2Cf38fdd6d-632f-4a06-bc18-e32b838f7c06%2Ce3f3754f-a746-4f9d-a22d-aeeb402f1349%2C09877dba-d2c3-4546-b4cf-d16e558b3c7b%2C23c8e546-5bd5-414e-9efa-2fde34256d1d%2C795b467a-93b6-433c-be6e-a5ab0e43d21f%2Ca1926667-d3b1-4857-aff1-c66d98cf47d8%2Cc72001e2-6ab5-4c09-a723-24187aa8cbf2%2Cca5f2181-12ce-4ada-af3c-dd532617fcec%2Ce35a7768-1479-4992-8ddc-471a859b4851%2Cc9f19771-354d-47af-b51d-fcedfbf343ce%2C230c417c-d6f3-4819-ade0-89baed62964d%2Cbdf30988-3875-4a24-9db1-0fb2217c2df8%2C69b4dc74-b416-4aa0-81da-ed01d5250368%2C2e848bc1-04b7-4699-ba01-cd9e48c3ff2d%2C60f48334-ae5b-47a4-a03b-1413a8cef308%2C446baed3-c419-473f-8c86-3926892c462c%2C7bd30096-9c5f-4a32-9e40-9fbac7cde864%2C063200ea-c1d2-473a-aa9f-e81a0a27740b%2Ce68eeec4-fac8-4845-b237-27b9ecf1c164%2C7c10c902-6735-406f-9cd6-26da7ba016d1%2C9013cdf0-dee8-430a-a86a-64e61cf4a0b2%2C7335c4ea-02a2-4f3d-9444-2ed2744d01b4%2C892dbb0f-d166-4f9e-be72-026efd02cf2d%2Ce2048cee-e9cf-4b5b-962e-12b1edef735e%2C5bd7b570-b1bc-47de-a4c7-139b9c05f46f%2C011beae3-7796-4511-85f6-babf49632c29%2C339a8249-4bf4-4913-849b-b129235b38b5%2C4a35d647-8cb3-4a02-9c53-359a047af8ee%2Cf3a19893-902f-4e2e-8001-aaabac879964%2C4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4%2Cad77fb0f-eddd-44da-8ade-3e5374bbfe6c%29&organization_id=eq.34638283-7b3d-47e2-bec8-a9e600e28c4a:1  Failed to load resource: the server responded with a status of 400 ()
+cid:footerImage:1  Failed to load resource: net::ERR_UNKNOWN_URL_SCHEME
+cid:footerImage:1  Failed to load resource: net::ERR_UNKNOWN_URL_SCHEME
+cid:footerImage:1  Failed to load resource: net::ERR_UNKNOWN_URL_SCHEME
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Livegraph] Connection closed. Code: 4001, reason: connection_lifetime
+ [enrichMaterials] ✅ Category match: "decking boards (8')" "5/4 x 6 Treated Deck Boards (8')" -> "PT BROWN 5/4X6"X8'" (SKU: 84895016) T1: $9.99 × 59 = $589.41
+ [enrichMaterials] 🔍 Smart matched "Stair Treads" -> inventory item e3f3754f-a746-4f9d-a22d-aeeb402f1349 (key: stair treads)
+ [enrichMaterials] ✅ Category match: "stair treads" "Stair Treads" -> "STAIR STEP PT BROWN 2X12X48"" (SKU: 39595063) T1: $31.99 × 10 = $319.90
+ [enrichMaterials] 🔍 Smart matched "2x4 Top Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing top rail)
+ [enrichMaterials] ✅ Category match: "railing top rail" "2x4 Top Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 9 = $160.29
+ [enrichMaterials] 🔍 Smart matched "2x4 Bottom Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing bottom rail)
+ [enrichMaterials] ✅ Category match: "railing bottom rail" "2x4 Bottom Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 9 = $160.29
+ [enrichMaterials] 🔍 Smart matched "2x2 Balusters (42")" -> inventory item 2e848bc1-04b7-4699-ba01-cd9e48c3ff2d (key: railing balusters)
+ [enrichMaterials] ✅ Category match: "railing balusters" "2x2 Balusters (42")" -> "PT BALUSTER BROWN 2X2X42" (SKU: 51206852) T1: $2.69 × 209 = $562.21
+ [enrichMaterials] 🔍 Smart matched "4x4 Railing Posts (42")" -> inventory item c3fd65c9-5f3b-429d-b03c-a448f6dfd777 (key: railing posts)
+ [enrichMaterials] ✅ Category match: "railing posts" "4x4 Railing Posts (42")" -> "PT BROWN 4X4"X8'" (SKU: 84895043) T1: $18.49 × 12 = $221.88
+ [enrichMaterials] 🔍 Smart matched "1/2" x 4" Lag Screws with Washers" -> inventory item 4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4 (key: lag screws)
+ [enrichMaterials] ✅ Category match: "lag screws" "1/2" x 4" Lag Screws with Washers" -> "LAG SCREW #3/8(50)    HLZ385CT" (SKU: 1399886) T1: $48.29 × 12 = $579.48
+ [enrichMaterials] 🔍 Smart matched "Ledger Flashing Tape (16')" -> inventory item ad77fb0f-eddd-44da-8ade-3e5374bbfe6c (key: ledger flashing)
+ [enrichMaterials] ✅ Category match: "ledger flashing" "Ledger Flashing Tape (16')" -> "ZINC 8" 2.25/LB 225 FT/ROLL" (SKU: MMS449748) T1: $5.15 × 16 = $82.40
+ [enrichMaterials] 🔍 Smart matched "Joist Hangers" -> inventory item f38fdd6d-632f-4a06-bc18-e32b838f7c06 (key: joist hangers)
+ [enrichMaterials] ✅ Category match: "joist hangers" "Joist Hangers" -> "HANGER FACE MT Z-MAX 2X8"" (SKU: 35945339) T1: $2.23 × 26 = $57.98
+ [enrichMaterials] 🔍 Smart matched "Deck Screws (3")" -> inventory item 60f48334-ae5b-47a4-a03b-1413a8cef308 (key: deck screws)
+ [enrichMaterials] ✅ Category match: "deck screws" "Deck Screws (3")" -> "SCREW DECK #6X2 1/4"X100BX FH" (SKU: 13997876) T1: $9.79 × 40 = $391.60
+ [enrichMaterials] 🔍 Smart matched "Structural Screws (5")" -> inventory item 69b4dc74-b416-4aa0-81da-ed01d5250368 (key: structural screws)
+ [enrichMaterials] ✅ Category match: "structural screws" "Structural Screws (5")" -> "SCREW STRUCTURAL .22X5"BX50 BK" (SKU: 35945194) T1: $85.99 × 5 = $429.95
+ [enrichMaterials] 🔍 Smart matched "Post Anchors" -> inventory item 795b467a-93b6-433c-be6e-a5ab0e43d21f (key: post anchors)
+ [enrichMaterials] ✅ Category match: "post anchors" "Post Anchors" -> "SADDLE REBAR CARPOT 6X6"" (SKU: 35945128) T1: $12.99 × 6 = $77.94
+ [enrichMaterials] 🔍 Smart matched "Concrete Mix (80lb)" -> inventory item 446baed3-c419-473f-8c86-3926892c462c (key: concrete mix)
+ [enrichMaterials] ✅ Category match: "concrete mix" "Concrete Mix (80lb)" -> "BOMIX CONCRETE  PRE-MIX. 30KG" (SKU: 0533008) T1: $9.79 × 6 = $58.74
+ [enrichMaterials] 🔍 Smart matched "Railing Brackets" -> inventory item a1926667-d3b1-4857-aff1-c66d98cf47d8 (key: railing brackets)
+ [enrichMaterials] ✅ Category match: "railing brackets" "Railing Brackets" -> "CONNECTOR RAIL PK4 BLACK" (SKU: 10015036) T1: $16.29 × 48 = $781.92
+ [enrichMaterials] ✅ Total T1 price: 7237.82
+ [PrintableDeckDesign] Materials for print: Object
+ [PrintableDeckDesign] Materials for print: Object
+ [SavedDeckDesigns] Loading designs for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [SavedDeckDesigns] Loaded designs: 2
+ ✓ Design saved via server successfully: Object
+ ✓ Deal created successfully: Object
+ ✓ Quote created successfully: Object
+ [SavedDeckDesigns] Loading designs for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [SavedDeckDesigns] Loaded designs: 3
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔍 getAllInventoryClient - User ID: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ 🔍 getAllInventoryClient - User metadata: Object
+ 🔐 Inventory - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔄 Fetching inventory...
+ [settings-client] ✅ Organization settings fetched via server
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ [quotes-client] Server endpoint returned 3 quotes (role=admin)
+ 📊 Inventory filtered data - Total rows returned: 1000
+ 📦 Sample inventory data (first 3): Array(3)
+ ✅ Mapped inventory items count: 1000
+ ✅ Sample mapped items (first 2): Array(2)
+ 🖼️ Items with images: 0
+ [contacts-client] Server returned 341 contacts for role=admin
+ Loaded quotes: 3
+ Loaded legacy bids: 0
+ [Bids] Loaded inventory items: 1000
+ [Bids] Sample inventory items: Array(5)
+ [Bids] Loading line items for editing: Array(23)
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:7 appointments:0
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ 4:28:50 AM [vite] (client) hmr update /src/components/Bids.tsx, /index.css
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔍 getAllInventoryClient - User ID: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ 🔍 getAllInventoryClient - User metadata: Object
+ 🔐 Inventory - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔄 Fetching inventory...
+ 📊 Inventory filtered data - Total rows returned: 1000
+ 📦 Sample inventory data (first 3): Array(3)
+ ✅ Mapped inventory items count: 1000
+ ✅ Sample mapped items (first 2): Array(2)
+ 🖼️ Items with images: 0
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ [quotes-client] Server endpoint returned 3 quotes (role=admin)
+ [settings-client] ✅ Organization settings fetched via server
+ [contacts-client] Server returned 341 contacts for role=admin
+ Loaded quotes: 3
+ Loaded legacy bids: 0
+ [Bids] Loaded inventory items: 1000
+ [Bids] Sample inventory items: Array(5)
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:7 appointments:0
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [bundleCode] Found 2 CSS files in VFS
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [bundleCode] Total CSS size to be processed by lightningcss: 0.01MB
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [lightningCSS] Processing 0.21MB of CSS (environment: browser)
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [lightningCSS] Encoded size: 0.21MB
+devtools_worker-842e3c39370a3f94.min.js.br:3169 [lightningCSS] Transform completed successfully
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:7 appointments:0
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:7 appointments:0
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:7 appointments:0
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:7 appointments:0
+ 🔍 getAllInventoryClient - User ID: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ 🔍 getAllInventoryClient - User metadata: Object
+ 🔐 Inventory - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔄 Fetching inventory...
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ [quotes-client] Server endpoint returned 2 quotes (role=admin)
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [settings-client] ✅ Organization settings fetched via server
+ [contacts-client] Server returned 341 contacts for role=admin
+ 📊 Inventory filtered data - Total rows returned: 1000
+ 📦 Sample inventory data (first 3): Array(3)
+ ✅ Mapped inventory items count: 1000
+ ✅ Sample mapped items (first 2): Array(2)
+ 🖼️ Items with images: 0
+ Loaded quotes: 2
+ Loaded legacy bids: 0
+ [Bids] Loaded inventory items: 1000
+ [Bids] Sample inventory items: Array(5)
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [PrintableDeckDesign] Materials for print: Object
+ [project-wizard-defaults] 📐 Fetching org conversion factors for: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [project-wizard-defaults] ✅ Org CFs fetched: 5 entries
+ [project-wizard-defaults] 📊 Fetching user defaults for: Object
+ [project-wizard-defaults] ✅ User defaults fetched successfully: 0 items
+ [project-wizard-defaults] 📐 Extracted conversion factors: Object
+ [enrichMaterials] Enriching 21 materials for 'deck' planner (Treated)
+ [project-wizard-defaults] 📊 Fetching org defaults via server for: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 4:37:08 AM [vite] (client) hmr update /src/components/planners/DeckPlanner.tsx, /index.css
+ [PrintableDeckDesign] Materials for print: Object
+ [project-wizard-defaults] 📐 Fetching org conversion factors for: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [project-wizard-defaults] ✅ Defaults fetched successfully: 69 records
+ [enrichMaterials] Found 69 default mappings
+ [enrichMaterials] Mapped 50 categories to inventory items
+ [enrichMaterials] Fetched inventory items: 28
+ [enrichMaterials] Built lookup maps: 28 by ID, 28 by SKU
+ [enrichMaterials] 📏 Length-specific match: "ledger board (12')" -> 063200ea-c1d2-473a-aa9f-e81a0a27740b
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Ledger Board (12')" -> inventory item 063200ea-c1d2-473a-aa9f-e81a0a27740b (key: ledger board (12'))
+ [enrichMaterials] ✅ Category match: "ledger board (12')" "Pressure Treated Ledger Board (12')" -> "PT BROWN 2X8"X12'" (SKU: 84895032) T1: $29.99 × 1 = $29.99
+ [enrichMaterials] 📏 Length-specific match: "joists (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Joists (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: joists (16'))
+ [enrichMaterials] ✅ Category match: "joists (16')" "Pressure Treated Joists (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 10 = $399.80
+ [enrichMaterials] 📏 Length-specific match: "rim joists (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Rim Joists (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: rim joists (16'))
+ [enrichMaterials] ✅ Category match: "rim joists (16')" "Pressure Treated Rim Joists (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 2 = $79.96
+ [enrichMaterials] 📏 Length-specific match: "rim joists (12')" -> 063200ea-c1d2-473a-aa9f-e81a0a27740b
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Rim Joists (12')" -> inventory item 063200ea-c1d2-473a-aa9f-e81a0a27740b (key: rim joists (12'))
+ [enrichMaterials] ✅ Category match: "rim joists (12')" "Pressure Treated Rim Joists (12')" -> "PT BROWN 2X8"X12'" (SKU: 84895032) T1: $29.99 × 2 = $59.98
+ [enrichMaterials] 📏 Length-specific match: "beams (12')" -> 063200ea-c1d2-473a-aa9f-e81a0a27740b
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Beams (12')" -> inventory item 063200ea-c1d2-473a-aa9f-e81a0a27740b (key: beams (12'))
+ [enrichMaterials] ✅ Category match: "beams (12')" "Pressure Treated Beams (12')" -> "PT BROWN 2X8"X12'" (SKU: 84895032) T1: $29.99 × 2 = $59.98
+ [enrichMaterials] 📏 Length-specific match: "posts (8')" -> 230c417c-d6f3-4819-ade0-89baed62964d
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Posts (8')" -> inventory item 230c417c-d6f3-4819-ade0-89baed62964d (key: posts (8'))
+ [enrichMaterials] ✅ Category match: "posts (8')" "Pressure Treated Posts (8')" -> "PT BROWN D4S 6X6"X8'" (SKU: 84895046) T1: $46.79 × 4 = $187.16
+ [enrichMaterials] 🔍 Smart matched "Stair Stringers (8')" -> inventory item ca5f2181-12ce-4ada-af3c-dd532617fcec (key: stair stringers)
+ [enrichMaterials] ✅ Category match: "stair stringers" "Stair Stringers (8')" -> "PT BROWN 2X12"X12'" (SKU: 84895040) T1: $54.75 × 3 = $164.25
+ [enrichMaterials] 📏 Length-specific match: "decking boards (16')" -> f3a19893-902f-4e2e-8001-aaabac879964
+ [enrichMaterials] 🔍 Smart matched "5/4 x 6 Treated Deck Boards (16')" -> inventory item f3a19893-902f-4e2e-8001-aaabac879964 (key: decking boards (16'))
+ [enrichMaterials] ✅ Category match: "decking boards (16')" "5/4 x 6 Treated Deck Boards (16')" -> "PT BROWN 5/4X6"X16'" (SKU: 84895020) T1: $19.99 × 30 = $599.70
+ [enrichMaterials] 🔍 Smart matched "Stair Treads" -> inventory item e3f3754f-a746-4f9d-a22d-aeeb402f1349 (key: stair treads)
+ [enrichMaterials] ✅ Category match: "stair treads" "Stair Treads" -> "STAIR STEP PT BROWN 2X12X48"" (SKU: 39595063) T1: $31.99 × 8 = $255.92
+ [enrichMaterials] 🔍 Smart matched "2x4 Top Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing top rail)
+ [enrichMaterials] ✅ Category match: "railing top rail" "2x4 Top Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 7 = $124.67
+ [enrichMaterials] 🔍 Smart matched "2x4 Bottom Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing bottom rail)
+ [enrichMaterials] ✅ Category match: "railing bottom rail" "2x4 Bottom Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 7 = $124.67
+ [enrichMaterials] 🔍 Smart matched "2x2 Balusters (42")" -> inventory item 2e848bc1-04b7-4699-ba01-cd9e48c3ff2d (key: railing balusters)
+ [enrichMaterials] ✅ Category match: "railing balusters" "2x2 Balusters (42")" -> "PT BALUSTER BROWN 2X2X42" (SKU: 51206852) T1: $2.69 × 146 = $392.74
+ [enrichMaterials] 🔍 Smart matched "4x4 Railing Posts (42")" -> inventory item c3fd65c9-5f3b-429d-b03c-a448f6dfd777 (key: railing posts)
+ [enrichMaterials] ✅ Category match: "railing posts" "4x4 Railing Posts (42")" -> "PT BROWN 4X4"X8'" (SKU: 84895043) T1: $18.49 × 9 = $166.41
+ [enrichMaterials] 🔍 Smart matched "1/2" x 4" Lag Screws with Washers" -> inventory item 4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4 (key: lag screws)
+ [enrichMaterials] ✅ Category match: "lag screws" "1/2" x 4" Lag Screws with Washers" -> "LAG SCREW #3/8(50)    HLZ385CT" (SKU: 1399886) T1: $48.29 × 9 (CF: 0.02, converted: 0.1800, order: 1) = $8.69
+ [enrichMaterials] 🔍 Smart matched "Ledger Flashing Tape (12')" -> inventory item ad77fb0f-eddd-44da-8ade-3e5374bbfe6c (key: ledger flashing)
+ [enrichMaterials] ✅ Category match: "ledger flashing" "Ledger Flashing Tape (12')" -> "ZINC 8" 2.25/LB 225 FT/ROLL" (SKU: MMS449748) T1: $5.15 × 12 (CF: 0.0044, converted: 0.0528, order: 1) = $0.27
+ [enrichMaterials] 🔍 Smart matched "Joist Hangers" -> inventory item f38fdd6d-632f-4a06-bc18-e32b838f7c06 (key: joist hangers)
+ [enrichMaterials] ✅ Category match: "joist hangers" "Joist Hangers" -> "HANGER FACE MT Z-MAX 2X8"" (SKU: 35945339) T1: $2.23 × 20 = $44.60
+ [enrichMaterials] 🔍 Smart matched "Deck Screws (3")" -> inventory item 60f48334-ae5b-47a4-a03b-1413a8cef308 (key: deck screws)
+ [enrichMaterials] ✅ Category match: "deck screws" "Deck Screws (3")" -> "SCREW DECK #6X2 1/4"X100BX FH" (SKU: 13997876) T1: $9.79 × 20 (CF: 0.5, converted: 10.0000, order: 10) = $97.90
+ [enrichMaterials] 🔍 Smart matched "Structural Screws (5")" -> inventory item 69b4dc74-b416-4aa0-81da-ed01d5250368 (key: structural screws)
+ [enrichMaterials] ✅ Category match: "structural screws" "Structural Screws (5")" -> "SCREW STRUCTURAL .22X5"BX50 BK" (SKU: 35945194) T1: $85.99 × 5 (CF: 0.02, converted: 0.1000, order: 1) = $8.60
+ [enrichMaterials] 🔍 Smart matched "Post Anchors" -> inventory item 795b467a-93b6-433c-be6e-a5ab0e43d21f (key: post anchors)
+ [enrichMaterials] ✅ Category match: "post anchors" "Post Anchors" -> "SADDLE REBAR CARPOT 6X6"" (SKU: 35945128) T1: $12.99 × 4 = $51.96
+ [enrichMaterials] 🔍 Smart matched "Concrete Mix (80lb)" -> inventory item 446baed3-c419-473f-8c86-3926892c462c (key: concrete mix)
+ [enrichMaterials] ✅ Category match: "concrete mix" "Concrete Mix (80lb)" -> "BOMIX CONCRETE  PRE-MIX. 30KG" (SKU: 0533008) T1: $9.79 × 4 = $39.16
+ [enrichMaterials] 🔍 Smart matched "Railing Brackets" -> inventory item a1926667-d3b1-4857-aff1-c66d98cf47d8 (key: railing brackets)
+ [enrichMaterials] ✅ Category match: "railing brackets" "Railing Brackets" -> "CONNECTOR RAIL PK4 BLACK" (SKU: 10015036) T1: $16.29 × 36 (CF: 0.25, converted: 9.0000, order: 9) = $146.61
+ [enrichMaterials] ✅ Total T1 price: 3043.02
+ [PrintableDeckDesign] Materials for print: Object
+ 4:37:08 AM [vite] (client) hmr update /src/components/ProjectQuoteGenerator.tsx, /index.css
+ [project-wizard-defaults] ✅ Org CFs fetched: 5 entries
+ [project-wizard-defaults] 📊 Fetching user defaults for: Object
+ [project-wizard-defaults] ✅ User defaults fetched successfully: 0 items
+ [project-wizard-defaults] 📐 Extracted conversion factors: Object
+ [enrichMaterials] Enriching 21 materials for 'deck' planner (Treated)
+ [project-wizard-defaults] 📊 Fetching org defaults via server for: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [project-wizard-defaults] ✅ Defaults fetched successfully: 69 records
+ [enrichMaterials] Found 69 default mappings
+ [enrichMaterials] Mapped 50 categories to inventory items
+ [enrichMaterials] Fetched inventory items: 28
+ [enrichMaterials] Built lookup maps: 28 by ID, 28 by SKU
+ [enrichMaterials] 📏 Length-specific match: "ledger board (12')" -> 063200ea-c1d2-473a-aa9f-e81a0a27740b
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Ledger Board (12')" -> inventory item 063200ea-c1d2-473a-aa9f-e81a0a27740b (key: ledger board (12'))
+ [enrichMaterials] ✅ Category match: "ledger board (12')" "Pressure Treated Ledger Board (12')" -> "PT BROWN 2X8"X12'" (SKU: 84895032) T1: $29.99 × 1 = $29.99
+ [enrichMaterials] 📏 Length-specific match: "joists (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Joists (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: joists (16'))
+ [enrichMaterials] ✅ Category match: "joists (16')" "Pressure Treated Joists (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 10 = $399.80
+ [enrichMaterials] 📏 Length-specific match: "rim joists (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Rim Joists (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: rim joists (16'))
+ [enrichMaterials] ✅ Category match: "rim joists (16')" "Pressure Treated Rim Joists (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 2 = $79.96
+ [enrichMaterials] 📏 Length-specific match: "rim joists (12')" -> 063200ea-c1d2-473a-aa9f-e81a0a27740b
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Rim Joists (12')" -> inventory item 063200ea-c1d2-473a-aa9f-e81a0a27740b (key: rim joists (12'))
+ [enrichMaterials] ✅ Category match: "rim joists (12')" "Pressure Treated Rim Joists (12')" -> "PT BROWN 2X8"X12'" (SKU: 84895032) T1: $29.99 × 2 = $59.98
+ [enrichMaterials] 📏 Length-specific match: "beams (12')" -> 063200ea-c1d2-473a-aa9f-e81a0a27740b
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Beams (12')" -> inventory item 063200ea-c1d2-473a-aa9f-e81a0a27740b (key: beams (12'))
+ [enrichMaterials] ✅ Category match: "beams (12')" "Pressure Treated Beams (12')" -> "PT BROWN 2X8"X12'" (SKU: 84895032) T1: $29.99 × 2 = $59.98
+ [enrichMaterials] 📏 Length-specific match: "posts (8')" -> 230c417c-d6f3-4819-ade0-89baed62964d
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Posts (8')" -> inventory item 230c417c-d6f3-4819-ade0-89baed62964d (key: posts (8'))
+ [enrichMaterials] ✅ Category match: "posts (8')" "Pressure Treated Posts (8')" -> "PT BROWN D4S 6X6"X8'" (SKU: 84895046) T1: $46.79 × 4 = $187.16
+ [enrichMaterials] 🔍 Smart matched "Stair Stringers (8')" -> inventory item ca5f2181-12ce-4ada-af3c-dd532617fcec (key: stair stringers)
+ [enrichMaterials] ✅ Category match: "stair stringers" "Stair Stringers (8')" -> "PT BROWN 2X12"X12'" (SKU: 84895040) T1: $54.75 × 3 = $164.25
+ [enrichMaterials] 📏 Length-specific match: "decking boards (16')" -> f3a19893-902f-4e2e-8001-aaabac879964
+ [enrichMaterials] 🔍 Smart matched "5/4 x 6 Treated Deck Boards (16')" -> inventory item f3a19893-902f-4e2e-8001-aaabac879964 (key: decking boards (16'))
+ [enrichMaterials] ✅ Category match: "decking boards (16')" "5/4 x 6 Treated Deck Boards (16')" -> "PT BROWN 5/4X6"X16'" (SKU: 84895020) T1: $19.99 × 30 = $599.70
+ [enrichMaterials] 🔍 Smart matched "Stair Treads" -> inventory item e3f3754f-a746-4f9d-a22d-aeeb402f1349 (key: stair treads)
+ [enrichMaterials] ✅ Category match: "stair treads" "Stair Treads" -> "STAIR STEP PT BROWN 2X12X48"" (SKU: 39595063) T1: $31.99 × 8 = $255.92
+ [enrichMaterials] 🔍 Smart matched "2x4 Top Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing top rail)
+ [enrichMaterials] ✅ Category match: "railing top rail" "2x4 Top Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 7 = $124.67
+ [enrichMaterials] 🔍 Smart matched "2x4 Bottom Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing bottom rail)
+ [enrichMaterials] ✅ Category match: "railing bottom rail" "2x4 Bottom Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 7 = $124.67
+ [enrichMaterials] 🔍 Smart matched "2x2 Balusters (42")" -> inventory item 2e848bc1-04b7-4699-ba01-cd9e48c3ff2d (key: railing balusters)
+ [enrichMaterials] ✅ Category match: "railing balusters" "2x2 Balusters (42")" -> "PT BALUSTER BROWN 2X2X42" (SKU: 51206852) T1: $2.69 × 146 = $392.74
+ [enrichMaterials] 🔍 Smart matched "4x4 Railing Posts (42")" -> inventory item c3fd65c9-5f3b-429d-b03c-a448f6dfd777 (key: railing posts)
+ [enrichMaterials] ✅ Category match: "railing posts" "4x4 Railing Posts (42")" -> "PT BROWN 4X4"X8'" (SKU: 84895043) T1: $18.49 × 9 = $166.41
+ [enrichMaterials] 🔍 Smart matched "1/2" x 4" Lag Screws with Washers" -> inventory item 4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4 (key: lag screws)
+ [enrichMaterials] ✅ Category match: "lag screws" "1/2" x 4" Lag Screws with Washers" -> "LAG SCREW #3/8(50)    HLZ385CT" (SKU: 1399886) T1: $48.29 × 9 (CF: 0.02, converted: 0.1800, order: 1) = $8.69
+ [enrichMaterials] 🔍 Smart matched "Ledger Flashing Tape (12')" -> inventory item ad77fb0f-eddd-44da-8ade-3e5374bbfe6c (key: ledger flashing)
+ [enrichMaterials] ✅ Category match: "ledger flashing" "Ledger Flashing Tape (12')" -> "ZINC 8" 2.25/LB 225 FT/ROLL" (SKU: MMS449748) T1: $5.15 × 12 (CF: 0.0044, converted: 0.0528, order: 1) = $0.27
+ [enrichMaterials] 🔍 Smart matched "Joist Hangers" -> inventory item f38fdd6d-632f-4a06-bc18-e32b838f7c06 (key: joist hangers)
+ [enrichMaterials] ✅ Category match: "joist hangers" "Joist Hangers" -> "HANGER FACE MT Z-MAX 2X8"" (SKU: 35945339) T1: $2.23 × 20 = $44.60
+ [enrichMaterials] 🔍 Smart matched "Deck Screws (3")" -> inventory item 60f48334-ae5b-47a4-a03b-1413a8cef308 (key: deck screws)
+ [enrichMaterials] ✅ Category match: "deck screws" "Deck Screws (3")" -> "SCREW DECK #6X2 1/4"X100BX FH" (SKU: 13997876) T1: $9.79 × 20 (CF: 0.5, converted: 10.0000, order: 10) = $97.90
+ [enrichMaterials] 🔍 Smart matched "Structural Screws (5")" -> inventory item 69b4dc74-b416-4aa0-81da-ed01d5250368 (key: structural screws)
+ [enrichMaterials] ✅ Category match: "structural screws" "Structural Screws (5")" -> "SCREW STRUCTURAL .22X5"BX50 BK" (SKU: 35945194) T1: $85.99 × 5 (CF: 0.02, converted: 0.1000, order: 1) = $8.60
+ [enrichMaterials] 🔍 Smart matched "Post Anchors" -> inventory item 795b467a-93b6-433c-be6e-a5ab0e43d21f (key: post anchors)
+ [enrichMaterials] ✅ Category match: "post anchors" "Post Anchors" -> "SADDLE REBAR CARPOT 6X6"" (SKU: 35945128) T1: $12.99 × 4 = $51.96
+ [enrichMaterials] 🔍 Smart matched "Concrete Mix (80lb)" -> inventory item 446baed3-c419-473f-8c86-3926892c462c (key: concrete mix)
+ [enrichMaterials] ✅ Category match: "concrete mix" "Concrete Mix (80lb)" -> "BOMIX CONCRETE  PRE-MIX. 30KG" (SKU: 0533008) T1: $9.79 × 4 = $39.16
+ [enrichMaterials] 🔍 Smart matched "Railing Brackets" -> inventory item a1926667-d3b1-4857-aff1-c66d98cf47d8 (key: railing brackets)
+ [enrichMaterials] ✅ Category match: "railing brackets" "Railing Brackets" -> "CONNECTOR RAIL PK4 BLACK" (SKU: 10015036) T1: $16.29 × 36 (CF: 0.25, converted: 9.0000, order: 9) = $146.61
+ [enrichMaterials] ✅ Total T1 price: 3043.02
+ [PrintableDeckDesign] Materials for print: Object
+ [PrintableDeckDesign] Materials for print: Object
+ [SavedDeckDesigns] Loading designs for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [SavedDeckDesigns] Loaded designs: 3
+ [PrintableDeckDesign] Materials for print: Object
+ [project-wizard-defaults] 📐 Fetching org conversion factors for: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [project-wizard-defaults] ✅ Org CFs fetched: 5 entries
+ [project-wizard-defaults] 📊 Fetching user defaults for: Object
+ [project-wizard-defaults] ✅ User defaults fetched successfully: 0 items
+ [project-wizard-defaults] 📐 Extracted conversion factors: Object
+ [enrichMaterials] Enriching 23 materials for 'deck' planner
+ [project-wizard-defaults] 📊 Fetching org defaults via server for: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [project-wizard-defaults] ✅ Defaults fetched successfully: 69 records
+ [enrichMaterials] Found 69 default mappings
+ [enrichMaterials] Mapped 50 categories to inventory items
+ [enrichMaterials] Fetched inventory items: 28
+ [enrichMaterials] Built lookup maps: 28 by ID, 28 by SKU
+ [enrichMaterials] 📏 Length-specific match: "ledger board (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Ledger Board (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: ledger board (16'))
+ [enrichMaterials] ✅ Category match: "ledger board (16')" "Pressure Treated Ledger Board (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 1 = $39.98
+ [enrichMaterials] 📏 Length-specific match: "joists (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Joists (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: joists (16'))
+ [enrichMaterials] ✅ Category match: "joists (16')" "Pressure Treated Joists (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 13 = $519.74
+ [enrichMaterials] 📏 Length-specific match: "joists (8')" -> 7bd30096-9c5f-4a32-9e40-9fbac7cde864
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Joists (8')" -> inventory item 7bd30096-9c5f-4a32-9e40-9fbac7cde864 (key: joists (8'))
+ [enrichMaterials] ✅ Category match: "joists (8')" "Pressure Treated Joists (8')" -> "PT BROWN 2X8"X8'" (SKU: 84895030) T1: $19.99 × 13 = $259.87
+ [enrichMaterials] 📏 Length-specific match: "rim joists (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Rim Joists (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: rim joists (16'))
+ [enrichMaterials] ✅ Category match: "rim joists (16')" "Pressure Treated Rim Joists (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 4 = $159.92
+ [enrichMaterials] 📏 Length-specific match: "rim joists (8')" -> 7bd30096-9c5f-4a32-9e40-9fbac7cde864
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Rim Joists (8')" -> inventory item 7bd30096-9c5f-4a32-9e40-9fbac7cde864 (key: rim joists (8'))
+ [enrichMaterials] ✅ Category match: "rim joists (8')" "Pressure Treated Rim Joists (8')" -> "PT BROWN 2X8"X8'" (SKU: 84895030) T1: $19.99 × 2 = $39.98
+ [enrichMaterials] 📏 Length-specific match: "beams (16')" -> 7c10c902-6735-406f-9cd6-26da7ba016d1
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Beams (16')" -> inventory item 7c10c902-6735-406f-9cd6-26da7ba016d1 (key: beams (16'))
+ [enrichMaterials] ✅ Category match: "beams (16')" "Pressure Treated Beams (16')" -> "PT BROWN 2X8"X16'" (SKU: 84895034) T1: $39.98 × 3 = $119.94
+ [enrichMaterials] 📏 Length-specific match: "posts (8')" -> 230c417c-d6f3-4819-ade0-89baed62964d
+ [enrichMaterials] 🔍 Smart matched "Pressure Treated Posts (8')" -> inventory item 230c417c-d6f3-4819-ade0-89baed62964d (key: posts (8'))
+ [enrichMaterials] ✅ Category match: "posts (8')" "Pressure Treated Posts (8')" -> "PT BROWN D4S 6X6"X8'" (SKU: 84895046) T1: $46.79 × 6 = $280.74
+ [enrichMaterials] 🔍 Smart matched "Stair Stringers (8')" -> inventory item ca5f2181-12ce-4ada-af3c-dd532617fcec (key: stair stringers)
+ [enrichMaterials] ✅ Category match: "stair stringers" "Stair Stringers (8')" -> "PT BROWN 2X12"X12'" (SKU: 84895040) T1: $54.75 × 3 = $164.25
+ [enrichMaterials] 📏 Length-specific match: "decking boards (16')" -> f3a19893-902f-4e2e-8001-aaabac879964
+ [enrichMaterials] 🔍 Smart matched "5/4 x 6 Treated Deck Boards (16')" -> inventory item f3a19893-902f-4e2e-8001-aaabac879964 (key: decking boards (16'))
+ [enrichMaterials] ✅ Category match: "decking boards (16')" "5/4 x 6 Treated Deck Boards (16')" -> "PT BROWN 5/4X6"X16'" (SKU: 84895020) T1: $19.99 × 59 = $1179.41
+ [enrichMaterials] 📏 Length-specific match: "decking boards (8')" -> 5bd7b570-b1bc-47de-a4c7-139b9c05f46f
+ [enrichMaterials] 🔍 Smart matched "5/4 x 6 Treated Deck Boards (8')" -> inventory item 5bd7b570-b1bc-47de-a4c7-139b9c05f46f (key: decking boards (8'))
+ [enrichMaterials] ✅ Category match: "decking boards (8')" "5/4 x 6 Treated Deck Boards (8')" -> "PT BROWN 5/4X6"X8'" (SKU: 84895016) T1: $9.99 × 59 = $589.41
+ [enrichMaterials] 🔍 Smart matched "Stair Treads" -> inventory item e3f3754f-a746-4f9d-a22d-aeeb402f1349 (key: stair treads)
+ [enrichMaterials] ✅ Category match: "stair treads" "Stair Treads" -> "STAIR STEP PT BROWN 2X12X48"" (SKU: 39595063) T1: $31.99 × 10 = $319.90
+ [enrichMaterials] 🔍 Smart matched "2x4 Top Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing top rail)
+ [enrichMaterials] ✅ Category match: "railing top rail" "2x4 Top Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 9 = $160.29
+ [enrichMaterials] 🔍 Smart matched "2x4 Bottom Rail (8')" -> inventory item c72001e2-6ab5-4c09-a723-24187aa8cbf2 (key: railing bottom rail)
+ [enrichMaterials] ✅ Category match: "railing bottom rail" "2x4 Bottom Rail (8')" -> "PT BROWN 2X6"X10'" (SKU: 84895027) T1: $17.81 × 9 = $160.29
+ [enrichMaterials] 🔍 Smart matched "2x2 Balusters (42")" -> inventory item 2e848bc1-04b7-4699-ba01-cd9e48c3ff2d (key: railing balusters)
+ [enrichMaterials] ✅ Category match: "railing balusters" "2x2 Balusters (42")" -> "PT BALUSTER BROWN 2X2X42" (SKU: 51206852) T1: $2.69 × 209 = $562.21
+ [enrichMaterials] 🔍 Smart matched "4x4 Railing Posts (42")" -> inventory item c3fd65c9-5f3b-429d-b03c-a448f6dfd777 (key: railing posts)
+ [enrichMaterials] ✅ Category match: "railing posts" "4x4 Railing Posts (42")" -> "PT BROWN 4X4"X8'" (SKU: 84895043) T1: $18.49 × 12 = $221.88
+ [enrichMaterials] 🔍 Smart matched "1/2" x 4" Lag Screws with Washers" -> inventory item 4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4 (key: lag screws)
+ [enrichMaterials] ✅ Category match: "lag screws" "1/2" x 4" Lag Screws with Washers" -> "LAG SCREW #3/8(50)    HLZ385CT" (SKU: 1399886) T1: $48.29 × 12 = $579.48
+ [enrichMaterials] 🔍 Smart matched "Ledger Flashing Tape (16')" -> inventory item ad77fb0f-eddd-44da-8ade-3e5374bbfe6c (key: ledger flashing)
+ [enrichMaterials] ✅ Category match: "ledger flashing" "Ledger Flashing Tape (16')" -> "ZINC 8" 2.25/LB 225 FT/ROLL" (SKU: MMS449748) T1: $5.15 × 16 = $82.40
+ [enrichMaterials] 🔍 Smart matched "Joist Hangers" -> inventory item f38fdd6d-632f-4a06-bc18-e32b838f7c06 (key: joist hangers)
+ [enrichMaterials] ✅ Category match: "joist hangers" "Joist Hangers" -> "HANGER FACE MT Z-MAX 2X8"" (SKU: 35945339) T1: $2.23 × 26 = $57.98
+ [enrichMaterials] 🔍 Smart matched "Deck Screws (3")" -> inventory item 60f48334-ae5b-47a4-a03b-1413a8cef308 (key: deck screws)
+ [enrichMaterials] ✅ Category match: "deck screws" "Deck Screws (3")" -> "SCREW DECK #6X2 1/4"X100BX FH" (SKU: 13997876) T1: $9.79 × 40 = $391.60
+ [enrichMaterials] 🔍 Smart matched "Structural Screws (5")" -> inventory item 69b4dc74-b416-4aa0-81da-ed01d5250368 (key: structural screws)
+ [enrichMaterials] ✅ Category match: "structural screws" "Structural Screws (5")" -> "SCREW STRUCTURAL .22X5"BX50 BK" (SKU: 35945194) T1: $85.99 × 5 = $429.95
+ [enrichMaterials] 🔍 Smart matched "Post Anchors" -> inventory item 795b467a-93b6-433c-be6e-a5ab0e43d21f (key: post anchors)
+ [enrichMaterials] ✅ Category match: "post anchors" "Post Anchors" -> "SADDLE REBAR CARPOT 6X6"" (SKU: 35945128) T1: $12.99 × 6 = $77.94
+ [enrichMaterials] 🔍 Smart matched "Concrete Mix (80lb)" -> inventory item 446baed3-c419-473f-8c86-3926892c462c (key: concrete mix)
+ [enrichMaterials] ✅ Category match: "concrete mix" "Concrete Mix (80lb)" -> "BOMIX CONCRETE  PRE-MIX. 30KG" (SKU: 0533008) T1: $9.79 × 6 = $58.74
+ [enrichMaterials] 🔍 Smart matched "Railing Brackets" -> inventory item a1926667-d3b1-4857-aff1-c66d98cf47d8 (key: railing brackets)
+ [enrichMaterials] ✅ Category match: "railing brackets" "Railing Brackets" -> "CONNECTOR RAIL PK4 BLACK" (SKU: 10015036) T1: $16.29 × 48 = $781.92
+ [enrichMaterials] ✅ Total T1 price: 7237.82
+ [PrintableDeckDesign] Materials for print: Object
+ [PrintableDeckDesign] Materials for print: Object
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ProjectQuoteGenerator] Loading contacts...
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [project-wizard-defaults] 📊 Fetching org defaults via server for: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [settings-client] ✅ Organization settings fetched via server
+ [ProjectQuoteGenerator] Loaded tax rates: 15 0
+ [project-wizard-defaults] ✅ Defaults fetched successfully: 69 records
+ [contacts-client] Server returned 341 contacts for role=admin
+ [ProjectQuoteGenerator] Loaded contacts: 341 Array(341)
+usorqldwroecyxucmtuw.supabase.co/rest/v1/inventory?select=id%2Citem_name%2Csku%2Cunit_price%2Ccost&id=in.%282ca48b19-b5d5-4f24-9113-b19d53d02d4a%2Ccf0e48e0-4f96-4449-a913-a7873ddbc8fc%2Cc3fd65c9-5f3b-429d-b03c-a448f6dfd777%2Cf38fdd6d-632f-4a06-bc18-e32b838f7c06%2Ce3f3754f-a746-4f9d-a22d-aeeb402f1349%2C09877dba-d2c3-4546-b4cf-d16e558b3c7b%2C23c8e546-5bd5-414e-9efa-2fde34256d1d%2C795b467a-93b6-433c-be6e-a5ab0e43d21f%2Ca1926667-d3b1-4857-aff1-c66d98cf47d8%2Cc72001e2-6ab5-4c09-a723-24187aa8cbf2%2Cca5f2181-12ce-4ada-af3c-dd532617fcec%2Ce35a7768-1479-4992-8ddc-471a859b4851%2Cc9f19771-354d-47af-b51d-fcedfbf343ce%2C230c417c-d6f3-4819-ade0-89baed62964d%2Cbdf30988-3875-4a24-9db1-0fb2217c2df8%2C69b4dc74-b416-4aa0-81da-ed01d5250368%2C2e848bc1-04b7-4699-ba01-cd9e48c3ff2d%2C60f48334-ae5b-47a4-a03b-1413a8cef308%2C446baed3-c419-473f-8c86-3926892c462c%2C7bd30096-9c5f-4a32-9e40-9fbac7cde864%2C063200ea-c1d2-473a-aa9f-e81a0a27740b%2Ce68eeec4-fac8-4845-b237-27b9ecf1c164%2C7c10c902-6735-406f-9cd6-26da7ba016d1%2C9013cdf0-dee8-430a-a86a-64e61cf4a0b2%2C7335c4ea-02a2-4f3d-9444-2ed2744d01b4%2C892dbb0f-d166-4f9e-be72-026efd02cf2d%2Ce2048cee-e9cf-4b5b-962e-12b1edef735e%2C5bd7b570-b1bc-47de-a4c7-139b9c05f46f%2C011beae3-7796-4511-85f6-babf49632c29%2C339a8249-4bf4-4913-849b-b129235b38b5%2C4a35d647-8cb3-4a02-9c53-359a047af8ee%2Cf3a19893-902f-4e2e-8001-aaabac879964%2C4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4%2Cad77fb0f-eddd-44da-8ade-3e5374bbfe6c%29&organization_id=eq.34638283-7b3d-47e2-bec8-a9e600e28c4a:1  Failed to load resource: the server responded with a status of 400 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/inventory?select=id%2Citem_name%2Csku%2Cunit_price%2Ccost&id=in.%282ca48b19-b5d5-4f24-9113-b19d53d02d4a%2Ccf0e48e0-4f96-4449-a913-a7873ddbc8fc%2Cc3fd65c9-5f3b-429d-b03c-a448f6dfd777%2Cf38fdd6d-632f-4a06-bc18-e32b838f7c06%2Ce3f3754f-a746-4f9d-a22d-aeeb402f1349%2C09877dba-d2c3-4546-b4cf-d16e558b3c7b%2C23c8e546-5bd5-414e-9efa-2fde34256d1d%2C795b467a-93b6-433c-be6e-a5ab0e43d21f%2Ca1926667-d3b1-4857-aff1-c66d98cf47d8%2Cc72001e2-6ab5-4c09-a723-24187aa8cbf2%2Cca5f2181-12ce-4ada-af3c-dd532617fcec%2Ce35a7768-1479-4992-8ddc-471a859b4851%2Cc9f19771-354d-47af-b51d-fcedfbf343ce%2C230c417c-d6f3-4819-ade0-89baed62964d%2Cbdf30988-3875-4a24-9db1-0fb2217c2df8%2C69b4dc74-b416-4aa0-81da-ed01d5250368%2C2e848bc1-04b7-4699-ba01-cd9e48c3ff2d%2C60f48334-ae5b-47a4-a03b-1413a8cef308%2C446baed3-c419-473f-8c86-3926892c462c%2C7bd30096-9c5f-4a32-9e40-9fbac7cde864%2C063200ea-c1d2-473a-aa9f-e81a0a27740b%2Ce68eeec4-fac8-4845-b237-27b9ecf1c164%2C7c10c902-6735-406f-9cd6-26da7ba016d1%2C9013cdf0-dee8-430a-a86a-64e61cf4a0b2%2C7335c4ea-02a2-4f3d-9444-2ed2744d01b4%2C892dbb0f-d166-4f9e-be72-026efd02cf2d%2Ce2048cee-e9cf-4b5b-962e-12b1edef735e%2C5bd7b570-b1bc-47de-a4c7-139b9c05f46f%2C011beae3-7796-4511-85f6-babf49632c29%2C339a8249-4bf4-4913-849b-b129235b38b5%2C4a35d647-8cb3-4a02-9c53-359a047af8ee%2Cf3a19893-902f-4e2e-8001-aaabac879964%2C4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4%2Cad77fb0f-eddd-44da-8ade-3e5374bbfe6c%29&organization_id=eq.34638283-7b3d-47e2-bec8-a9e600e28c4a:1  Failed to load resource: the server responded with a status of 400 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/inventory?select=id%2Citem_name%2Csku%2Cunit_price%2Ccost&id=in.%282ca48b19-b5d5-4f24-9113-b19d53d02d4a%2Ccf0e48e0-4f96-4449-a913-a7873ddbc8fc%2Cc3fd65c9-5f3b-429d-b03c-a448f6dfd777%2Cf38fdd6d-632f-4a06-bc18-e32b838f7c06%2Ce3f3754f-a746-4f9d-a22d-aeeb402f1349%2C09877dba-d2c3-4546-b4cf-d16e558b3c7b%2C23c8e546-5bd5-414e-9efa-2fde34256d1d%2C795b467a-93b6-433c-be6e-a5ab0e43d21f%2Ca1926667-d3b1-4857-aff1-c66d98cf47d8%2Cc72001e2-6ab5-4c09-a723-24187aa8cbf2%2Cca5f2181-12ce-4ada-af3c-dd532617fcec%2Ce35a7768-1479-4992-8ddc-471a859b4851%2Cc9f19771-354d-47af-b51d-fcedfbf343ce%2C230c417c-d6f3-4819-ade0-89baed62964d%2Cbdf30988-3875-4a24-9db1-0fb2217c2df8%2C69b4dc74-b416-4aa0-81da-ed01d5250368%2C2e848bc1-04b7-4699-ba01-cd9e48c3ff2d%2C60f48334-ae5b-47a4-a03b-1413a8cef308%2C446baed3-c419-473f-8c86-3926892c462c%2C7bd30096-9c5f-4a32-9e40-9fbac7cde864%2C063200ea-c1d2-473a-aa9f-e81a0a27740b%2Ce68eeec4-fac8-4845-b237-27b9ecf1c164%2C7c10c902-6735-406f-9cd6-26da7ba016d1%2C9013cdf0-dee8-430a-a86a-64e61cf4a0b2%2C7335c4ea-02a2-4f3d-9444-2ed2744d01b4%2C892dbb0f-d166-4f9e-be72-026efd02cf2d%2Ce2048cee-e9cf-4b5b-962e-12b1edef735e%2C5bd7b570-b1bc-47de-a4c7-139b9c05f46f%2C011beae3-7796-4511-85f6-babf49632c29%2C339a8249-4bf4-4913-849b-b129235b38b5%2C4a35d647-8cb3-4a02-9c53-359a047af8ee%2Cf3a19893-902f-4e2e-8001-aaabac879964%2C4bc05df6-b1a9-4ce2-a044-6f8e3a8706e4%2Cad77fb0f-eddd-44da-8ade-3e5374bbfe6c%29&organization_id=eq.34638283-7b3d-47e2-bec8-a9e600e28c4a:1  Failed to load resource: the server responded with a status of 400 ()
+ [PrintableDeckDesign] Materials for print: Object
+ [SavedDeckDesigns] Loading designs for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [SavedDeckDesigns] Loaded designs: 3
+ ✓ Design saved via server successfully: Object
+ ✓ Deal created successfully: Object
+ ✓ Quote created successfully: Object
+ [SavedDeckDesigns] Loading designs for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [SavedDeckDesigns] Loaded designs: 4
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Livegraph] Connection closed. Code: 4001, reason: draining_start
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔍 getAllInventoryClient - User ID: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ 🔍 getAllInventoryClient - User metadata: Object
+ 🔐 Inventory - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔄 Fetching inventory...
+ [quotes-client] Server endpoint returned 3 quotes (role=admin)
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ [contacts-client] Server returned 341 contacts for role=admin
+ [settings-client] ✅ Organization settings fetched via server
+ 📊 Inventory filtered data - Total rows returned: 1000
+ 📦 Sample inventory data (first 3): Array(3)
+ ✅ Mapped inventory items count: 1000
+ ✅ Sample mapped items (first 2): Array(2)
+ 🖼️ Items with images: 0
+ Loaded quotes: 3
+ Loaded legacy bids: 0
+ [Bids] Loaded inventory items: 1000
+ [Bids] Sample inventory items: Array(5)
+ [Bids] Loading line items for editing: Array(23)
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Normalized item: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object
+ [Bids] Line item display: Object

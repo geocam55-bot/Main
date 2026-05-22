@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180">
+  <defs>
+    <linearGradient id="si-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#041A12"/>
+      <stop offset="50%" stop-color="#082418"/>
+      <stop offset="100%" stop-color="#041008"/>
+    </linearGradient>
+    <radialGradient id="si-center-glow" cx="50%" cy="50%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="si-box-main" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6EE7B7"/>
+      <stop offset="50%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="si-box-side" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="si-box-top" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6EE7B7"/>
+      <stop offset="100%" stop-color="#A7F3D0"/>
+    </linearGradient>
+    <linearGradient id="si-shelf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#374151"/>
+      <stop offset="100%" stop-color="#1F2937"/>
+    </linearGradient>
+    <linearGradient id="si-box-amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <linearGradient id="si-box-amber-side" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#B45309"/>
+      <stop offset="100%" stop-color="#92400E"/>
+    </linearGradient>
+    <linearGradient id="si-box-teal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5EEAD4"/>
+      <stop offset="50%" stop-color="#2DD4BF"/>
+      <stop offset="100%" stop-color="#14B8A6"/>
+    </linearGradient>
+    <linearGradient id="si-box-teal-side" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F766E"/>
+      <stop offset="100%" stop-color="#0D5E57"/>
+    </linearGradient>
+    <filter id="si-shadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="si-glow">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="240" height="180" fill="url(#si-bg)"/>
+  <rect width="240" height="180" fill="url(#si-center-glow)"/>
+
+  <!-- Back shelf -->
+  <g filter="url(#si-shadow)">
+    <rect x="30" y="42" width="180" height="4" rx="1" fill="url(#si-shelf)"/>
+    <!-- Shelf legs -->
+    <rect x="34" y="42" width="3" height="110" fill="#1F2937" opacity="0.7"/>
+    <rect x="203" y="42" width="3" height="110" fill="#1F2937" opacity="0.7"/>
+  </g>
+
+  <!-- Middle shelf -->
+  <rect x="30" y="88" width="180" height="4" rx="1" fill="url(#si-shelf)"/>
+
+  <!-- Bottom shelf / floor -->
+  <rect x="30" y="134" width="180" height="4" rx="1" fill="url(#si-shelf)"/>
+
+  <!-- Top shelf boxes (row 1) -->
+  <!-- Small green box left -->
+  <g filter="url(#si-shadow)" transform="translate(45, 14)">
+    <rect x="0" y="0" width="28" height="28" rx="2" fill="url(#si-box-main)" opacity="0.9"/>
+    <rect x="28" y="3" width="8" height="25" rx="1" fill="url(#si-box-side)" opacity="0.8"/>
+    <!-- Tape stripe -->
+    <rect x="12" y="0" width="4" height="28" rx="0.5" fill="white" opacity="0.12"/>
+    <!-- Highlight -->
+    <rect x="2" y="2" width="12" height="4" rx="1" fill="white" opacity="0.1"/>
+  </g>
+
+  <!-- Amber box top row center -->
+  <g filter="url(#si-shadow)" transform="translate(90, 8)">
+    <rect x="0" y="0" width="34" height="34" rx="2" fill="url(#si-box-amber)" opacity="0.9"/>
+    <rect x="34" y="3" width="10" height="31" rx="1" fill="url(#si-box-amber-side)" opacity="0.8"/>
+    <!-- Label -->
+    <rect x="6" y="10" width="22" height="14" rx="1.5" fill="white" opacity="0.15"/>
+    <rect x="10" y="14" width="14" height="2" rx="0.5" fill="white" opacity="0.12"/>
+    <rect x="10" y="18" width="10" height="2" rx="0.5" fill="white" opacity="0.08"/>
+    <!-- Highlight -->
+    <rect x="2" y="2" width="14" height="4" rx="1" fill="white" opacity="0.1"/>
+  </g>
+
+  <!-- Teal box top row right -->
+  <g filter="url(#si-shadow)" transform="translate(150, 18)">
+    <rect x="0" y="0" width="24" height="24" rx="2" fill="url(#si-box-teal)" opacity="0.9"/>
+    <rect x="24" y="2" width="7" height="22" rx="1" fill="url(#si-box-teal-side)" opacity="0.8"/>
+    <!-- Barcode -->
+    <g opacity="0.15" transform="translate(5, 6)">
+      <rect x="0" y="0" width="1.5" height="12" fill="white"/>
+      <rect x="3" y="0" width="1" height="12" fill="white"/>
+      <rect x="5.5" y="0" width="2" height="12" fill="white"/>
+      <rect x="9" y="0" width="1" height="12" fill="white"/>
+      <rect x="11.5" y="0" width="1.5" height="12" fill="white"/>
+    </g>
+  </g>
+
+  <!-- Middle shelf boxes (row 2) -->
+  <!-- Large green box center -->
+  <g filter="url(#si-shadow)" transform="translate(70, 48)">
+    <rect x="0" y="0" width="42" height="40" rx="3" fill="url(#si-box-main)" opacity="0.95"/>
+    <rect x="42" y="3" width="12" height="37" rx="1.5" fill="url(#si-box-side)" opacity="0.85"/>
+    <!-- Top face -->
+    <polygon points="0,0 42,0 54,3 12,3" fill="url(#si-box-top)" opacity="0.3"/>
+    <!-- Package icon (box outline) -->
+    <g transform="translate(13, 10)" stroke="white" stroke-width="1.5" fill="none" opacity="0.2">
+      <rect x="0" y="0" width="16" height="16" rx="1"/>
+      <line x1="0" y1="6" x2="16" y2="6"/>
+      <line x1="6" y1="0" x2="6" y2="6"/>
+      <line x1="10" y1="0" x2="10" y2="6"/>
+    </g>
+    <!-- Highlight -->
+    <rect x="3" y="2" width="18" height="5" rx="1.5" fill="white" opacity="0.08"/>
+  </g>
+
+  <!-- Small amber box left middle -->
+  <g filter="url(#si-shadow)" transform="translate(40, 60)">
+    <rect x="0" y="0" width="22" height="28" rx="2" fill="url(#si-box-amber)" opacity="0.85"/>
+    <rect x="22" y="2" width="6" height="26" rx="1" fill="url(#si-box-amber-side)" opacity="0.75"/>
+    <rect x="5" y="8" width="12" height="2" rx="0.5" fill="white" opacity="0.1"/>
+  </g>
+
+  <!-- Teal box right middle -->
+  <g filter="url(#si-shadow)" transform="translate(145, 52)">
+    <rect x="0" y="0" width="32" height="36" rx="2" fill="url(#si-box-teal)" opacity="0.9"/>
+    <rect x="32" y="3" width="9" height="33" rx="1" fill="url(#si-box-teal-side)" opacity="0.8"/>
+    <!-- Tag -->
+    <rect x="8" y="8" width="16" height="20" rx="1.5" fill="white" opacity="0.12"/>
+    <rect x="11" y="12" width="10" height="1.5" rx="0.5" fill="white" opacity="0.1"/>
+    <rect x="11" y="16" width="7" height="1.5" rx="0.5" fill="white" opacity="0.08"/>
+    <rect x="11" y="20" width="10" height="1.5" rx="0.5" fill="white" opacity="0.06"/>
+  </g>
+
+  <!-- Bottom shelf boxes (row 3) -->
+  <!-- Wide green box -->
+  <g filter="url(#si-shadow)" transform="translate(50, 98)">
+    <rect x="0" y="0" width="50" height="36" rx="3" fill="url(#si-box-main)" opacity="0.9"/>
+    <rect x="50" y="3" width="14" height="33" rx="1.5" fill="url(#si-box-side)" opacity="0.8"/>
+    <!-- Tape cross -->
+    <rect x="22" y="0" width="4" height="36" rx="0.5" fill="white" opacity="0.1"/>
+    <rect x="0" y="16" width="50" height="4" rx="0.5" fill="white" opacity="0.08"/>
+    <!-- Highlight -->
+    <rect x="3" y="2" width="22" height="5" rx="1.5" fill="white" opacity="0.07"/>
+  </g>
+
+  <!-- Amber small bottom right -->
+  <g filter="url(#si-shadow)" transform="translate(130, 106)">
+    <rect x="0" y="0" width="26" height="28" rx="2" fill="url(#si-box-amber)" opacity="0.85"/>
+    <rect x="26" y="2" width="8" height="26" rx="1" fill="url(#si-box-amber-side)" opacity="0.75"/>
+    <rect x="6" y="7" width="14" height="14" rx="1" fill="white" opacity="0.1"/>
+    <!-- Checkmark -->
+    <polyline points="10,14 13,18 20,10" stroke="white" stroke-width="1.5" fill="none" opacity="0.15"/>
+  </g>
+
+  <!-- Teal mini box bottom -->
+  <g filter="url(#si-shadow)" transform="translate(172, 114)">
+    <rect x="0" y="0" width="20" height="20" rx="2" fill="url(#si-box-teal)" opacity="0.85"/>
+    <rect x="20" y="2" width="6" height="18" rx="1" fill="url(#si-box-teal-side)" opacity="0.75"/>
+  </g>
+
+  <!-- Clipboard / inventory list floating right -->
+  <g filter="url(#si-glow)" transform="translate(195, 60)" opacity="0.6">
+    <rect x="0" y="0" width="24" height="32" rx="2" fill="#1F2937"/>
+    <rect x="7" y="-3" width="10" height="6" rx="2" fill="#374151"/>
+    <rect x="4" y="8" width="16" height="1.5" rx="0.5" fill="#10B981" opacity="0.5"/>
+    <rect x="4" y="12" width="12" height="1.5" rx="0.5" fill="#10B981" opacity="0.4"/>
+    <rect x="4" y="16" width="14" height="1.5" rx="0.5" fill="#10B981" opacity="0.3"/>
+    <rect x="4" y="20" width="10" height="1.5" rx="0.5" fill="#10B981" opacity="0.25"/>
+    <rect x="4" y="24" width="16" height="1.5" rx="0.5" fill="#10B981" opacity="0.2"/>
+  </g>
+
+  <!-- Ambient particles -->
+  <circle cx="20" cy="25" r="1" fill="#10B981" opacity="0.2"/>
+  <circle cx="225" cy="155" r="0.8" fill="#10B981" opacity="0.15"/>
+  <circle cx="15" cy="130" r="0.6" fill="#10B981" opacity="0.12"/>
+  <circle cx="230" cy="15" r="0.7" fill="#10B981" opacity="0.1"/>
+  <circle cx="120" cy="170" r="0.5" fill="#10B981" opacity="0.08"/>
+
+  <!-- Floor reflection -->
+  <ellipse cx="120" cy="160" rx="80" ry="12" fill="#10B981" opacity="0.03"/>
+</svg>

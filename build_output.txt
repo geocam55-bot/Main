@@ -1,0 +1,243 @@
+
+> ProSpaces CRM@0.1.0 build
+> vite build
+
+vite v6.3.5 building for production...
+transforming...
+✓ 4330 modules transformed.
+rendering chunks...
+[plugin vite:reporter] 
+(!) /workspaces/Prospaces/src/utils/supabase/info.tsx is dynamically imported by /workspaces/Prospaces/src/components/ThemeProvider.tsx, /workspaces/Prospaces/src/components/kitchen/Kitchen3DRenderer.tsx, /workspaces/Prospaces/src/utils/themes.ts, /workspaces/Prospaces/src/utils/themes.ts but also statically imported by /workspaces/Prospaces/src/components/Appointments.tsx, /workspaces/Prospaces/src/components/AuditLog.tsx, /workspaces/Prospaces/src/components/CalendarAccountSetup.tsx, /workspaces/Prospaces/src/components/Contacts.tsx, /workspaces/Prospaces/src/components/DataDiagnostic.tsx, /workspaces/Prospaces/src/components/Email.tsx, /workspaces/Prospaces/src/components/EmailAccountSetup.tsx, /workspaces/Prospaces/src/components/ImportExport.tsx, /workspaces/Prospaces/src/components/Inventory.tsx, /workspaces/Prospaces/src/components/InventoryDiagnostic.tsx, /workspaces/Prospaces/src/components/LandingPageDebug.tsx, /workspaces/Prospaces/src/components/Login.tsx, /workspaces/Prospaces/src/components/MemberLogin.tsx, /workspaces/Prospaces/src/components/OAuthCallback.tsx, /workspaces/Prospaces/src/components/PermissionsManager.tsx, /workspaces/Prospaces/src/components/PublicQuoteView.tsx, /workspaces/Prospaces/src/components/Security.tsx, /workspaces/Prospaces/src/components/TrackingRedirect.tsx, /workspaces/Prospaces/src/components/Users.tsx, /workspaces/Prospaces/src/components/kitchen/Kitchen3DRenderer.tsx, /workspaces/Prospaces/src/components/kitchen/ModelLibrary.tsx, /workspaces/Prospaces/src/components/marketing/LandingPageBuilder.tsx, /workspaces/Prospaces/src/components/marketing/LandingPageDiagnostic.tsx, /workspaces/Prospaces/src/components/marketing/PublicLandingPage.tsx, /workspaces/Prospaces/src/components/subscription/ApiAccess.tsx, /workspaces/Prospaces/src/hooks/useAppointmentNotifications.ts, /workspaces/Prospaces/src/utils/ai-prefs-client.ts, /workspaces/Prospaces/src/utils/api-keys-client.ts, /workspaces/Prospaces/src/utils/audit.ts, /workspaces/Prospaces/src/utils/bids-client.ts, /workspaces/Prospaces/src/utils/contacts-client.ts, /workspaces/Prospaces/src/utils/designs-client.ts, /workspaces/Prospaces/src/utils/email-preloader.ts, /workspaces/Prospaces/src/utils/ensure-profile.ts, /workspaces/Prospaces/src/utils/marketing-client.ts, /workspaces/Prospaces/src/utils/permissions.ts, /workspaces/Prospaces/src/utils/portal-client.ts, /workspaces/Prospaces/src/utils/project-wizard-defaults-client.ts, /workspaces/Prospaces/src/utils/quotes-client.ts, /workspaces/Prospaces/src/utils/server-headers.ts, /workspaces/Prospaces/src/utils/settings-client.ts, /workspaces/Prospaces/src/utils/subscription-client.ts, /workspaces/Prospaces/src/utils/supabase/client.ts, /workspaces/Prospaces/src/utils/users-client.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter] 
+(!) /workspaces/Prospaces/src/utils/supabase/client.ts is dynamically imported by /workspaces/Prospaces/src/components/ThemeProvider.tsx, /workspaces/Prospaces/src/utils/contacts-client.ts, /workspaces/Prospaces/src/utils/permissions.ts, /workspaces/Prospaces/src/utils/permissions.ts, /workspaces/Prospaces/src/utils/themes.ts, /workspaces/Prospaces/src/utils/themes.ts but also statically imported by /workspaces/Prospaces/src/App.tsx, /workspaces/Prospaces/src/components/AITaskSuggestions.tsx, /workspaces/Prospaces/src/components/AdminFixUsers.tsx, /workspaces/Prospaces/src/components/BackgroundImportManager.tsx, /workspaces/Prospaces/src/components/BackgroundJobProcessor.tsx, /workspaces/Prospaces/src/components/Bids.tsx, /workspaces/Prospaces/src/components/CalendarAccountSetup.tsx, /workspaces/Prospaces/src/components/ChangePasswordDialog.tsx, /workspaces/Prospaces/src/components/CleanupUnusedOrganizations.tsx, /workspaces/Prospaces/src/components/Contacts.tsx, /workspaces/Prospaces/src/components/DataDiagnostic.tsx, /workspaces/Prospaces/src/components/DatabaseInit.tsx, /workspaces/Prospaces/src/components/DiagnosticPanel.tsx, /workspaces/Prospaces/src/components/Email.tsx, /workspaces/Prospaces/src/components/EmailAccountSetup.tsx, /workspaces/Prospaces/src/components/EmailQuoteDialog.tsx, /workspaces/Prospaces/src/components/FindMissingUser.tsx, /workspaces/Prospaces/src/components/FixInvalidOrgIds.tsx, /workspaces/Prospaces/src/components/ImportExport.tsx, /workspaces/Prospaces/src/components/Inventory.tsx, /workspaces/Prospaces/src/components/InventoryIndexFixer.tsx, /workspaces/Prospaces/src/components/Login.tsx, /workspaces/Prospaces/src/components/ManagerMigrationHelper.tsx, /workspaces/Prospaces/src/components/MemberLogin.tsx, /workspaces/Prospaces/src/components/MessagingHub.tsx, /workspaces/Prospaces/src/components/PermissionsManager.tsx, /workspaces/Prospaces/src/components/PermissionsTableSetup.tsx, /workspaces/Prospaces/src/components/ProfilesSyncFixer.tsx, /workspaces/Prospaces/src/components/SavedProjectDesigns.tsx, /workspaces/Prospaces/src/components/ScheduledJobs.tsx, /workspaces/Prospaces/src/components/Tenants.tsx, /workspaces/Prospaces/src/components/UserRecovery.tsx, /workspaces/Prospaces/src/components/Users.tsx, /workspaces/Prospaces/src/components/insights-app/InsightsShell.tsx, /workspaces/Prospaces/src/components/inventory-app/InventoryShell.tsx, /workspaces/Prospaces/src/components/it-app/ITShell.tsx, /workspaces/Prospaces/src/components/kitchen/SavedKitchenDesigns.tsx, /workspaces/Prospaces/src/components/marketing-app/MarketingShell.tsx, /workspaces/Prospaces/src/components/marketing/CampaignAnalytics.tsx, /workspaces/Prospaces/src/components/marketing/EmailDesignStudio.tsx, /workspaces/Prospaces/src/components/marketing/referrals/ReferralsTab.tsx, /workspaces/Prospaces/src/components/portal/PortalAccessManager.tsx, /workspaces/Prospaces/src/components/project-wizard/OpportunitySelector.tsx, /workspaces/Prospaces/src/components/project-wizards/ProjectWizardsShell.tsx, /workspaces/Prospaces/src/components/reports/BidProposalReports.tsx, /workspaces/Prospaces/src/components/reports/ManagerSummaryReports.tsx, /workspaces/Prospaces/src/hooks/useAISuggestions.ts, /workspaces/Prospaces/src/hooks/useAppointmentNotifications.ts, /workspaces/Prospaces/src/hooks/useBidNotifications.ts, /workspaces/Prospaces/src/hooks/useNotificationPreferences.ts, /workspaces/Prospaces/src/hooks/useTaskNotifications.ts, /workspaces/Prospaces/src/hooks/useUnreadEmails.ts, /workspaces/Prospaces/src/insights-entry.tsx, /workspaces/Prospaces/src/inventory-entry.tsx, /workspaces/Prospaces/src/it-entry.tsx, /workspaces/Prospaces/src/marketing-entry.tsx, /workspaces/Prospaces/src/project-wizards-entry.tsx, /workspaces/Prospaces/src/utils/api.ts, /workspaces/Prospaces/src/utils/appointments-client.ts, /workspaces/Prospaces/src/utils/bids-client.ts, /workspaces/Prospaces/src/utils/campaigns-client.ts, /workspaces/Prospaces/src/utils/contacts-client.ts, /workspaces/Prospaces/src/utils/contacts-diagnostic.ts, /workspaces/Prospaces/src/utils/documents-client.ts, /workspaces/Prospaces/src/utils/enrichMaterialsWithPricing.ts, /workspaces/Prospaces/src/utils/ensure-profile.ts, /workspaces/Prospaces/src/utils/inventory-client.ts, /workspaces/Prospaces/src/utils/inventory-loader.ts, /workspaces/Prospaces/src/utils/inventory-optimization.ts, /workspaces/Prospaces/src/utils/marketing-client.ts, /workspaces/Prospaces/src/utils/notes-client.ts, /workspaces/Prospaces/src/utils/project-managers-client.ts, /workspaces/Prospaces/src/utils/project-wizard-defaults-client.ts, /workspaces/Prospaces/src/utils/quotes-client.ts, /workspaces/Prospaces/src/utils/server-function-url.ts, /workspaces/Prospaces/src/utils/server-headers.ts, /workspaces/Prospaces/src/utils/settings-client.ts, /workspaces/Prospaces/src/utils/tasks-client.ts, /workspaces/Prospaces/src/utils/users-client.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter] 
+(!) /workspaces/Prospaces/src/components/About.tsx is dynamically imported by /workspaces/Prospaces/src/App.tsx but also statically imported by /workspaces/Prospaces/src/components/LandingPage.tsx, dynamic import will not move module into another chunk.
+
+computing gzip size...
+build/inventory.html                                                    0.66 kB │ gzip:   0.35 kB
+build/insights.html                                                     1.06 kB │ gzip:   0.43 kB
+build/marketing.html                                                    1.21 kB │ gzip:   0.45 kB
+build/it.html                                                           1.34 kB │ gzip:   0.47 kB
+build/project-wizards.html                                              1.77 kB │ gzip:   0.56 kB
+build/assets/info-hero-insights-CXaYhgBZ.svg                            4.27 kB │ gzip:   1.06 kB
+build/assets/space-sales-CXuHX5pY.svg                                   4.32 kB │ gzip:   1.30 kB
+build/assets/info-hero-sales-D3se7aUu.svg                               4.78 kB │ gzip:   1.07 kB
+build/assets/info-hero-marketing-Be3h0SSO.svg                           4.84 kB │ gzip:   1.21 kB
+build/assets/info-hero-build-DAXaWEwI.svg                               4.85 kB │ gzip:   1.21 kB
+build/assets/info-hero-inventory-QunvQHnO.svg                           4.97 kB │ gzip:   1.05 kB
+build/assets/space-insights-B3JHbEJq.svg                                5.36 kB │ gzip:   1.33 kB
+build/assets/info-hero-it-Cawiur3w.svg                                  5.54 kB │ gzip:   1.28 kB
+build/assets/space-build-BqcnySM9.svg                                   6.04 kB │ gzip:   1.46 kB
+build/assets/space-operations-wtzXXQYp.svg                              6.21 kB │ gzip:   1.39 kB
+build/assets/space-marketing-CfsjvlZQ.svg                               7.50 kB │ gzip:   1.87 kB
+build/index.html                                                        8.07 kB │ gzip:   1.60 kB
+build/assets/space-inventory-C8eOGgvR.svg                               9.54 kB │ gzip:   1.83 kB
+build/assets/f99d25ddb222762681abcb651c10ad4a23a854fb-DrJFVo4D.png     16.12 kB
+build/assets/09aa6b9a364cd19b8e73e23401db6a6a0b182a0e-6hf3wE5Q.png  1,453.35 kB
+build/assets/index-DFP_Wrl_.css                                       255.41 kB │ gzip:  34.56 kB
+build/assets/useDebounce-CrsNTaEX.js                                    0.20 kB │ gzip:   0.17 kB
+build/assets/index-BXfL2J27.js                                          0.23 kB │ gzip:   0.17 kB
+build/assets/chevron-up-AgO9okMx.js                                     0.30 kB │ gzip:   0.25 kB
+build/assets/chevron-left-DjbXLSBv.js                                   0.30 kB │ gzip:   0.25 kB
+build/assets/loader-circle-BId9qWU7.js                                  0.31 kB │ gzip:   0.26 kB
+build/assets/square-CK3kzhwn.js                                         0.32 kB │ gzip:   0.26 kB
+build/assets/plus-CR7hWYpV.js                                           0.32 kB │ gzip:   0.25 kB
+build/assets/x-BQeNL26k.js                                              0.33 kB │ gzip:   0.26 kB
+build/assets/clock-CUNIloLA.js                                          0.34 kB │ gzip:   0.27 kB
+build/assets/arrow-right-DOr2f-5r.js                                    0.34 kB │ gzip:   0.26 kB
+build/assets/search-GR0YwarE.js                                         0.34 kB │ gzip:   0.27 kB
+build/assets/circle-check-CTGOX943.js                                   0.34 kB │ gzip:   0.27 kB
+build/assets/trending-up-DXUwshrs.js                                    0.35 kB │ gzip:   0.27 kB
+build/assets/ban-BmLPyLiS.js                                            0.35 kB │ gzip:   0.27 kB
+build/assets/Logo-BwsNr8z6.js                                           0.35 kB │ gzip:   0.29 kB
+build/assets/circle-check-big-LoVBJdNh.js                               0.36 kB │ gzip:   0.28 kB
+build/assets/play-CY5vBgQU.js                                           0.36 kB │ gzip:   0.28 kB
+build/assets/index-CP98k3Dd.js                                          0.36 kB │ gzip:   0.29 kB
+build/assets/smartphone-BIR3lM6O.js                                     0.37 kB │ gzip:   0.29 kB
+build/assets/info-DKtU7X2s.js                                           0.37 kB │ gzip:   0.28 kB
+build/assets/rotate-ccw-0nC3u1QV.js                                     0.37 kB │ gzip:   0.29 kB
+build/assets/lock-CwK3EGck.js                                           0.37 kB │ gzip:   0.29 kB
+build/assets/circle-x-Ait6N9SC.js                                       0.37 kB │ gzip:   0.28 kB
+build/assets/credit-card-C7m8LBq9.js                                    0.38 kB │ gzip:   0.29 kB
+build/assets/pause-8VHJngKg.js                                          0.38 kB │ gzip:   0.27 kB
+build/assets/mail-Dgh824sY.js                                           0.38 kB │ gzip:   0.30 kB
+build/assets/moon-CoczaIpO.js                                           0.39 kB │ gzip:   0.30 kB
+build/assets/dollar-sign-DMZR7l9V.js                                    0.39 kB │ gzip:   0.29 kB
+build/assets/type-Ba4yVuF2.js                                           0.39 kB │ gzip:   0.28 kB
+build/assets/target-CXt0AtDD.js                                         0.39 kB │ gzip:   0.26 kB
+build/assets/git-branch-Dqz_oUmI.js                                     0.40 kB │ gzip:   0.29 kB
+build/assets/paperclip-JI4m-YKU.js                                      0.40 kB │ gzip:   0.30 kB
+build/assets/upload-D4IcEjRJ.js                                         0.40 kB │ gzip:   0.30 kB
+build/assets/ellipsis-vertical-B8kqXB28.js                              0.40 kB │ gzip:   0.27 kB
+build/assets/log-in-DUBI4Z0B.js                                         0.40 kB │ gzip:   0.29 kB
+build/assets/copy-CWiifnFn.js                                           0.40 kB │ gzip:   0.31 kB
+build/assets/download-CsY7vE64.js                                       0.40 kB │ gzip:   0.30 kB
+build/assets/activity-CjUfYQKz.js                                       0.41 kB │ gzip:   0.30 kB
+build/assets/pen-Da4O2nlT.js                                            0.41 kB │ gzip:   0.31 kB
+build/assets/globe-DclGRb4O.js                                          0.41 kB │ gzip:   0.29 kB
+build/assets/history-B-4bOXRn.js                                        0.41 kB │ gzip:   0.30 kB
+build/assets/user-check-BXYPxYSw.js                                     0.41 kB │ gzip:   0.31 kB
+build/assets/link-2-BWkJM4IF.js                                         0.41 kB │ gzip:   0.31 kB
+build/assets/database-Z6JAWenO.js                                       0.41 kB │ gzip:   0.30 kB
+build/assets/circle-question-mark-DujX30ND.js                           0.41 kB │ gzip:   0.31 kB
+build/assets/settings-2-BnNGqWr4.js                                     0.42 kB │ gzip:   0.29 kB
+build/assets/video-Dll8CWA_.js                                          0.42 kB │ gzip:   0.32 kB
+build/assets/chart-column-B5LbN8sX.js                                   0.42 kB │ gzip:   0.30 kB
+build/assets/eye-BkroH0sR.js                                            0.42 kB │ gzip:   0.30 kB
+build/assets/funnel-CSN2axzw.js                                         0.42 kB │ gzip:   0.31 kB
+build/assets/external-link-DT2nszjO.js                                  0.42 kB │ gzip:   0.30 kB
+build/assets/map-pin-D0Le9VJ2.js                                        0.43 kB │ gzip:   0.32 kB
+build/assets/clipboard-Dg376H6o.js                                      0.43 kB │ gzip:   0.31 kB
+build/assets/calendar-PQyCCcWK.js                                       0.43 kB │ gzip:   0.30 kB
+build/assets/key-CRkQ_0mH.js                                            0.43 kB │ gzip:   0.32 kB
+build/assets/zap-J4dPIpsG.js                                            0.43 kB │ gzip:   0.31 kB
+build/assets/barcode-D3Aw_ELj.js                                        0.44 kB │ gzip:   0.28 kB
+build/assets/triangle-alert-pBu7xjGz.js                                 0.44 kB │ gzip:   0.31 kB
+build/assets/shield-CNTEXgdQ.js                                         0.44 kB │ gzip:   0.33 kB
+build/assets/award-BOVCNADb.js                                          0.44 kB │ gzip:   0.33 kB
+build/assets/image-C8ctTYFL.js                                          0.44 kB │ gzip:   0.32 kB
+build/assets/pencil-C40RIMAp.js                                         0.45 kB │ gzip:   0.33 kB
+build/assets/shopping-cart-B5DN1sFD.js                                  0.46 kB │ gzip:   0.33 kB
+build/assets/send-DtS_1W4k.js                                           0.46 kB │ gzip:   0.33 kB
+build/assets/folder-open-DpIk2Y2R.js                                    0.46 kB │ gzip:   0.32 kB
+build/assets/wrench-BmaEaog_.js                                         0.47 kB │ gzip:   0.34 kB
+build/assets/list-DwT2nQM6.js                                           0.47 kB │ gzip:   0.29 kB
+build/assets/users-c_34rtbr.js                                          0.48 kB │ gzip:   0.33 kB
+build/assets/brush-CDgjkPZq.js                                          0.48 kB │ gzip:   0.34 kB
+build/assets/user-plus-CzS2A0Xg.js                                      0.48 kB │ gzip:   0.34 kB
+build/assets/printer-DKyeS8pb.js                                        0.49 kB │ gzip:   0.34 kB
+build/assets/square-pen-BjHUi6mo.js                                     0.49 kB │ gzip:   0.34 kB
+build/assets/tag-LIlaQLfl.js                                            0.49 kB │ gzip:   0.35 kB
+build/assets/save-CIvsy1Th.js                                           0.50 kB │ gzip:   0.33 kB
+build/assets/trash-2-Bt4_bEmV.js                                        0.50 kB │ gzip:   0.32 kB
+build/assets/camera-DYHj9pAD.js                                         0.51 kB │ gzip:   0.35 kB
+build/assets/layout-grid-CBaN6-Yd.js                                    0.52 kB │ gzip:   0.30 kB
+build/assets/gift-q82NrTKQ.js                                           0.52 kB │ gzip:   0.35 kB
+build/assets/scoped-email-CqrR-ZGR.js                                   0.52 kB │ gzip:   0.38 kB
+build/assets/share-2-CWjPtxhT.js                                        0.52 kB │ gzip:   0.33 kB
+build/assets/file-down-BQY1syPA.js                                      0.53 kB │ gzip:   0.35 kB
+build/assets/package-DHt8G9oX.js                                        0.54 kB │ gzip:   0.36 kB
+build/assets/door-open-B6MLD39A.js                                      0.54 kB │ gzip:   0.35 kB
+build/assets/calendar-clock-BRas5tOK.js                                 0.54 kB │ gzip:   0.35 kB
+build/assets/warehouse-CkTBFUeS.js                                      0.55 kB │ gzip:   0.36 kB
+build/assets/building-2-SiIW3qvX.js                                     0.55 kB │ gzip:   0.34 kB
+build/assets/file-text-BzSZX7pV.js                                      0.56 kB │ gzip:   0.35 kB
+build/assets/ruler-B69hoz8u.js                                          0.57 kB │ gzip:   0.35 kB
+build/assets/mouse-pointer-click-Bnf-MwmL.js                            0.59 kB │ gzip:   0.39 kB
+build/assets/layers-D1XJh-9M.js                                         0.59 kB │ gzip:   0.34 kB
+build/assets/rocket-Czs4GjfK.js                                         0.62 kB │ gzip:   0.41 kB
+build/assets/pen-tool-Ccxg7ggr.js                                       0.64 kB │ gzip:   0.41 kB
+build/assets/star-kHL9_RJP.js                                           0.64 kB │ gzip:   0.40 kB
+build/assets/settings-BIH1jxds.js                                       0.65 kB │ gzip:   0.36 kB
+build/assets/textarea-8hq4-70d.js                                       0.66 kB │ gzip:   0.41 kB
+build/assets/sparkles-Du8bovO3.js                                       0.67 kB │ gzip:   0.39 kB
+build/assets/wand-sparkles-Sk-0sVzX.js                                  0.68 kB │ gzip:   0.40 kB
+build/assets/triangle-BfJJ-aZq.js                                       0.78 kB │ gzip:   0.41 kB
+build/assets/user-cog-DAUmkBsu.js                                       0.82 kB │ gzip:   0.44 kB
+build/assets/useAudienceSegments-VzPhXpDE.js                            0.87 kB │ gzip:   0.42 kB
+build/assets/clipboard-DmeE4Bfy.js                                      0.92 kB │ gzip:   0.40 kB
+build/assets/folder-Dbxb4Zwi.js                                         0.95 kB │ gzip:   0.45 kB
+build/assets/input-BGPBgzZ2.js                                          0.97 kB │ gzip:   0.57 kB
+build/assets/house-DMf0Uw1h.js                                          0.97 kB │ gzip:   0.48 kB
+build/assets/notifications-BSIAbdOP.js                                  0.97 kB │ gzip:   0.48 kB
+build/assets/label-uoZoUUJ8.js                                          0.98 kB │ gzip:   0.60 kB
+build/assets/boxes-9KCa3R5O.js                                          1.02 kB │ gzip:   0.51 kB
+build/assets/alert-CMpUVCgP.js                                          1.05 kB │ gzip:   0.53 kB
+build/assets/DesktopOnlyAccess-C1135Q22.js                              1.06 kB │ gzip:   0.58 kB
+build/assets/separator-BH21X7BO.js                                      1.11 kB │ gzip:   0.59 kB
+build/assets/MetricCard-B4wcJRkL.js                                     1.13 kB │ gzip:   0.51 kB
+build/assets/square-stack-PS4M63El.js                                   1.15 kB │ gzip:   0.57 kB
+build/assets/badge-Bcxk2_Kn.js                                          1.16 kB │ gzip:   0.57 kB
+build/assets/PermissionGate-DkYIeulc.js                                 1.38 kB │ gzip:   0.58 kB
+build/assets/zoom-out-DmWyOm60.js                                       1.53 kB │ gzip:   0.51 kB
+build/assets/sticky-note-D7lVVndd.js                                    1.97 kB │ gzip:   0.68 kB
+build/assets/campaign-metrics-dXjRvsdZ.js                               2.15 kB │ gzip:   0.75 kB
+build/assets/BackgroundProcessingModuleHelp-DzAY2jo7.js                 2.18 kB │ gzip:   1.10 kB
+build/assets/export-engine-CUlL9-tD.js                                  2.23 kB │ gzip:   1.15 kB
+build/assets/switch-DCwWtDHn.js                                         2.73 kB │ gzip:   1.38 kB
+build/assets/DiagnosticPanel-CcKb6bRl.js                                3.19 kB │ gzip:   1.27 kB
+build/assets/progress-BINGAz36.js                                       3.25 kB │ gzip:   1.54 kB
+build/assets/proceduralTextures-9gEcsgfa.js                             3.48 kB │ gzip:   1.13 kB
+build/assets/tabs-CgwMlwVP.js                                           3.56 kB │ gzip:   1.56 kB
+build/assets/AdminFixUsers-B6MaymST.js                                  4.10 kB │ gzip:   1.67 kB
+build/assets/checkbox-gAz6y-XW.js                                       4.10 kB │ gzip:   1.79 kB
+build/assets/documents-client-B7CTcw7P.js                               4.24 kB │ gzip:   1.37 kB
+build/assets/avatar-CC4yN1hv.js                                         4.59 kB │ gzip:   2.10 kB
+build/assets/portal-client-C6mDJwvG.js                                  4.60 kB │ gzip:   1.36 kB
+build/assets/marketing-client-D5xpWXI7.js                               4.60 kB │ gzip:   1.14 kB
+build/assets/OpportunitySelector-B0JixN_S.js                            4.70 kB │ gzip:   1.83 kB
+build/assets/subscription-client-fUVytv5f.js                            5.72 kB │ gzip:   1.51 kB
+build/assets/MainPanels-C0J-hBJN.js                                     5.87 kB │ gzip:   2.35 kB
+build/assets/popover-CHNqFP7Y.js                                        6.80 kB │ gzip:   2.54 kB
+build/assets/Reports-BP_fewAB.js                                        7.39 kB │ gzip:   3.03 kB
+build/assets/GettingStarted-BMYX9cMy.js                                 7.73 kB │ gzip:   2.92 kB
+build/assets/Marketing-B8W0MXsD.js                                      7.76 kB │ gzip:   2.73 kB
+build/assets/BidProposalReports-Bqi-tYjM.js                             8.50 kB │ gzip:   2.36 kB
+build/assets/advanced-search-CztcXUJV.js                                8.54 kB │ gzip:   3.06 kB
+build/assets/slider-DVGGp0Rb.js                                         8.84 kB │ gzip:   3.50 kB
+build/assets/Notes-Cw10wBWt.js                                          8.96 kB │ gzip:   3.54 kB
+build/assets/Tasks-HxKGzs8B.js                                          8.99 kB │ gzip:   3.31 kB
+build/assets/PlannerWorkflowHelp-BN2fPRtw.js                            9.18 kB │ gzip:   3.35 kB
+build/assets/dialog-BStMUTiT.js                                         9.46 kB │ gzip:   3.48 kB
+build/assets/LeadScoring-3zuHdjGP.js                                   10.02 kB │ gzip:   3.03 kB
+build/assets/BackgroundImportManager-Dha_U-F1.js                       10.07 kB │ gzip:   3.67 kB
+build/assets/JourneyBuilder-A1YLAVPO.js                                10.11 kB │ gzip:   2.83 kB
+build/assets/MarketingDashboard-CNNb48sM.js                            10.28 kB │ gzip:   3.48 kB
+build/assets/ManagerSummaryReports-BZ0f1t3g.js                         10.94 kB │ gzip:   3.58 kB
+build/assets/enrichMaterialsWithPricing-CHQfe78a.js                    11.07 kB │ gzip:   3.38 kB
+build/assets/Garage3DRenderer-C3MRKWo0.js                              11.14 kB │ gzip:   3.87 kB
+build/assets/MarketingAnalytics-BzAft2wq.js                            11.37 kB │ gzip:   2.90 kB
+build/assets/scroll-area-BoUpS47u.js                                   12.57 kB │ gzip:   3.97 kB
+build/assets/Kitchen3DRenderer-AunKQbmD.js                             12.81 kB │ gzip:   5.20 kB
+build/assets/InteractiveModuleHelp-AuynOIc1.js                         13.22 kB │ gzip:   4.43 kB
+build/assets/lumberLengths-BK3352Bc.js                                 13.51 kB │ gzip:   4.50 kB
+build/assets/inventory-Dokf7hX8.js                                     13.86 kB │ gzip:   5.21 kB
+build/assets/insights-Ib8ytVOm.js                                      14.58 kB │ gzip:   5.33 kB
+build/assets/ReferralsTab-DBpYJuhh.js                                  15.32 kB │ gzip:   4.50 kB
+build/assets/AuditLog-DU0CPN4T.js                                      16.52 kB │ gzip:   5.03 kB
+build/assets/ScheduledJobs-DAhZQ_Bs.js                                 17.11 kB │ gzip:   5.59 kB
+build/assets/Security-F66yXySz.js                                      19.06 kB │ gzip:   6.18 kB
+build/assets/marketing-D_J9dAeM.js                                     19.59 kB │ gzip:   6.93 kB
+build/assets/three-CVK1LGLH.js                                         20.25 kB │ gzip:   6.95 kB
+build/assets/Deck3DRenderer-CfiKFpYa.js                                20.87 kB │ gzip:   6.59 kB
+build/assets/it-D58geFdQ.js                                            21.59 kB │ gzip:   7.34 kB
+build/assets/select-CUCTiDIA.js                                        23.95 kB │ gzip:   8.21 kB
+build/assets/project-wizards-CiHaAV84.js                               25.50 kB │ gzip:   8.86 kB
+build/assets/SubscriptionAgreement-vFCGNF-J.js                         27.89 kB │ gzip:   6.96 kB
+build/assets/Dashboard--6X4MiQ9.js                                     32.16 kB │ gzip:  10.76 kB
+build/assets/CampaignManager-BFTG-9e1.js                               34.79 kB │ gzip:   8.22 kB
+build/assets/Documents-DnzzPHzH.js                                     35.54 kB │ gzip:   9.22 kB
+build/assets/LandingPageBuilder-Cyi-G-BD.js                            39.55 kB │ gzip:  10.62 kB
+build/assets/InteriorFinishingPlanner-DHrAdBWQ.js                      42.35 kB │ gzip:  11.99 kB
+build/assets/MessagingHub-DfqEuRyl.js                                  42.41 kB │ gzip:  12.09 kB
+build/assets/AITaskSuggestions-D809vmFL.js                             42.80 kB │ gzip:  11.82 kB
+build/assets/ManagerDashboard-CZBVVXPV.js                              45.26 kB │ gzip:  14.20 kB
+build/assets/Bids-BQlm0bGj.js                                          46.46 kB │ gzip:  13.69 kB
+build/assets/Tenants-BLiHmz4Q.js                                       46.50 kB │ gzip:  11.47 kB
+build/assets/Appointments-CkPsKsSO.js                                  52.18 kB │ gzip:  14.78 kB
+build/assets/PlannerExportDialog-B72tvJOd.js                           52.42 kB │ gzip:  15.14 kB
+build/assets/EmailDesignStudio-DKFKzauM.js                             52.86 kB │ gzip:  13.38 kB
+build/assets/SubscriptionBilling-D9oyHtbq.js                           53.76 kB │ gzip:  14.91 kB
+build/assets/Email-Cqq6NFAm.js                                         59.85 kB │ gzip:  16.58 kB
+build/assets/GaragePlanner-CpqIySh8.js                                 65.55 kB │ gzip:  16.75 kB
+build/assets/api-DCb9UB9W.js                                           76.86 kB │ gzip:  18.72 kB
+build/assets/ShedPlanner-DCNRDlYq.js                                   84.06 kB │ gzip:  21.19 kB
+build/assets/DeckPlanner-DGYrQRlV.js                                   89.46 kB │ gzip:  20.50 kB
+build/assets/KitchenPlanner-B2Y5p0up.js                                94.98 kB │ gzip:  22.02 kB
+build/assets/Inventory-CFd1ml3V.js                                    108.67 kB │ gzip:  27.08 kB
+build/assets/Users-CH_oBilM.js                                        124.57 kB │ gzip:  29.67 kB
+build/assets/RoofPlanner-g--n00dp.js                                  139.51 kB │ gzip:  29.78 kB
+build/assets/Settings-Bex2qMV0.js                                     162.93 kB │ gzip:  37.77 kB
+build/assets/Contacts-CVXHhiMC.js                                     211.12 kB │ gzip:  52.11 kB
+build/assets/PieChart-AIhrQW1h.js                                     373.27 kB │ gzip: 109.29 kB
+build/assets/ImportExport-BT9ExoGn.js                                 383.51 kB │ gzip: 128.58 kB
+build/assets/index-DgS29DQt.js                                        532.53 kB │ gzip: 157.23 kB
+build/assets/main-Bji1h--e.js                                         854.72 kB │ gzip: 226.61 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 24.71s

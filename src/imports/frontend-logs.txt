@@ -1,0 +1,187 @@
+ Running frontend commit 68a678d5ef4e7daa71b2bed3b14f62b8a3691d55
+vendor-core-ade2edecaf4781c7.min.js.br:54 Statsig is not ready to log exposures, will retry in 1 seconds
+(anonymous) @ vendor-core-ade2edecaf4781c7.min.js.br:54
+vendor-core-ade2edecaf4781c7.min.js.br:54 Loaded 32 scripts (5990110b), 0 from cache (0b)
+ The powerPreference option is currently ignored when calling requestAdapter() on Windows. See https://crbug.com/369219127
+initialize @ 6005-316f94e648742cad.min.js.br:358
+vendor-core-ade2edecaf4781c7.min.js.br:54 [import] git: 48589f4cb70c6245ed05d8f4e8e56d36d6b05fb3, stamp: 594A0F27E5DEFE4C
+vendor-core-ade2edecaf4781c7.min.js.br:54 Statsig is not ready to log exposures, will retry in 1 seconds
+(anonymous) @ vendor-core-ade2edecaf4781c7.min.js.br:54
+vendor-core-ade2edecaf4781c7.min.js.br:54 Autosave Changes not available or already claimed by another tab undefined
+(index):1  Failed to load resource: net::ERR_FAILED
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Fullscreen] Booting... (emscripten version 4.0.21)
+vendor-core-ade2edecaf4781c7.min.js.br:54 [GPU] graphicsAPI:"WebGPU", vendor:"Google Inc. (Intel)" renderer:"ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)" deviceArchitecture:"gen-9" deviceDescription:"" webGPUDevice:"" webGPUVendor:"intel" bindings:"emdawnwebgpu"
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Fullscreen] Ready in 2012.1ms
+vendor-core-ade2edecaf4781c7.min.js.br:54 [FullscreenApp] calling setEditorTheme and setting preference light
+vendor-core-ade2edecaf4781c7.min.js.br:54 [MultiplayerSession] connecting to wss://www.figma.com/api/multiplayer/0NIWxaPFaVcCTCDFcePevZ?role=editor&tracking_session_id=wclAxBLNUPgdi9Wf&version=151&recentReload=0&file-load-streaming-compression&user-id=899069755560023552&client_release=68a678d5ef4e7daa71b2bed3b14f62b8a3691d55
+vendor-core-ade2edecaf4781c7.min.js.br:54 [FullscreenApp] calling setEditorTheme and setting preference light
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Sprigma] Sprig SDK is ready
+vendor-core-ade2edecaf4781c7.min.js.br:54 [MultiplayerSession] Joining file version 106 (initial load)
+vendor-core-ade2edecaf4781c7.min.js.br:54 Migration succeeded: context: fullscreen_migrate_SceneGraphManager, version: 106, duration: 0ms.
+ProSpaces-CRM?p=f&t=jo9d7ztSK0EYzG7h-0:1 Access to image at 'https://www.gravatar.com/avatar/146e0560555de63a72928201c83f3a4a?size=240&default=https%3A%2F%2Fs3-alpha.figma.com%2Fstatic%2Fuser_g_v2.png?c=1' from origin 'https://www.figma.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+www.gravatar.com/avatar/146e0560555de63a72928201c83f3a4a?size=240&default=https%3A%2F%2Fs3-alpha.figma.com%2Fstatic%2Fuser_g_v2.png?c=1:1  Failed to load resource: net::ERR_FAILED
+/api/make/0NIWxaPFaVcCTCDFcePevZ/cached_preview_urls?source_code_hash=7c6f11f27627a6d1d88a6420b5c16445d543c348:1  Failed to load resource: the server responded with a status of 404 ()
+/api/make/fetch_ds_code_gen_status:1  Failed to load resource: the server responded with a status of 400 ()
+vendor-core-ade2edecaf4781c7.min.js.br:54 [Fullscreen] loadtime=15.48s maxmem=656154280
+vendor-core-ade2edecaf4781c7.min.js.br:54 [devtools] Initialized LS
+vendor-core-ade2edecaf4781c7.min.js.br:54 [devtools] Initialized LS
+ Using default Supabase URL from info.tsx
+ No user ID, loading theme from localStorage
+ Applying theme: vibrant
+vendor-core-ade2edecaf4781c7.min.js.br:54 Too many elapsed hits of react since last report
+(anonymous) @ vendor-core-ade2edecaf4781c7.min.js.br:54
+ 3:16:33 AM [vite] (client) hmr update /src/components/ContactDetail.tsx, /index.css
+ 📋 Calling /profiles/ensure for profile resolution...
+ No localStorage permissions found, using hardcoded defaults
+ Server /profiles/ensure response: 200 Object
+ ✅ Profile resolved via server: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org: 34638283-7b3d-47e2-bec8-a9e600e28c4a needs_pw: false
+ No localStorage permissions found, using hardcoded defaults
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ Loading theme for user: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+ [email-preloader] Fetching email accounts...
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:2 appointments:0
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:2 appointments:0
+ Loaded theme from database: ocean
+ Loaded theme from database: ocean
+ Applying theme: ocean
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:2 appointments:0
+ 🔐 Tasks - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a Scope: personal
+ 👤 Personal scope - Loading only own tasks
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:2 appointments:0
+ 🔐 Appointments - Current user: george.campbell@ronaatlantic.ca Role: admin Scope: personal
+ 👤 Personal scope - Loading only own appointments
+ 📊 Tasks filtered data - Total rows: 0
+ [email-preloader] Cached 4 account(s)
+ [email-preloader] Background sync for account 68a7c187-77f3-488a-89e1-aba77b647c91...
+ 📊 Appointments filtered data - Total rows: 0
+ [quotes-client] Server endpoint returned 2 quotes (role=admin)
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ 🔍 DASHBOARD DEBUG: Object
+ 🔍 DEBUG: Won deals for avg calculation: Array(0)
+ 🔍 DEBUG: Won deals count: 0
+ 📊 Avg Days to Close - Won deals: 0 Avg days: 0.0
+ 📊 Avg Open Deal Age - Open bids: 2 Valid: 2 Avg days: 0.1
+ 📊 About to count pipeline data:
+   - allBids.length: 2
+   - allBids data: Array(2)
+   - Adding deal: draft -> Draft
+   - Adding deal: draft -> Draft
+ 📊 Pipeline Status Counts: Object
+ 📊 Pipeline Chart Data: Array(1)
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [email-preloader] Background sync done: 0 new emails
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔍 getAllInventoryClient - User ID: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ 🔍 getAllInventoryClient - User metadata: Object
+ 🔐 Inventory - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔄 Fetching inventory...
+ [settings-client] ✅ Organization settings fetched via server
+ [quotes-client] Server endpoint returned 3 quotes (role=admin)
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ 📊 Inventory filtered data - Total rows returned: 1000
+ 📦 Sample inventory data (first 3): Array(3)
+ ✅ Mapped inventory items count: 1000
+ ✅ Sample mapped items (first 2): Array(2)
+ 🖼️ Items with images: 0
+ [contacts-client] Server returned 341 contacts for role=admin
+ Loaded quotes: 3
+ Loaded legacy bids: 0
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:2 appointments:0
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ 3:18:52 AM [vite] (client) hmr update /src/components/ContactDetail.tsx, /index.css
+ [contacts-client] Fetching contacts via server endpoint (scope=personal)...
+ 📝 Notes - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a Scope: personal
+ 👤 Personal View - Loading only own notes for user: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ [notes-client] Query returned 0 note(s)
+ [contacts-client] Server returned 181 contacts for role=admin
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔍 getAllInventoryClient - User ID: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ 🔍 getAllInventoryClient - User metadata: Object
+ 🔐 Inventory - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔄 Fetching inventory...
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ [settings-client] ✅ Organization settings fetched via server
+ [quotes-client] Server endpoint returned 3 quotes (role=admin)
+ 📊 Inventory filtered data - Total rows returned: 1000
+ 📦 Sample inventory data (first 3): Array(3)
+ ✅ Mapped inventory items count: 1000
+ ✅ Sample mapped items (first 2): Array(2)
+ 🖼️ Items with images: 0
+ [contacts-client] Server returned 341 contacts for role=admin
+ Loaded quotes: 3
+ Loaded legacy bids: 0
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔐 Tasks - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a Scope: personal
+ 👤 Personal scope - Loading only own tasks
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:2 appointments:0
+ 🔐 Appointments - Current user: george.campbell@ronaatlantic.ca Role: admin Scope: personal
+ 👤 Personal scope - Loading only own appointments
+ 📊 Tasks filtered data - Total rows: 0
+ 📊 Appointments filtered data - Total rows: 0
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ [quotes-client] Server endpoint returned 2 quotes (role=admin)
+ 🔍 DASHBOARD DEBUG: Object
+ 🔍 DEBUG: Won deals for avg calculation: Array(0)
+ 🔍 DEBUG: Won deals count: 0
+ 📊 Avg Days to Close - Won deals: 0 Avg days: 0.0
+ 📊 Avg Open Deal Age - Open bids: 2 Valid: 2 Avg days: 0.1
+ 📊 About to count pipeline data:
+   - allBids.length: 2
+   - allBids data: Array(2)
+   - Adding deal: draft -> Draft
+   - Adding deal: draft -> Draft
+ 📊 Pipeline Status Counts: Object
+ 📊 Pipeline Chart Data: Array(1)
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ [contacts-client] Fetching contacts via server endpoint (scope=team)...
+ [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔍 getAllInventoryClient - User ID: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ 🔍 getAllInventoryClient - User metadata: Object
+ 🔐 Inventory - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ 🔄 Fetching inventory...
+ 📊 Inventory filtered data - Total rows returned: 1000
+ 📦 Sample inventory data (first 3): Array(3)
+ ✅ Mapped inventory items count: 1000
+ ✅ Sample mapped items (first 2): Array(2)
+ 🖼️ Items with images: 0
+ [settings-client] ✅ Organization settings fetched via server
+ [quotes-client] Server endpoint returned 3 quotes (role=admin)
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ [contacts-client] Server returned 341 contacts for role=admin
+ Loaded quotes: 3
+ Loaded legacy bids: 0
+ ✅ Applied 116 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 116 permissions from server (KV store)
+ [permissions] Applied 116 permissions from server, synced to localStorage
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ [ai-suggestions] Data loaded — bids:0 contacts:181 tasks:0 opportunities:2 appointments:0
+ [ai-suggestions] Generated 2 suggestions (0 critical)
+ 3:22:45 AM [vite] (client) hmr update /src/components/ContactDetail.tsx, /index.css

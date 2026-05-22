@@ -1,0 +1,11 @@
+[functions.nylas-callback]
+verify_jwt = false
+
+[functions.nylas-connect]
+verify_jwt = true
+
+[functions.server]
+verify_jwt = false
+
+[functions.make-server]
+verify_jwt = false

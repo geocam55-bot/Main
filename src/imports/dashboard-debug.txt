@@ -1,0 +1,96 @@
+ Using default Supabase URL from info.tsx
+ No user ID, loading theme from localStorage
+ Applying theme: midnight
+/favicon.ico:1  Failed to load resource: the server responded with a status of 404 ()
+ 📋 Calling /profiles/ensure for profile resolution...
+ ✅ Applied 115 permission overrides from Security Settings (localStorage)
+ [permissions] Loaded 115 permissions from server (KV store)
+ [permissions] Applied 115 permissions from server, synced to localStorage
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+ Loading theme for user: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+ [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+ [email-preloader] Fetching email accounts...
+ [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+ Server /profiles/ensure response: 200 Object
+ ✅ Profile resolved via server: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org: 34638283-7b3d-47e2-bec8-a9e600e28c4a needs_pw: false
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+ ✅ Applied 115 permission overrides from Security Settings (localStorage)
+ 🔐 Tasks - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a Scope: personal
+ 👤 Personal scope - Loading only own tasks
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+ [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+ Loaded theme from database: midnight
+ Loaded theme from database: midnight
+ 🔐 Appointments - Current user: george.campbell@ronaatlantic.ca Role: admin Scope: personal
+ 👤 Personal scope - Loading only own appointments
+ 📊 Tasks filtered data - Total rows: 0
+ 📊 Appointments filtered data - Total rows: 0
+ [email-preloader] Cached 4 account(s)
+ [email-preloader] Background sync for account 68a7c187-77f3-488a-89e1-aba77b647c91...
+ [quotes-client] Server endpoint returned 0 quotes (role=admin)
+ [bids-client] Server endpoint returned 0 bids (role=admin)
+ 🔍 DASHBOARD DEBUG: Object
+ 🔍 DEBUG: Won deals for avg calculation: Array(0)
+ 🔍 DEBUG: Won deals count: 0
+ 📊 Avg Days to Close - Won deals: 0 Avg days: 0.0
+ 📊 Avg Open Deal Age - Open bids: 0 Valid: 0 Avg days: 0.0
+ 📊 About to count pipeline data:
+   - allBids.length: 0
+   - allBids data: Array(0)
+ 📊 Pipeline Status Counts: Object
+ 📊 Pipeline Chart Data: Array(0)
+index-8USOSgY9.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-8USOSgY9.js:958 [permissions] Loaded 115 permissions from server (KV store)
+index-8USOSgY9.js:958 [permissions] Applied 115 permissions from server, synced to localStorage
+index-8USOSgY9.js:958 [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-8USOSgY9.js:958 [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-8USOSgY9.js:958 [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+index-8USOSgY9.js:958 [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+index-8USOSgY9.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-8USOSgY9.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-8USOSgY9.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-8USOSgY9.js:1592 [email-preloader] Background sync done: 0 new emails
+index-8USOSgY9.js:1394 [settings-client] 📊 Fetching user preferences for user: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+index-8USOSgY9.js:1394 [settings-client] ✅ User preferences fetched via server
+index-8USOSgY9.js:1394 [settings-client] 📊 Fetching organization settings for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-8USOSgY9.js:2943 ImportExport component mounted for user: Object
+index-8USOSgY9.js:1394 [settings-client] ✅ Organization settings fetched via server
+index-8USOSgY9.js:1394 [settings-client] Fetching org user mode for org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-8USOSgY9.js:1394 [settings-client] Org mode fetched: multi source: kv
+index-8USOSgY9.js:2867 [Settings] ✅ Settings loaded successfully
+index-8USOSgY9.js:2944 Auto-mapped "Item Number" -> "sku" (SKU)
+index-8USOSgY9.js:2944 Auto-mapped "Item Description" -> "name" (Item Name)
+index-8USOSgY9.js:2944 No match found for column "Selling U/M"
+index-8USOSgY9.js:2944 Auto-mapped "Department Code" -> "department_code" (Department Code)
+index-8USOSgY9.js:2944 No match found for column "Class Code"
+index-8USOSgY9.js:2944 Auto-mapped "Retail" -> "price_tier_1" (T1 — Retail)
+index-8USOSgY9.js:2944 Auto-mapped "VIP" -> "price_tier_2" (T2 — VIP)
+index-8USOSgY9.js:2944 No match found for column "Elite-B"
+index-8USOSgY9.js:2944 No match found for column "Elite-A"
+index-8USOSgY9.js:2944 No match found for column "Landscaper"
+index-8USOSgY9.js:2944 No match found for column "Roofing"
+index-8USOSgY9.js:2944 No match found for column "Insulation"
+index-8USOSgY9.js:2944 No match found for column "Drywall"
+index-8USOSgY9.js:2944 Auto-mapped "Cost" -> "cost" (Cost)
+index-8USOSgY9.js:2944 Auto-mapped "Quantity on Order" -> "quantity" (Quantity On Hand)
+index-8USOSgY9.js:2944 Auto-mapped "Quantity on Hand" -> "quantity" (Quantity On Hand)
+index-8USOSgY9.js:2944 Final mapping: Object
+index-8USOSgY9.js:2943 ImportExport component mounted for user: Object
+index-8USOSgY9.js:2943 ImportExport component mounted for user: Object
+index-8USOSgY9.js:2943 ImportExport component mounted for user: Object
+index-8USOSgY9.js:2943 ImportExport component mounted for user: Object
+index-8USOSgY9.js:2943 ImportExport component mounted for user: Object
+index-8USOSgY9.js:2943 ImportExport component mounted for user: Object
+index-8USOSgY9.js:2943 Authenticated user: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+index-8USOSgY9.js:2943 App user org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-8USOSgY9.js:2943 Total records to import: 80960
+index-8USOSgY9.js:2943 Splitting 80960 records into 41 job(s) of up to 2000 each
+index-8USOSgY9.js:2943 Creating job (part 1/41): 2000 records
+index-8USOSgY9.js:2943 Job response (part 1/41): Object
+index-8USOSgY9.js:2943 Invalid response: Object
+U @ index-8USOSgY9.js:2943
+index-8USOSgY9.js:2943 Failed to create background import job: Error: Invalid server response (part 1/41)
+    at U (index-8USOSgY9.js:2943:9849)
+U @ index-8USOSgY9.js:2943

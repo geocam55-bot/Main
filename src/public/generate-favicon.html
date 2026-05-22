@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate ProSpaces Favicon</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        canvas {
+            border: 2px solid #ddd;
+            margin: 20px 0;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        .info {
+            background: #f0f9ff;
+            border: 1px solid #bfdbfe;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>ProSpaces CRM Favicon Generator</h1>
+    
+    <div class="info">
+        <p><strong>Instructions:</strong></p>
+        <ol>
+            <li>Click the buttons below to generate and download favicon images</li>
+            <li>Save the downloaded files to your <code>/public</code> folder</li>
+            <li>Refresh your browser to see the new favicon</li>
+        </ol>
+    </div>
+
+    <h2>Preview (32x32)</h2>
+    <canvas id="canvas32" width="32" height="32"></canvas>
+    <button onclick="downloadFavicon(32, 'favicon-32x32.png')">Download 32x32 PNG</button>
+
+    <h2>Preview (192x192 - PWA)</h2>
+    <canvas id="canvas192" width="192" height="192"></canvas>
+    <button onclick="downloadFavicon(192, 'icon-192x192.png')">Download 192x192 PNG</button>
+
+    <h2>Preview (512x512 - PWA)</h2>
+    <canvas id="canvas512" width="512" height="512"></canvas>
+    <button onclick="downloadFavicon(512, 'icon-512x512.png')">Download 512x512 PNG</button>
+
+    <script>
+        function drawFavicon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            const scale = size / 100;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Draw gradient background with rounded corners
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#2563eb');
+            gradient.addColorStop(0.5, '#9333ea');
+            gradient.addColorStop(1, '#ec4899');
+            
+            ctx.fillStyle = gradient;
+            const radius = 20 * scale;
+            ctx.beginPath();
+            ctx.roundRect(0, 0, size, size, radius);
+            ctx.fill();
+            
+            // Draw buildings (white)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            
+            // Main building
+            ctx.beginPath();
+            ctx.roundRect(32 * scale, 22 * scale, 22 * scale, 56 * scale, 2 * scale);
+            ctx.fill();
+            
+            // Left tower
+            ctx.beginPath();
+            ctx.roundRect(22 * scale, 46 * scale, 14 * scale, 32 * scale, 2 * scale);
+            ctx.fill();
+            
+            // Right tower
+            ctx.beginPath();
+            ctx.roundRect(62 * scale, 36 * scale, 14 * scale, 42 * scale, 2 * scale);
+            ctx.fill();
+            
+            // Draw windows (purple)
+            ctx.fillStyle = '#9333ea';
+            
+            // Windows on main building
+            const mainWindows = [
+                [37, 28], [45, 28],
+                [37, 36], [45, 36],
+                [37, 44], [45, 44],
+                [37, 52], [45, 52]
+            ];
+            mainWindows.forEach(([x, y]) => {
+                ctx.beginPath();
+                ctx.roundRect(x * scale, y * scale, 4 * scale, 4 * scale, 1 * scale);
+                ctx.fill();
+            });
+            
+            // Windows on left tower
+            ctx.beginPath();
+            ctx.roundRect(26 * scale, 52 * scale, 6 * scale, 5 * scale, 1 * scale);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.roundRect(26 * scale, 60 * scale, 6 * scale, 5 * scale, 1 * scale);
+            ctx.fill();
+            
+            // Windows on right tower
+            const rightWindows = [[66, 42], [66, 50], [66, 58]];
+            rightWindows.forEach(([x, y]) => {
+                ctx.beginPath();
+                ctx.roundRect(x * scale, y * scale, 6 * scale, 5 * scale, 1 * scale);
+                ctx.fill();
+            });
+        }
+
+        function downloadFavicon(size, filename) {
+            const canvas = document.getElementById(`canvas${size}`);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Draw all canvases on load
+        window.onload = function() {
+            drawFavicon(document.getElementById('canvas32'), 32);
+            drawFavicon(document.getElementById('canvas192'), 192);
+            drawFavicon(document.getElementById('canvas512'), 512);
+        };
+    </script>
+</body>
+</html>

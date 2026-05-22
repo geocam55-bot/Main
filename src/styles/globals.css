@@ -1,0 +1,291 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CACHE BUST v3 - Fixed CommonJS/ESM mismatch! */
+
+/* Custom Scrollbar Styles - Always Visible */
+.kitchen-planner-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #e2e8f0;
+}
+
+/* Force scrollbars to always be visible in Webkit browsers */
+.kitchen-planner-scroll::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  display: block !important;
+}
+
+.kitchen-planner-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 0;
+  display: block !important;
+}
+
+.kitchen-planner-scroll::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 8px;
+  border: 3px solid #e2e8f0;
+  min-height: 40px;
+  display: block !important;
+}
+
+.kitchen-planner-scroll::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+.kitchen-planner-scroll::-webkit-scrollbar-corner {
+  background: #e2e8f0;
+  display: block !important;
+}
+
+.kitchen-planner-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Print Styles for Deck Planner */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.5in 0.5in 0.5in 0.5in;
+  }
+
+  html {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body {
+    background: white;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Add substantial top padding to main content */
+  #root {
+    padding-top: 0.5in !important;
+  }
+
+  #root > div {
+    padding-top: 0.5in !important;
+  }
+
+  /* Hide scrollbars */
+  * {
+    overflow: visible !important;
+    -webkit-overflow-scrolling: auto !important;
+  }
+
+  /* Remove max-height constraints */
+  div {
+    max-height: none !important;
+  }
+
+  header {
+    background: white !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  .print\:border-b-2 {
+    border-bottom-width: 2px !important;
+  }
+
+  .print\:border-black {
+    border-color: black !important;
+  }
+
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+
+  .print\:border-2 {
+    border-width: 2px !important;
+  }
+
+  .print\:break-before-page {
+    break-before: page;
+  }
+  
+  /* Ensure hidden elements with print:block show up */
+  .hidden.print\:block {
+    display: block !important;
+  }
+
+  /* Force visibility of canvas */
+  canvas {
+    display: block !important;
+    max-width: 100% !important;
+  }
+
+  /* Better table printing */
+  table {
+    page-break-inside: avoid;
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  
+  /* Ensure table rows and cells are visible */
+  tr, td, th {
+    page-break-inside: avoid;
+  }
+  
+  /* Force visibility of hover states that might have styling */
+  tr:hover,
+  .hover\:bg-slate-50 {
+    background-color: transparent !important;
+  }
+
+  /* Remove scrollbars from print */
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+  
+  scrollbar-width: none !important;
+}
+
+@layer base {
+  :root {
+    /* Tailwind CSS variables - values set dynamically by ThemeProvider */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 0 0% 0%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 215 25% 27%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 215 25% 27%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+/* PWA Animations */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease-out;
+}
+
+/* Hide scrollbar for horizontal scrolling navigation */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* Mobile contrast safeguards for controls and dropdowns */
+@media (max-width: 639px) {
+  input,
+  textarea,
+  select,
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"],
+  [data-slot="select-content"] {
+    background-color: var(--mobile-control-background, hsl(var(--card))) !important;
+    color: var(--mobile-control-foreground, hsl(var(--card-foreground))) !important;
+    border-color: hsl(var(--border)) !important;
+  }
+
+  input::placeholder,
+  textarea::placeholder,
+  [data-slot="input"]::placeholder,
+  [data-slot="textarea"]::placeholder {
+    color: var(--mobile-control-placeholder, hsl(var(--muted-foreground))) !important;
+    opacity: 1;
+  }
+
+  select option {
+    background-color: var(--mobile-control-background, hsl(var(--card)));
+    color: var(--mobile-control-foreground, hsl(var(--card-foreground)));
+  }
+}

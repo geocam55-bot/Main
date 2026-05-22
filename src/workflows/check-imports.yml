@@ -1,0 +1,91 @@
+name: Check Imports and Build
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  check-imports:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for versioned imports (except allowed)
+        run: |
+          echo "🔍 Checking for versioned imports..."
+          
+          # Check for versioned imports (exclude node_modules and allowed packages)
+          VERSIONED_IMPORTS=$(grep -r "from ['\"].*@[0-9]" src/ --include="*.tsx" --include="*.ts" || true)
+          
+          # Filter out allowed versioned imports
+          INVALID_IMPORTS=$(echo "$VERSIONED_IMPORTS" | grep -v "react-hook-form@7.55.0" | grep -v "sonner@2.0.3" || true)
+          
+          if [ -n "$INVALID_IMPORTS" ]; then
+            echo "❌ Found invalid versioned imports:"
+            echo "$INVALID_IMPORTS"
+            echo ""
+            echo "⚠️  Only these versioned imports are allowed:"
+            echo "   - react-hook-form@7.55.0"
+            echo "   - sonner@2.0.3"
+            echo ""
+            echo "Please remove version numbers from other imports."
+            exit 1
+          else
+            echo "✅ No invalid versioned imports found"
+          fi
+
+      - name: Check for incorrect CSS imports
+        run: |
+          echo "🔍 Checking CSS imports in main.tsx..."
+          
+          # Check if main.tsx imports the correct CSS file
+          if grep -q "import.*globals\.css" src/main.tsx 2>/dev/null; then
+            echo "❌ Found globals.css import in main.tsx"
+            echo "Expected: import './index.css'"
+            exit 1
+          fi
+          
+          if ! grep -q "import ['\"]\.\/index\.css['\"]" src/main.tsx 2>/dev/null; then
+            echo "⚠️  Warning: No index.css import found in main.tsx"
+          else
+            echo "✅ CSS imports are correct"
+          fi
+
+      - name: Check for absolute imports that should be relative
+        run: |
+          echo "🔍 Checking for incorrect absolute imports..."
+          
+          # Check for imports that don't start with ./ or ../ (excluding node_modules packages)
+          ABSOLUTE_IMPORTS=$(grep -r "from ['\"][^\.@].*\/.*['\"]" src/ --include="*.tsx" --include="*.ts" || true)
+          
+          if [ -n "$ABSOLUTE_IMPORTS" ]; then
+            echo "⚠️  Warning: Found potential absolute imports that should be relative:"
+            echo "$ABSOLUTE_IMPORTS"
+          else
+            echo "✅ No problematic absolute imports found"
+          fi
+
+      - name: Run TypeScript type check
+        run: npm run build
+        continue-on-error: false
+
+      - name: Report success
+        if: success()
+        run: |
+          echo "✅ All checks passed!"
+          echo "✅ No invalid versioned imports"
+          echo "✅ CSS imports are correct"
+          echo "✅ TypeScript build successful"

@@ -1,0 +1,189 @@
+index-CHwnOxB0.js:958 Using default Supabase URL from info.tsx
+/favicon.ico:1  Failed to load resource: the server responded with a status of 404 ()
+usorqldwroecyxucmtuw.supabase.co/auth/v1/token?grant_type=refresh_token:1  Failed to load resource: the server responded with a status of 400 ()
+index-CHwnOxB0.js:958 AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+    at iF (index-CHwnOxB0.js:942:8462)
+    at async $xe (index-CHwnOxB0.js:942:9332)
+    at async yr (index-CHwnOxB0.js:942:9040)
+    at async index-CHwnOxB0.js:958:19931
+    at async index-CHwnOxB0.js:942:3874
+_recoverAndRefresh @ index-CHwnOxB0.js:958
+index-CHwnOxB0.js:958 No user ID, loading theme from localStorage
+index-CHwnOxB0.js:958 Applying theme: light
+index-CHwnOxB0.js:1394 📋 Calling /profiles/ensure for profile resolution...
+index-CHwnOxB0.js:958 ✅ Applied 115 permission overrides from Security Settings (localStorage)
+index-CHwnOxB0.js:1394 Server /profiles/ensure response: 200 Object
+index-CHwnOxB0.js:1394 ✅ Profile resolved via server: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org: 34638283-7b3d-47e2-bec8-a9e600e28c4a needs_pw: false
+index-CHwnOxB0.js:958 ✅ Applied 115 permission overrides from Security Settings (localStorage)
+index-CHwnOxB0.js:958 [permissions] Loaded 115 permissions from server (KV store)
+index-CHwnOxB0.js:958 [permissions] Applied 115 permissions from server, synced to localStorage
+index-CHwnOxB0.js:958 [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-CHwnOxB0.js:958 Loading theme for user: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+index-CHwnOxB0.js:958 [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-CHwnOxB0.js:1592 [email-preloader] Fetching email accounts...
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+index-CHwnOxB0.js:958 [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+usorqldwroecyxucmtuw.supabase.co/rest/v1/user_preferences?select=notifications_email%2Cnotifications_push%2Cnotifications_task_assignments%2Cnotifications_appointments%2Cnotifications_bids&user_id=eq.f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b:1  Failed to load resource: the server responded with a status of 406 ()
+index-CHwnOxB0.js:1453 🔐 Tasks - Current user: george.campbell@ronaatlantic.ca Role: admin Organization: 34638283-7b3d-47e2-bec8-a9e600e28c4a Scope: personal
+index-CHwnOxB0.js:1453 👤 Personal scope - Loading only own tasks
+index-CHwnOxB0.js:958 [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+index-CHwnOxB0.js:958 [permissions] Loaded 115 permissions from server (KV store)
+index-CHwnOxB0.js:958 [permissions] Applied 115 permissions from server, synced to localStorage
+index-CHwnOxB0.js:1453 🔐 Appointments - Current user: george.campbell@ronaatlantic.ca Role: admin Scope: personal
+index-CHwnOxB0.js:1453 👤 Personal scope - Loading only own appointments
+index-CHwnOxB0.js:958 [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-CHwnOxB0.js:958 [ai-suggestions] Starting scan for user f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b org 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-CHwnOxB0.js:1453 📊 Tasks filtered data - Total rows: 0
+index-CHwnOxB0.js:1453 📊 Appointments filtered data - Total rows: 0
+index-CHwnOxB0.js:958 [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+index-CHwnOxB0.js:958 Loaded theme from database: midnight
+index-CHwnOxB0.js:958 Loaded theme from database: midnight
+index-CHwnOxB0.js:958 Applying theme: midnight
+index-CHwnOxB0.js:958 [ai-suggestions] Data loaded — bids:0 contacts:182 tasks:0 opportunities:0 appointments:0
+index-CHwnOxB0.js:1592 [email-preloader] Cached 4 account(s)
+index-CHwnOxB0.js:1592 [email-preloader] Background sync for account 68a7c187-77f3-488a-89e1-aba77b647c91...
+index-CHwnOxB0.js:1453 [bids-client] Server endpoint returned 0 bids (role=admin)
+index-CHwnOxB0.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-CHwnOxB0.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-CHwnOxB0.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-CHwnOxB0.js:958 [ai-suggestions] Generated 0 suggestions (0 critical)
+index-CHwnOxB0.js:1592 [email-preloader] Background sync done: 0 new emails
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:1450 [quotes-client] Server endpoint returned 0 quotes (role=admin)
+index-CHwnOxB0.js:1461 🔍 DASHBOARD DEBUG: Object
+index-CHwnOxB0.js:1461 🔍 DEBUG: Won deals for avg calculation: Array(0)
+index-CHwnOxB0.js:1461 🔍 DEBUG: Won deals count: 0
+index-CHwnOxB0.js:1461 📊 Avg Days to Close - Won deals: 0 Avg days: 0.0
+index-CHwnOxB0.js:1461 📊 Avg Open Deal Age - Open bids: 0 Valid: 0 Avg days: 0.0
+index-CHwnOxB0.js:1461 📊 About to count pipeline data:
+index-CHwnOxB0.js:1461   - allBids.length: 0
+index-CHwnOxB0.js:1461   - allBids data: Array(0)
+index-CHwnOxB0.js:1461 📊 Pipeline Status Counts: Object
+index-CHwnOxB0.js:1461 📊 Pipeline Chart Data: Array(0)
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+index-CHwnOxB0.js:2944 Auto-mapped "Item Number" -> "sku" (SKU)
+index-CHwnOxB0.js:2944 Auto-mapped "Item Description" -> "name" (Item Name)
+index-CHwnOxB0.js:2944 No match found for column "Selling U/M"
+index-CHwnOxB0.js:2944 Auto-mapped "Department Code" -> "department_code" (Department Code)
+index-CHwnOxB0.js:2944 No match found for column "Class Code"
+index-CHwnOxB0.js:2944 Auto-mapped "Retail" -> "price_tier_1" (T1 — Retail)
+index-CHwnOxB0.js:2944 Auto-mapped "VIP" -> "price_tier_2" (T2 — VIP)
+index-CHwnOxB0.js:2944 No match found for column "Elite-B"
+index-CHwnOxB0.js:2944 No match found for column "Elite-A"
+index-CHwnOxB0.js:2944 No match found for column "Landscaper"
+index-CHwnOxB0.js:2944 No match found for column "Roofing"
+index-CHwnOxB0.js:2944 No match found for column "Insulation"
+index-CHwnOxB0.js:2944 No match found for column "Drywall"
+index-CHwnOxB0.js:2944 Auto-mapped "Cost" -> "cost" (Cost)
+index-CHwnOxB0.js:2944 Auto-mapped "Quantity on Order" -> "quantity" (Quantity On Hand)
+index-CHwnOxB0.js:2944 Auto-mapped "Quantity on Hand" -> "quantity" (Quantity On Hand)
+index-CHwnOxB0.js:2944 Final mapping: Object
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object
+index-CHwnOxB0.js:2943 Authenticated user: f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b
+index-CHwnOxB0.js:2943 App user org: 34638283-7b3d-47e2-bec8-a9e600e28c4a
+index-CHwnOxB0.js:2943 Total records to import: 80960
+index-CHwnOxB0.js:2943 Splitting 80960 records into 41 job(s) of up to 2000 each
+index-CHwnOxB0.js:2943 Creating job (part 1/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 1/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 2/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 2/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 3/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 3/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 4/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 4/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 5/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 5/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 6/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 6/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 7/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 7/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 8/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 8/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 9/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 9/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 10/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 10/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 11/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 11/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 12/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 12/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 13/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 13/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 14/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 14/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 15/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 15/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 16/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 16/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 17/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 17/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 18/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 18/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 19/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 19/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 20/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 20/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 21/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 21/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 22/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 22/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 23/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 23/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 24/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 24/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 25/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 25/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 26/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 26/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 27/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 27/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 28/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 28/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 29/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 29/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 30/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 30/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 31/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 31/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 32/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 32/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 33/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 33/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 34/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 34/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 35/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 35/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 36/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 36/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 37/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 37/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 38/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 38/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 39/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 39/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 40/41): 2000 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 40/41): undefined
+index-CHwnOxB0.js:2943 Creating job (part 41/41): 960 records
+index-CHwnOxB0.js:2943 Job created via edge function (part 41/41): undefined
+index-CHwnOxB0.js:2943 ImportExport component mounted for user: Object

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" fill="none">
+  <!-- Background -->
+  <rect width="800" height="400" rx="24" fill="#F5F3FF"/>
+  
+  <!-- Admin dashboard layout -->
+  <!-- Sidebar mockup -->
+  <rect x="40" y="50" width="170" height="300" rx="16" fill="white" stroke="#DDD6FE" stroke-width="1.5"/>
+  <rect x="55" y="68" width="140" height="32" rx="8" fill="#7C3AED"/>
+  <text x="125" y="88" text-anchor="middle" fill="white" font-size="11" font-weight="700">IT Administration</text>
+  
+  <!-- Sidebar items -->
+  <rect x="55" y="112" width="140" height="28" rx="6" fill="#EDE9FE"/>
+  <text x="75" y="130" fill="#7C3AED" font-size="10" font-weight="600">👤 User Management</text>
+  
+  <rect x="55" y="146" width="140" height="28" rx="6" fill="transparent"/>
+  <text x="75" y="164" fill="#64748B" font-size="10">🏢 Organizations</text>
+  
+  <rect x="55" y="180" width="140" height="28" rx="6" fill="transparent"/>
+  <text x="75" y="198" fill="#64748B" font-size="10">🛡 Security</text>
+  
+  <rect x="55" y="214" width="140" height="28" rx="6" fill="transparent"/>
+  <text x="75" y="232" fill="#64748B" font-size="10">📋 Audit Log</text>
+  
+  <rect x="55" y="248" width="140" height="28" rx="6" fill="transparent"/>
+  <text x="75" y="266" fill="#64748B" font-size="10">⚙ Settings</text>
+  
+  <rect x="55" y="282" width="140" height="28" rx="6" fill="transparent"/>
+  <text x="75" y="300" fill="#64748B" font-size="10">💳 Billing</text>
+
+  <!-- Main content area: User management table -->
+  <rect x="226" y="50" width="544" height="300" rx="16" fill="white" stroke="#DDD6FE" stroke-width="1.5"/>
+  <text x="248" y="80" fill="#4C1D95" font-size="14" font-weight="700">User Management</text>
+  <text x="248" y="96" fill="#64748B" font-size="10">12 active users across 3 roles</text>
+  
+  <!-- Search + Add button -->
+  <rect x="248" y="108" width="200" height="28" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="262" y="126" fill="#94A3B8" font-size="10">🔍 Search users...</text>
+  <rect x="680" y="108" width="72" height="28" rx="6" fill="#7C3AED"/>
+  <text x="716" y="126" text-anchor="middle" fill="white" font-size="10" font-weight="600">+ Add</text>
+  
+  <!-- Table header -->
+  <rect x="248" y="146" width="504" height="30" rx="0" fill="#F5F3FF"/>
+  <text x="262" y="165" fill="#6D28D9" font-size="10" font-weight="600">Name</text>
+  <text x="400" y="165" fill="#6D28D9" font-size="10" font-weight="600">Email</text>
+  <text x="560" y="165" fill="#6D28D9" font-size="10" font-weight="600">Role</text>
+  <text x="660" y="165" fill="#6D28D9" font-size="10" font-weight="600">Status</text>
+  
+  <!-- Row 1 -->
+  <circle cx="274" cy="196" r="12" fill="#7C3AED" opacity="0.15"/>
+  <text x="274" y="200" text-anchor="middle" fill="#7C3AED" font-size="8" font-weight="700">JD</text>
+  <text x="294" y="200" fill="#1E293B" font-size="10" font-weight="500">John Davis</text>
+  <text x="400" y="200" fill="#64748B" font-size="10">john@company.com</text>
+  <rect x="555" y="188" width="68" height="18" rx="9" fill="#EDE9FE"/>
+  <text x="589" y="200" text-anchor="middle" fill="#7C3AED" font-size="8" font-weight="600">Super Admin</text>
+  <circle cx="668" cy="196" r="4" fill="#22C55E"/>
+  <text x="680" y="200" fill="#22C55E" font-size="9" font-weight="500">Active</text>
+  
+  <!-- Row 2 -->
+  <circle cx="274" cy="228" r="12" fill="#3B82F6" opacity="0.15"/>
+  <text x="274" y="232" text-anchor="middle" fill="#3B82F6" font-size="8" font-weight="700">SM</text>
+  <text x="294" y="232" fill="#1E293B" font-size="10" font-weight="500">Sarah Martinez</text>
+  <text x="400" y="232" fill="#64748B" font-size="10">sarah@company.com</text>
+  <rect x="555" y="220" width="68" height="18" rx="9" fill="#DBEAFE"/>
+  <text x="589" y="232" text-anchor="middle" fill="#2563EB" font-size="8" font-weight="600">Admin</text>
+  <circle cx="668" cy="228" r="4" fill="#22C55E"/>
+  <text x="680" y="232" fill="#22C55E" font-size="9" font-weight="500">Active</text>
+  
+  <!-- Row 3 -->
+  <circle cx="274" cy="260" r="12" fill="#10B981" opacity="0.15"/>
+  <text x="274" y="264" text-anchor="middle" fill="#10B981" font-size="8" font-weight="700">MC</text>
+  <text x="294" y="264" fill="#1E293B" font-size="10" font-weight="500">Mike Chen</text>
+  <text x="400" y="264" fill="#64748B" font-size="10">mike@company.com</text>
+  <rect x="555" y="252" width="68" height="18" rx="9" fill="#D1FAE5"/>
+  <text x="589" y="264" text-anchor="middle" fill="#059669" font-size="8" font-weight="600">Member</text>
+  <circle cx="668" cy="260" r="4" fill="#22C55E"/>
+  <text x="680" y="264" fill="#22C55E" font-size="9" font-weight="500">Active</text>
+  
+  <!-- Row 4 -->
+  <circle cx="274" cy="292" r="12" fill="#F59E0B" opacity="0.15"/>
+  <text x="274" y="296" text-anchor="middle" fill="#F59E0B" font-size="8" font-weight="700">LP</text>
+  <text x="294" y="296" fill="#1E293B" font-size="10" font-weight="500">Lisa Park</text>
+  <text x="400" y="296" fill="#64748B" font-size="10">lisa@company.com</text>
+  <rect x="555" y="284" width="68" height="18" rx="9" fill="#D1FAE5"/>
+  <text x="589" y="296" text-anchor="middle" fill="#059669" font-size="8" font-weight="600">Member</text>
+  <circle cx="668" cy="292" r="4" fill="#F59E0B"/>
+  <text x="680" y="296" fill="#F59E0B" font-size="9" font-weight="500">Pending</text>
+  
+  <!-- Bottom bar -->
+  <rect x="248" y="312" width="504" height="26" rx="0" fill="#FAFAF9"/>
+  <text x="262" y="330" fill="#94A3B8" font-size="9">Showing 4 of 12 users • Page 1 of 3</text>
+</svg>

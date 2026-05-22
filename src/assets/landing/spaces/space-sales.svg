@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180">
+  <defs>
+    <linearGradient id="ss-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A1628"/>
+      <stop offset="50%" stop-color="#0F2040"/>
+      <stop offset="100%" stop-color="#081420"/>
+    </linearGradient>
+    <linearGradient id="ss-glow" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#2F7CFF" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#1E40AF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ss-hand-l" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#D0DDEF"/>
+      <stop offset="100%" stop-color="#8CAED0"/>
+    </linearGradient>
+    <linearGradient id="ss-hand-r" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E0E8F4"/>
+      <stop offset="100%" stop-color="#A0BCD8"/>
+    </linearGradient>
+    <linearGradient id="ss-cuff-l" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#3A5A80"/>
+      <stop offset="100%" stop-color="#28405C"/>
+    </linearGradient>
+    <linearGradient id="ss-cuff-r" x1="1" y1="0" x2="0.2" y2="1">
+      <stop offset="0%" stop-color="#4A6A90"/>
+      <stop offset="100%" stop-color="#304868"/>
+    </linearGradient>
+    <filter id="ss-softglow">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="ss-handshadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <radialGradient id="ss-center-glow" cx="50%" cy="50%">
+      <stop offset="0%" stop-color="#2F7CFF" stop-opacity="0.18"/>
+      <stop offset="70%" stop-color="#2F7CFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="240" height="180" fill="url(#ss-bg)"/>
+  <!-- Center blue glow -->
+  <ellipse cx="120" cy="86" rx="90" ry="60" fill="url(#ss-center-glow)"/>
+  <!-- Top edge glow -->
+  <ellipse cx="120" cy="0" rx="100" ry="30" fill="url(#ss-glow)"/>
+
+  <!-- Left sleeve -->
+  <g filter="url(#ss-handshadow)">
+    <path d="M14,106 L14,72 Q14,64 24,64 L60,64 L60,112 L24,112 Q14,112 14,106Z" fill="url(#ss-cuff-l)"/>
+    <rect x="14" y="64" width="3" height="48" rx="1.5" fill="#5A8AB8" opacity="0.3"/>
+    <line x1="20" y1="66" x2="55" y2="66" stroke="white" stroke-width="0.6" opacity="0.08"/>
+  </g>
+
+  <!-- Right sleeve -->
+  <g filter="url(#ss-handshadow)">
+    <path d="M226,106 L226,72 Q226,64 216,64 L180,64 L180,112 L216,112 Q226,112 226,106Z" fill="url(#ss-cuff-r)"/>
+    <rect x="223" y="64" width="3" height="48" rx="1.5" fill="#6A9AC8" opacity="0.3"/>
+    <line x1="185" y1="66" x2="222" y2="66" stroke="white" stroke-width="0.6" opacity="0.08"/>
+  </g>
+
+  <!-- Left hand -->
+  <g filter="url(#ss-handshadow)">
+    <path d="M55,68 Q64,58 78,62 L114,76 Q122,80 118,88 L108,83 Q100,78 90,82 L74,92 Q66,97 58,92 L54,88Z" fill="url(#ss-hand-l)"/>
+    <!-- Thumb -->
+    <path d="M78,62 L86,56 Q89,54 90,58 L88,66 Q86,70 83,68Z" fill="#C0D4E8" opacity="0.85"/>
+    <!-- Fingers -->
+    <path d="M90,82 L102,74 Q106,72 107,76 L96,84 Q92,86 90,82Z" fill="#A8C4E0" opacity="0.6"/>
+    <path d="M82,88 L94,80 Q97,78 98,81 L88,89 Q84,91 82,88Z" fill="#A8C4E0" opacity="0.55"/>
+    <path d="M74,92 L86,84 Q89,82 90,85 L80,93 Q76,95 74,92Z" fill="#A8C4E0" opacity="0.5"/>
+  </g>
+
+  <!-- Right hand -->
+  <g filter="url(#ss-handshadow)">
+    <path d="M185,68 Q176,58 162,62 L126,76 Q118,80 122,88 L132,83 Q140,78 150,82 L166,92 Q174,97 182,92 L186,88Z" fill="url(#ss-hand-r)"/>
+    <!-- Thumb -->
+    <path d="M162,62 L154,56 Q151,54 150,58 L152,66 Q154,70 157,68Z" fill="#D8E4F4" opacity="0.85"/>
+    <!-- Fingers -->
+    <path d="M150,82 L138,74 Q134,72 133,76 L144,84 Q148,86 150,82Z" fill="#C0D8F0" opacity="0.6"/>
+    <path d="M158,88 L146,80 Q143,78 142,81 L152,89 Q156,91 158,88Z" fill="#C0D8F0" opacity="0.55"/>
+    <path d="M166,92 L154,84 Q151,82 150,85 L160,93 Q164,95 166,92Z" fill="#C0D8F0" opacity="0.5"/>
+  </g>
+
+  <!-- Clasp highlight -->
+  <ellipse cx="120" cy="82" rx="12" ry="5" fill="white" opacity="0.06"/>
+
+  <!-- Floor reflection -->
+  <ellipse cx="120" cy="145" rx="70" ry="15" fill="#2F7CFF" opacity="0.04"/>
+  <ellipse cx="120" cy="140" rx="50" ry="8" fill="white" opacity="0.015"/>
+</svg>

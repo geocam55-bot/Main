@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180">
+  <defs>
+    <linearGradient id="sb-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A1408"/>
+      <stop offset="50%" stop-color="#201A0C"/>
+      <stop offset="100%" stop-color="#140F06"/>
+    </linearGradient>
+    <radialGradient id="sb-sky-glow" cx="50%" cy="20%">
+      <stop offset="0%" stop-color="#FF9F3F" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#FF9F3F" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sb-walls" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5A4833"/>
+      <stop offset="100%" stop-color="#3E3222"/>
+    </linearGradient>
+    <linearGradient id="sb-roof" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#6A5540"/>
+      <stop offset="100%" stop-color="#4A3A28"/>
+    </linearGradient>
+    <linearGradient id="sb-window-glow" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#FFD080"/>
+      <stop offset="100%" stop-color="#FF9F3F"/>
+    </linearGradient>
+    <linearGradient id="sb-door" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#5A4228"/>
+      <stop offset="100%" stop-color="#3A2A18"/>
+    </linearGradient>
+    <linearGradient id="sb-garage" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#4A3A28"/>
+      <stop offset="100%" stop-color="#2A2018"/>
+    </linearGradient>
+    <linearGradient id="sb-ground" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#2A2216"/>
+      <stop offset="100%" stop-color="#1A140C"/>
+    </linearGradient>
+    <filter id="sb-wglow">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="sb-shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <radialGradient id="sb-warmglow" cx="50%" cy="70%">
+      <stop offset="0%" stop-color="#FF9F3F" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#FF9F3F" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="240" height="180" fill="url(#sb-bg)"/>
+  <rect width="240" height="180" fill="url(#sb-sky-glow)"/>
+
+  <!-- Ground -->
+  <rect x="0" y="130" width="240" height="50" fill="url(#sb-ground)"/>
+  <line x1="0" y1="130" x2="240" y2="130" stroke="#4A3A28" stroke-width="0.5" opacity="0.4"/>
+
+  <!-- House body -->
+  <g filter="url(#sb-shadow)">
+    <!-- Main structure -->
+    <rect x="60" y="70" width="90" height="60" rx="2" fill="url(#sb-walls)"/>
+    <!-- Garage wing -->
+    <rect x="150" y="80" width="40" height="50" rx="2" fill="url(#sb-walls)" opacity="0.9"/>
+  </g>
+
+  <!-- Roof -->
+  <polygon points="55,72 105,38 155,72" fill="url(#sb-roof)"/>
+  <line x1="55" y1="72" x2="105" y2="38" stroke="#7A6550" stroke-width="0.8" opacity="0.4"/>
+  <line x1="155" y1="72" x2="105" y2="38" stroke="#7A6550" stroke-width="0.8" opacity="0.4"/>
+  <!-- Garage roof -->
+  <polygon points="148,82 170,68 195,82" fill="url(#sb-roof)" opacity="0.85"/>
+
+  <!-- Chimney -->
+  <rect x="125" y="42" width="10" height="20" rx="1" fill="#4A3A28"/>
+  <rect x="123" y="40" width="14" height="4" rx="1" fill="#5A4833"/>
+
+  <!-- Windows with warm glow -->
+  <g filter="url(#sb-wglow)">
+    <!-- Left window -->
+    <rect x="72" y="82" width="16" height="14" rx="1.5" fill="url(#sb-window-glow)"/>
+    <line x1="80" y1="82" x2="80" y2="96" stroke="#9A7840" stroke-width="0.8"/>
+    <line x1="72" y1="89" x2="88" y2="89" stroke="#9A7840" stroke-width="0.8"/>
+    <!-- Glow aura -->
+    <rect x="70" y="80" width="20" height="18" rx="3" fill="#FFD080" opacity="0.08"/>
+
+    <!-- Right window -->
+    <rect x="122" y="82" width="16" height="14" rx="1.5" fill="url(#sb-window-glow)"/>
+    <line x1="130" y1="82" x2="130" y2="96" stroke="#9A7840" stroke-width="0.8"/>
+    <line x1="122" y1="89" x2="138" y2="89" stroke="#9A7840" stroke-width="0.8"/>
+    <rect x="120" y="80" width="20" height="18" rx="3" fill="#FFD080" opacity="0.08"/>
+
+    <!-- Attic window (round) -->
+    <circle cx="105" cy="58" r="6" fill="url(#sb-window-glow)" opacity="0.8"/>
+    <line x1="105" y1="52" x2="105" y2="64" stroke="#9A7840" stroke-width="0.6"/>
+    <line x1="99" y1="58" x2="111" y2="58" stroke="#9A7840" stroke-width="0.6"/>
+  </g>
+
+  <!-- Front door -->
+  <rect x="97" y="105" width="16" height="25" rx="1.5" fill="url(#sb-door)"/>
+  <rect x="97" y="105" width="16" height="3" rx="1" fill="#6A5240"/>
+  <circle cx="110" cy="118" r="1.2" fill="#B8935A"/>
+  <!-- Door light -->
+  <rect x="99" y="107" width="5" height="8" rx="1" fill="url(#sb-window-glow)" opacity="0.5"/>
+  <rect x="106" y="107" width="5" height="8" rx="1" fill="url(#sb-window-glow)" opacity="0.5"/>
+
+  <!-- Garage door -->
+  <rect x="157" y="100" width="26" height="30" rx="2" fill="url(#sb-garage)"/>
+  <line x1="157" y1="107" x2="183" y2="107" stroke="#5A4833" stroke-width="0.5" opacity="0.5"/>
+  <line x1="157" y1="114" x2="183" y2="114" stroke="#5A4833" stroke-width="0.5" opacity="0.5"/>
+  <line x1="157" y1="121" x2="183" y2="121" stroke="#5A4833" stroke-width="0.5" opacity="0.5"/>
+
+  <!-- Landscaping -->
+  <ellipse cx="50" cy="130" rx="12" ry="10" fill="#2A3A20" opacity="0.7"/>
+  <ellipse cx="45" cy="128" rx="9" ry="8" fill="#344A28" opacity="0.6"/>
+  <ellipse cx="200" cy="130" rx="10" ry="8" fill="#2A3A20" opacity="0.6"/>
+
+  <!-- Path/walkway -->
+  <path d="M100,130 L95,145 Q95,150 100,150 L110,150 Q115,150 115,145 L110,130Z" fill="#3E3222" opacity="0.5"/>
+
+  <!-- Warm light spill from windows -->
+  <rect width="240" height="180" fill="url(#sb-warmglow)"/>
+
+  <!-- Stars -->
+  <circle cx="30" cy="18" r="0.8" fill="white" opacity="0.3"/>
+  <circle cx="200" cy="12" r="0.6" fill="white" opacity="0.25"/>
+  <circle cx="170" cy="28" r="0.5" fill="white" opacity="0.2"/>
+  <circle cx="80" cy="10" r="0.7" fill="white" opacity="0.2"/>
+  <circle cx="220" cy="35" r="0.5" fill="white" opacity="0.15"/>
+</svg>

@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Path aliases */
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "utils/**/*.ts",
+    "utils/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "App.tsx",
+    "main.tsx",
+    "project-wizards-entry.tsx",
+    "marketing-entry.tsx",
+    "insights-entry.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.config.ts",
+    "src/supabase/functions/**/*",
+    "src/tests/**/*"
+  ],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
