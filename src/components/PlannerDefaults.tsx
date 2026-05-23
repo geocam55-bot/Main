@@ -121,7 +121,7 @@ const aluminumDeckCategories = {
   'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
   'Railing': ['Aluminum Top & Bottom Rail', 'Picket Packages', 'Clear Glass Pickets (CDG-6)', 'Angled Stair Glass Pickets (CAG-6)', 'Aluminum Posts', 'Aluminum Stair Posts'],
   'Railing - Tempered Glass Panels by Size': aluminumGlassPanelEntries(),
-  'Hardware': ['Lag Screws', 'Ledger Flashing', 'Joist Hangers', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws', 'Post Base Plate Cover', 'Decorative Post Cap', 'Universal Angle Bracket (UAB)', 'Vinyl Insert for Glass (GVI)', 'Rubber Blocks for Glass (GRB-10)', 'Rail Support Legs (SRSL)', 'Lag Bolts (post mounting)', 'Self Drilling Screws'],
+  'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws', 'Post Base Plate Cover', 'Decorative Post Cap', 'Universal Angle Bracket (UAB)', 'Vinyl Insert for Glass (GVI)', 'Rubber Blocks for Glass (GRB-10)', 'Rail Support Legs (SRSL)', 'Lag Bolts (post mounting)', 'Self Drilling Screws'],
 };
 
 const ALUMINUM_ONLY_HARDWARE_CATEGORIES = new Set([
@@ -154,6 +154,7 @@ const SYSTEM_CF_SUGGESTIONS: Record<string, number> = {
   // Miscellaneous
   'Flashing': 1 / 10,
   'Furring Strip': 1 / 8,              // 8 ft/piece
+  'Formtube': 4 / 12,                  // Sold in 12' lengths, 4' needed per footing (CF = 4/12)
 };
 
 const formatMaterialTypeLabel = (type: string, plannerType?: string): string => {
@@ -185,7 +186,7 @@ const PLANNER_CATEGORIES: Record<string, Record<string, Record<string, string[]>
       'Decking': ['Decking Boards', 'Stair Treads'],
       'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
       'Railing': ['Railing Posts', 'Railing Top Rail', 'Railing Bottom Rail', 'Railing Balusters'],
-      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws'],
+      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws'],
     },
     treated: {
       'Framing': ['Ledger Board', 'Joists', 'Rim Joists', 'Beams', 'Posts', 'Stair Stringers'],
@@ -197,7 +198,7 @@ const PLANNER_CATEGORIES: Record<string, Record<string, Record<string, string[]>
       'Decking': ['Decking Boards', 'Stair Treads'],
       'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
       'Railing': ['Railing Posts', 'Railing Top Rail', 'Railing Bottom Rail', 'Railing Balusters'],
-      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws'],
+      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws'],
     },
     composite: {
       'Framing': ['Ledger Board', 'Joists', 'Rim Joists', 'Beams', 'Posts', 'Stair Stringers'],
@@ -209,7 +210,7 @@ const PLANNER_CATEGORIES: Record<string, Record<string, Record<string, string[]>
       'Decking': ['Decking Boards', 'Stair Treads'],
       'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
       'Railing': ['Railing Posts', 'Railing Top Rail', 'Railing Bottom Rail', 'Railing Balusters'],
-      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Deck Clips', 'Composite Screws', 'Composite Plugs', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws'],
+      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Deck Clips', 'Composite Screws', 'Composite Plugs', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws'],
     },
     cedar: {
       'Framing': ['Ledger Board', 'Joists', 'Rim Joists', 'Beams', 'Posts', 'Stair Stringers'],
@@ -221,7 +222,7 @@ const PLANNER_CATEGORIES: Record<string, Record<string, Record<string, string[]>
       'Decking': ['Decking Boards', 'Stair Treads'],
       'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
       'Railing': ['Railing Posts', 'Railing Top Rail', 'Railing Bottom Rail', 'Railing Balusters'],
-      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws'],
+      'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws'],
     },
     aluminum: aluminumDeckCategories,
     'aluminum-white': aluminumDeckCategories,

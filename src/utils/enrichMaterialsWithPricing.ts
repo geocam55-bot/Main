@@ -409,6 +409,8 @@ export async function enrichMaterialsWithT1Pricing(
             inventoryItemId = tryMatch('lag screws');
           } else if (description.includes('concrete mix')) {
             inventoryItemId = tryMatch('concrete mix');
+          } else if (description.includes('formtube')) {
+            inventoryItemId = tryMatch('formtube');
           }
           
           // -----------------------------------------------------------
