@@ -75,6 +75,8 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
   const svgRef = useRef<SVGSVGElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadInputRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState<number>(1);
 
   // Canvas Interaction State
@@ -193,21 +195,19 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
 
   useEffect(() => {
     async function loadInventory() {
-      if (!user.organizationId) return;
-      setLoading(true);
+      const orgId = user?.organizationId || user?.organization_id;
+      if (!orgId) return;
       try {
-        const result = await searchInventoryClient({ organizationId: user.organizationId });
+        const result = await searchInventoryClient({ organizationId: orgId });
         if (result && result.items) {
           setInventoryItems(result.items);
         }
       } catch (err) {
-        // Failed to load inventory
-      } finally {
-        setLoading(false);
+        console.warn("Failed to load inventory:", err);
       }
     }
     loadInventory();
-  }, [user.organizationId]);
+  }, [user?.organizationId, user?.organization_id]);
 
   const handleSaveDraft = async () => {
     if (!bgImage) {
@@ -417,24 +417,60 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type === 'application/pdf') {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
       try {
         setLoading(true);
         toast.info('Converting PDF to image...', { duration: 3000 });
         
-        // Load PDF.js via script tag to avoid bundler configuration issues
+        // Load PDF.js via script tag and dynamically setup same-origin blob worker to bypass browser policies
         const pdfjsLib: any = await new Promise((resolve, reject) => {
+          const setupWorker = async (lib: any) => {
+            try {
+              // Avoid re-fetching and creating redundant blob URLs if we already set up a working blob URL
+              if (lib.GlobalWorkerOptions.workerSrc && lib.GlobalWorkerOptions.workerSrc.startsWith('blob:')) {
+                resolve(lib);
+                return;
+              }
+              const workerUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+              
+              // 1. First choice: try fetching raw text from CDN with CORS to bypass Worker CSP importScripts issues
+              try {
+                const resp = await fetch(workerUrl);
+                if (resp.ok) {
+                  const blob = new Blob([await resp.text()], { type: 'application/javascript' });
+                  lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+                  resolve(lib);
+                  return;
+                }
+              } catch (fetchErr) {
+                console.warn("Same-origin fetching of worker text failed, trying inline importScripts:", fetchErr);
+              }
+
+              // 2. Second choice: fallback to standard inline importScripts worker URL inside blob
+              const inlineWorkerCode = `importScripts("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js");`;
+              const blob = new Blob([inlineWorkerCode], { type: 'application/javascript' });
+              lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+              resolve(lib);
+            } catch (err) {
+              console.warn("Same-origin blob worker setup failed entirely, falling back to direct CDN URL:", err);
+              lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+              resolve(lib);
+            }
+          };
+
           if ((window as any).pdfjsLib) {
-            resolve((window as any).pdfjsLib);
+            setupWorker((window as any).pdfjsLib);
             return;
           }
           const script = document.createElement('script');
           script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-          script.onload = () => {
-            (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            resolve((window as any).pdfjsLib);
+          script.onload = () => setupWorker((window as any).pdfjsLib);
+          script.onerror = (err) => {
+            console.error("Failed to load PDF.js script:", err);
+            reject(new Error("Could not load PDF rendering library. Please check your internet connection."));
           };
-          script.onerror = reject;
           document.head.appendChild(script);
         });
 
@@ -488,9 +524,9 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
           setSelectedPdfPages(new Set([1]));
           setShowPdfModal(true);
         }
-      } catch (error) {
-        // PDF processing error
-        toast.error("Failed to process the PDF. Please try a different file.");
+      } catch (error: any) {
+        console.error("PDF processing error:", error);
+        toast.error(`PDF processing error: ${error?.message || error}`);
       } finally {
         setLoading(false);
         e.target.value = ''; // Reset input
@@ -1010,20 +1046,42 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
               <div className="bg-background p-3 rounded-lg shadow-sm border border-border flex flex-wrap items-center gap-3">
                 {/* Upload & Draft */}
                 <div className="flex items-center gap-1 pr-3 border-r border-border">
-                  <label className={`cursor-pointer flex flex-col items-center justify-center p-2 rounded-md hover:bg-purple-50 transition-colors ${loading ? 'opacity-50' : ''}`}>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={loading}
+                    className={`flex flex-col items-center justify-center p-2 rounded-md hover:bg-purple-50 transition-colors ${loading ? 'opacity-50' : ''}`}
+                  >
                     <UploadCloud className="w-5 h-5 mb-1 text-purple-500" />
                     <span className="text-[10px] font-medium text-muted-foreground">Upload</span>
-                    <input type="file" accept="application/pdf, image/jpeg, image/png" className="hidden" disabled={loading} onChange={handleFileUpload} />
-                  </label>
+                    <input 
+                      ref={fileInputRef}
+                      type="file" 
+                      accept="application/pdf, .pdf, image/jpeg, image/jpg, image/png, image/*" 
+                      className="hidden" 
+                      disabled={loading} 
+                      onChange={handleFileUpload} 
+                    />
+                  </button>
                   <button onClick={handleSaveDraft} disabled={loading || !bgImage} className="flex flex-col items-center justify-center p-2 rounded-md hover:bg-green-50 transition-colors disabled:opacity-50">
                     <Save className="w-5 h-5 mb-1 text-green-500" />
                     <span className="text-[10px] font-medium text-muted-foreground">Save</span>
                   </button>
-                  <label className={`cursor-pointer flex flex-col items-center justify-center p-2 rounded-md hover:bg-orange-50 transition-colors ${loading ? 'opacity-50' : ''}`}>
+                  <button 
+                    onClick={() => loadInputRef.current?.click()}
+                    disabled={loading}
+                    className={`flex flex-col items-center justify-center p-2 rounded-md hover:bg-orange-50 transition-colors ${loading ? 'opacity-50' : ''}`}
+                  >
                     <FolderOpen className="w-5 h-5 mb-1 text-orange-500" />
                     <span className="text-[10px] font-medium text-muted-foreground">Load</span>
-                    <input type="file" accept=".pjt" className="hidden" disabled={loading} onChange={handleLoadProjectFile} />
-                  </label>
+                    <input 
+                      ref={loadInputRef}
+                      type="file" 
+                      accept=".pjt" 
+                      className="hidden" 
+                      disabled={loading} 
+                      onChange={handleLoadProjectFile} 
+                    />
+                  </button>
                 </div>
 
                 {/* History Tools */}
