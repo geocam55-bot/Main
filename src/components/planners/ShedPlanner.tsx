@@ -21,50 +21,82 @@ import { PermissionGate } from '../PermissionGate';
 import { PlannerWorkflowHelp } from './PlannerWorkflowHelp';
 import { PlannerExportDialog } from './PlannerExportDialog';
 
+const DEFAULT_CONFIG: ShedConfig = {
+  width: 10,
+  length: 12,
+  wallHeight: 7,
+  style: 'barn',
+  roofPitch: 8,
+  foundationType: 'concrete-blocks',
+  doorType: 'double',
+  doorWidth: 5,
+  doorHeight: 6.5,
+  doorPosition: 'front',
+  windows: [
+    {
+      id: '1',
+      width: 2,
+      height: 2,
+      position: 'left',
+      offsetFromLeft: 5,
+      offsetFromFloor: 3,
+    },
+    {
+      id: '2',
+      width: 2,
+      height: 2,
+      position: 'right',
+      offsetFromLeft: 5,
+      offsetFromFloor: 3,
+    },
+  ],
+  hasLoft: true,
+  hasFloor: true,
+  hasShutters: true,
+  hasFlowerBox: false,
+  sidingType: 'vinyl',
+  roofingMaterial: 'architectural-shingle',
+  hasElectrical: true,
+  hasShelvingPackage: true,
+  unit: 'feet',
+};
+
 interface ShedPlannerProps {
   user: User;
 }
 
 export function ShedPlanner({ user }: ShedPlannerProps) {
-  const [config, setConfig] = useState<ShedConfig>({
-    width: 10,
-    length: 12,
-    wallHeight: 7,
-    style: 'barn',
-    roofPitch: 8,
-    foundationType: 'concrete-blocks',
-    doorType: 'double',
-    doorWidth: 5,
-    doorHeight: 6.5,
-    doorPosition: 'front',
-    windows: [
-      {
-        id: '1',
-        width: 2,
-        height: 2,
-        position: 'left',
-        offsetFromLeft: 5,
-        offsetFromFloor: 3,
-      },
-      {
-        id: '2',
-        width: 2,
-        height: 2,
-        position: 'right',
-        offsetFromLeft: 5,
-        offsetFromFloor: 3,
-      },
-    ],
-    hasLoft: true,
-    hasFloor: true,
-    hasShutters: true,
-    hasFlowerBox: false,
-    sidingType: 'vinyl',
-    roofingMaterial: 'architectural-shingle',
-    hasElectrical: true,
-    hasShelvingPackage: true,
-    unit: 'feet',
-  });
+  const [rawConfig, setRawConfig] = useState<ShedConfig>(DEFAULT_CONFIG);
+
+  // Derive a complete config with fallbacks to avoid any undefined field lookups or calculation crashes
+  const config = React.useMemo(() => {
+    return {
+      ...DEFAULT_CONFIG,
+      ...rawConfig,
+      windows: rawConfig?.windows || DEFAULT_CONFIG.windows || [],
+    };
+  }, [rawConfig]);
+
+  const setConfig = (newVal: ShedConfig | ((prev: ShedConfig) => ShedConfig)) => {
+    if (typeof newVal === 'function') {
+      setRawConfig((prev) => {
+        const rawMerged = newVal(prev);
+        return {
+          ...DEFAULT_CONFIG,
+          ...rawMerged,
+          windows: rawMerged?.windows || DEFAULT_CONFIG.windows || [],
+        };
+      });
+    } else {
+      setRawConfig({
+        ...DEFAULT_CONFIG,
+        ...newVal,
+        windows: newVal?.windows || DEFAULT_CONFIG.windows || [],
+      });
+    }
+  };
+
+  const orgId = user?.organizationId || user?.organization_id || '';
 
   const [activeTab, setActiveTab] = useState<'design' | 'materials' | 'templates' | 'saved' | 'defaults'>('design');
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
@@ -106,20 +138,20 @@ export function ShedPlanner({ user }: ShedPlannerProps) {
     let cancelled = false;
 
     const loadPricingContext = async () => {
-      if (!user.organizationId) return;
+      if (!orgId) return;
 
       let cfMap: Record<string, number> = {};
       let mergedUserDefs: Record<string, string> = {};
 
       try {
-        const orgCFs = await getOrgConversionFactors(user.organizationId);
+        const orgCFs = await getOrgConversionFactors(orgId);
         cfMap = extractOrgConversionFactors(orgCFs, 'shed');
       } catch (err) {
         // Best-effort
       }
 
       try {
-        const persistedUserDefs = await getUserDefaults(user.id, user.organizationId);
+        const persistedUserDefs = await getUserDefaults(user?.id || '', orgId);
         mergedUserDefs = persistedUserDefs;
         const userCFMap = extractConversionFactors(persistedUserDefs, 'shed');
         cfMap = { ...cfMap, ...userCFMap };
@@ -140,22 +172,22 @@ export function ShedPlanner({ user }: ShedPlannerProps) {
       cancelled = true;
     };
   }, [
-    user.organizationId,
-    user.id,
+    orgId,
+    user?.id,
     defaultsVersion,
   ]);
 
   // Enrich materials with T1 pricing whenever config changes, leveraging cached pricingContext.
   useEffect(() => {
     const enrichMaterials = async () => {
-      if (user.organizationId && flatMaterials.length > 0) {
+      if (orgId && flatMaterials.length > 0) {
         const { materials: enriched, totalT1Price: total } = await enrichMaterialsWithT1Pricing(
           flatMaterials,
-          user.organizationId,
+          orgId,
           'shed',
           undefined,
           pricingContext.cfMap,
-          user.id,
+          user?.id,
           pricingContext.mergedUserDefaults
         );
         setEnrichedMaterials(enriched);
@@ -183,10 +215,10 @@ export function ShedPlanner({ user }: ShedPlannerProps) {
     config.roofingMaterial,
     config.hasElectrical,
     config.hasShelvingPackage,
-    user.organizationId,
+    orgId,
     pricingContext.cfMap,
     pricingContext.mergedUserDefaults,
-    user.id,
+    user?.id,
     defaultsVersion,
   ]);
 

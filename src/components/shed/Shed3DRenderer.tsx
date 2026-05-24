@@ -392,6 +392,7 @@ export function Shed3DRenderer({ config }: Shed3DRendererProps) {
       // Gambrel roof (barn style) - simplified and corrected
       const lowerRise = roofRise * 0.5; // Lower section rises 50% of total
       const upperRise = roofRise * 0.5; // Upper section rises the remaining 50%
+      const barnLowerX = shedWidth / 4; // Inner edge of lower panels
       
       // Lower sections (steeper angle from wall to mid-point)
       const lowerWidth = shedWidth / 4; // Quarter of the width for lower section
@@ -464,7 +465,6 @@ export function Shed3DRenderer({ config }: Shed3DRendererProps) {
       const barnWallTop = wallHeight + 0.2;
       const barnLowerY = barnWallTop + lowerRise;
       const barnPeakY = barnWallTop + lowerRise + upperRise;
-      const barnLowerX = shedWidth / 4; // Inner edge of lower panels
 
       // Front gable - lower left triangle
       const barnFrontLLGeom = new BufferGeometry();
