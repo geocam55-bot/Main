@@ -92,6 +92,10 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
     customerName?: string;
     customerCompany?: string;
   }>({});
+  const [pricingContext, setPricingContext] = useState<{
+    cfMap: Record<string, number>;
+    mergedUserDefaults: Record<string, string>;
+  }>({ cfMap: {}, mergedUserDefaults: {} });
 
   const pricingMaterialType = config.sidingType === 'metal'
     ? 'aluminum'
@@ -139,38 +143,90 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
     }
   }, [config.bays, config.width]);
 
-  // Enrich materials with T1 pricing whenever config changes
+  // Load defaults and conversion factors context when defaults/material type context changes,
+  // not on every single dimensional tweak or slider drag.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPricingContext = async () => {
+      if (!user.organizationId) return;
+
+      let cfMap: Record<string, number> = {};
+      let mergedUserDefs: Record<string, string> = {};
+
+      try {
+        const orgCFs = await getOrgConversionFactors(user.organizationId);
+        cfMap = extractOrgConversionFactors(orgCFs, 'garage', pricingMaterialType);
+      } catch (err) {
+        // Best-effort
+      }
+
+      try {
+        const persistedUserDefs = await getUserDefaults(user.id, user.organizationId);
+        mergedUserDefs = persistedUserDefs;
+        const userCFMap = extractConversionFactors(persistedUserDefs, 'garage', pricingMaterialType);
+        cfMap = { ...cfMap, ...userCFMap };
+      } catch (err) {
+        // Best-effort
+      }
+
+      if (!cancelled) {
+        setPricingContext({
+          cfMap,
+          mergedUserDefaults: mergedUserDefs,
+        });
+      }
+    };
+
+    loadPricingContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user.organizationId,
+    user.id,
+    pricingMaterialType,
+    defaultsVersion,
+  ]);
+
+  // Enrich materials with T1 pricing whenever config changes, leveraging cached pricingContext.
   useEffect(() => {
     const enrichMaterials = async () => {
       if (user.organizationId && flatMaterials.length > 0) {
-        let cfMap: Record<string, number> = {};
-        try {
-          // Start with org-level CFs as baseline
-          const orgCFs = await getOrgConversionFactors(user.organizationId);
-          cfMap = extractOrgConversionFactors(orgCFs, 'garage', pricingMaterialType);
-
-          // Overlay user-level CFs (user overrides take priority per-category)
-          const userDefs = await getUserDefaults(user.id, user.organizationId);
-          const userCFMap = extractConversionFactors(userDefs, 'garage', pricingMaterialType);
-          cfMap = { ...cfMap, ...userCFMap };
-        } catch (err) {
-          // Could not load conversion factors
-        }
-
         const { materials: enriched, totalT1Price: total } = await enrichMaterialsWithT1Pricing(
           flatMaterials,
           user.organizationId,
           'garage',
           pricingMaterialType,
-          cfMap,
-          user.id
+          pricingContext.cfMap,
+          user.id,
+          pricingContext.mergedUserDefaults
         );
         setEnrichedMaterials(enriched);
         setTotalT1Price(total);
       }
     };
     enrichMaterials();
-  }, [config, user.organizationId, defaultsVersion, pricingMaterialType, user.id]);
+  }, [
+    config.width,
+    config.length,
+    config.height,
+    config.bays,
+    config.doors.length,
+    config.hasWalkDoor,
+    config.walkDoorPosition,
+    config.sidingType,
+    config.roofingMaterial,
+    config.hasAtticTrusses,
+    config.isInsulated,
+    config.hasElectrical,
+    user.organizationId,
+    pricingContext.cfMap,
+    pricingContext.mergedUserDefaults,
+    pricingMaterialType,
+    user.id,
+    defaultsVersion,
+  ]);
 
   // Create enriched materials structure for display
   const getEnrichedMaterialsStructure = () => {

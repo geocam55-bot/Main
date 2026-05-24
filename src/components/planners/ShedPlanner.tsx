@@ -78,6 +78,10 @@ export function ShedPlanner({ user }: ShedPlannerProps) {
     customerName?: string;
     customerCompany?: string;
   }>({});
+  const [pricingContext, setPricingContext] = useState<{
+    cfMap: Record<string, number>;
+    mergedUserDefaults: Record<string, string>;
+  }>({ cfMap: {}, mergedUserDefaults: {} });
 
   const materials = calculateMaterials(config);
 
@@ -96,38 +100,95 @@ export function ShedPlanner({ user }: ShedPlannerProps) {
     ...(materials.accessories || []),
   ];
 
-  // Enrich materials with T1 pricing whenever config changes
+  // Load defaults and conversion factors context when defaults/material type context changes,
+  // not on every single dimensional tweak or slider drag.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPricingContext = async () => {
+      if (!user.organizationId) return;
+
+      let cfMap: Record<string, number> = {};
+      let mergedUserDefs: Record<string, string> = {};
+
+      try {
+        const orgCFs = await getOrgConversionFactors(user.organizationId);
+        cfMap = extractOrgConversionFactors(orgCFs, 'shed');
+      } catch (err) {
+        // Best-effort
+      }
+
+      try {
+        const persistedUserDefs = await getUserDefaults(user.id, user.organizationId);
+        mergedUserDefs = persistedUserDefs;
+        const userCFMap = extractConversionFactors(persistedUserDefs, 'shed');
+        cfMap = { ...cfMap, ...userCFMap };
+      } catch (err) {
+        // Best-effort
+      }
+
+      if (!cancelled) {
+        setPricingContext({
+          cfMap,
+          mergedUserDefaults: mergedUserDefs,
+        });
+      }
+    };
+
+    loadPricingContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user.organizationId,
+    user.id,
+    defaultsVersion,
+  ]);
+
+  // Enrich materials with T1 pricing whenever config changes, leveraging cached pricingContext.
   useEffect(() => {
     const enrichMaterials = async () => {
       if (user.organizationId && flatMaterials.length > 0) {
-        let cfMap: Record<string, number> = {};
-        try {
-          // Start with org-level CFs as baseline
-          const orgCFs = await getOrgConversionFactors(user.organizationId);
-          cfMap = extractOrgConversionFactors(orgCFs, 'shed');
-
-          // Overlay user-level CFs (user overrides take priority per-category)
-          const userDefs = await getUserDefaults(user.id, user.organizationId);
-          const userCFMap = extractConversionFactors(userDefs, 'shed');
-          cfMap = { ...cfMap, ...userCFMap };
-        } catch (err) {
-          // Could not load conversion factors
-        }
-
         const { materials: enriched, totalT1Price: total } = await enrichMaterialsWithT1Pricing(
           flatMaterials,
           user.organizationId,
           'shed',
           undefined,
-          cfMap,
-          user.id
+          pricingContext.cfMap,
+          user.id,
+          pricingContext.mergedUserDefaults
         );
         setEnrichedMaterials(enriched);
         setTotalT1Price(total);
       }
     };
     enrichMaterials();
-  }, [config, user.organizationId, defaultsVersion]);
+  }, [
+    config.width,
+    config.length,
+    config.wallHeight,
+    config.style,
+    config.roofPitch,
+    config.foundationType,
+    config.doorType,
+    config.doorWidth,
+    config.doorHeight,
+    config.doorPosition,
+    config.windows,
+    config.hasLoft,
+    config.hasFloor,
+    config.hasShutters,
+    config.hasFlowerBox,
+    config.sidingType,
+    config.roofingMaterial,
+    config.hasElectrical,
+    config.hasShelvingPackage,
+    user.organizationId,
+    pricingContext.cfMap,
+    pricingContext.mergedUserDefaults,
+    user.id,
+    defaultsVersion,
+  ]);
 
   // Create enriched materials structure for display
   const getEnrichedMaterialsStructure = () => {

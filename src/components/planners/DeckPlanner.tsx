@@ -178,6 +178,8 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     config.aluminumRailingColor,
     config.joistSpacing,
     config.deckingType,
+    config.postSize,
+    config.formtubeSize,
     pricingMaterialType,
     config.deckingPattern,
     orgId,
