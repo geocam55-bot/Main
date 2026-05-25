@@ -112,6 +112,40 @@ function seedStorageFiles() {
     demoTask.nextRunTime = calculateNextRunTime(demoTask).toISOString();
     saveJson(TASKS_FILE, [demoTask]);
   }
+
+  // Seed sample log history if empty
+  const logs = loadJson(LOGS_FILE, []);
+  if (logs.length === 0) {
+    const demoLogs = [
+      {
+        id: "log-sys-ready",
+        taskId: "task-demo-1",
+        taskName: "Unattended Nightly Contacts Backup",
+        timestamp: new Date(Date.now() - 3600000 * 24).toISOString(), // 24 hours ago
+        actionType: "export",
+        module: "contacts",
+        fileStorage: "local",
+        fileName: "nightly_contacts_backup.csv",
+        status: "success",
+        recordCount: 4,
+        message: "Successfully exported 4 records from contacts to unattended local storage file: nightly_contacts_backup.csv"
+      },
+      {
+        id: "log-sys-init",
+        taskId: "task-demo-1",
+        taskName: "Unattended Nightly Contacts Backup",
+        timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        actionType: "export",
+        module: "contacts",
+        fileStorage: "local",
+        fileName: "nightly_contacts_backup.csv",
+        status: "success",
+        recordCount: 4,
+        message: "Successfully executed unattended file export backup. Written 4 records to storage successfully."
+      }
+    ];
+    saveJson(LOGS_FILE, demoLogs);
+  }
 }
 
 seedStorageFiles();

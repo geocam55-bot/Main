@@ -156,7 +156,9 @@ export function Navigation({
       submenuItems.push(
         { id: 'tenants', label: 'Organizations', icon: Building2 },
         { id: 'users', label: 'Users', icon: UserCog },
-        { id: 'security', label: 'Security', icon: Shield }
+        { id: 'security', label: 'Security', icon: Shield },
+        { id: 'import-export', label: 'Import/Export', icon: Upload },
+        { id: 'scheduled-jobs', label: 'Scheduled Jobs', icon: Clock }
       );
     } else {
       // For non-super_admin, use canView to determine visibility
@@ -171,6 +173,7 @@ export function Navigation({
       }
       if (canView('import-export', user.role) && organization?.import_export_enabled !== false) {
         submenuItems.push({ id: 'import-export', label: 'Import/Export', icon: Upload });
+        submenuItems.push({ id: 'scheduled-jobs', label: 'Scheduled Jobs', icon: Clock });
       }
     }
     
