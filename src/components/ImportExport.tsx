@@ -173,10 +173,45 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Self-healing fetch wrapper to resolve PWA / service worker caching issues
   const safeFetch = async (url: string, options?: RequestInit) => {
-    const res = await fetch(url, options);
+    // Generate a unique URL query parameter to bypass ANY browser, CDN, or service worker cache
+    const separator = url.includes("?") ? "&" : "?";
+    const cacheBusterUrl = `${url}${separator}_t=${Date.now()}`;
+
+    // Request headers to explicitly disable caching at all levels
+    const extendedOptions: RequestInit = {
+      ...options,
+      headers: {
+        ...(options?.headers || {}),
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+      }
+    };
+
+    const res = await fetch(cacheBusterUrl, extendedOptions);
     const contentType = res.headers.get("content-type");
+    
     if (contentType && contentType.includes("text/html")) {
-      console.warn("API returned HTML instead of JSON. Stale service worker cache detected. Checking active safeguards...");
+      const htmlText = await res.text().catch(() => "");
+      console.warn("API returned HTML instead of JSON. Stale service worker cache detected or router mismatch. HTML sample:", htmlText.substring(0, 200));
+      
+      // Force unregister all active service workers immediately as a proactive measure
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const reg of registrations) {
+            await reg.unregister();
+            console.log("Unregistered service worker successfully:", reg.scope);
+          }
+        } catch (e) {
+          console.error("Failed to unregister service worker:", e);
+        }
+      }
+
+      // If it's a 404 or 500 error from the actual server, report the detailed text instead of service worker reload loop
+      if (res.status === 404) {
+        throw new Error(`Server route not found (404) for ${url}. Please verify the server is running.`);
+      }
       
       // Prevent infinite automatic reload loops
       const alreadyAttempted = sessionStorage.getItem("sw_clean_reload_attempted");
@@ -191,27 +226,18 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               console.error("Failed to clear service worker caches:", e);
             }
           }
-          if ("serviceWorker" in navigator) {
-            try {
-              const regs = await navigator.serviceWorker.getRegistrations();
-              for (const reg of regs) {
-                await reg.unregister();
-              }
-            } catch (e) {
-              console.error("Failed to unregister service worker:", e);
-            }
-          }
         }
-        toast.error("Stale browser cache detected. Cleared cache & reloading page to apply backend updates...", { duration: 4000 });
+        toast.error("Stale browser cache detected. Cleared cache & reloading page to apply backend updates...", { duration: 4500 });
         setTimeout(() => {
           window.location.reload();
         }, 1500);
       } else {
         console.error("API still returned HTML after unregistration & reload. Stale cache is still active or server routing mismatch.");
-        toast.warning("Server returned an unexpected page structure. If data is not showing, please perform a hard-refresh (Ctrl+F5 or Cmd+Shift+R to bypass cache).", { duration: 6000 });
+        toast.warning(`Unexpected HTML response (Status ${res.status}). Try doing a hard-refresh (Ctrl+F5 or Cmd+Shift+R) to bypass cache.`, { duration: 8000 });
       }
-      throw new Error("Received HTML shell instead of API response. Self-healing triggered.");
+      throw new Error(`Received HTML response instead of JSON. Status: ${res.status}`);
     }
+    
     // If it's a successful JSON response, clear the guard flag so any future true staleness can heal
     if (res.ok && contentType && contentType.includes("application/json")) {
       sessionStorage.removeItem("sw_clean_reload_attempted");
