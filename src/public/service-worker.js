@@ -58,6 +58,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip local API endpoints - always fetch fresh, never cache
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
   // Skip POST/PUT/DELETE - only cache GET requests
   if (request.method !== 'GET') {
     return;

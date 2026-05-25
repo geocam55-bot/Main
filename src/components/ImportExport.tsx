@@ -171,11 +171,46 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     fetchCrmRecords(previewModule);
   }, [previewModule]);
 
+  // Self-healing fetch wrapper to resolve PWA / service worker caching issues
+  const safeFetch = async (url: string, options?: RequestInit) => {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("text/html")) {
+      console.warn("API returned HTML instead of JSON. Stale service worker cache detected. Purging cache...");
+      if (typeof window !== "undefined") {
+        if ("caches" in window) {
+          try {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(key => caches.delete(key)));
+          } catch (e) {
+            console.error("Failed to clear service worker caches:", e);
+          }
+        }
+        if ("serviceWorker" in navigator) {
+          try {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const reg of regs) {
+              await reg.unregister();
+            }
+          } catch (e) {
+            console.error("Failed to unregister service worker:", e);
+          }
+        }
+      }
+      toast.error("Browser service-worker cache has been cleared to apply backend updates. Reloading the page...", { duration: 4000 });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+      throw new Error("Received HTML shell instead of API response. Self-healing triggered.");
+    }
+    return res;
+  };
+
   // Fetches lists
   const fetchTasks = async () => {
     setLoadingTasks(true);
     try {
-      const res = await fetch("/api/import-export/tasks");
+      const res = await safeFetch("/api/import-export/tasks");
       const data = await res.json();
       setTasks(data);
     } catch (e) {
@@ -187,7 +222,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   const fetchStats = async () => {
     try {
-      const res = await fetch("/api/import-export/crm-stats");
+      const res = await safeFetch("/api/import-export/crm-stats");
       const data = await res.json();
       setCrmStats(data);
     } catch (e) {
@@ -198,7 +233,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const fetchFiles = async (drive: "local" | "onedrive") => {
     setLoadingFiles(true);
     try {
-      const res = await fetch(`/api/import-export/storage/${drive}`);
+      const res = await safeFetch(`/api/import-export/storage/${drive}`);
       if (!res.ok) {
         throw new Error(`HTTP status ${res.status}`);
       }
@@ -220,7 +255,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const fetchHistory = async () => {
     setLoadingHistory(true);
     try {
-      const res = await fetch("/api/import-export/history");
+      const res = await safeFetch("/api/import-export/history");
       const data = await res.json();
       setHistory(data);
     } catch (e) {
@@ -232,7 +267,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   const fetchCrmRecords = async (mod: "contacts" | "inventory" | "deals") => {
     try {
-      const res = await fetch(`/api/import-export/crm-data/${mod}`);
+      const res = await safeFetch(`/api/import-export/crm-data/${mod}`);
       const data = await res.json();
       setCrmRecords(data || []);
     } catch (e) {
@@ -250,7 +285,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
     setLoadingFiles(true);
     try {
-      const res = await fetch(`/api/import-export/storage/${target}/upload`, {
+      const res = await safeFetch(`/api/import-export/storage/${target}/upload`, {
         method: "POST",
         body: formData
       });
@@ -277,7 +312,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
     setModalUploading(true);
     try {
-      const res = await fetch(`/api/import-export/storage/${target}/upload`, {
+      const res = await safeFetch(`/api/import-export/storage/${target}/upload`, {
         method: "POST",
         body: formData
       });
@@ -301,7 +336,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!confirm(`Are you sure you want to delete ${fileName} from the simulated ${target === 'local' ? 'Local Drive' : 'OneDrive'}?`)) return;
 
     try {
-      const res = await fetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
+      const res = await safeFetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
         method: "DELETE"
       });
       const data = await res.json();
@@ -327,7 +362,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     toast.info("Triggering unattended background job on backend...", { id: "job-run" });
 
     try {
-      const res = await fetch(`/api/import-export/tasks/${taskId}/run`, {
+      const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
         method: "POST"
       });
       const data = await res.json();
@@ -354,7 +389,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!confirm("Are you sure you want to clear all scheduler logs history?")) return;
 
     try {
-      const res = await fetch("/api/import-export/history/clear", {
+      const res = await safeFetch("/api/import-export/history/clear", {
         method: "POST"
       });
       const data = await res.json();
@@ -372,7 +407,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!confirm("Are you sure you want to permanently delete this scheduled task?")) return;
 
     try {
-      const res = await fetch(`/api/import-export/tasks/${taskId}`, {
+      const res = await safeFetch(`/api/import-export/tasks/${taskId}`, {
         method: "DELETE"
       });
       const data = await res.json();
@@ -389,7 +424,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const handleToggleTaskStatus = async (task: ScheduledTask) => {
     const nextStatus = task.status === "active" ? "disabled" : "active";
     try {
-      const res = await fetch("/api/import-export/tasks", {
+      const res = await safeFetch("/api/import-export/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -451,7 +486,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
 
     try {
-      const res = await fetch("/api/import-export/tasks", {
+      const res = await safeFetch("/api/import-export/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -553,7 +588,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
     try {
       // Register temporary task, run it, and delete it immediately
-      const registerRes = await fetch("/api/import-export/tasks", {
+      const registerRes = await safeFetch("/api/import-export/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tempTask)
@@ -561,13 +596,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       const registerData = await registerRes.json();
       
       if (registerData.success) {
-        const runRes = await fetch(`/api/import-export/tasks/${registerData.task.id}/run`, {
+        const runRes = await safeFetch(`/api/import-export/tasks/${registerData.task.id}/run`, {
           method: "POST"
         });
         const runData = await runRes.json();
         
         // delete temporary helper
-        await fetch(`/api/import-export/tasks/${registerData.task.id}`, { method: "DELETE" });
+        await safeFetch(`/api/import-export/tasks/${registerData.task.id}`, { method: "DELETE" });
 
         if (runData.success) {
           if (runData.logResult.status === 'success') {
@@ -1279,7 +1314,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
                             setModalUploading(true);
                             try {
-                              const res = await fetch(`/api/import-export/storage/${manualStorage}/upload`, {
+                              const res = await safeFetch(`/api/import-export/storage/${manualStorage}/upload`, {
                                 method: "POST",
                                 body: formData
                               });
