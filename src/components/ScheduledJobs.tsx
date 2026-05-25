@@ -977,4 +977,5 @@ function ScheduledJobs(props) {
 }
 }
 }
+export { ScheduledJobs };
 export default ScheduledJobs;
