@@ -150,6 +150,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [manualFormat, setManualFormat] = useState<"csv" | "json" | "xml">("csv");
   const [manualUploadingFile, setManualUploadingFile] = useState<File | null>(null);
   const [manualIsProcessing, setManualIsProcessing] = useState(false);
+  const [modalUploading, setModalUploading] = useState(false);
 
   // Storage selection search
   const [storageSearchTerm, setStorageSearchTerm] = useState("");
@@ -198,13 +199,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setLoadingFiles(true);
     try {
       const res = await fetch(`/api/import-export/storage/${drive}`);
+      if (!res.ok) {
+        throw new Error(`HTTP status ${res.status}`);
+      }
       const data = await res.json();
       if (data.success) {
         if (drive === "local") setLocalFiles(data.files || []);
         else setOnedriveFiles(data.files || []);
+      } else {
+        throw new Error(data.error || "Unknown backend error");
       }
-    } catch (e) {
-      toast.error(`Could not read ${drive === "local" ? "Local Drive" : "OneDrive"} storage`);
+    } catch (e: any) {
+      console.error(`Could not read ${drive} storage:`, e);
+      toast.error(`Could not read ${drive === "local" ? "Local Drive" : "OneDrive"} storage: ${e.message || e}`);
     } finally {
       setLoadingFiles(false);
     }
@@ -258,6 +265,34 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       toast.error("Network error during file upload");
     } finally {
       setLoadingFiles(false);
+    }
+  };
+
+  const handleModalFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, target: "local" | "onedrive") => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setModalUploading(true);
+    try {
+      const res = await fetch(`/api/import-export/storage/${target}/upload`, {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Uploaded & mapped "${file.name}" to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
+        setActionFileName(file.name);
+        fetchFiles(target);
+      } else {
+        toast.error("File upload failed: " + data.error);
+      }
+    } catch (e) {
+      toast.error("Network error during file upload");
+    } finally {
+      setModalUploading(false);
     }
   };
 
@@ -1210,36 +1245,94 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 )}
 
                 {/* Target File Name selection and helper triggers */}
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <label className="block text-2xs uppercase text-slate-400 font-bold">Target Filename Path</label>
-                    {manualType === "import" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentFiles = manualStorage === "onedrive" ? onedriveFiles : localFiles;
-                          if (currentFiles.length > 0) {
-                            setManualFileName(currentFiles[0].name);
-                            toast.info(`Autofilled with: ${currentFiles[0].name}`);
-                          } else {
-                            toast.error("Drive contains no available import files.");
-                          }
-                        }}
-                        className="text-3xs text-blue-600 hover:underline font-semibold"
-                      >
-                        Autofill from drive files
-                      </button>
-                    )}
+                <div className="space-y-3 bg-slate-50 border p-3 rounded-xl">
+                  <div>
+                    <label className="block text-2xs uppercase text-slate-400 font-bold mb-1 col-span-2">Target Filename Path</label>
+                    <input
+                      type="text"
+                      value={manualFileName}
+                      onChange={(e) => setManualFileName(e.target.value)}
+                      placeholder="Enter output file name (e.g. dump.csv)"
+                      className="w-full border rounded-lg px-2.5 py-1.5 outline-none font-mono text-slate-755 text-xs focus:border-blue-500 bg-white"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={manualFileName}
-                    onChange={(e) => setManualFileName(e.target.value)}
-                    placeholder="Enter output file name (e.g. dump.csv)"
-                    className="w-full border rounded-lg px-3 py-1.5 outline-none font-mono text-slate-755"
-                  />
-                  <span className="text-4xs text-slate-450 mt-1 block">
-                    {manualType === 'import' ? 'Reads spreadsheet file raw table data on server directory.' : 'Creates or overwrites files onto mapped drive folders.'}
+
+                  <div className="grid grid-cols-1 gap-2 pt-0.5 col-span-2">
+                    {/* Browse from local PC */}
+                    <div>
+                      <label className="block text-4xs uppercase text-slate-450 font-bold mb-1 font-mono">Upload from Computer</label>
+                      <label className={`w-full flex items-center justify-center gap-1 px-2.5 py-1.5 border border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 hover:text-blue-700 bg-white rounded-lg cursor-pointer text-slate-650 text-3xs font-semibold shadow-xs transition-all ${modalUploading ? 'opacity-50' : ''}`}>
+                        {modalUploading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                        <span>{modalUploading ? "Uploading..." : "Browse PC File"}</span>
+                        <input 
+                          type="file" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+
+                            const formData = new FormData();
+                            formData.append("file", file);
+
+                            setModalUploading(true);
+                            try {
+                              const res = await fetch(`/api/import-export/storage/${manualStorage}/upload`, {
+                                method: "POST",
+                                body: formData
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                toast.success(`Uploaded & loaded "${file.name}" to ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
+                                setManualFileName(file.name);
+                                fetchFiles(manualStorage);
+                              } else {
+                                toast.error("File upload failed: " + data.error);
+                              }
+                            } catch (err) {
+                              toast.error("Network error during file upload");
+                            } finally {
+                              setModalUploading(false);
+                            }
+                          }} 
+                          className="hidden" 
+                          accept=".csv,.json,.xml,.xls,.xlsx" 
+                        />
+                      </label>
+                    </div>
+
+                    {/* Choose from current folder */}
+                    <div>
+                      <label className="block text-4xs uppercase text-slate-450 font-bold mb-1 font-mono">Pick Existing Folder File</label>
+                      {(() => {
+                        const currentFiles = manualStorage === "onedrive" ? onedriveFiles : localFiles;
+                        return (
+                          <select
+                            value={currentFiles.some(f => f.name === manualFileName) ? manualFileName : ""}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setManualFileName(e.target.value);
+                                toast.success(`Mapped file "${e.target.value}"`);
+                              }
+                            }}
+                            className="w-full border rounded-lg px-2 py-1.5 outline-none font-semibold text-slate-700 bg-white text-3xs truncate focus:border-blue-500"
+                          >
+                            <option value="">-- Choose file --</option>
+                            {currentFiles.map(file => (
+                              <option key={file.name} value={file.name}>
+                                {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <span className="text-4xs text-slate-450 block leading-normal pt-1 border-t border-slate-200">
+                    {manualType === 'import' ? '💡 Compiles and executes full CRM relational database upserts.' : '💡 Serializes relational rows into target spreadsheet format.'}
                   </span>
                 </div>
 
@@ -1714,8 +1807,74 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                       value={actionFileName}
                       onChange={(e) => setActionFileName(e.target.value)}
                       placeholder="e.g. backup_dump.csv"
-                      className="w-full border rounded-lg px-3 py-1.5 outline-none font-mono text-slate-800"
+                      className="w-full border rounded-lg px-3 py-1.5 outline-none font-mono text-slate-800 focus:border-blue-500"
                     />
+                  </div>
+
+                  {/* ACTIVE FILE SELECTOR FROM USER LOCAL COMPUTER & FOLDER REPOSITORY */}
+                  <div className="sm:col-span-2 bg-slate-50 border p-3.5 rounded-xl space-y-3 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                        <FolderOpen className="w-4 h-4 text-blue-600" />
+                        Scheduler File Picker (Local Computer & Target Folder)
+                      </span>
+                      <span className="text-4xs text-slate-400">
+                        Mapped space: <span className="font-mono bg-slate-200 px-1 py-0.5 rounded text-slate-650">./{actionStorage === 'onedrive' ? 'onedrive' : 'local_drive'}</span>
+                      </span>
+                    </div>
+
+                    <p className="text-4xs text-slate-500 leading-relaxed">
+                      To run scheduled unattended imports, files must reside on container directories.
+                      Use the controls below to select an existing file or upload a new file from your computer.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      {/* Upload new file from PC */}
+                      <div className="space-y-1.5">
+                        <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Upload from your Computer</label>
+                        <label className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 hover:text-blue-700 rounded-lg cursor-pointer font-semibold text-center text-slate-600 transition-all ${modalUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                          {modalUploading ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                          <span>{modalUploading ? "Uploading..." : "Browse PC File"}</span>
+                          <input 
+                            type="file" 
+                            onChange={(e) => handleModalFileUpload(e, actionStorage)} 
+                            className="hidden" 
+                            accept=".csv,.json,.xml,.xls,.xlsx" 
+                          />
+                        </label>
+                      </div>
+
+                      {/* Select existing from selected folder space */}
+                      <div className="space-y-1.5">
+                        <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Select existing file in Folder</label>
+                        {(() => {
+                          const currentFiles = actionStorage === "onedrive" ? onedriveFiles : localFiles;
+                          return (
+                            <select
+                              value={currentFiles.some(f => f.name === actionFileName) ? actionFileName : ""}
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  setActionFileName(e.target.value);
+                                  toast.success(`Selected file "${e.target.value}"`);
+                                }
+                              }}
+                              className="w-full border rounded-lg px-2.5 py-2 outline-none font-medium text-slate-700 bg-white text-xs truncate focus:border-blue-500"
+                            >
+                              <option value="">-- Choose file on drive --</option>
+                              {currentFiles.map(file => (
+                                <option key={file.name} value={file.name}>
+                                  {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                                </option>
+                              ))}
+                            </select>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   </div>
 
                   {actionType === "export" && (
