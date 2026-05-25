@@ -176,32 +176,45 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const res = await fetch(url, options);
     const contentType = res.headers.get("content-type");
     if (contentType && contentType.includes("text/html")) {
-      console.warn("API returned HTML instead of JSON. Stale service worker cache detected. Purging cache...");
-      if (typeof window !== "undefined") {
-        if ("caches" in window) {
-          try {
-            const keys = await caches.keys();
-            await Promise.all(keys.map(key => caches.delete(key)));
-          } catch (e) {
-            console.error("Failed to clear service worker caches:", e);
-          }
-        }
-        if ("serviceWorker" in navigator) {
-          try {
-            const regs = await navigator.serviceWorker.getRegistrations();
-            for (const reg of regs) {
-              await reg.unregister();
+      console.warn("API returned HTML instead of JSON. Stale service worker cache detected. Checking active safeguards...");
+      
+      // Prevent infinite automatic reload loops
+      const alreadyAttempted = sessionStorage.getItem("sw_clean_reload_attempted");
+      if (!alreadyAttempted) {
+        sessionStorage.setItem("sw_clean_reload_attempted", "true");
+        if (typeof window !== "undefined") {
+          if ("caches" in window) {
+            try {
+              const keys = await caches.keys();
+              await Promise.all(keys.map(key => caches.delete(key)));
+            } catch (e) {
+              console.error("Failed to clear service worker caches:", e);
             }
-          } catch (e) {
-            console.error("Failed to unregister service worker:", e);
+          }
+          if ("serviceWorker" in navigator) {
+            try {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              for (const reg of regs) {
+                await reg.unregister();
+              }
+            } catch (e) {
+              console.error("Failed to unregister service worker:", e);
+            }
           }
         }
+        toast.error("Stale browser cache detected. Cleared cache & reloading page to apply backend updates...", { duration: 4000 });
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        console.error("API still returned HTML after unregistration & reload. Stale cache is still active or server routing mismatch.");
+        toast.warning("Server returned an unexpected page structure. If data is not showing, please perform a hard-refresh (Ctrl+F5 or Cmd+Shift+R to bypass cache).", { duration: 6000 });
       }
-      toast.error("Browser service-worker cache has been cleared to apply backend updates. Reloading the page...", { duration: 4000 });
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
       throw new Error("Received HTML shell instead of API response. Self-healing triggered.");
+    }
+    // If it's a successful JSON response, clear the guard flag so any future true staleness can heal
+    if (res.ok && contentType && contentType.includes("application/json")) {
+      sessionStorage.removeItem("sw_clean_reload_attempted");
     }
     return res;
   };
