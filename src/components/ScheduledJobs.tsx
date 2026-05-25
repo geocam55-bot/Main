@@ -36,7 +36,7 @@ import {
   sanitizeFilename
 } from '../utils/export-engine';
 
-function ScheduledJobs(props) {
+function ScheduledJobs({ user, onNavigate }) {
   // State for editing a job
   const [jobs, setJobs] = useState([]);
   const [editJob, setEditJob] = useState(null);
@@ -48,7 +48,14 @@ function ScheduledJobs(props) {
   const [editRepeatDaysOfWeek, setEditRepeatDaysOfWeek] = useState([]);
   const [editRepeatDaysOfMonth, setEditRepeatDaysOfMonth] = useState([]);
 
-  // ...existing code...
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      loadJobs();
+    }
+  }, [user]);
 
   const processJob = async (job: any) => {
     const supabase = createClient();
@@ -425,11 +432,13 @@ function ScheduledJobs(props) {
   const loadJobs = async () => {
     try {
       const supabase = createClient();
+      const orgId = user?.organizationId || user?.organization_id;
+      if (!orgId) return;
       
       const { data, error } = await supabase
         .from('scheduled_jobs')
         .select('*')
-        .eq('organization_id', user.organizationId)
+        .eq('organization_id', orgId)
         .order('scheduled_time', { ascending: false })
         .limit(50);
 
@@ -447,6 +456,8 @@ function ScheduledJobs(props) {
     try {
       setIsProcessing(true);
       const supabase = createClient();
+      const orgId = user?.organizationId || user?.organization_id;
+      if (!orgId) throw new Error('No organization id found for current user');
 
       const { error } = await supabase
         .from('scheduled_jobs')
@@ -455,7 +466,7 @@ function ScheduledJobs(props) {
           completed_at: new Date().toISOString()
         })
         .eq('id', jobId)
-        .eq('organization_id', user.organizationId);
+        .eq('organization_id', orgId);
 
       if (error) throw error;
 
@@ -472,12 +483,14 @@ function ScheduledJobs(props) {
     try {
       setIsProcessing(true);
       const supabase = createClient();
+      const orgId = user?.organizationId || user?.organization_id;
+      if (!orgId) throw new Error('No organization id found for current user');
 
       const { error } = await supabase
         .from('scheduled_jobs')
         .delete()
         .eq('id', jobId)
-        .eq('organization_id', user.organizationId);
+        .eq('organization_id', orgId);
 
       if (error) throw error;
 

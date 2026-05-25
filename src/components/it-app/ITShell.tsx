@@ -1,4 +1,4 @@
-import { ImportScreen } from '../../modules/import-export/components/ImportScreen';
+import ImportExport from '../ImportExport';
 import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import {
   Monitor,
@@ -376,8 +376,8 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
           {currentView === 'security' && <Security user={currentUser} />}
           {currentView === 'audit-log' && <AuditLog user={currentUser} />}
           {currentView === 'settings' && <SettingsComponent user={currentUser} organization={organization} onUserUpdate={setCurrentUser} onOrganizationUpdate={setOrganization} />}
-          {currentView === 'import-export' && <ImportScreen />}
-          {currentView === 'scheduled-jobs' && <ScheduledJobs user={currentUser} />}
+          {currentView === 'import-export' && <ImportExport user={currentUser} onNavigate={handleNavigate} />}
+          {currentView === 'scheduled-jobs' && <ScheduledJobs user={currentUser} onNavigate={handleNavigate} />}
           {currentView === 'billing' && <SubscriptionBilling user={currentUser} />}
           {currentView === 'agreement' && <SubscriptionAgreement organization={organization} onBack={() => handleNavigate('home')} />}
           {currentView === 'portal-admin' && <PortalMessagesAdmin user={currentUser} />}
