@@ -1,5 +1,48 @@
 @import "tailwindcss";
 
+@theme {
+  /* Direct color mappings from CSS custom properties */
+  --color-background: var(--color-background);
+  --color-background-secondary: var(--color-background-secondary);
+  --color-background-tertiary: var(--color-background-tertiary);
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-text: var(--color-primary-text);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-border: var(--color-border);
+  --color-border-light: var(--color-border-light);
+  --color-card: var(--color-card);
+  --color-card-hover: var(--color-card-hover);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+  --color-info: var(--color-info);
+  --color-nav-background: var(--color-nav-background);
+  --color-nav-text: var(--color-nav-text);
+  --color-nav-hover: var(--color-nav-hover);
+  --color-nav-active: var(--color-nav-active);
+  --color-topbar-background: var(--color-topbar-background);
+  --color-topbar-text: var(--color-topbar-text);
+
+  /* shadcn style component custom properties */
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-input: hsl(var(--input));
+  --color-ring: var(--color-primary);
+}
+
 html, body, #root {
   background-color: var(--color-background, #f8fafc);
   color: var(--color-text, #0f172a);
