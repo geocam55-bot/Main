@@ -1049,39 +1049,41 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
                   <button 
                     onClick={() => fileInputRef.current?.click()}
                     disabled={loading}
-                    className={`flex flex-col items-center justify-center p-2 rounded-md hover:bg-purple-50 transition-colors ${loading ? 'opacity-50' : ''}`}
+                    className={`flex flex-col items-center justify-center p-2 rounded-md hover:bg-purple-50 transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <UploadCloud className="w-5 h-5 mb-1 text-purple-500" />
                     <span className="text-[10px] font-medium text-muted-foreground">Upload</span>
-                    <input 
-                      ref={fileInputRef}
-                      type="file" 
-                      accept="application/pdf, .pdf, image/jpeg, image/jpg, image/png, image/*" 
-                      className="hidden" 
-                      disabled={loading} 
-                      onChange={handleFileUpload} 
-                    />
                   </button>
+                  <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    accept="application/pdf, .pdf, image/jpeg, image/jpg, image/png, image/*" 
+                    className="hidden" 
+                    disabled={loading} 
+                    onChange={handleFileUpload} 
+                  />
+
                   <button onClick={handleSaveDraft} disabled={loading || !bgImage} className="flex flex-col items-center justify-center p-2 rounded-md hover:bg-green-50 transition-colors disabled:opacity-50">
                     <Save className="w-5 h-5 mb-1 text-green-500" />
                     <span className="text-[10px] font-medium text-muted-foreground">Save</span>
                   </button>
+
                   <button 
                     onClick={() => loadInputRef.current?.click()}
                     disabled={loading}
-                    className={`flex flex-col items-center justify-center p-2 rounded-md hover:bg-orange-50 transition-colors ${loading ? 'opacity-50' : ''}`}
+                    className={`flex flex-col items-center justify-center p-2 rounded-md hover:bg-orange-50 transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <FolderOpen className="w-5 h-5 mb-1 text-orange-500" />
                     <span className="text-[10px] font-medium text-muted-foreground">Load</span>
-                    <input 
-                      ref={loadInputRef}
-                      type="file" 
-                      accept=".pjt" 
-                      className="hidden" 
-                      disabled={loading} 
-                      onChange={handleLoadProjectFile} 
-                    />
                   </button>
+                  <input 
+                    ref={loadInputRef}
+                    type="file" 
+                    accept=".pjt" 
+                    className="hidden" 
+                    disabled={loading} 
+                    onChange={handleLoadProjectFile} 
+                  />
                 </div>
 
                 {/* History Tools */}
