@@ -180,14 +180,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
     // Request headers to explicitly disable caching at all levels (only for GET requests)
     const extendedOptions: RequestInit = {
-      ...options,
-      headers: isGet ? {
+      ...options
+    };
+
+    if (isGet) {
+      extendedOptions.headers = {
         ...(options?.headers || {}),
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
         "Expires": "0"
-      } : (options?.headers || {})
-    };
+      };
+    } else if (options?.headers) {
+      extendedOptions.headers = options.headers;
+    }
 
     const res = await fetch(cacheBusterUrl, extendedOptions);
     const contentType = res.headers.get("content-type");
@@ -195,6 +200,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (contentType && contentType.includes("text/html")) {
       const htmlText = await res.text().catch(() => "");
       console.warn("API returned HTML instead of JSON. Stale service worker cache detected or router mismatch. HTML sample:", htmlText.substring(0, 200));
+      
+      // Pull title from the HTML document to print the system/origin details
+      const titleMatch = htmlText.match(/<title>([\s\S]*?)<\/title>/i);
+      const htmlTitle = titleMatch ? titleMatch[1].trim() : htmlText.replace(/<[^>]*>/g, '').substring(0, 100).trim();
       
       // Force unregister all active service workers immediately as a proactive measure
       if (typeof window !== "undefined" && "serviceWorker" in navigator) {
@@ -234,9 +243,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         }, 1500);
       } else {
         console.error("API still returned HTML after unregistration & reload. Stale cache is still active or server routing mismatch.");
-        toast.warning(`Unexpected HTML response (Status ${res.status}). Try doing a hard-refresh (Ctrl+F5 or Cmd+Shift+R) to bypass cache.`, { duration: 8000 });
+        toast.warning(`Unexpected HTML response (Status ${res.status}). Source: [${htmlTitle || "empty"}]. Try doing a hard-refresh (Ctrl+F5 or Cmd+Shift+R).`, { duration: 8000 });
       }
-      throw new Error(`Received HTML response instead of JSON. Status: ${res.status}`);
+      throw new Error(`Received HTML response [${htmlTitle || "empty"}] instead of JSON. Status: ${res.status}`);
     }
     
     // If it's a successful JSON response, clear the guard flag so any future true staleness can heal

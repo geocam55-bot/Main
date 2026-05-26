@@ -610,6 +610,15 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
+  // --- FALLBACK CATCH-ALL FOR ALL UNHANDLED API ROUTES ---
+  app.all('/api/*', (req, res) => {
+    console.warn(`[WARN] Unhandled API request: ${req.method} ${req.originalUrl || req.url}`);
+    res.status(404).json({
+      success: false,
+      error: `API endpoint not found: ${req.method} ${req.originalUrl || req.url}`
+    });
+  });
+
   const distPath = path.join(process.cwd(), 'build');
   const isProduction = process.env.NODE_ENV === "production" && fs.existsSync(distPath);
 
