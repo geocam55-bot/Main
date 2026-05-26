@@ -5,6 +5,7 @@ import multer from 'multer';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import * as XLSX from 'xlsx';
+import os from 'os';
 
 // Ensure storage and data folders exist
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -414,7 +415,11 @@ async function startServer() {
   });
 
   // Setup multer
-  const upload = multer({ dest: 'uploads/' });
+  const uploadDir = path.join(os.tmpdir(), 'prospaces_uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+  const upload = multer({ dest: uploadDir });
 
   // API router / endpoints
   app.post('/api/import-export/upload', upload.single('file'), (req, res) => {

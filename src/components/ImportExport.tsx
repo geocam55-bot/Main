@@ -335,8 +335,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       } else {
         toast.error("File upload failed: " + data.error);
       }
-    } catch (e) {
-      toast.error("Network error during file upload");
+    } catch (e: any) {
+      console.error("File upload error:", e);
+      toast.error(`Network error during file upload: ${e.message || e}`);
     } finally {
       setLoadingFiles(false);
     }
@@ -363,8 +364,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       } else {
         toast.error("File upload failed: " + data.error);
       }
-    } catch (e) {
-      toast.error("Network error during file upload");
+    } catch (e: any) {
+      console.error("Modal file upload error:", e);
+      toast.error(`Network error during file upload: ${e.message || e}`);
     } finally {
       setModalUploading(false);
     }
@@ -1365,8 +1367,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                               } else {
                                 toast.error("File upload failed: " + data.error);
                               }
-                            } catch (err) {
-                              toast.error("Network error during file upload");
+                            } catch (err: any) {
+                              console.error("Manual file upload error:", err);
+                              toast.error(`Network error during file upload: ${err.message || err}`);
                             } finally {
                               setModalUploading(false);
                             }
