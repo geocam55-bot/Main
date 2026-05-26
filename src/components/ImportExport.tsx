@@ -173,19 +173,20 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Self-healing fetch wrapper to resolve PWA / service worker caching issues
   const safeFetch = async (url: string, options?: RequestInit) => {
-    // Generate a unique URL query parameter to bypass ANY browser, CDN, or service worker cache
-    const separator = url.includes("?") ? "&" : "?";
-    const cacheBusterUrl = `${url}${separator}_t=${Date.now()}`;
+    const isGet = !options?.method || options.method.toUpperCase() === "GET";
+    
+    // Generate a unique URL query parameter only for GET requests to bypass browser cache
+    const cacheBusterUrl = isGet ? `${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}` : url;
 
-    // Request headers to explicitly disable caching at all levels
+    // Request headers to explicitly disable caching at all levels (only for GET requests)
     const extendedOptions: RequestInit = {
       ...options,
-      headers: {
+      headers: isGet ? {
         ...(options?.headers || {}),
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
         "Expires": "0"
-      }
+      } : (options?.headers || {})
     };
 
     const res = await fetch(cacheBusterUrl, extendedOptions);
