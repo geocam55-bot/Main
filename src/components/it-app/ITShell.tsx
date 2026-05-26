@@ -128,11 +128,13 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
   useEffect(() => onPermissionsChanged(() => setPermissionVersion((version) => version + 1)), []);
 
   const isSuperAdmin = currentUser.role === 'super_admin';
+  const isAdmin = currentUser.role === 'admin' || isSuperAdmin;
   const hasNavAccess = useCallback((item: NavItem) => {
     if (item.superAdminOnly && !isSuperAdmin) return false;
+    if (isAdmin) return true;
     if (item.module && !canView(item.module, currentUser.role)) return false;
     return true;
-  }, [isSuperAdmin, currentUser.role]);
+  }, [isSuperAdmin, isAdmin, currentUser.role]);
 
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => hasNavAccess(item)

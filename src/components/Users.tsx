@@ -89,10 +89,10 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
 
   // Check permissions using the permissions system
   // Director can VIEW users but not add/edit/delete
-  const canViewUsers = canView('users', user.role);
-  const canManageUsers = canAdd('users', user.role) || canChange('users', user.role);
-  const canManageAllUsers = canDelete('users', user.role) || (user.role === 'super_admin' || user.role === 'admin');
   const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+  const canViewUsers = isAdmin || canView('users', user.role);
+  const canManageUsers = isAdmin || canAdd('users', user.role) || canChange('users', user.role);
+  const canManageAllUsers = isAdmin || canDelete('users', user.role);
 
   const [users, setUsers] = useState<OrgUser[]>([]);
 

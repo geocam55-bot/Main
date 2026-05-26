@@ -76,8 +76,9 @@ export function Security({ user }: SecurityProps) {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const canAccessSecurity = canView('security', user.role);
-  const canEditSecurity = canChange('security', user.role);
+  const isAdmin = user.role === 'admin' || isSuperAdmin;
+  const canAccessSecurity = isAdmin || canView('security', user.role);
+  const canEditSecurity = isAdmin || canChange('security', user.role);
 
   const roles = ALL_ROLES.filter((role) => user.role === 'super_admin' || role !== 'super_admin');
 

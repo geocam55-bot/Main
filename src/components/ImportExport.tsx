@@ -109,6 +109,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // Loading indicator states
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [explorerUploading, setExplorerUploading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
 
@@ -279,8 +280,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  const fetchFiles = async (drive: "local" | "onedrive") => {
-    setLoadingFiles(true);
+  const fetchFiles = async (drive: "local" | "onedrive", silent = false) => {
+    if (!silent) setLoadingFiles(true);
     try {
       const res = await safeFetch(`/api/import-export/storage/${drive}`);
       if (!res.ok) {
@@ -297,7 +298,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       console.error(`Could not read ${drive} storage:`, e);
       toast.error(`Could not read ${drive === "local" ? "Local Drive" : "OneDrive"} storage: ${e.message || e}`);
     } finally {
-      setLoadingFiles(false);
+      if (!silent) setLoadingFiles(false);
     }
   };
 
@@ -332,7 +333,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const formData = new FormData();
     formData.append("file", file);
 
-    setLoadingFiles(true);
+    setExplorerUploading(true);
     try {
       const res = await safeFetch(`/api/import-export/storage/${target}/upload`, {
         method: "POST",
@@ -341,7 +342,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       const data = await res.json();
       if (data.success) {
         toast.success(`Uploaded ${file.name} to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully`);
-        fetchFiles(target);
+        await fetchFiles(target, true);
       } else {
         toast.error("File upload failed: " + data.error);
       }
@@ -349,7 +350,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       console.error("File upload error:", e);
       toast.error(`Network error during file upload: ${e.message || e}`);
     } finally {
-      setLoadingFiles(false);
+      setExplorerUploading(false);
     }
   };
 
@@ -1140,14 +1141,21 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   {/* Upload button wrapper */}
                   <div className="flex items-center gap-2">
                     <label className={`text-xs px-3.5 py-1.5 rounded-lg border-2 border-dashed font-semibold cursor-pointer shadow-sm transition-all inline-flex items-center gap-1.5 ${
-                      driveTab === 'onedrive' 
-                        ? 'border-blue-300 hover:border-blue-600 hover:bg-blue-50 text-blue-700 bg-white' 
-                        : 'border-slate-300 hover:border-slate-700 hover:bg-slate-100 text-slate-700 bg-white'
+                      explorerUploading
+                        ? 'opacity-50 pointer-events-none'
+                        : driveTab === 'onedrive' 
+                          ? 'border-blue-300 hover:border-blue-600 hover:bg-blue-50 text-blue-700 bg-white' 
+                          : 'border-slate-300 hover:border-slate-700 hover:bg-slate-100 text-slate-700 bg-white'
                     }`}>
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Upload to Drive</span>
+                      {explorerUploading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
+                      <span>{explorerUploading ? "Uploading..." : "Upload to Drive"}</span>
                       <input 
                         type="file" 
+                        disabled={explorerUploading}
                         onChange={(e) => handleFileUpload(e, driveTab)} 
                         className="hidden" 
                         accept=".csv,.json,.xml,.xls,.xlsx" 
