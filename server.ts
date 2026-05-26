@@ -406,10 +406,20 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  // Log incoming API requests
+  // Log incoming API requests to a file for diagnostics
   app.use((req, res, next) => {
     if (req.url.startsWith('/api/')) {
+      const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}\n`;
       console.log(`[API] ${req.method} ${req.url}`);
+      try {
+        const logDir = path.join(process.cwd(), 'data');
+        if (!fs.existsSync(logDir)) {
+          fs.mkdirSync(logDir, { recursive: true });
+        }
+        fs.appendFileSync(path.join(logDir, 'api_requests.log'), logLine);
+      } catch (err) {
+        console.error('Failed to write to api_requests.log:', err);
+      }
     }
     next();
   });
@@ -611,7 +621,7 @@ async function startServer() {
   });
 
   // --- FALLBACK CATCH-ALL FOR ALL UNHANDLED API ROUTES ---
-  app.all('/api/*', (req, res) => {
+  app.all('/api/*all', (req, res) => {
     console.warn(`[WARN] Unhandled API request: ${req.method} ${req.originalUrl || req.url}`);
     res.status(404).json({
       success: false,
