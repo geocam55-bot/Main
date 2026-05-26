@@ -668,7 +668,11 @@ async function startServer() {
     });
   } else {
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('*all', (req, res, next) => {
+      // Skip API requests in production so they don't get routed to HTML index
+      if (req.originalUrl && req.originalUrl.startsWith('/api/')) {
+        return next();
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

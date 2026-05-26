@@ -9,6 +9,7 @@ import { createClient } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
+import { unregisterServiceWorker } from './utils/pwa';
 import './index.css';
 
 function ITApp() {
@@ -52,6 +53,8 @@ function ITApp() {
   }, [user]);
 
   useEffect(() => {
+    unregisterServiceWorker().catch(() => {});
+
     const loadSafetyTimer = setTimeout(() => {
       setLoading(false);
     }, 3000);
