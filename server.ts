@@ -17,7 +17,17 @@ if (!fs.existsSync(ONEDRIVE_DIR)) fs.mkdirSync(ONEDRIVE_DIR, { recursive: true }
 
 const TASKS_FILE = path.join(DATA_DIR, 'scheduled_tasks.json');
 const LOGS_FILE = path.join(DATA_DIR, 'scheduled_task_history.json');
-const CRM_DB_FILE = path.join(DATA_DIR, 'mock_crm_database.json');
+const CRM_DB_FILE = path.join(DATA_DIR, 'crm_database.json');
+
+const MOCK_CRM_DB_FILE = path.join(DATA_DIR, 'mock_crm_database.json');
+if (fs.existsSync(MOCK_CRM_DB_FILE) && !fs.existsSync(CRM_DB_FILE)) {
+  try {
+    fs.copyFileSync(MOCK_CRM_DB_FILE, CRM_DB_FILE);
+    console.log('[Migration] Migrated mock_crm_database.json to crm_database.json');
+  } catch (err) {
+    console.error('Migration failed:', err);
+  }
+}
 
 // Helper to load/save JSON files safely
 function loadJson(file, defaultData) {
@@ -39,7 +49,7 @@ function saveJson(file, data) {
   }
 }
 
-// Seeding standard CRM mock database if not exists
+// Seeding standard CRM database if not exists
 const initialCrmDb = {
   contacts: [
     { id: '1', Name: 'John Doe', Email: 'john@example.com', Phone: '555-0199', Company: 'Acme Corp', Trade: 'Builder', Status: 'Lead', PriceLevel: 'Standard', Notes: 'Met at builders convention' },
@@ -258,7 +268,7 @@ async function executeScheduledTask(task: any) {
       logEntry.message = `Successfully exported ${records.length} records from ${task.action.module} to unattended ${task.action.fileStorage} storage file: ${task.action.fileName}`;
     } else if (task.action.type === 'import') {
       if (!fs.existsSync(filePath)) {
-        throw new Error(`Execution failed: Import source file '${task.action.fileName}' not found in the simulated ${task.action.fileStorage} drive space.`);
+        throw new Error(`Execution failed: Import source file '${task.action.fileName}' not found in ${task.action.fileStorage === 'onedrive' ? 'OneDrive' : 'Local Drive'}.`);
       }
 
       const fileExtension = path.extname(filePath).toLowerCase();
@@ -297,7 +307,7 @@ async function executeScheduledTask(task: any) {
         throw new Error(`Successfully read but found no valid tabular rows to import.`);
       }
 
-      // Upsert records in local crm simulation database
+      // Upsert records in local crm database
       const moduleKey = task.action.module;
       if (!crmDb[moduleKey]) crmDb[moduleKey] = [];
 
@@ -415,7 +425,7 @@ async function startServer() {
     res.json({ fileId: req.file.filename, originalName: req.file.originalname });
   });
 
-  // --- STORAGE EMULATOR APIs ---
+  // --- STORAGE CLIENT APIs ---
   app.get('/api/import-export/storage/:target', (req, res) => {
     const { target } = req.params;
     const targetDir = target === 'onedrive' ? ONEDRIVE_DIR : LOCAL_DRIVE_DIR;

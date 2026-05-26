@@ -330,7 +330,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Uploaded ${file.name} to simulated ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully`);
+        toast.success(`Uploaded ${file.name} to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully`);
         fetchFiles(target);
       } else {
         toast.error("File upload failed: " + data.error);
@@ -372,7 +372,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Delete handles from storage
   const handleFileDelete = async (fileName: string, target: "local" | "onedrive") => {
-    if (!confirm(`Are you sure you want to delete ${fileName} from the simulated ${target === 'local' ? 'Local Drive' : 'OneDrive'}?`)) return;
+    if (!confirm(`Are you sure you want to delete ${fileName} from ${target === 'local' ? 'Local Drive' : 'OneDrive'}?`)) return;
 
     try {
       const res = await safeFetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
@@ -606,7 +606,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setManualIsProcessing(true);
     toast.info(`Executing instant ${manualType} of ${manualModule}...`, { id: "manual-job" });
 
-    // Emulating the process by triggering a temporary internal unattended task
+    // Executing the process instantly by triggering a temporary internal unattended task
     const tempTask: ScheduledTask = {
       id: 'temp-manual-' + Math.random().toString(36).slice(2, 6),
       name: `Instant Manual ${manualType === 'import' ? 'Import' : 'Export'}`,
@@ -1007,7 +1007,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         {activeTab === "storage" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* Left Nav Pane for emulated storage categories */}
+            {/* Left Nav Pane for storage categories */}
             <div className="space-y-4">
               <div className="bg-white border rounded-xl p-4 shadow-2xs">
                 <h3 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Enterprise Storage Clients</h3>
@@ -1440,7 +1440,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 {/* Header preview filter */}
                 <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-bold text-slate-850 text-sm">Real-time Connected Mock CRM Tables</h3>
+                    <h3 className="font-bold text-slate-850 text-sm">Real-time Connected CRM Tables</h3>
                     <p className="text-2xs text-slate-400 font-normal">Interactive preview panel reflecting upserts run by either background unattended logs or loaders.</p>
                   </div>
 
@@ -1868,7 +1868,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                       onChange={(e) => setActionStorage(e.target.value as any)}
                       className="w-full border rounded-lg px-3 py-1.5 font-medium text-slate-700 bg-white"
                     >
-                      <option value="local">📁 User Local Drive Emulation Folder (./local_drive)</option>
+                      <option value="local">📁 User Local Drive Folder (./local_drive)</option>
                       <option value="onedrive">☁️ Microsoft OneDrive Storage (./onedrive)</option>
                     </select>
                   </div>
