@@ -638,6 +638,50 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
+  // --- SELF-UNINSTALLING SERVICE WORKER ENDPOINTS ---
+  app.get(['/service-worker.js', '/sw.js'], (req, res) => {
+    res.set({
+      'Content-Type': 'application/javascript',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    res.send(`
+// Self-uninstalling Service Worker to resolve stale caching and static API interception issues
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => caches.delete(cacheName))
+      );
+    })
+    .then(() => {
+      console.log('[ServiceWorker] Caches cleared. Unregistering self...');
+      return self.registration.unregister();
+    })
+    .then(() => {
+      return self.clients.matchAll();
+    })
+    .then((clients) => {
+      clients.forEach((client) => {
+        if (client.navigate) {
+          try {
+            client.navigate(client.url);
+          } catch (e) {
+            console.error('Failed to navigate client:', e);
+          }
+        }
+      });
+    })
+  );
+});
+    `);
+  });
+
   // --- FALLBACK CATCH-ALL FOR ALL UNHANDLED API ROUTES ---
   app.all('/api/*all', (req, res) => {
     console.warn(`[WARN] Unhandled API request: ${req.method} ${req.originalUrl || req.url}`);

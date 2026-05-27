@@ -4,6 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ProSpaces — Marketing Space</title>
+    <script>
+      // Bulletproof immediate Service Worker and Cache Storage removal
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (let registration of registrations) {
+            registration.unregister().then(function() {
+              console.log('SW unregistered');
+            }).catch(function(e) {
+              console.error('SW unregister failed:', e);
+            });
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(key) {
+            caches.delete(key).then(function() {
+              console.log('Cache cleared:', key);
+            });
+          });
+        });
+      }
+      // Instantly clear any local storage cache keys that might override network states
+      try {
+        sessionStorage.removeItem("sw_clean_reload_attempted");
+      } catch (e) {}
+    </script>
   </head>
 
   <body>
