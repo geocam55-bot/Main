@@ -5,31 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ProSpaces — Project Wizards</title>
     <script>
-      // Bulletproof immediate Service Worker and Cache Storage removal
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for (let registration of registrations) {
-            registration.unregister().then(function() {
-              console.log('SW unregistered');
-            }).catch(function(e) {
-              console.error('SW unregister failed:', e);
+      // Bulletproof active Service Worker & Cache Storage healer with auto-reload bypass
+      (function() {
+        var unregisterAndReload = function() {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              if (registrations && registrations.length > 0) {
+                var promises = registrations.map(function(reg) {
+                  return reg.unregister();
+                });
+                Promise.all(promises).then(function() {
+                  if ('caches' in window) {
+                    caches.keys().then(function(keys) {
+                      Promise.all(keys.map(function(k) { return caches.delete(k); })).then(function() {
+                        window.location.reload();
+                      });
+                    }).catch(function() {
+                      window.location.reload();
+                    });
+                  } else {
+                    window.location.reload();
+                  }
+                });
+              }
             });
           }
-        });
-      }
-      if ('caches' in window) {
-        caches.keys().then(function(keys) {
-          keys.forEach(function(key) {
-            caches.delete(key).then(function() {
-              console.log('Cache cleared:', key);
+        };
+
+        if ('serviceWorker' in navigator) {
+          if (navigator.serviceWorker.controller) {
+            unregisterAndReload();
+          } else {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              if (regs && regs.length > 0) {
+                unregisterAndReload();
+              }
             });
-          });
-        });
-      }
-      // Instantly clear any local storage cache keys that might override network states
-      try {
-        sessionStorage.removeItem("sw_clean_reload_attempted");
-      } catch (e) {}
+          }
+        }
+
+        try {
+          sessionStorage.removeItem("sw_clean_reload_attempted");
+        } catch (e) {}
+      })();
     </script>
   </head>
 
