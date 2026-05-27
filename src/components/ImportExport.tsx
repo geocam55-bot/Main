@@ -237,13 +237,16 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             }).catch(e => console.warn("Caching keys read failed:", e));
           }
         }
-        toast.error("Stale browser cache detected. Cleared cache & reloading page to apply backend updates...", { duration: 4500 });
+        toast.error("Stale browser cache detected. Cleared cache & reloading page to apply backend updates...", { duration: 5000 });
         setTimeout(() => {
           window.location.reload();
         }, 1500);
       } else {
         console.error("API still returned HTML after unregistration & reload. Stale cache is still active or server routing mismatch.");
-        toast.warning(`Unexpected HTML response (Status ${res.status}). Source: [${htmlTitle || "empty"}]. Try doing a hard-refresh (Ctrl+F5 or Cmd+Shift+R).`, { duration: 8000 });
+        toast.warning(
+          `Stale preview cache detected. Because this app is embedded in an iframe, please click the "Open in new tab" button at the top-right of the preview window, or right-click here and select "Reload frame". This will instantly clear any stale Service Worker caches.`,
+          { duration: 15000 }
+        );
       }
       throw new Error(`Received HTML response [${htmlTitle || "empty"}] instead of JSON. Status: ${res.status}`);
     }

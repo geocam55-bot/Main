@@ -673,6 +673,7 @@ async function startServer() {
     });
     res.send(`
 // Self-uninstalling Service Worker to resolve stale caching and static API interception issues
+// Dynamic instance signature: ${Date.now()}-${Math.random()}
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
