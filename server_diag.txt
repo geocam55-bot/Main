@@ -1,0 +1,5 @@
+[DIAG] Server starting at 2026-05-27T12:54:35.878Z
+[2026-05-27T12:56:13.425Z] REQ: GET /api/health (original: /api/health)
+[2026-05-27T12:56:13.437Z] REQ: GET /api/import-export/storage/local (original: /api/import-export/storage/local)
+[2026-05-27T12:56:13.441Z] REQ: GET /api/import-export/crm-stats (original: /api/import-export/crm-stats)
+[2026-05-27T12:56:13.445Z] REQ: GET /nonexistent-path (original: /nonexistent-path)

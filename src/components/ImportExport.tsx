@@ -1371,12 +1371,18 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                             formData.append("file", file);
 
                             setModalUploading(true);
+                            const uploadToastId = toast.loading(`Uploading "${file.name}" to simulated storage disk...`);
+                            
                             try {
-                              const res = await safeFetch(`/api/import-export/storage/${manualStorage}/upload`, {
+                              // Direct fetch to prevent any sandbox iframe/service worker api hangs
+                              const res = await fetch(`/api/import-export/storage/${manualStorage}/upload?_t=${Date.now()}`, {
                                 method: "POST",
                                 body: formData
                               });
+                              
                               const data = await res.json();
+                              toast.dismiss(uploadToastId);
+
                               if (data.success) {
                                 toast.success(`Uploaded & loaded "${file.name}" to ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
                                 setManualFileName(file.name);
@@ -1385,8 +1391,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                 toast.error("File upload failed: " + data.error);
                               }
                             } catch (err: any) {
+                              toast.dismiss(uploadToastId);
                               console.error("Manual file upload error:", err);
-                              toast.error(`Network error during file upload: ${err.message || err}`);
+                              toast.error(`Network error during file upload: ${err.message || err}. Please try doing a Hard-Refresh (Ctrl+F5) to clear browser caching.`);
                             } finally {
                               setModalUploading(false);
                             }

@@ -480,11 +480,26 @@ async function startServer() {
     }
   });
 
-  app.post('/api/import-export/storage/:target/upload', upload.single('file'), (req, res) => {
+  app.post('/api/import-export/storage/:target/upload', (req, res, next) => {
+    const target = req.params.target;
+    const len = req.headers['content-length'] || 'unknown';
+    const ct = req.headers['content-type'] || 'unknown';
+    const logLine = `[${new Date().toISOString()}] [API START] POST /api/import-export/storage/${target}/upload, content-length: ${len}, content-type: ${ct}\n`;
+    try {
+      fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
+    } catch (e) {
+      console.error('Diag append failed in upload start:', e);
+    }
+    next();
+  }, upload.single('file'), (req, res) => {
     const { target } = req.params;
     const targetDir = target === 'onedrive' ? ONEDRIVE_DIR : LOCAL_DRIVE_DIR;
 
     if (!req.file) {
+      const warnLine = `[${new Date().toISOString()}] [API WARN] No req.file found after multer parsing! target: ${target}\n`;
+      try {
+        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), warnLine);
+      } catch (e) {}
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
@@ -493,8 +508,18 @@ async function startServer() {
       const destPath = path.join(targetDir, req.file.originalname);
       fs.copyFileSync(req.file.path, destPath);
       fs.unlinkSync(req.file.path); // remove temp multer file
+      
+      const successLine = `[${new Date().toISOString()}] [API SUCCESS] Successfully uploaded & saved ${req.file.originalname} to ${destPath}\n`;
+      try {
+        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), successLine);
+      } catch (e) {}
+      
       res.json({ success: true, fileName: req.file.originalname });
     } catch (err: any) {
+      const errLine = `[${new Date().toISOString()}] [API ERROR] Failed in file save/unlink sequence: ${err.message || err}\n`;
+      try {
+        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), errLine);
+      } catch (e) {}
       res.status(500).json({ success: false, error: err.message });
     }
   });
