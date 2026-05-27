@@ -208,15 +208,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       
       // Force unregister all active service workers immediately as a proactive measure
       if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-        try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const reg of registrations) {
-            await reg.unregister();
-            console.log("Unregistered service worker successfully:", reg.scope);
+            reg.unregister()
+              .then(() => console.log("Unregistered service worker successfully:", reg.scope))
+              .catch(e => console.error("SW unregister error:", e));
           }
-        } catch (e) {
-          console.error("Failed to unregister service worker:", e);
-        }
+        }).catch((e) => {
+          console.warn("Failed to retrieve service worker registrations:", e);
+        });
       }
 
       // If it's a 404 or 500 error from the actual server, report the detailed text instead of service worker reload loop
@@ -230,12 +230,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         sessionStorage.setItem("sw_clean_reload_attempted", "true");
         if (typeof window !== "undefined") {
           if ("caches" in window) {
-            try {
-              const keys = await caches.keys();
-              await Promise.all(keys.map(key => caches.delete(key)));
-            } catch (e) {
-              console.error("Failed to clear service worker caches:", e);
-            }
+            caches.keys().then((keys) => {
+              Promise.all(keys.map(key => caches.delete(key)))
+                .then(() => console.log("Cleared caches successfully"))
+                .catch(e => console.error("Cache clear error:", e));
+            }).catch(e => console.warn("Caching keys read failed:", e));
           }
         }
         toast.error("Stale browser cache detected. Cleared cache & reloading page to apply backend updates...", { duration: 4500 });

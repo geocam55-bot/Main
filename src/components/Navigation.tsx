@@ -41,6 +41,7 @@ import {
   History,
   Info,
   Brush,
+  Clock,
 } from 'lucide-react';
 import {
   DropdownMenu,

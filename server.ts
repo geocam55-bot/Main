@@ -403,8 +403,26 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Root level diagnostics to verify server is actually running and receiving traffic
+  try {
+    fs.writeFileSync(path.join(process.cwd(), 'server_diag.txt'), `[DIAG] Server starting at ${new Date().toISOString()}\n`, 'utf8');
+  } catch (err) {
+    console.error('Diag write failed:', err);
+  }
+
   app.use(cors());
   app.use(express.json());
+
+  // Log all incoming requests for diagnostics
+  app.use((req, res, next) => {
+    try {
+      const logLine = `[${new Date().toISOString()}] REQ: ${req.method} ${req.url} (original: ${req.originalUrl || ''})\n`;
+      fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
+    } catch (err) {
+      console.error('Diag append failed:', err);
+    }
+    next();
+  });
 
   // Log incoming API requests to a file for diagnostics
   app.use((req, res, next) => {
@@ -697,7 +715,24 @@ async function startServer() {
       if (req.originalUrl && req.originalUrl.startsWith('/api/')) {
         return next();
       }
-      res.sendFile(path.join(distPath, 'index.html'));
+
+      // Determine which HTML file to serve in production multi-page setup
+      let filename = 'index.html';
+      const url = req.originalUrl || req.url;
+      if (url.includes('.html')) {
+        const basename = path.basename(url.split('?')[0]);
+        if (basename) {
+          filename = basename;
+        }
+      } else {
+        const parts = url.split('/');
+        const firstSegment = parts[1]?.split('?')[0];
+        if (firstSegment && ['project-wizards', 'marketing', 'insights', 'inventory', 'it'].includes(firstSegment)) {
+          filename = `${firstSegment}.html`;
+        }
+      }
+
+      res.sendFile(path.join(distPath, filename));
     });
   }
 
