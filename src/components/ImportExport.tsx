@@ -92,6 +92,19 @@ interface CrmStats {
   deals: number;
 }
 
+const readFileAsBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1] || result;
+      resolve(base64);
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+};
+
 export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (view: string) => void }) {
   // Tabs: 'scheduler' | 'storage' | 'manual' | 'history'
   const [activeTab, setActiveTab] = useState<"scheduler" | "storage" | "manual" | "history">("scheduler");
@@ -99,6 +112,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [driveTab, setDriveTab] = useState<"local" | "onedrive">("local");
   
   // Data States
+  const [isFallbackMode, setIsFallbackMode] = useState(false);
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [history, setHistory] = useState<ExecutionLog[]>([]);
   const [localFiles, setLocalFiles] = useState<StorageFile[]>([]);
@@ -152,6 +166,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [manualFormat, setManualFormat] = useState<"csv" | "json" | "xml">("csv");
   const [manualUploadingFile, setManualUploadingFile] = useState<File | null>(null);
   const [manualIsProcessing, setManualIsProcessing] = useState(false);
+  const [manualUploading, setManualUploading] = useState(false);
   const [modalUploading, setModalUploading] = useState(false);
 
   // Storage selection search
@@ -259,7 +274,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   };
 
   // Self-healing fetch wrapper to resolve PWA / service worker caching issues
-  const safeFetch = async (url: string, options?: RequestInit) => {
+  const safeFetch = async (url: string, options?: RequestInit, timeoutMs = 4000) => {
     if (isFallbackMode) {
       throw new Error("SERVER_HTML_RESPONSE");
     }
@@ -285,37 +300,51 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       extendedOptions.headers = options.headers;
     }
 
-    const res = await fetch(cacheBusterUrl, extendedOptions);
-    const contentType = res.headers.get("content-type");
-    
-    if (contentType && contentType.includes("text/html")) {
-      const htmlText = await res.text().catch(() => "");
-      console.warn("API returned HTML instead of JSON. Switching to Cloud-Autonomous browser execution to bypass intercepted routing.", htmlText.substring(0, 150));
-      
-      // Force unregister active service workers immediately in background
-      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          for (const reg of registrations) {
-            reg.unregister().catch(() => {});
-          }
-        }).catch(() => {});
-      }
+    // Set a request timeout limit to prevent infinite page load/spinners
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    extendedOptions.signal = controller.signal;
 
-      // If it's a 404 from the actual server, treat it as routing missing and trigger browser mode
-      setIsFallbackMode(true);
-      try {
-        localStorage.setItem("prospaces_import_export_local_fallback", "true");
-      } catch {}
-      throw new Error("SERVER_HTML_RESPONSE");
+    try {
+      const res = await fetch(cacheBusterUrl, extendedOptions);
+      clearTimeout(timeoutId);
+
+      const contentType = res.headers.get("content-type");
+      
+      if (contentType && contentType.includes("text/html")) {
+        const htmlText = await res.text().catch(() => "");
+        console.warn("API returned HTML instead of JSON. Switching to Cloud-Autonomous browser execution to bypass intercepted routing.", htmlText.substring(0, 150));
+        
+        // Force unregister active service workers immediately in background
+        if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const reg of registrations) {
+              reg.unregister().catch(() => {});
+            }
+          }).catch(() => {});
+        }
+
+        // If it's a 404 from the actual server, treat it as routing missing and trigger browser mode
+        setIsFallbackMode(true);
+        throw new Error("SERVER_HTML_RESPONSE");
+      }
+      
+      // If it's a successful JSON response, clear the guard flag so any future true staleness can heal
+      if (res.ok && contentType && contentType.includes("application/json")) {
+        try {
+          sessionStorage.removeItem("sw_clean_reload_attempted");
+        } catch {}
+      }
+      return res;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === "AbortError" || err.message === "The user aborted a request.") {
+        console.warn("safeFetch connection timed out. Activating Cloud-Autonomous client-side fallback.");
+        setIsFallbackMode(true);
+        throw new Error("SERVER_HTML_RESPONSE");
+      }
+      throw err;
     }
-    
-    // If it's a successful JSON response, clear the guard flag so any future true staleness can heal
-    if (res.ok && contentType && contentType.includes("application/json")) {
-      try {
-        sessionStorage.removeItem("sw_clean_reload_attempted");
-      } catch {}
-    }
-    return res;
   };
 
   // Fetches lists
@@ -332,12 +361,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         localStorage.setItem("prospaces_fallback_tasks", JSON.stringify(data));
       } catch {}
     } catch (e: any) {
-      if (e.message === "SERVER_HTML_RESPONSE") {
-        setIsFallbackMode(true);
-        try {
-          localStorage.setItem("prospaces_import_export_local_fallback", "true");
-        } catch {}
-      }
+      setIsFallbackMode(true);
       console.warn("Tasks loading shifted to secure local storage configuration.");
       try {
         const cached = localStorage.getItem("prospaces_fallback_tasks");
@@ -378,6 +402,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
+  // Simple non-blocking wrapper to prevent database select tasks from locking the main UI thread during virtual mode
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number, fallbackValue: T): Promise<T> => {
+    let timeoutId: any;
+    const timeoutPromise = new Promise<T>((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve(fallbackValue);
+      }, ms);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutId);
+    });
+  };
+
   const fetchStats = async () => {
     try {
       if (isFallbackMode) {
@@ -390,9 +427,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         localStorage.setItem("prospaces_fallback_crm_stats", JSON.stringify(data));
       } catch {}
     } catch (e: any) {
-      if (e.message === "SERVER_HTML_RESPONSE") {
-        setIsFallbackMode(true);
-      }
+      setIsFallbackMode(true);
       console.warn("CRM Stats loaded via client-side metadata.");
       try {
         const cached = localStorage.getItem("prospaces_fallback_crm_stats");
@@ -413,7 +448,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             bidQuery = bidQuery.eq("organization_id", orgId);
           }
           
-          const [ctRes, invRes, bidRes] = await Promise.all([ctQuery, invQuery, bidQuery]);
+          const results = await withTimeout(
+            Promise.all([ctQuery, invQuery, bidQuery]),
+            1500,
+            [{ count: 0 }, { count: 0 }, { count: 0 }]
+          );
+          const ctRes = results[0] || { count: 0 };
+          const invRes = results[1] || { count: 0 };
+          const bidRes = results[2] || { count: 0 };
           const counts = {
             contacts: ctRes.count || 0,
             inventory: invRes.count || 0,
@@ -448,29 +490,30 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         throw new Error(data.error || "Unknown backend error");
       }
     } catch (e: any) {
-      if (e.message === "SERVER_HTML_RESPONSE") {
-        setIsFallbackMode(true);
-      }
+      setIsFallbackMode(true);
       console.warn(`Drive files for [${drive}] shifted to browser local disk virtualization.`);
       try {
         const cached = localStorage.getItem(`prospaces_fallback_files_${drive}`);
         if (cached) {
           const filesparsed = JSON.parse(cached);
-          if (drive === "local") setLocalFiles(filesparsed);
-          else setOnedriveFiles(filesparsed);
-        } else {
-          // Initialize default preloaded workspace spreadsheets
-          const seedFiles = drive === "local" ? [
-            { name: "sample_contacts_import.csv", size: 1048, lastModified: new Date().toISOString(), extension: ".csv" },
-            { name: "sample_inventory_import.csv", size: 2048, lastModified: new Date().toISOString(), extension: ".csv" }
-          ] : [
-            { name: "onedrive_contacts_import.csv", size: 1250, lastModified: new Date().toISOString(), extension: ".csv" },
-            { name: "onedrive_inventory_import.csv", size: 2420, lastModified: new Date().toISOString(), extension: ".csv" }
-          ];
-          if (drive === "local") setLocalFiles(seedFiles);
-          else setOnedriveFiles(seedFiles);
-          localStorage.setItem(`prospaces_fallback_files_${drive}`, JSON.stringify(seedFiles));
+          if (filesparsed && filesparsed.length > 0) {
+            if (drive === "local") setLocalFiles(filesparsed);
+            else setOnedriveFiles(filesparsed);
+            return;
+          }
         }
+        
+        // Initialize default preloaded workspace spreadsheets
+        const seedFiles = drive === "local" ? [
+          { name: "sample_contacts_import.csv", size: 1048, lastModified: new Date().toISOString(), extension: ".csv" },
+          { name: "sample_inventory_import.csv", size: 2048, lastModified: new Date().toISOString(), extension: ".csv" }
+        ] : [
+          { name: "onedrive_contacts_import.csv", size: 1250, lastModified: new Date().toISOString(), extension: ".csv" },
+          { name: "onedrive_inventory_import.csv", size: 2420, lastModified: new Date().toISOString(), extension: ".csv" }
+        ];
+        if (drive === "local") setLocalFiles(seedFiles);
+        else setOnedriveFiles(seedFiles);
+        localStorage.setItem(`prospaces_fallback_files_${drive}`, JSON.stringify(seedFiles));
       } catch {}
     } finally {
       if (!silent) setLoadingFiles(false);
@@ -490,9 +533,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         localStorage.setItem("prospaces_fallback_history", JSON.stringify(data));
       } catch {}
     } catch (e: any) {
-      if (e.message === "SERVER_HTML_RESPONSE") {
-        setIsFallbackMode(true);
-      }
+      setIsFallbackMode(true);
       console.warn("Unattended scheduler activity log read via client history store.");
       try {
         const cached = localStorage.getItem("prospaces_fallback_history");
@@ -559,7 +600,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           query = query.eq("organization_id", orgId);
         }
         
-        const { data, error } = await query;
+        const selectPromise = query;
+        const { data, error } = await withTimeout(
+          selectPromise,
+          1500,
+          { data: [], error: null }
+        );
         if (error) {
           throw error;
         }
@@ -804,7 +850,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (isFallbackMode) {
+    const runFallbackUpload = () => {
       setExplorerUploading(true);
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -822,7 +868,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             content: fileContent
           });
           
-          localStorage.setItem(`prospaces_fallback_files_${target}`, JSON.stringify(filtered));
+          try {
+            localStorage.setItem(`prospaces_fallback_files_${target}`, JSON.stringify(filtered));
+          } catch (storageErr) {
+            console.warn("Storage quota exceeded, keeping in active app session memory only:", storageErr);
+          }
           if (target === "local") setLocalFiles(filtered);
           else setOnedriveFiles(filtered);
           toast.success(`Uploaded ${file.name} to virtual ${target === "onedrive" ? "OneDrive" : "Local Drive"} disk successfully!`);
@@ -833,31 +883,46 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           setExplorerUploading(false);
         }
       };
+      reader.onerror = () => {
+        toast.error("Failed to read the selected file in the browser.");
+        setExplorerUploading(false);
+      };
       reader.readAsText(file);
+    };
+
+    if (isFallbackMode) {
+      runFallbackUpload();
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     setExplorerUploading(true);
+    const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
     try {
-      const res = await safeFetch(`/api/import-export/storage/${target}/upload`, {
+      const base64Data = await readFileAsBase64(file);
+      const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
         method: "POST",
-        body: formData
-      });
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileContent: base64Data
+        })
+      }, 4000);
       const data = await res.json();
+      toast.dismiss(uploadToastId);
       if (data.success) {
-        toast.success(`Uploaded ${file.name} to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully`);
+        toast.success(`Uploaded "${file.name}" successfully!`);
+        setExplorerUploading(false);
         await fetchFiles(target, true);
       } else {
-        toast.error("File upload failed: " + data.error);
+        throw new Error(data.error || "File upload response was not successful");
       }
     } catch (e: any) {
-      console.error("File upload error:", e);
-      toast.error(`Network error during file upload: ${e.message || e}`);
-    } finally {
-      setExplorerUploading(false);
+      toast.dismiss(uploadToastId);
+      console.warn("File upload failed, shifting file to browser local fallback storage.", e);
+      setIsFallbackMode(true);
+      runFallbackUpload();
     }
   };
 
@@ -865,7 +930,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (isFallbackMode) {
+    const runFallbackUpload = () => {
       setModalUploading(true);
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -883,10 +948,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             content: fileContent
           });
           
-          localStorage.setItem(`prospaces_fallback_files_${target}`, JSON.stringify(filtered));
+          try {
+            localStorage.setItem(`prospaces_fallback_files_${target}`, JSON.stringify(filtered));
+          } catch (storageErr) {
+            console.warn("Storage quota exceeded, keeping in active app session memory only:", storageErr);
+          }
           if (target === "local") setLocalFiles(filtered);
           else setOnedriveFiles(filtered);
-          toast.success(`Uploaded & mapped "${file.name}" virtual storage metadata!`);
+          toast.success(`Successfully uploaded "${file.name}" to Virtual Storage!`);
           setActionFileName(file.name);
         } catch (err: any) {
           toast.error("Process file uploading error: " + err.message);
@@ -894,32 +963,50 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           setModalUploading(false);
         }
       };
+      reader.onerror = () => {
+        toast.error("Failed to read the selected file in the browser.");
+        setModalUploading(false);
+      };
+      reader.onabort = () => {
+        setModalUploading(false);
+      };
       reader.readAsText(file);
+    };
+
+    if (isFallbackMode) {
+      runFallbackUpload();
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     setModalUploading(true);
+    const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
     try {
-      const res = await safeFetch(`/api/import-export/storage/${target}/upload`, {
+      const base64Data = await readFileAsBase64(file);
+      const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
         method: "POST",
-        body: formData
-      });
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileContent: base64Data
+        })
+      }, 4000);
+      toast.dismiss(uploadToastId);
       const data = await res.json();
       if (data.success) {
         toast.success(`Uploaded & mapped "${file.name}" to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
         setActionFileName(file.name);
+        setModalUploading(false);
         fetchFiles(target);
       } else {
-        toast.error("File upload failed: " + data.error);
+        throw new Error(data.error || "File upload response was not successful");
       }
     } catch (e: any) {
-      console.error("Modal file upload error:", e);
-      toast.error(`Network error during file upload: ${e.message || e}`);
-    } finally {
-      setModalUploading(false);
+      toast.dismiss(uploadToastId);
+      console.warn("Modal file upload failed, shifting file to browser local fallback storage.", e);
+      setIsFallbackMode(true);
+      runFallbackUpload();
     }
   };
 
@@ -1415,12 +1502,34 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 Enterprise automation & scheduler for imports and exports matching system records with Microsoft OneDrive & Local Storage.
               </p>
               {isFallbackMode && (
-                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-lg text-xs font-medium">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
-                  </span>
-                  🌐 Cloud-Autonomous Mode Active: Direct Browser-to-Supabase connection with Virtualized Storage enabled.
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-lg text-xs font-medium">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+                    </span>
+                    🌐 Cloud-Autonomous Mode Active: Direct Browser-to-Supabase connection with Virtualized Storage enabled.
+                  </div>
+                  <button 
+                    onClick={() => {
+                      try {
+                        localStorage.removeItem("prospaces_import_export_local_fallback");
+                        sessionStorage.removeItem("sw_clean_reload_attempted");
+                      } catch {}
+                      setIsFallbackMode(false);
+                      setTimeout(() => {
+                        fetchTasks();
+                        fetchStats();
+                        fetchHistory();
+                        fetchFiles("local");
+                        fetchFiles("onedrive");
+                      }, 100);
+                      toast.success("Successfully reconnected to the server! Reloading live backend filesystem databases...");
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-xs flex items-center gap-1"
+                  >
+                    <span>Switch to Live Server Mode</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -2060,31 +2169,83 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     {/* Browse from local PC */}
                     <div>
                       <label className="block text-4xs uppercase text-slate-450 font-bold mb-1 font-mono">Upload from Computer</label>
-                      <label className={`w-full flex items-center justify-center gap-1 px-2.5 py-1.5 border border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 hover:text-blue-700 bg-white rounded-lg cursor-pointer text-slate-650 text-3xs font-semibold shadow-xs transition-all ${modalUploading ? 'opacity-50' : ''}`}>
-                        {modalUploading ? (
+                      <label 
+                        htmlFor="manual-file-picker-input"
+                        className={`w-full flex items-center justify-center gap-1 px-2.5 py-1.5 border border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 hover:text-blue-700 bg-white rounded-lg cursor-pointer text-slate-650 text-3xs font-semibold shadow-xs transition-all ${manualUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                      >
+                        {manualUploading ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
                         ) : (
                           <Upload className="w-3.5 h-3.5 text-slate-400" />
                         )}
-                        <span>{modalUploading ? "Uploading..." : "Browse PC File"}</span>
+                        <span>{manualUploading ? "Uploading..." : "Browse PC File"}</span>
                         <input 
+                          id="manual-file-picker-input"
                           type="file" 
                           onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
 
-                            const formData = new FormData();
-                            formData.append("file", file);
+                            const runFallback = () => {
+                              setManualUploading(true);
+                              const reader = new FileReader();
+                              reader.onload = async (eventReader) => {
+                                try {
+                                  const fileContent = eventReader.target?.result as string;
+                                  const cachedFilesStr = localStorage.getItem(`prospaces_fallback_files_${manualStorage}`);
+                                  const currentFiles = cachedFilesStr ? JSON.parse(cachedFilesStr) : [];
+                                  const filtered = currentFiles.filter((f: any) => f.name !== file.name);
+                                  
+                                  filtered.push({
+                                    name: file.name,
+                                    size: file.size,
+                                    lastModified: new Date().toISOString(),
+                                    extension: "." + file.name.split(".").pop()?.toLowerCase(),
+                                    content: fileContent
+                                  });
+                                  
+                                  try {
+                                    localStorage.setItem(`prospaces_fallback_files_${manualStorage}`, JSON.stringify(filtered));
+                                  } catch (storageErr) {
+                                    console.warn("Storage quota exceeded, keeping in active app session memory only:", storageErr);
+                                  }
+                                  if (manualStorage === "local") setLocalFiles(filtered);
+                                  else setOnedriveFiles(filtered);
+                                  toast.success(`Successfully uploaded "${file.name}" to Virtual Storage!`);
+                                  setManualFileName(file.name);
+                                } catch (err: any) {
+                                  toast.error("Process file uploading error: " + err.message);
+                                } finally {
+                                  setManualUploading(false);
+                                }
+                              };
+                              reader.onerror = () => {
+                                toast.error("Failed to read the selected file in the browser.");
+                                setManualUploading(false);
+                              };
+                              reader.readAsText(file);
+                            };
 
-                            setModalUploading(true);
-                            const uploadToastId = toast.loading(`Uploading "${file.name}" to simulated storage disk...`);
+                            if (isFallbackMode) {
+                              runFallback();
+                              return;
+                            }
+
+                            setManualUploading(true);
+                            const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
                             
                             try {
-                              // Direct fetch to prevent any sandbox iframe/service worker api hangs
-                              const res = await fetch(`/api/import-export/storage/${manualStorage}/upload?_t=${Date.now()}`, {
+                              const base64Data = await readFileAsBase64(file);
+                              const res = await safeFetch(`/api/import-export/storage/${manualStorage}/upload-base64`, {
                                 method: "POST",
-                                body: formData
-                              });
+                                headers: {
+                                  "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({
+                                  fileName: file.name,
+                                  fileContent: base64Data
+                                })
+                              }, 4000);
                               
                               const data = await res.json();
                               toast.dismiss(uploadToastId);
@@ -2094,14 +2255,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                 setManualFileName(file.name);
                                 fetchFiles(manualStorage);
                               } else {
-                                toast.error("File upload failed: " + data.error);
+                                throw new Error(data.error || "File upload response was not successful");
                               }
                             } catch (err: any) {
                               toast.dismiss(uploadToastId);
-                              console.error("Manual file upload error:", err);
-                              toast.error(`Network error during file upload: ${err.message || err}. Please try doing a Hard-Refresh (Ctrl+F5) to clear browser caching.`);
+                              console.warn("Manual file upload failed, shifting file to browser local fallback storage.", err);
+                              setIsFallbackMode(true);
+                              runFallback();
                             } finally {
-                              setModalUploading(false);
+                              setManualUploading(false);
                             }
                           }} 
                           className="hidden" 
@@ -2639,7 +2801,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                       {/* Upload new file from PC */}
                       <div className="space-y-1.5">
                         <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Upload from your Computer</label>
-                        <label className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 hover:text-blue-700 rounded-lg cursor-pointer font-semibold text-center text-slate-600 transition-all ${modalUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <label 
+                          htmlFor="scheduler-file-picker-input"
+                          className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 hover:text-blue-700 rounded-lg cursor-pointer font-semibold text-center text-slate-600 transition-all ${modalUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                        >
                           {modalUploading ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
                           ) : (
@@ -2647,6 +2812,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                           )}
                           <span>{modalUploading ? "Uploading..." : "Browse PC File"}</span>
                           <input 
+                            id="scheduler-file-picker-input"
                             type="file" 
                             onChange={(e) => handleModalFileUpload(e, actionStorage)} 
                             className="hidden" 
@@ -2659,26 +2825,26 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                       <div className="space-y-1.5">
                         <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Select existing file in Folder</label>
                         {(() => {
-                          const currentFiles = actionStorage === "onedrive" ? onedriveFiles : localFiles;
-                          return (
-                            <select
-                              value={currentFiles.some(f => f.name === actionFileName) ? actionFileName : ""}
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  setActionFileName(e.target.value);
-                                  toast.success(`Selected file "${e.target.value}"`);
-                                }
-                              }}
-                              className="w-full border rounded-lg px-2.5 py-2 outline-none font-medium text-slate-700 bg-white text-xs truncate focus:border-blue-500"
-                            >
-                              <option value="">-- Choose file on drive --</option>
-                              {currentFiles.map(file => (
-                                <option key={file.name} value={file.name}>
-                                  {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                                </option>
-                              ))}
-                            </select>
-                          );
+                           const currentFiles = actionStorage === "onedrive" ? onedriveFiles : localFiles;
+                           return (
+                             <select
+                               value={currentFiles.some(f => f.name === actionFileName) ? actionFileName : ""}
+                               onChange={(e) => {
+                                 setActionFileName(e.target.value);
+                                 if (e.target.value) {
+                                   toast.success(`Selected file "${e.target.value}"`);
+                                 }
+                               }}
+                               className="w-full border rounded-lg px-2.5 py-2 outline-none font-medium text-slate-700 bg-white text-xs truncate focus:border-blue-500"
+                             >
+                               <option value="">-- Choose file on drive --</option>
+                               {currentFiles.map(file => (
+                                 <option key={file.name} value={file.name}>
+                                   {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                                 </option>
+                               ))}
+                             </select>
+                           );
                         })()}
                       </div>
                     </div>

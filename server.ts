@@ -411,7 +411,8 @@ async function startServer() {
   }
 
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: "100mb" }));
+  app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
   // Log all incoming requests for diagnostics
   app.use((req, res, next) => {
@@ -456,6 +457,34 @@ async function startServer() {
       return;
     }
     res.json({ fileId: req.file.filename, originalName: req.file.originalname });
+  });
+
+  // Base64 robust file receiver - bypasses sandbox streaming issues or buggy multer versions
+  app.post('/api/import-export/storage/:target/upload-base64', (req, res) => {
+    const { target } = req.params;
+    const { fileName, fileContent } = req.body;
+    const targetDir = target === 'onedrive' ? ONEDRIVE_DIR : LOCAL_DRIVE_DIR;
+
+    if (!fileName || !fileContent) {
+      return res.status(400).json({ success: false, error: 'Missing fileName or fileContent' });
+    }
+
+    try {
+      const destPath = path.join(targetDir, fileName);
+      // Decodes the base64 string to a binary buffer
+      const buffer = Buffer.from(fileContent, 'base64');
+      fs.writeFileSync(destPath, buffer);
+      
+      const logLine = `[${new Date().toISOString()}] [API BASE64 SUCCESS] Saved ${fileName} (${buffer.length} bytes) to ${destPath}\n`;
+      try {
+        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
+      } catch {}
+      
+      return res.json({ success: true, fileName });
+    } catch (err: any) {
+      console.error('Base64 upload error:', err);
+      return res.status(500).json({ success: false, error: err.message || err });
+    }
   });
 
   // --- STORAGE CLIENT APIs ---
