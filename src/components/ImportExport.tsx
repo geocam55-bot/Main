@@ -306,6 +306,24 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
+  const parseResponseJson = async (res: Response): Promise<any> => {
+    const text = await res.text();
+    if (!res.ok) {
+      let errMsg = `Server returned ${res.status}: ${res.statusText || "Error"}`;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.error) errMsg = parsed.error;
+        else if (parsed.message) errMsg = parsed.message;
+      } catch {}
+      throw new Error(errMsg);
+    }
+    try {
+      return JSON.parse(text);
+    } catch (err: any) {
+      throw new Error(`Invalid JSON response from server: ${text.slice(0, 100) || "(empty)"}`);
+    }
+  };
+
   // Fetches lists
   const fetchTasks = async () => {
     setLoadingTasks(true);
@@ -395,8 +413,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           fileName: file.name,
           fileContent: base64Data
         })
-      }, 10000);
-      const data = await res.json();
+      }, 120000);
+      const data = await parseResponseJson(res);
       toast.dismiss(uploadToastId);
       if (data.success) {
         toast.success(`Uploaded "${file.name}" successfully!`);
@@ -430,9 +448,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           fileName: file.name,
           fileContent: base64Data
         })
-      }, 10000);
+      }, 120000);
+      const data = await parseResponseJson(res);
       toast.dismiss(uploadToastId);
-      const data = await res.json();
       if (data.success) {
         toast.success(`Uploaded & mapped "${file.name}" to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
         setActionFileName(file.name);
@@ -1453,9 +1471,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                   fileName: file.name,
                                   fileContent: base64Data
                                 })
-                              }, 10000);
+                              }, 120000);
                               
-                              const data = await res.json();
+                              const data = await parseResponseJson(res);
                               toast.dismiss(uploadToastId);
 
                               if (data.success) {
