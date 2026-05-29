@@ -29,7 +29,11 @@ import {
   Lock, 
   Unlock, 
   ArrowRight,
-  Info
+  Info,
+  Copy,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "motion/react";
@@ -119,6 +123,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [msAccounts, setMsAccounts] = useState<any[]>([]);
   const [fetchingMsAccounts, setFetchingMsAccounts] = useState(false);
   const [isConnectingMs, setIsConnectingMs] = useState(false);
+  const [showMsDiagnosticGuide, setShowMsDiagnosticGuide] = useState(true);
+  const [copiedUri, setCopiedUri] = useState(false);
 
   const fetchMsAccounts = async () => {
     setFetchingMsAccounts(true);
@@ -1525,70 +1531,160 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
               {/* OneDrive Cloud Storage Information panel */}
               {driveTab === "onedrive" ? (
-                <div className="bg-blue-600 text-white rounded-xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[220px]">
-                  <div className="absolute top-0 right-0 p-3 opacity-15">
-                    <Cloud className="w-32 h-32" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-xs uppercase tracking-wider text-blue-100">Microsoft Cloud Service</h4>
-                    <p className="text-lg font-bold mt-1">OneDrive Cloud Drive</p>
-                    
-                    {msAccounts.length > 0 ? (
-                      <div className="mt-2 space-y-1">
-                        <p className="text-xs text-blue-100 flex items-center gap-1.5 font-medium">
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-300" />
-                          Connected: <span className="underline">{msAccounts[0].email}</span>
-                        </p>
-                        <p className="text-3xs text-blue-200">
-                          Account Owner: {msAccounts[0].displayName || "Microsoft User"}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="mt-2 space-y-1.5">
-                        <p className="text-xs text-blue-200 font-medium">
-                          No Microsoft account linked here.
-                        </p>
-                        <p className="text-[10px] text-blue-200/90 leading-relaxed bg-blue-700/40 p-2 rounded-lg border border-blue-500/30">
-                          💡 <strong>Use Any Account:</strong> The login flow will prompt you to select or input your specific Microsoft credentials. This allows you to connect any custom OneDrive account, even if it is different from your computer's local account.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="mt-4 space-y-3 relative z-10">
-                    {msAccounts.length > 0 ? (
-                      <button
-                        onClick={() => handleDisconnectMicrosoft(msAccounts[0].id)}
-                        className="w-full text-center bg-blue-700/60 hover:bg-rose-700/80 text-white text-xs font-semibold py-1.5 rounded-lg border border-blue-500/50 transition-all outline-none"
-                      >
-                        Disconnect Microsoft Account
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleConnectMicrosoft}
-                        disabled={isConnectingMs}
-                        className="w-full text-center bg-white hover:bg-blue-50 text-blue-700 text-xs font-bold py-2 rounded-lg transition-all shadow-md flex items-center justify-center gap-2 outline-none disabled:opacity-50"
-                      >
-                        {isConnectingMs ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin text-blue-700" />
-                            Establishing Cloud Link...
-                          </>
-                        ) : (
-                          <>
-                            <Cloud className="w-4 h-4 text-blue-600" />
-                            Sign in with Microsoft
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    <div className="border-t border-blue-500/50 pt-2 flex items-center justify-between">
-                      <span className="text-3xs bg-blue-500 px-2 py-0.5 rounded text-white font-bold tracking-tight">
-                        {msAccounts.length > 0 ? "OAUTH CONNECTED" : "LOCAL MODE (./onedrive)"}
-                      </span>
-                      <span className="text-3xs text-blue-200 italic">OneDrive Unattended SDK v3.2</span>
+                <div className="space-y-4">
+                  <div className="bg-blue-600 text-white rounded-xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[220px]">
+                    <div className="absolute top-0 right-0 p-3 opacity-15">
+                      <Cloud className="w-32 h-32" />
                     </div>
+                    <div>
+                      <h4 className="font-semibold text-xs uppercase tracking-wider text-blue-100">Microsoft Cloud Service</h4>
+                      <p className="text-lg font-bold mt-1">OneDrive Cloud Drive</p>
+                      
+                      {msAccounts.length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-blue-100 flex items-center gap-1.5 font-medium">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-300" />
+                            Connected: <span className="underline">{msAccounts[0].email}</span>
+                          </p>
+                          <p className="text-3xs text-blue-200">
+                            Account Owner: {msAccounts[0].displayName || "Microsoft User"}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-2 space-y-1.5">
+                          <p className="text-xs text-blue-200 font-medium">
+                            No Microsoft account linked here.
+                          </p>
+                          <p className="text-[10px] text-blue-200/90 leading-relaxed bg-blue-700/40 p-2 rounded-lg border border-blue-500/30">
+                            💡 <strong>Use Any Account:</strong> The login flow will prompt you to select or input your specific Microsoft credentials. This allows you to connect any custom OneDrive account, even if it is different from your computer's local account.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="mt-4 space-y-3 relative z-10">
+                      {msAccounts.length > 0 ? (
+                        <button
+                          onClick={() => handleDisconnectMicrosoft(msAccounts[0].id)}
+                          className="w-full text-center bg-blue-700/60 hover:bg-rose-700/80 text-white text-xs font-semibold py-1.5 rounded-lg border border-blue-500/50 transition-all outline-none"
+                        >
+                          Disconnect Microsoft Account
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleConnectMicrosoft}
+                          disabled={isConnectingMs}
+                          className="w-full text-center bg-white hover:bg-blue-50 text-blue-700 text-xs font-bold py-2 rounded-lg transition-all shadow-md flex items-center justify-center gap-2 outline-none disabled:opacity-50"
+                        >
+                          {isConnectingMs ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-blue-700" />
+                              Establishing Cloud Link...
+                            </>
+                          ) : (
+                            <>
+                              <Cloud className="w-4 h-4 text-blue-600" />
+                              Sign in with Microsoft
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      <div className="border-t border-blue-500/50 pt-2 flex items-center justify-between">
+                        <span className="text-3xs bg-blue-500 px-2 py-0.5 rounded text-white font-bold tracking-tight">
+                          {msAccounts.length > 0 ? "OAUTH CONNECTED" : "LOCAL MODE (./onedrive)"}
+                        </span>
+                        <span className="text-3xs text-blue-200 italic">OneDrive Unattended SDK v3.2</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Microsoft Azure Portal Integration Tutorial & Redirect URI Copy Assist */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <button 
+                      onClick={() => setShowMsDiagnosticGuide(!showMsDiagnosticGuide)}
+                      className="w-full flex items-center justify-between text-left font-sans outline-none group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="p-1 px-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-xs leading-none">⚠️</div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">Fixing "invalid_request" / Redirect URI Error</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Click here to resolve login connection errors</p>
+                        </div>
+                      </div>
+                      {showMsDiagnosticGuide ? (
+                        <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                      )}
+                    </button>
+
+                    {showMsDiagnosticGuide && (
+                      <div className="pt-2 border-t border-slate-200/60 space-y-3">
+                        <p className="text-xs text-slate-600 leading-relaxed font-sans">
+                          Because this is a sandboxed preview environment, the URL changes dynamically. Microsoft rejects logging in unless the active preview address is added as an authorized Redirect URI in your Microsoft Azure App Registration.
+                        </p>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Your Current Redirect URI</label>
+                          <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg p-1.5 pl-2.5">
+                            <code className="text-xs font-mono text-slate-800 break-all select-all flex-1">
+                              {window.location.origin.includes('prospaces.vercel.app') 
+                                ? window.location.origin 
+                                : window.location.origin + '/oauth-callback'}
+                            </code>
+                            <button
+                              onClick={() => {
+                                const finalUri = window.location.origin.includes('prospaces.vercel.app') 
+                                  ? window.location.origin 
+                                  : window.location.origin + '/oauth-callback';
+                                navigator.clipboard.writeText(finalUri);
+                                setCopiedUri(true);
+                                toast.success("Redirect URI copied to clipboard!");
+                                setTimeout(() => setCopiedUri(false), 2500);
+                              }}
+                              className="p-1.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 hover:text-slate-950 rounded-md transition-all shrink-0 outline-none flex items-center justify-center gap-1.5 text-xs font-semibold"
+                            >
+                              {copiedUri ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" shrink-0="true" />
+                                  <span className="text-emerald-700">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-1 font-sans">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Resolution Steps</p>
+                          <ol className="text-xs text-slate-650 space-y-1.5 list-none pl-0">
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">1</span>
+                              <span className="leading-relaxed">
+                                Open the <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold inline-flex items-center gap-0.5 hover:underline">Microsoft Azure Apps Portal <ExternalLink className="w-2.5 h-2.5" /></a> and select registration <strong>ID: 392b79e9-...-373a3</strong>
+                              </span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">2</span>
+                              <span className="leading-relaxed">Go to <strong>Authentication</strong> (under "Manage" in the left sidebar menu)</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">3</span>
+                              <span className="leading-relaxed">Under <strong>Web Redirect URIs</strong>, click <strong>"Add URI"</strong> and paste the copied address above</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">4</span>
+                              <span className="leading-relaxed">Click <strong>Save</strong> at the top-left, wait 10 seconds, then try signing in again!</span>
+                            </li>
+                          </ol>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
