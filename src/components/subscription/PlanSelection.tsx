@@ -25,47 +25,48 @@ interface PlanSelectionProps {
 // Default plans (can be overridden by props)
 const DEFAULT_PLANS: Plan[] = [
   {
-    id: 'pro-monthly',
-    name: 'Professional',
-    price: 99,
+    id: 'starter',
+    name: 'Basic',
+    price: 29,
     currency: 'USD',
-    description: 'Perfect for growing teams',
+    description: 'Essential CRM workflows for small builders',
     features: [
-      'Up to 5 team members',
-      'All core features',
-      'Email support',
-      'Monthly billing',
-      'Basic analytics',
+      'Core CRM (Contacts, Deals, Tasks)',
+      'Email integration',
+      'Basic reports',
+      'Community support',
     ],
     popular: false,
   },
   {
-    id: 'business-monthly',
-    name: 'Business',
-    price: 199,
+    id: 'professional',
+    name: 'Professional',
+    price: 79,
     currency: 'USD',
-    description: 'For established businesses',
+    description: 'Perfect for growing teams & custom builders',
     features: [
-      'Up to 20 team members',
-      'All Professional features',
-      'Priority email & phone support',
-      'Advanced analytics',
-      'Custom integrations',
+      'Everything in Basic',
+      'Marketing automation',
+      'Inventory management',
+      'Document management',
+      'Project Wizards (3D Planners)',
+      'Customer portal',
     ],
     popular: true,
   },
   {
-    id: 'enterprise-contact',
+    id: 'enterprise',
     name: 'Enterprise',
-    price: 0,
+    price: 199,
     currency: 'USD',
-    description: 'For large organizations',
+    description: 'For large organizations needing custom scaling',
     features: [
-      'Unlimited team members',
-      'All Business features',
-      'Dedicated account manager',
-      'Unlimited integrations',
-      'SLA guarantee',
+      'Everything in Professional',
+      'SSO SAML encryption',
+      'Audit logging history',
+      'Developer API access',
+      'Custom integrations',
+      'SLA performance guarantees',
     ],
     popular: false,
   },
@@ -77,7 +78,7 @@ export function PlanSelection({
   onContactSupport,
   trialEndDate,
 }: PlanSelectionProps) {
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>('starter');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -181,7 +182,7 @@ export function PlanSelection({
                 </ul>
 
                 {/* CTA Button */}
-                {plan.id === 'enterprise-contact' ? (
+                {plan.id === 'enterprise-custom' ? (
                   <Button
                     variant="outline"
                     className="w-full"

@@ -12,6 +12,7 @@ import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { DailyBriefingPopup } from './components/DailyBriefingPopup';
 import { Toaster } from './components/ui/sonner';
 import ErrorBoundary from './components/ErrorBoundary';
+import { toast } from 'sonner@2.0.3';
 import { GettingStarted } from './components/GettingStarted';
 import { createClient } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
@@ -757,8 +758,24 @@ export function AppContent() {
         <Toaster />
         <PlanSelection
           onSelectPlan={async (planId) => {
-            // TODO: Handle plan selection - redirect to payment
-            console.log('Selected plan:', planId);
+            const toastId = toast.loading('Upgrading subscription to ' + planId + '...');
+            try {
+              const { upgradeFromTrial } = await import('./utils/subscription-client');
+              const res = await upgradeFromTrial(planId);
+              if (res.success) {
+                toast.success('Your subscription has been successfully upgraded!', { id: toastId });
+                // Refresh and clear current plan selection view
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              } else {
+                toast.error('Could not complete upgrade. Please try again or contact support.', { id: toastId });
+              }
+            } catch (err: any) {
+              console.error('Subscription upgrade failed:', err);
+              toast.error(err.message || 'Error occurred during upgrade', { id: toastId });
+              throw err;
+            }
           }}
           onContactSupport={() => {
             window.location.href = 'mailto:support@prospacescrm.ca';
