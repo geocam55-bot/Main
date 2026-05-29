@@ -158,7 +158,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       const { data, error: invokeError } = await supabase.functions.invoke('make-server-8405be07/microsoft-oauth-init', {
         method: 'POST',
-        body: { frontendOrigin: window.location.origin },
+        body: { 
+          frontendOrigin: window.location.origin,
+          includeFiles: true,
+          purpose: 'both',
+          prompt: 'select_account'
+        },
         headers: {
           'X-User-Token': session.access_token,
         },
@@ -1539,12 +1544,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                         </p>
                       </div>
                     ) : (
-                      <div className="mt-2 space-y-1">
+                      <div className="mt-2 space-y-1.5">
                         <p className="text-xs text-blue-200 font-medium">
                           No Microsoft account linked here.
                         </p>
-                        <p className="text-3xs text-blue-200/80 leading-normal">
-                          Authorize to read list files or write unattended logs to Microsoft SaaS directory.
+                        <p className="text-[10px] text-blue-200/90 leading-relaxed bg-blue-700/40 p-2 rounded-lg border border-blue-500/30">
+                          💡 <strong>Use Any Account:</strong> The login flow will prompt you to select or input your specific Microsoft credentials. This allows you to connect any custom OneDrive account, even if it is different from your computer's local account.
                         </p>
                       </div>
                     )}
