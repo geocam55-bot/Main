@@ -1305,9 +1305,9 @@ app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
     // Accept frontendOrigin from request body so redirect goes to frontend
     const body = await c.req.json().catch(() => ({}));
     const frontendOrigin = body.frontendOrigin;
-    // Use the bare origin (no /oauth-callback path) — the SPA detects ?code=&state= on any path
+    // Always append /oauth-callback to match registered Azure AD App registrations exactly and load the lightweight callback handler
     const redirectUri = frontendOrigin
-      ? frontendOrigin.replace(/\/+$/, '')
+      ? frontendOrigin.replace(/\/+$/, '') + '/oauth-callback'
       : (Deno.env.get('AZURE_REDIRECT_URI') ?? '');
 
     if (!redirectUri) return c.json({ error: 'No redirect URI available (send frontendOrigin or set AZURE_REDIRECT_URI)' }, 500);
@@ -1592,9 +1592,9 @@ app.post(`${PREFIX}/google-oauth-init`, async (c) => {
 
     const body = await c.req.json().catch(() => ({}));
     const frontendOrigin = body.frontendOrigin;
-    // Use the bare origin (no /oauth-callback path) — the SPA detects ?code=&state= on any path
+    // Always append /oauth-callback to match registered OAuth client registrations exactly and load the lightweight callback handler
     const redirectUri = frontendOrigin
-      ? frontendOrigin.replace(/\/+$/, '')
+      ? frontendOrigin.replace(/\/+$/, '') + '/oauth-callback'
       : (Deno.env.get('GOOGLE_REDIRECT_URI') ?? '');
 
     if (!redirectUri) return c.json({ error: 'No redirect URI available (send frontendOrigin or set GOOGLE_REDIRECT_URI)' }, 500);
