@@ -1304,7 +1304,10 @@ app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
 
     // Accept frontendOrigin from request body so redirect goes to frontend
     const body = await c.req.json().catch(() => ({}));
-    const frontendOrigin = body.frontendOrigin;
+    let frontendOrigin = body.frontendOrigin;
+    if (frontendOrigin && frontendOrigin.includes('prospacescrm.com') && !frontendOrigin.includes('www.')) {
+      frontendOrigin = frontendOrigin.replace('prospacescrm.com', 'www.prospacescrm.com');
+    }
     // Always append /oauth-callback to match registered Azure AD App registrations exactly.
     // However, if the origin contains "prospaces.vercel.app", use the bare origin registered in Azure AD.
     const redirectUri = frontendOrigin
@@ -1594,7 +1597,10 @@ app.post(`${PREFIX}/google-oauth-init`, async (c) => {
     if (!cid) return c.json({ error: 'Google not configured (missing GOOGLE_CLIENT_ID)' }, 500);
 
     const body = await c.req.json().catch(() => ({}));
-    const frontendOrigin = body.frontendOrigin;
+    let frontendOrigin = body.frontendOrigin;
+    if (frontendOrigin && frontendOrigin.includes('prospacescrm.com') && !frontendOrigin.includes('www.')) {
+      frontendOrigin = frontendOrigin.replace('prospacescrm.com', 'www.prospacescrm.com');
+    }
     // Always append /oauth-callback to match registered OAuth client registrations exactly.
     // However, if the origin contains "prospaces.vercel.app", use the bare origin registered in Google.
     const redirectUri = frontendOrigin
