@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createClient } from "../utils/supabase/client";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { 
   Upload, 
   Download, 
@@ -106,6 +107,159 @@ const readFileAsBase64 = (file: File): Promise<string> => {
 };
 
 export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (view: string) => void }) {
+  // Load custom Express API base URL
+  const [backendUrl, setBackendUrl] = useState(() => {
+    return localStorage.getItem("import_export_server_url") || window.location.origin;
+  });
+  const [healthStatus, setHealthStatus] = useState<"unknown" | "connected" | "failed">("unknown");
+  const [checkingHealth, setCheckingHealth] = useState(false);
+  const [showBackendConfig, setShowBackendConfig] = useState(false);
+
+  // Microsoft/OneDrive Accounts integration
+  const [msAccounts, setMsAccounts] = useState<any[]>([]);
+  const [fetchingMsAccounts, setFetchingMsAccounts] = useState(false);
+  const [isConnectingMs, setIsConnectingMs] = useState(false);
+
+  const fetchMsAccounts = async () => {
+    setFetchingMsAccounts(true);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/email-accounts`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'X-User-Token': session.access_token
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list = (data.accounts || []).filter((acc: any) => acc.provider === "outlook");
+        setMsAccounts(list);
+      }
+    } catch (err) {
+      console.error("Failed to fetch MS accounts in scheduler:", err);
+    } finally {
+      setFetchingMsAccounts(false);
+    }
+  };
+
+  const handleConnectMicrosoft = async () => {
+    setIsConnectingMs(true);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error("You must be logged in to connect Microsoft OneDrive.");
+        setIsConnectingMs(false);
+        return;
+      }
+
+      const { data, error: invokeError } = await supabase.functions.invoke('make-server-8405be07/microsoft-oauth-init', {
+        method: 'POST',
+        body: { frontendOrigin: window.location.origin },
+        headers: {
+          'X-User-Token': session.access_token,
+        },
+      });
+
+      if (invokeError) {
+        throw new Error(invokeError.message);
+      }
+
+      if (!data?.success || !data?.authUrl) {
+        throw new Error(data?.error || 'Failed to generate authorization URL.');
+      }
+
+      const width = 650;
+      const height = 800;
+      const left = Math.max(0, window.screen.width / 2 - width / 2);
+      const top = Math.max(0, window.screen.height / 2 - height / 2);
+
+      const popup = window.open(
+        data.authUrl,
+        `Microsoft OneDrive OAuth`,
+        `width=${width},height=${height},left=${left},top=${top},toolbar=no,location=yes,status=yes,menubar=no,scrollbars=yes,resizable=yes`
+      );
+
+      if (!popup) {
+        toast.error('Popup blocker active. Please allow popups to connect Microsoft OneDrive.');
+        setIsConnectingMs(false);
+        return;
+      }
+
+      const pollId = data.pollId;
+      if (pollId) {
+        let pollAttempts = 0;
+        const maxPollAttempts = 180;
+        
+        const interval = setInterval(async () => {
+          pollAttempts++;
+          if (pollAttempts > maxPollAttempts) {
+            clearInterval(interval);
+            setIsConnectingMs(false);
+            return;
+          }
+
+          try {
+            const pollRes = await fetch(
+              `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/oauth-poll/${pollId}`,
+              {
+                headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+              }
+            );
+
+            if (pollRes.ok) {
+              const pollResult = await pollRes.json();
+              if (pollResult && pollResult.status === 'complete' && pollResult.result) {
+                clearInterval(interval);
+                setIsConnectingMs(false);
+                if (pollResult.result.success) {
+                  toast.success("Microsoft OneDrive connected successfully!");
+                  fetchMsAccounts();
+                } else {
+                  toast.error(`Connection failed: ${pollResult.result.error || 'Unknown error'}`);
+                }
+              }
+            }
+          } catch (pollErr) {
+            // retry
+          }
+        }, 1500);
+      }
+    } catch (err: any) {
+      setIsConnectingMs(false);
+      toast.error(`Microsoft connection error: ${err.message || err}`);
+    }
+  };
+
+  const handleDisconnectMicrosoft = async (accountId: string) => {
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/email-accounts/${accountId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'X-User-Token': session.access_token
+        }
+      });
+
+      if (res.ok) {
+        toast.success("Successfully disconnected Microsoft OneDrive account.");
+        fetchMsAccounts();
+      } else {
+        toast.error("Failed to disconnect account.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to disconnect.");
+    }
+  };
+
   // Tabs: 'scheduler' | 'storage' | 'manual' | 'history'
   const [activeTab, setActiveTab] = useState<"scheduler" | "storage" | "manual" | "history">("scheduler");
   // Drive selection for Storage Explorer: 'local' | 'onedrive'
@@ -181,7 +335,53 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     fetchFiles("onedrive");
     fetchHistory();
     fetchCrmRecords(previewModule);
+    fetchMsAccounts();
   }, []);
+
+  const testBackendConnection = async (targetUrl = backendUrl) => {
+    setCheckingHealth(true);
+    try {
+      const sanitizedUrl = targetUrl.replace(/\/$/, "");
+      const res = await fetch(`${sanitizedUrl}/api/health`, { 
+        method: "GET",
+        headers: {
+          "Cache-Control": "no-cache"
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "ok") {
+        setHealthStatus("connected");
+        toast.success("Successfully connected to the Unattended Express API Backend!");
+      } else {
+        setHealthStatus("failed");
+        toast.error(`Connection failed: Server responded with status ${res.status}`);
+      }
+    } catch (err: any) {
+      setHealthStatus("failed");
+      toast.error(`Connection failed: ${err.message || "Endpoint unreachable. Ensure backend server is running and CORS is configured."}`);
+    } finally {
+      setCheckingHealth(false);
+    }
+  };
+
+  useEffect(() => {
+    // Check connection health in background on mount / backendUrl change
+    const checkOnMount = async () => {
+      try {
+        const sanitizedUrl = backendUrl.replace(/\/$/, "");
+        const res = await fetch(`${sanitizedUrl}/api/health`, { method: "GET" });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          setHealthStatus("connected");
+        } else {
+          setHealthStatus("failed");
+        }
+      } catch {
+        setHealthStatus("failed");
+      }
+    };
+    checkOnMount();
+  }, [backendUrl]);
 
   useEffect(() => {
     fetchCrmRecords(previewModule);
@@ -275,7 +475,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // Self-healing fetch wrapper to resolve PWA / service worker caching issues
   const safeFetch = async (url: string, options?: RequestInit, timeoutMs = 8000) => {
     const isGet = !options?.method || options.method.toUpperCase() === "GET";
-    const cacheBusterUrl = isGet ? `${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}` : url;
+    
+    // Resolve absolute URL basing on backendUrl settings
+    const base = backendUrl.replace(/\/$/, "");
+    const resolvedUrl = url.startsWith("http") ? url : `${base}${url}`;
+    const cacheBusterUrl = isGet ? `${resolvedUrl}${resolvedUrl.includes("?") ? "&" : "?"}_t=${Date.now()}` : resolvedUrl;
 
     const extendedOptions: RequestInit = {
       ...options
@@ -324,16 +528,71 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  // Fetches lists
+  // Fetches lists with integrated browser storage backup & recovery to handle Cloud Run ephemeral container restarts
   const fetchTasks = async () => {
     setLoadingTasks(true);
     try {
       const res = await safeFetch("/api/import-export/tasks");
       const data = await res.json();
-      setTasks(data || []);
+      const serverTasks = Array.isArray(data) ? data : [];
+      setTasks(serverTasks);
+
+      // --- PERSISTENCE AUTO-RESTORE SYSTEM ---
+      const backupStr = localStorage.getItem("unattended_scheduler_tasks_backup");
+      if (backupStr) {
+        try {
+          const backupTasks = JSON.parse(backupStr);
+          if (Array.isArray(backupTasks)) {
+            // Locate user-defined custom tasks in local backup that are missing on the live server 
+            const missingTasks = backupTasks.filter(bt => 
+              bt && bt.id && bt.id !== "task-demo-1" && !serverTasks.some(st => st && st.id === bt.id)
+            );
+
+            if (missingTasks.length > 0) {
+              console.log("[Auto-Restore] Discovered missing tasks on the server. Re-scheduling from local browser backup...", missingTasks);
+              toast.info(`Restoring ${missingTasks.length} offline/scheduled tasks that were cleared by a server restart...`, { id: "restoring-tasks" });
+              
+              // Restore individual tasks using POST requests to the API router
+              for (const taskToRestore of missingTasks) {
+                await safeFetch("/api/import-export/tasks", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(taskToRestore)
+                });
+              }
+
+              // Re-fetch the fully synchronized tasks list from the backend
+              const refreshedRes = await safeFetch("/api/import-export/tasks");
+              const refreshedData = await refreshedRes.json();
+              const finalTasks = Array.isArray(refreshedData) ? refreshedData : serverTasks;
+              setTasks(finalTasks);
+              localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(finalTasks));
+              
+              toast.success(`Successfully restored ${missingTasks.length} scheduled tasks from your secure local browser backup.`, { id: "restoring-tasks" });
+              return;
+            }
+          }
+        } catch (backupErr) {
+          console.error("Local storage backup read/restore fail:", backupErr);
+        }
+      }
+
+      // If fully synchronized and no restoration was needed, update browser backup with the server's current list
+      localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(serverTasks));
     } catch (e: any) {
       console.error("Failed to fetch live tasks:", e);
-      toast.error("Failed to load scheduled tasks from Live server.");
+      toast.error("Failed to load scheduled tasks from Live server. Attempting to fall back to browser offline task cache.");
+      
+      // Offline Fallback: If server is completely unreachable, load tasks from browser backup
+      const backupStr = localStorage.getItem("unattended_scheduler_tasks_backup");
+      if (backupStr) {
+        try {
+          const backupTasks = JSON.parse(backupStr);
+          if (Array.isArray(backupTasks)) {
+            setTasks(backupTasks);
+          }
+        } catch {}
+      }
     } finally {
       setLoadingTasks(false);
     }
@@ -823,6 +1082,22 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             </div>
           </div>
 
+          <button
+            onClick={() => setShowBackendConfig(!showBackendConfig)}
+            className="px-3 py-2 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 rounded-lg shadow-sm transition-all flex items-center gap-2 text-xs font-semibold"
+            title="Express API Backend Settings"
+          >
+            {healthStatus === "connected" ? (
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            ) : healthStatus === "failed" ? (
+              <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            ) : (
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+            )}
+            <span>Backend: {healthStatus === "connected" ? "Connected" : healthStatus === "failed" ? "Offline" : "Checking..."}</span>
+            <Settings className="h-3.5 w-3.5 ml-1 text-slate-400" />
+          </button>
+
           <button 
             onClick={() => {
               fetchTasks();
@@ -839,6 +1114,94 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           </button>
         </div>
       </div>
+
+      {showBackendConfig && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 font-sans">Unattended Express API Server Settings</h3>
+              <p className="text-xs text-slate-500">
+                Configure the target endpoint for the Express backend scheduler, file-system explorer, and backups.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowBackendConfig(false)}
+              className="text-slate-400 hover:text-slate-600 text-xs font-semibold px-2 py-0.5 border rounded hover:bg-slate-100"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-end gap-3">
+            <div className="flex-1 space-y-1.5">
+              <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Backend Server URL Address</label>
+              <div className="relative shadow-xs rounded-lg">
+                <input
+                  type="text"
+                  placeholder="e.g. http://localhost:3000"
+                  value={backendUrl}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBackendUrl(val);
+                    setHealthStatus("unknown");
+                  }}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono text-slate-700 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  localStorage.setItem("import_export_server_url", backendUrl);
+                  testBackendConnection(backendUrl);
+                }}
+                disabled={checkingHealth}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
+              >
+                {checkingHealth ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-3.5 h-3.5" />
+                )}
+                Save & Test Connection
+              </button>
+
+              <button
+                onClick={() => {
+                  const defaultUrl = window.location.origin;
+                  setBackendUrl(defaultUrl);
+                  localStorage.setItem("import_export_server_url", defaultUrl);
+                  testBackendConnection(defaultUrl);
+                }}
+                className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-semibold text-xs transition-all shadow-sm"
+              >
+                Reset to Default
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Diagnostics Info */}
+          <div className="bg-white border border-slate-150 rounded-lg p-3.5 text-xs text-slate-600 space-y-1.5 font-sans leading-relaxed">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-700">Self-Healing Diagnostics:</span>
+              <span className={`px-2 py-0.5 rounded-full text-4xs uppercase font-bold tracking-wider ${
+                healthStatus === "connected" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                healthStatus === "failed" ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                "bg-amber-50 text-amber-700 border border-amber-200"
+              }`}>
+                {healthStatus || "Checking..."}
+              </span>
+            </div>
+            <p>
+              By default, the client requests standard relative pathname endpoints starting with <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-800 text-3xs">/api/import-export/...</code>.
+            </p>
+            <p className="text-slate-500">
+              💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend (e.g. on Netlify or Vercel) but run the Express server on a separate server machine or port, POST file-system operations are intercepted by Netlify/Vercel with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server firewall!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs Menu Navigation */}
       <div className="flex gap-2 border-b border-zinc-200">
@@ -1157,26 +1520,70 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
               {/* OneDrive Cloud Storage Information panel */}
               {driveTab === "onedrive" ? (
-                <div className="bg-blue-600 text-white rounded-xl p-4 shadow-sm relative overflow-hidden">
+                <div className="bg-blue-600 text-white rounded-xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[220px]">
                   <div className="absolute top-0 right-0 p-3 opacity-15">
                     <Cloud className="w-32 h-32" />
                   </div>
-                  <h4 className="font-semibold text-xs uppercase tracking-wider text-blue-100">Microsoft Cloud Service</h4>
-                  <p className="text-lg font-bold mt-1">OneDrive Personal</p>
-                  <p className="text-xs text-blue-200 mt-0.5">Account Connected: geocam55@gmail.com</p>
-                  
-                  <div className="mt-5 space-y-1.5 relative">
-                    <div className="flex justify-between text-2xs text-blue-200">
-                      <span>Cloud Space Used</span>
-                      <span>1.2 MB / 15 GB Free</span>
-                    </div>
-                    <div className="w-full bg-blue-700/60 rounded-full h-2">
-                      <div className="bg-blue-100 h-2 rounded-full" style={{ width: "2%" }}></div>
-                    </div>
+                  <div>
+                    <h4 className="font-semibold text-xs uppercase tracking-wider text-blue-100">Microsoft Cloud Service</h4>
+                    <p className="text-lg font-bold mt-1">OneDrive Cloud Drive</p>
+                    
+                    {msAccounts.length > 0 ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-blue-100 flex items-center gap-1.5 font-medium">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-300" />
+                          Connected: <span className="underline">{msAccounts[0].email}</span>
+                        </p>
+                        <p className="text-3xs text-blue-200">
+                          Account Owner: {msAccounts[0].displayName || "Microsoft User"}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-blue-200 font-medium">
+                          No Microsoft account linked here.
+                        </p>
+                        <p className="text-3xs text-blue-200/80 leading-normal">
+                          Authorize to read list files or write unattended logs to Microsoft SaaS directory.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-5 border-t border-blue-500/50 pt-3 flex items-center justify-between">
-                    <span className="text-3xs bg-blue-500 px-2 py-0.5 rounded text-white font-bold tracking-tight">ACTIVE</span>
-                    <span className="text-3xs text-blue-100 italic">OneDrive Unattended SDK v3.2</span>
+                  
+                  <div className="mt-4 space-y-3 relative z-10">
+                    {msAccounts.length > 0 ? (
+                      <button
+                        onClick={() => handleDisconnectMicrosoft(msAccounts[0].id)}
+                        className="w-full text-center bg-blue-700/60 hover:bg-rose-700/80 text-white text-xs font-semibold py-1.5 rounded-lg border border-blue-500/50 transition-all outline-none"
+                      >
+                        Disconnect Microsoft Account
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleConnectMicrosoft}
+                        disabled={isConnectingMs}
+                        className="w-full text-center bg-white hover:bg-blue-50 text-blue-700 text-xs font-bold py-2 rounded-lg transition-all shadow-md flex items-center justify-center gap-2 outline-none disabled:opacity-50"
+                      >
+                        {isConnectingMs ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-blue-700" />
+                            Establishing Cloud Link...
+                          </>
+                        ) : (
+                          <>
+                            <Cloud className="w-4 h-4 text-blue-600" />
+                            Sign in with Microsoft
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    <div className="border-t border-blue-500/50 pt-2 flex items-center justify-between">
+                      <span className="text-3xs bg-blue-500 px-2 py-0.5 rounded text-white font-bold tracking-tight">
+                        {msAccounts.length > 0 ? "OAUTH CONNECTED" : "LOCAL MODE (./onedrive)"}
+                      </span>
+                      <span className="text-3xs text-blue-200 italic">OneDrive Unattended SDK v3.2</span>
+                    </div>
                   </div>
                 </div>
               ) : (
