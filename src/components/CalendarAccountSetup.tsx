@@ -161,11 +161,29 @@ export function CalendarAccountSetup({ isOpen, onClose, onAccountAdded, editingA
       // Use the function name with sub-path so supabase.functions.invoke()
       // hits  /functions/v1/make-server-8405be07/<subPath>
       const functionPath = `make-server-8405be07/${subPath}`;
-      // Invoking OAuth function
 
+      // Fetch custom OAuth Redirect Origin if stored in localStorage
+      const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
+      const bodyPayload: any = { purpose: 'calendar' };
+
+      if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
+        if (customOAuthOrigin === 'prospaces_vercel') {
+          bodyPayload.redirectUri = 'https://prospaces.vercel.app';
+        } else if (customOAuthOrigin === 'prospaces_crm') {
+          bodyPayload.redirectUri = 'https://www.prospacescrm.com/oauth-callback';
+        } else if (customOAuthOrigin.startsWith('http://') || customOAuthOrigin.startsWith('https://')) {
+          bodyPayload.redirectUri = customOAuthOrigin.includes('/oauth-callback') || customOAuthOrigin.includes('localhost')
+            ? customOAuthOrigin 
+            : customOAuthOrigin.replace(/\/+$/, '') + '/oauth-callback';
+        }
+      } else {
+        bodyPayload.frontendOrigin = window.location.origin;
+      }
+
+      // Invoking OAuth function
       const { data, error: invokeError } = await supabase.functions.invoke(functionPath, {
         method: 'POST',
-        body: { frontendOrigin: window.location.origin, purpose: 'calendar' },
+        body: bodyPayload,
         headers: {
           'X-User-Token': session.access_token,
         },

@@ -125,6 +125,22 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [isConnectingMs, setIsConnectingMs] = useState(false);
   const [showMsDiagnosticGuide, setShowMsDiagnosticGuide] = useState(true);
   const [copiedUri, setCopiedUri] = useState(false);
+  const [oauthRedirectOrigin, setOauthRedirectOriginState] = useState<string>(() => {
+    return localStorage.getItem('oauth_redirect_origin') || 'auto';
+  });
+  const [customOauthOriginUrl, setCustomOauthOriginUrlState] = useState<string>(() => {
+    return localStorage.getItem('custom_oauth_origin_url') || '';
+  });
+
+  const setOauthRedirectOrigin = (val: string) => {
+    localStorage.setItem('oauth_redirect_origin', val);
+    setOauthRedirectOriginState(val);
+  };
+
+  const setCustomOauthOriginUrl = (val: string) => {
+    localStorage.setItem('custom_oauth_origin_url', val);
+    setCustomOauthOriginUrlState(val);
+  };
 
   const fetchMsAccounts = async () => {
     setFetchingMsAccounts(true);
@@ -162,14 +178,31 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         return;
       }
 
+      // Fetch custom OAuth Redirect Origin if stored in localStorage
+      const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
+      const bodyPayload: any = {
+        includeFiles: true,
+        purpose: 'both',
+        prompt: 'select_account'
+      };
+
+      if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
+        if (customOAuthOrigin === 'prospaces_vercel') {
+          bodyPayload.redirectUri = 'https://prospaces.vercel.app';
+        } else if (customOAuthOrigin === 'prospaces_crm') {
+          bodyPayload.redirectUri = 'https://www.prospacescrm.com/oauth-callback';
+        } else if (customOAuthOrigin.startsWith('http://') || customOAuthOrigin.startsWith('https://')) {
+          bodyPayload.redirectUri = customOAuthOrigin.includes('/oauth-callback') || customOAuthOrigin.includes('localhost')
+            ? customOAuthOrigin 
+            : customOAuthOrigin.replace(/\/+$/, '') + '/oauth-callback';
+        }
+      } else {
+        bodyPayload.frontendOrigin = window.location.origin;
+      }
+
       const { data, error: invokeError } = await supabase.functions.invoke('make-server-8405be07/microsoft-oauth-init', {
         method: 'POST',
-        body: { 
-          frontendOrigin: window.location.origin,
-          includeFiles: true,
-          purpose: 'both',
-          prompt: 'select_account'
-        },
+        body: bodyPayload,
         headers: {
           'X-User-Token': session.access_token,
         },
@@ -1600,92 +1633,133 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   </div>
 
                   {/* Microsoft Azure Portal Integration Tutorial & Redirect URI Copy Assist */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                    <button 
-                      onClick={() => setShowMsDiagnosticGuide(!showMsDiagnosticGuide)}
-                      className="w-full flex items-center justify-between text-left font-sans outline-none group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="p-1 px-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-xs leading-none">⚠️</div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">Fixing "invalid_request" / Redirect URI Error</p>
-                          <p className="text-[10px] text-slate-500 mt-0.5">Click here to resolve login connection errors</p>
-                        </div>
-                      </div>
-                      {showMsDiagnosticGuide ? (
-                        <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                      )}
-                    </button>
+                  {(() => {
+                    const activeOriginValue = oauthRedirectOrigin === 'prospaces_vercel'
+                      ? 'https://prospaces.vercel.app'
+                      : oauthRedirectOrigin === 'prospaces_crm'
+                      ? 'https://www.prospacescrm.com'
+                      : oauthRedirectOrigin === 'custom'
+                      ? customOauthOriginUrl
+                      : window.location.origin;
 
-                    {showMsDiagnosticGuide && (
-                      <div className="pt-2 border-t border-slate-200/60 space-y-3">
-                        <p className="text-xs text-slate-600 leading-relaxed font-sans">
-                          Because this is a sandboxed preview environment, the URL changes dynamically. Microsoft rejects logging in unless the active preview address is added as an authorized Redirect URI in your Microsoft Azure App Registration.
-                        </p>
+                    const activeRedirectUriValue = activeOriginValue.includes('prospaces.vercel.app')
+                      ? activeOriginValue.replace(/\/+$/, '')
+                      : activeOriginValue.replace(/\/+$/, '') + '/oauth-callback';
 
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Your Current Redirect URI</label>
-                          <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg p-1.5 pl-2.5">
-                            <code className="text-xs font-mono text-slate-800 break-all select-all flex-1">
-                              {window.location.origin.includes('prospaces.vercel.app') 
-                                ? window.location.origin 
-                                : window.location.origin + '/oauth-callback'}
-                            </code>
-                            <button
-                              onClick={() => {
-                                const finalUri = window.location.origin.includes('prospaces.vercel.app') 
-                                  ? window.location.origin 
-                                  : window.location.origin + '/oauth-callback';
-                                navigator.clipboard.writeText(finalUri);
-                                setCopiedUri(true);
-                                toast.success("Redirect URI copied to clipboard!");
-                                setTimeout(() => setCopiedUri(false), 2500);
-                              }}
-                              className="p-1.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 hover:text-slate-950 rounded-md transition-all shrink-0 outline-none flex items-center justify-center gap-1.5 text-xs font-semibold"
-                            >
-                              {copiedUri ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-600" shrink-0="true" />
-                                  <span className="text-emerald-700">Copied!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>Copy</span>
-                                </>
-                              )}
-                            </button>
+                    return (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                        <button 
+                          onClick={() => setShowMsDiagnosticGuide(!showMsDiagnosticGuide)}
+                          className="w-full flex items-center justify-between text-left font-sans outline-none group"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="p-1 px-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-xs leading-none">⚙️</div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">Advanced Redirect URI Origin Selector</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">Configure custom domains or resolve dynamic sandbox login errors</p>
+                            </div>
                           </div>
-                        </div>
+                          {showMsDiagnosticGuide ? (
+                            <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                          )}
+                        </button>
 
-                        <div className="space-y-2 pt-1 font-sans">
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Resolution Steps</p>
-                          <ol className="text-xs text-slate-650 space-y-1.5 list-none pl-0">
-                            <li className="flex items-start gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">1</span>
-                              <span className="leading-relaxed">
-                                Open the <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold inline-flex items-center gap-0.5 hover:underline">Microsoft Azure Apps Portal <ExternalLink className="w-2.5 h-2.5" /></a> and select registration <strong>ID: 392b79e9-...-373a3</strong>
-                              </span>
-                            </li>
-                            <li className="flex items-start gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">2</span>
-                              <span className="leading-relaxed">Go to <strong>Authentication</strong> (under "Manage" in the left sidebar menu)</span>
-                            </li>
-                            <li className="flex items-start gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">3</span>
-                              <span className="leading-relaxed">Under <strong>Web Redirect URIs</strong>, click <strong>"Add URI"</strong> and paste the copied address above</span>
-                            </li>
-                            <li className="flex items-start gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">4</span>
-                              <span className="leading-relaxed">Click <strong>Save</strong> at the top-left, wait 10 seconds, then try signing in again!</span>
-                            </li>
-                          </ol>
-                        </div>
+                        {showMsDiagnosticGuide && (
+                          <div className="pt-2 border-t border-slate-200/60 space-y-3">
+                            <p className="text-xs text-slate-650 leading-relaxed font-sans">
+                              Because this is a sandboxed preview environment, the URL changes dynamically. Microsoft rejects logging in unless the active preview address is added as an authorized Redirect URI in your Microsoft Azure App Registration.
+                            </p>
+
+                            <div className="space-y-2 font-sans bg-amber-500/[0.04] border border-amber-500/10 rounded-lg p-3">
+                              <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Active OAuth Redirect Origin</label>
+                              <p className="text-3xs text-slate-500 leading-normal mb-2">
+                                Working from the AI Studio sandbox? Select a registered production domain (e.g. Vercel or Custom CRM). The authorization window will open under that domain and securely hand the token back to this browser window instantly!
+                              </p>
+                              <select
+                                value={oauthRedirectOrigin || 'auto'}
+                                onChange={(e) => setOauthRedirectOrigin(e.target.value)}
+                                className="w-full bg-white border border-slate-250 py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-800 outline-none shadow-xs mb-2 cursor-pointer transition-all focus:border-blue-500"
+                              >
+                                <option value="auto">🔌 Auto-Detect Current (Default: {window.location.origin})</option>
+                                <option value="prospaces_crm">🌐 Production CRM (https://www.prospacescrm.com)</option>
+                                <option value="prospaces_vercel">🚀 Vercel Host (https://prospaces.vercel.app)</option>
+                                <option value="custom">✍️ Custom Registered Origin...</option>
+                              </select>
+
+                              {oauthRedirectOrigin === 'custom' && (
+                                <div className="mt-2 space-y-1">
+                                  <input
+                                    type="text"
+                                    placeholder="https://your-custom-domain.com"
+                                    value={customOauthOriginUrl}
+                                    onChange={(e) => setCustomOauthOriginUrl(e.target.value)}
+                                    className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <p className="text-4xs text-slate-400">Must start with http:// or https:// (e.g. registered domain in Azure portal)</p>
+                                </div>
+                              )}
+
+                              <div className="space-y-1 mt-2.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Active Redirect URI passed to Microsoft / Google</label>
+                                <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg p-1.5 pl-2.5">
+                                  <code className="text-xs font-mono text-slate-800 break-all select-all flex-1">
+                                    {activeRedirectUriValue}
+                                  </code>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(activeRedirectUriValue);
+                                      setCopiedUri(true);
+                                      toast.success("Active Redirect URI copied to clipboard!");
+                                      setTimeout(() => setCopiedUri(false), 2500);
+                                    }}
+                                    className="p-1.5 bg-white border border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-600 hover:text-slate-900 rounded-md transition-all shrink-0 outline-none flex items-center justify-center gap-1.5 text-xs font-semibold"
+                                  >
+                                    {copiedUri ? (
+                                      <>
+                                        <Check className="w-3 h-3 text-emerald-600" shrink-0="true" />
+                                        <span className="text-emerald-700">Copied!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="w-3 h-3 text-slate-400" />
+                                        <span>Copy</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2 pt-1 font-sans">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Microsoft Azure Setup</p>
+                              <ol className="text-xs text-slate-650 space-y-1.5 list-none pl-0">
+                                <li className="flex items-start gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">1</span>
+                                  <span className="leading-relaxed">
+                                    Open the <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold inline-flex items-center gap-0.5 hover:underline">Microsoft Azure Apps Portal <ExternalLink className="w-2.5 h-2.5" /></a> and select registration <strong>ID: 392b79e9-...-373a3</strong>
+                                  </span>
+                                </li>
+                                <li className="flex items-start gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">2</span>
+                                  <span className="leading-relaxed">Go to <strong>Authentication</strong> (under "Manage" in left menu sidebar)</span>
+                                </li>
+                                <li className="flex items-start gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">3</span>
+                                  <span className="leading-relaxed">Under <strong>Web Redirect URIs</strong>, click <strong>"Add URI"</strong> and paste the copied address shown above</span>
+                                </li>
+                                <li className="flex items-start gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">4</span>
+                                  <span className="leading-relaxed">Click <strong>Save</strong> at the top-left, wait 10 seconds, then try signing in again!</span>
+                                </li>
+                              </ol>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="bg-slate-800 text-white rounded-xl p-4 shadow-sm relative overflow-hidden">

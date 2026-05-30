@@ -208,11 +208,29 @@ export function EmailAccountSetup({ isOpen, onClose, onAccountAdded, editingAcco
       // hits  /functions/v1/make-server-8405be07/<subPath>
       const functionPath = `make-server-8405be07/${subPath}`;
 
+      // Fetch custom OAuth Redirect Origin if stored in localStorage
+      const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
+      const bodyPayload: any = { purpose: 'email' };
+
+      if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
+        if (customOAuthOrigin === 'prospaces_vercel') {
+          bodyPayload.redirectUri = 'https://prospaces.vercel.app';
+        } else if (customOAuthOrigin === 'prospaces_crm') {
+          bodyPayload.redirectUri = 'https://www.prospacescrm.com/oauth-callback';
+        } else if (customOAuthOrigin.startsWith('http://') || customOAuthOrigin.startsWith('https://')) {
+          bodyPayload.redirectUri = customOAuthOrigin.includes('/oauth-callback') || customOAuthOrigin.includes('localhost')
+            ? customOAuthOrigin 
+            : customOAuthOrigin.replace(/\/+$/, '') + '/oauth-callback';
+        }
+      } else {
+        bodyPayload.frontendOrigin = window.location.origin;
+      }
+
       // supabase.functions.invoke() automatically sets the Authorization
       // header using the session JWT (or anon key), which the gateway requires.
       const { data, error: invokeError } = await supabase.functions.invoke(functionPath, {
         method: 'POST',
-        body: { frontendOrigin: window.location.origin },
+        body: bodyPayload,
         headers: {
           'X-User-Token': session.access_token,
         },
