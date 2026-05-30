@@ -431,7 +431,16 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           "Cache-Control": "no-cache"
         }
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        if (text.trim().startsWith("<") || text.trim().toLowerCase().startsWith("<!doctype")) {
+          throw new Error("Returned HTML instead of JSON. You have likely entered a static frontend domain (like Vercel, Netlify, or ProSpaces CRM) instead of the actual running backend Express API server.");
+        }
+        throw parseErr;
+      }
       if (res.ok && data.status === "ok") {
         setHealthStatus("connected");
         toast.success("Successfully connected to the Unattended Express API Backend!");
@@ -612,6 +621,29 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       const res = await fetch(cacheBusterUrl, extendedOptions);
       clearTimeout(timeoutId);
+      
+      // Auto-detect and heal static firewall / SPA proxy HTML page issues
+      if (url.includes("/api/")) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("text/html") || contentType.includes("text/plain")) {
+          throw new Error("Returned HTML instead of JSON for API query. Indication of a misconfigured host web firewall.");
+        }
+        
+        // Verify via body clone for bulletproof detection
+        const clone = res.clone();
+        try {
+          const text = await clone.text();
+          const trimmed = text.trim();
+          if (trimmed.startsWith("<") || trimmed.toLowerCase().startsWith("<!doctype")) {
+            throw new Error("Expected JSON response but received HTML index page. Indication of static Vercel/Netlify hosting fallback routing.");
+          }
+        } catch (e: any) {
+          if (e.message?.includes("received HTML") || e.message?.includes("Returned HTML")) {
+            throw e;
+          }
+        }
+      }
+      
       return res;
     } catch (err: any) {
       clearTimeout(timeoutId);
