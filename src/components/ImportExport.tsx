@@ -403,6 +403,24 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     fetchMsAccounts();
   }, []);
 
+  // Synchronize cloud OneDrive files when microsoft accounts become ready
+  useEffect(() => {
+    if (msAccounts.length > 0) {
+      fetchFiles("onedrive", true, onedriveFolderId);
+    }
+  }, [msAccounts, onedriveFolderId]);
+
+  // Keep modal choices fresh based on actionStorage selection
+  useEffect(() => {
+    if (showTaskModal) {
+      if (actionStorage === "onedrive" && msAccounts.length > 0) {
+        fetchFiles("onedrive", false, onedriveFolderId);
+      } else if (actionStorage === "local") {
+        fetchFiles("local", true);
+      }
+    }
+  }, [showTaskModal, actionStorage]);
+
   const testBackendConnection = async (targetUrl = backendUrl) => {
     setCheckingHealth(true);
     try {
@@ -2882,7 +2900,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     <label className="block text-slate-500 font-semibold mb-1">Target Storage Client Mount</label>
                     <select
                       value={actionStorage}
-                      onChange={(e) => setActionStorage(e.target.value as any)}
+                      onChange={(e) => {
+                        const val = e.target.value as any;
+                        setActionStorage(val);
+                        fetchFiles(val, false, val === "onedrive" ? onedriveFolderId : null);
+                      }}
                       className="w-full border rounded-lg px-3 py-1.5 font-medium text-slate-700 bg-white"
                     >
                       <option value="local">📁 User Local Drive Folder (./local_drive)</option>
@@ -2945,27 +2967,106 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
                       {/* Select existing from selected folder space */}
                       <div className="space-y-1.5">
-                        <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Select existing file in Folder</label>
+                        <div className="flex items-center justify-between">
+                          <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Select existing file in Folder</label>
+                          {actionStorage === "onedrive" && msAccounts.length > 0 && (
+                            <span className="text-[10px] text-blue-600 font-semibold truncate max-w-[150px]">
+                              Folder: {onedriveFolderPath.length > 0 ? onedriveFolderPath[onedriveFolderPath.length - 1].name : "Root"}
+                            </span>
+                          )}
+                        </div>
                         {(() => {
                            const currentFiles = actionStorage === "onedrive" ? onedriveFiles : localFiles;
+                           // Only files (not folders) should be available inside Target Filename select option
+                           const onlyFiles = currentFiles.filter(f => !f.isFolder);
+                           const folders = currentFiles.filter(f => f.isFolder);
+
                            return (
-                             <select
-                               value={currentFiles.some(f => f.name === actionFileName) ? actionFileName : ""}
-                               onChange={(e) => {
-                                 setActionFileName(e.target.value);
-                                 if (e.target.value) {
-                                   toast.success(`Selected file "${e.target.value}"`);
-                                 }
-                               }}
-                               className="w-full border rounded-lg px-2.5 py-2 outline-none font-medium text-slate-700 bg-white text-xs truncate focus:border-blue-500"
-                             >
-                               <option value="">-- Choose file on drive --</option>
-                               {currentFiles.map(file => (
-                                 <option key={file.name} value={file.name}>
-                                   {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                                 </option>
-                               ))}
-                             </select>
+                             <div className="space-y-2">
+                               <select
+                                 value={onlyFiles.some(f => f.name === actionFileName) ? actionFileName : ""}
+                                 onChange={(e) => {
+                                   const selectedFile = onlyFiles.find(f => f.name === e.target.value);
+                                   setActionFileName(e.target.value);
+                                   if (e.target.value) {
+                                     toast.success(`Selected file "${e.target.value}"`);
+                                     // Auto sync from cloud to backend if it's OneDrive
+                                     if (actionStorage === "onedrive" && msAccounts.length > 0 && selectedFile?.id) {
+                                       syncOneDriveCloudFileToBackend(selectedFile.id, selectedFile.name).catch(() => {});
+                                     }
+                                   }
+                                 }}
+                                 className="w-full border rounded-lg px-2.5 py-2 outline-none font-medium text-slate-700 bg-white text-xs truncate focus:border-blue-500 cursor-pointer"
+                               >
+                                 <option value="">-- Choose file on drive --</option>
+                                 {onlyFiles.map(file => (
+                                   <option key={file.id || file.name} value={file.name}>
+                                     {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                                   </option>
+                                 ))}
+                               </select>
+
+                               {/* If OneDrive, allow navigating subfolders directly in this modal! */}
+                               {actionStorage === "onedrive" && msAccounts.length > 0 && (folders.length > 0 || onedriveFolderPath.length > 0) && (
+                                 <div className="p-2 bg-blue-50/50 border border-blue-100 rounded-lg text-[11px] space-y-1.5">
+                                   <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium pb-1 border-b border-blue-100/50">
+                                     <span className="font-bold text-slate-700">Navigate OneDrive Folders:</span>
+                                     {onedriveFolderPath.length > 0 && (
+                                       <button
+                                         type="button"
+                                         onClick={async () => {
+                                           const newPath = [...onedriveFolderPath];
+                                           newPath.pop();
+                                           const parent = newPath[newPath.length - 1];
+                                           const parentId = parent ? parent.id : null;
+                                           setOnedriveFolderId(parentId);
+                                           setOnedriveFolderPath(newPath);
+                                           await fetchFiles("onedrive", false, parentId);
+                                         }}
+                                         className="text-blue-700 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+                                       >
+                                         <ArrowLeft className="w-2.5 h-2.5" /> Back
+                                       </button>
+                                     )}
+                                   </div>
+                                   <div className="max-h-[80px] overflow-y-auto space-y-1">
+                                     {onedriveFolderPath.length > 0 && (
+                                       <button
+                                         type="button"
+                                         onClick={async () => {
+                                           setOnedriveFolderId(null);
+                                           setOnedriveFolderPath([]);
+                                           await fetchFiles("onedrive", false, null);
+                                         }}
+                                         className="w-full text-left flex items-center gap-1.5 px-2 py-0.5 hover:bg-blue-100/30 text-blue-700 rounded text-[10.5px] font-sans font-bold"
+                                       >
+                                         <Folder className="w-3 h-3 text-amber-500 fill-amber-200" />
+                                         <span>[ROOT DIRECTORY]</span>
+                                       </button>
+                                     )}
+                                     {folders.map(folder => (
+                                       <button
+                                         key={folder.id}
+                                         type="button"
+                                         onClick={async () => {
+                                           if (folder.id) {
+                                             const newPath = [...onedriveFolderPath, { id: folder.id, name: folder.name }];
+                                             setOnedriveFolderId(folder.id);
+                                             setOnedriveFolderPath(newPath);
+                                             await fetchFiles("onedrive", false, folder.id);
+                                           }
+                                         }}
+                                         className="w-full text-left flex items-center gap-1.5 px-2 py-0.5 hover:bg-blue-100/30 hover:text-blue-800 rounded transition-colors text-slate-700 truncate cursor-pointer"
+                                       >
+                                         <Folder className="w-3 h-3 text-amber-500 fill-amber-100" />
+                                         <span>{folder.name}</span>
+                                       </button>
+                                     ))}
+                                     {folders.length === 0 && <span className="text-slate-400 text-[10px] italic block px-2 py-0.5">No subfolders found</span>}
+                                   </div>
+                                 </div>
+                               )}
+                             </div>
                            );
                         })()}
                       </div>
