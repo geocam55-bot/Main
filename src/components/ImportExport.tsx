@@ -116,9 +116,20 @@ const readFileAsBase64 = (file: File): Promise<string> => {
 };
 
 export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (view: string) => void }) {
+  // Determine smart fallback backend url depending on runtime host type (Static SPA vs Sandbox Node Container)
+  const getSmartDefaultUrl = () => {
+    const origin = window.location.origin;
+    const isStaticSite = 
+      origin.includes("prospacescrm.com") || 
+      origin.includes("vercel.app") || 
+      origin.includes("netlify.app") || 
+      origin.includes("github.io");
+    return isStaticSite ? "http://localhost:3000" : origin;
+  };
+
   // Load custom Express API base URL
   const [backendUrl, setBackendUrl] = useState(() => {
-    return localStorage.getItem("import_export_server_url") || window.location.origin;
+    return localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
   });
   const [healthStatus, setHealthStatus] = useState<"unknown" | "connected" | "failed">("unknown");
   const [checkingHealth, setCheckingHealth] = useState(false);
@@ -459,6 +470,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   useEffect(() => {
     // Check connection health in background on mount / backendUrl change
     const checkOnMount = async () => {
+      const defaultUrl = getSmartDefaultUrl();
       try {
         const sanitizedUrl = backendUrl.replace(/\/$/, "");
         const res = await fetch(`${sanitizedUrl}/api/health`, { method: "GET" });
@@ -467,13 +479,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           setHealthStatus("connected");
         } else {
           // Auto-heal incorrect or stale local backend URLs
-          if (sanitizedUrl !== window.location.origin) {
+          if (sanitizedUrl !== defaultUrl) {
             try {
-              const fallbackRes = await fetch(`${window.location.origin}/api/health`, { method: "GET" });
+              const fallbackRes = await fetch(`${defaultUrl}/api/health`, { method: "GET" });
               const fallbackData = await fallbackRes.json();
               if (fallbackRes.ok && fallbackData.status === "ok") {
-                setBackendUrl(window.location.origin);
-                localStorage.setItem("import_export_server_url", window.location.origin);
+                setBackendUrl(defaultUrl);
+                localStorage.setItem("import_export_server_url", defaultUrl);
                 setHealthStatus("connected");
                 return;
               }
@@ -483,13 +495,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         }
       } catch {
         const sanitizedUrl = backendUrl.replace(/\/$/, "");
-        if (sanitizedUrl !== window.location.origin) {
+        if (sanitizedUrl !== defaultUrl) {
           try {
-            const fallbackRes = await fetch(`${window.location.origin}/api/health`, { method: "GET" });
+            const fallbackRes = await fetch(`${defaultUrl}/api/health`, { method: "GET" });
             const fallbackData = await fallbackRes.json();
             if (fallbackRes.ok && fallbackData.status === "ok") {
-              setBackendUrl(window.location.origin);
-              localStorage.setItem("import_export_server_url", window.location.origin);
+              setBackendUrl(defaultUrl);
+              localStorage.setItem("import_export_server_url", defaultUrl);
               setHealthStatus("connected");
               return;
             }
@@ -648,8 +660,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     } catch (err: any) {
       clearTimeout(timeoutId);
       
-      // If the request fails & the target URL is different from window.location.origin, fall back to window.location.origin!
-      const fallbackBase = window.location.origin;
+      // If the request fails & the target URL is different from getSmartDefaultUrl(), fall back to getSmartDefaultUrl()!
+      const fallbackBase = getSmartDefaultUrl();
       if (base !== fallbackBase) {
         console.warn(`Fetch to ${resolvedUrl} failed. Falling back to local origin: ${fallbackBase}`);
         try {
@@ -664,8 +676,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           clearTimeout(fallbackTimeoutId);
           
           // Permanently reset the backendUrl to auto-heal other API queries as well
-          setBackendUrl(window.location.origin);
-          localStorage.setItem("import_export_server_url", window.location.origin);
+          setBackendUrl(fallbackBase);
+          localStorage.setItem("import_export_server_url", fallbackBase);
           setHealthStatus("connected");
           
           return res;
@@ -1503,7 +1515,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
               <button
                 onClick={() => {
-                  const defaultUrl = window.location.origin;
+                  const defaultUrl = getSmartDefaultUrl();
                   setBackendUrl(defaultUrl);
                   localStorage.setItem("import_export_server_url", defaultUrl);
                   testBackendConnection(defaultUrl);
