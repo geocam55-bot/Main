@@ -210,7 +210,11 @@ export function EmailAccountSetup({ isOpen, onClose, onAccountAdded, editingAcco
 
       // Fetch custom OAuth Redirect Origin if stored in localStorage
       const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
-      const bodyPayload: any = { purpose: 'email' };
+      const storedPrompt = localStorage.getItem('oauth_microsoft_prompt') || 'select_account';
+      const bodyPayload: any = { 
+        purpose: 'email',
+        prompt: storedPrompt
+      };
 
       if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
         if (customOAuthOrigin === 'prospaces_vercel') {

@@ -131,6 +131,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [customOauthOriginUrl, setCustomOauthOriginUrlState] = useState<string>(() => {
     return localStorage.getItem('custom_oauth_origin_url') || '';
   });
+  const [oauthMicrosoftPrompt, setOauthMicrosoftPromptState] = useState<string>(() => {
+    return localStorage.getItem('oauth_microsoft_prompt') || 'select_account';
+  });
 
   const setOauthRedirectOrigin = (val: string) => {
     localStorage.setItem('oauth_redirect_origin', val);
@@ -140,6 +143,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const setCustomOauthOriginUrl = (val: string) => {
     localStorage.setItem('custom_oauth_origin_url', val);
     setCustomOauthOriginUrlState(val);
+  };
+
+  const setOauthMicrosoftPrompt = (val: string) => {
+    localStorage.setItem('oauth_microsoft_prompt', val);
+    setOauthMicrosoftPromptState(val);
   };
 
   const fetchMsAccounts = async () => {
@@ -180,10 +188,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       // Fetch custom OAuth Redirect Origin if stored in localStorage
       const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
+      const storedPrompt = localStorage.getItem('oauth_microsoft_prompt') || 'select_account';
       const bodyPayload: any = {
         includeFiles: true,
         purpose: 'both',
-        prompt: 'select_account'
+        prompt: storedPrompt
       };
 
       if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
@@ -1700,6 +1709,22 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                   <p className="text-4xs text-slate-400">Must start with http:// or https:// (e.g. registered domain in Azure portal)</p>
                                 </div>
                               )}
+
+                              <div className="mt-3 pt-3 border-t border-slate-200/40 space-y-1">
+                                <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Microsoft Login Prompt Behavior</label>
+                                <p className="text-3xs text-slate-500 leading-normal mb-1.5">
+                                  Having trouble switching accounts? Choose "Force Login Screen" to bypass Microsoft active user caching completely!
+                                </p>
+                                <select
+                                  value={oauthMicrosoftPrompt}
+                                  onChange={(e) => setOauthMicrosoftPrompt(e.target.value)}
+                                  className="w-full bg-white border border-slate-250 py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-800 outline-none shadow-xs cursor-pointer transition-all focus:border-blue-500"
+                                >
+                                  <option value="select_account">👥 Account Chooser (Bypasses SSO if multiple active, can auto-select if single)</option>
+                                  <option value="login">🔐 Force Login Screen (Forces entering credentials — Choose this to switch accounts!)</option>
+                                  <option value="consent">📝 Consent Prompt (Forces consent grant overlay)</option>
+                                </select>
+                              </div>
 
                               <div className="space-y-1 mt-2.5">
                                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Active Redirect URI passed to Microsoft / Google</label>

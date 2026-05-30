@@ -164,7 +164,11 @@ export function CalendarAccountSetup({ isOpen, onClose, onAccountAdded, editingA
 
       // Fetch custom OAuth Redirect Origin if stored in localStorage
       const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
-      const bodyPayload: any = { purpose: 'calendar' };
+      const storedPrompt = localStorage.getItem('oauth_microsoft_prompt') || 'select_account';
+      const bodyPayload: any = { 
+        purpose: 'calendar',
+        prompt: storedPrompt
+      };
 
       if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
         if (customOAuthOrigin === 'prospaces_vercel') {
