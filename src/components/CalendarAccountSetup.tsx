@@ -164,7 +164,7 @@ export function CalendarAccountSetup({ isOpen, onClose, onAccountAdded, editingA
 
       // Fetch custom OAuth Redirect Origin if stored in localStorage
       const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
-      const storedPrompt = localStorage.getItem('oauth_microsoft_prompt') || 'select_account';
+      const storedPrompt = localStorage.getItem('oauth_microsoft_prompt') || 'login';
       const bodyPayload: any = { 
         purpose: 'calendar',
         prompt: storedPrompt

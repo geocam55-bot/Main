@@ -132,7 +132,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     return localStorage.getItem('custom_oauth_origin_url') || '';
   });
   const [oauthMicrosoftPrompt, setOauthMicrosoftPromptState] = useState<string>(() => {
-    return localStorage.getItem('oauth_microsoft_prompt') || 'select_account';
+    return localStorage.getItem('oauth_microsoft_prompt') || 'login';
   });
 
   const setOauthRedirectOrigin = (val: string) => {
@@ -188,7 +188,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       // Fetch custom OAuth Redirect Origin if stored in localStorage
       const customOAuthOrigin = localStorage.getItem('oauth_redirect_origin');
-      const storedPrompt = localStorage.getItem('oauth_microsoft_prompt') || 'select_account';
+      const storedPrompt = localStorage.getItem('oauth_microsoft_prompt') || 'login';
       const bodyPayload: any = {
         includeFiles: true,
         purpose: 'both',

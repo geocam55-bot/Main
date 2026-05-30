@@ -1333,7 +1333,7 @@ app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
     const filesScope = includeFiles ? ' Files.Read Files.ReadWrite' : '';
     url.searchParams.set('scope', baseScope + filesScope);
     url.searchParams.set('state', state);
-    url.searchParams.set('prompt', body.prompt || 'select_account');
+    url.searchParams.set('prompt', body.prompt || 'login');
     return c.json({ success: true, authUrl: url.toString(), pollId: state, registeredRedirectUri: redirectUri });
   } catch (err: any) { return c.json({ error: err.message }, 500); }
 });

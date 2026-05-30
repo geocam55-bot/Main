@@ -43,7 +43,7 @@ microsoftRoutes.get('/make-server-8405be07/microsoft-health', (c) => {
 // Initialize OAuth flow
 microsoftRoutes.post('/make-server-8405be07/microsoft-oauth-init', async (c) => {
   try {
-    const { scopes, includeCalendar, includeFiles, userId } = await c.req.json();
+    const { scopes, includeCalendar, includeFiles, userId, prompt } = await c.req.json();
 
     if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
       console.error('Missing Azure OAuth credentials');
@@ -88,6 +88,7 @@ microsoftRoutes.post('/make-server-8405be07/microsoft-oauth-init', async (c) => 
     authUrl.searchParams.set('scope', requestedScopes.join(' '));
     authUrl.searchParams.set('response_mode', 'query');
     authUrl.searchParams.set('state', encodedState);
+    authUrl.searchParams.set('prompt', prompt || 'login');
 
     console.log('[Microsoft OAuth] Initiated flow for user:', userId);
 
