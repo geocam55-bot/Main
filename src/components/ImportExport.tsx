@@ -33,7 +33,9 @@ import {
   Copy,
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ArrowLeft,
+  ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "motion/react";
@@ -43,6 +45,9 @@ interface StorageFile {
   size: number;
   lastModified: string;
   extension: string;
+  isFolder?: boolean;
+  id?: string;
+  webUrl?: string;
 }
 
 interface ScheduledTask {
@@ -270,6 +275,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 setIsConnectingMs(false);
                 if (pollResult.result.success) {
                   toast.success("Microsoft OneDrive connected successfully!");
+                  setOnedriveFolderId(null);
+                  setOnedriveFolderPath([]);
                   fetchMsAccounts();
                 } else {
                   toast.error(`Connection failed: ${pollResult.result.error || 'Unknown error'}`);
@@ -303,6 +310,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       if (res.ok) {
         toast.success("Successfully disconnected Microsoft OneDrive account.");
+        setOnedriveFolderId(null);
+        setOnedriveFolderPath([]);
         fetchMsAccounts();
       } else {
         toast.error("Failed to disconnect account.");
@@ -323,6 +332,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [history, setHistory] = useState<ExecutionLog[]>([]);
   const [localFiles, setLocalFiles] = useState<StorageFile[]>([]);
   const [onedriveFiles, setOnedriveFiles] = useState<StorageFile[]>([]);
+  const [onedriveFolderId, setOnedriveFolderId] = useState<string | null>(null);
+  const [onedriveFolderPath, setOnedriveFolderPath] = useState<{ id: string; name: string }[]>([]);
+  const [syncingFileId, setSyncingFileId] = useState<string | null>(null);
   const [crmStats, setCrmStats] = useState<CrmStats>({ contacts: 0, inventory: 0, deals: 0 });
   const [crmRecords, setCrmRecords] = useState<any[]>([]);
   const [previewModule, setPreviewModule] = useState<"contacts" | "inventory" | "deals">("contacts");
@@ -661,26 +673,136 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  const fetchFiles = async (drive: "local" | "onedrive", silent = false) => {
+  const fetchFiles = async (drive: "local" | "onedrive", silent = false, folderIdInput?: string | null) => {
     if (!silent) setLoadingFiles(true);
     try {
-      const res = await safeFetch(`/api/import-export/storage/${drive}`);
-      if (!res.ok) {
-        throw new Error(`HTTP status ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.success) {
-        const filesList = data.files || [];
-        if (drive === "local") setLocalFiles(filesList);
-        else setOnedriveFiles(filesList);
+      if (drive === "onedrive" && msAccounts.length > 0) {
+        // Fetch from real OneDrive cloud via Supabase edge function
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          throw new Error("No active session. Please log in.");
+        }
+        const activeEmail = msAccounts[0].email;
+        const targetFolderId = folderIdInput !== undefined ? folderIdInput : onedriveFolderId;
+        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/onedrive-files`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+            "X-User-Token": session.access_token
+          },
+          body: JSON.stringify({
+            email: activeEmail,
+            userId: session.user.id,
+            folderId: targetFolderId
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.items) {
+          const normalized = data.items.map((item: any) => ({
+            name: item.name,
+            size: item.size || 0,
+            lastModified: item.lastModifiedDateTime || new Date().toISOString(),
+            extension: item.name.split('.').pop() || '',
+            isFolder: !!item.isFolder,
+            id: item.id,
+            webUrl: item.webUrl
+          }));
+          setOnedriveFiles(normalized);
+        } else {
+          throw new Error(data.error || "Failed to list OneDrive files");
+        }
       } else {
-        throw new Error(data.error || "Unknown backend error");
+        const res = await safeFetch(`/api/import-export/storage/${drive}`);
+        if (!res.ok) {
+          throw new Error(`HTTP status ${res.status}`);
+        }
+         const data = await res.json();
+        if (data.success) {
+          const filesList = data.files || [];
+          if (drive === "local") setLocalFiles(filesList);
+          else setOnedriveFiles(filesList);
+        } else {
+          throw new Error(data.error || "Unknown backend error");
+        }
       }
     } catch (e: any) {
       console.error(`Failed to load drive files for [${drive}]:`, e);
-      toast.error(`Unable to read ${drive === "local" ? "Local Drive" : "OneDrive"} server directory.`);
+      if (drive === "onedrive" && msAccounts.length > 0) {
+        toast.error(`Unable to access Microsoft OneDrive cloud files: ${e.message}`);
+      } else {
+        toast.error(`Unable to read ${drive === "local" ? "Local Drive" : "OneDrive"} server directory.`);
+      }
     } finally {
       if (!silent) setLoadingFiles(false);
+    }
+  };
+
+  const syncOneDriveCloudFileToBackend = async (fileId: string, fileName: string) => {
+    setSyncingFileId(fileId);
+    const syncToastId = toast.loading(`Synchronizing "${fileName}" from OneDrive Cloud to server storage...`);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session. Please log in.");
+      }
+      const activeEmail = msAccounts[0]?.email;
+      if (!activeEmail) {
+        throw new Error("No connected Microsoft OneDrive account found.");
+      }
+      
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/onedrive-file-content`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+          "X-User-Token": session.access_token
+        },
+        body: JSON.stringify({
+          email: activeEmail,
+          userId: session.user.id,
+          itemId: fileId
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP error ${res.status}`);
+      }
+      const data = await res.json();
+      if (!data.success || !data.contentBase64) {
+        throw new Error(data.error || "Failed to download OneDrive file content from cloud");
+      }
+
+      const uploadRes = await safeFetch(`/api/import-export/storage/onedrive/upload-base64`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: fileName,
+          fileContent: data.contentBase64
+        })
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error(`Failed to upload to server storage: ${uploadRes.statusText}`);
+      }
+      const uploadData = await uploadRes.json();
+      if (!uploadData.success) {
+        throw new Error(uploadData.error || "Failed to save file on server storage");
+      }
+
+      toast.success(`Successfully synchronized "${fileName}" to server's OneDrive folder!`, { id: syncToastId });
+    } catch (e: any) {
+      console.error("Cloud sync error:", e);
+      toast.error(`Cloud sync failed: ${e.message}`, { id: syncToastId });
+      throw e; // rethrow so calling procedures are aware of failure
+    } finally {
+      setSyncingFileId(null);
     }
   };
 
@@ -800,8 +922,55 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   };
 
   // Download handle from backend
-  const handleFileDownload = (fileName: string, target: "local" | "onedrive") => {
-    window.open(`/api/import-export/storage/${target}/download/${encodeURIComponent(fileName)}`, "_blank");
+  const handleFileDownload = async (fileName: string, target: "local" | "onedrive", fileId?: string) => {
+    if (target === "onedrive" && msAccounts.length > 0 && fileId) {
+      const downloadToastId = toast.loading(`Downloading "${fileName}" from OneDrive Cloud...`);
+      try {
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("No active session. Please log in.");
+        const activeEmail = msAccounts[0]?.email;
+        if (!activeEmail) throw new Error("No connected Microsoft OneDrive account found.");
+
+        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/onedrive-file-content`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+            "X-User-Token": session.access_token
+          },
+          body: JSON.stringify({ email: activeEmail, userId: session.user.id, itemId: fileId })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP error ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.success && data.contentBase64) {
+          const raw = window.atob(data.contentBase64);
+          const rawLength = raw.length;
+          const uInt8Array = new Uint8Array(rawLength);
+          for (let i = 0; i < rawLength; ++i) {
+            uInt8Array[i] = raw.charCodeAt(i);
+          }
+          const blob = new Blob([uInt8Array], { type: data.mimeType || "application/octet-stream" });
+          const urlStr = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = urlStr;
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(urlStr);
+          toast.success(`Downloaded "${fileName}" successfully!`, { id: downloadToastId });
+        } else {
+          throw new Error(data.error || "Failed to download OneDrive file");
+        }
+      } catch (err: any) {
+        console.error("Cloud download error:", err);
+        toast.error(`Download failed: ${err.message}`, { id: downloadToastId });
+      }
+    } else {
+      window.open(`/api/import-export/storage/${target}/download/${encodeURIComponent(fileName)}`, "_blank");
+    }
   };
 
   // Forces an immediate execution of scheduled task unattended
@@ -1857,6 +2026,61 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 {/* Explorer File list body */}
                 <div className="p-4">
                   
+                  {/* Breadcrumb / Back Navigation */}
+                  {driveTab === "onedrive" && msAccounts.length > 0 && (onedriveFolderId || onedriveFolderPath.length > 0) && (
+                    <div className="mb-4 px-3 py-2 bg-blue-50/55 border border-blue-100 rounded-lg flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium overflow-x-auto whitespace-nowrap">
+                        <span className="text-slate-400">OneDrive:</span>
+                        <button 
+                          onClick={() => {
+                            setOnedriveFolderId(null);
+                            setOnedriveFolderPath([]);
+                            fetchFiles("onedrive", false, null);
+                          }}
+                          className="hover:text-blue-600 transition-colors font-semibold text-blue-700"
+                        >
+                          Root
+                        </button>
+                        {onedriveFolderPath.map((item, idx) => (
+                          <div key={item.id} className="flex items-center gap-1.5">
+                            <ChevronRight className="w-3 h-3 text-slate-305" />
+                            <button
+                              onClick={() => {
+                                const newPath = onedriveFolderPath.slice(0, idx + 1);
+                                setOnedriveFolderId(item.id);
+                                setOnedriveFolderPath(newPath);
+                                fetchFiles("onedrive", false, item.id);
+                              }}
+                              className={`hover:text-blue-600 transition-colors ${idx === onedriveFolderPath.length - 1 ? 'font-bold text-slate-800' : 'text-blue-700'}`}
+                            >
+                              {item.name}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (onedriveFolderPath.length <= 1) {
+                            setOnedriveFolderId(null);
+                            setOnedriveFolderPath([]);
+                            await fetchFiles("onedrive", false, null);
+                          } else {
+                            const newPath = [...onedriveFolderPath];
+                            newPath.pop();
+                            const parent = newPath[newPath.length - 1];
+                            setOnedriveFolderId(parent.id);
+                            setOnedriveFolderPath(newPath);
+                            await fetchFiles("onedrive", false, parent.id);
+                          }
+                        }}
+                        className="flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 px-2.5 py-1 rounded-md shadow-3xs transition-all shrink-0 font-sans"
+                      >
+                        <ArrowLeft className="w-3 h-3" />
+                        Up
+                      </button>
+                    </div>
+                  )}
+
                   {/* File search bar */}
                   <div className="mb-4">
                     <input
@@ -1882,54 +2106,113 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-150 border rounded-lg overflow-hidden">
-                      {getExplorerFiles().map((file) => (
-                        <div key={file.name} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 hovering hover:bg-slate-50 transition-colors gap-2">
-                          <div className="flex items-center gap-3">
-                            <span className="p-2 bg-slate-100 text-slate-500 rounded-md">
-                              <FileText className="w-4 h-4 text-slate-650" />
-                            </span>
-                            <div className="text-left font-normal max-w-xs sm:max-w-md">
-                              <p className="font-semibold text-xs text-slate-800 truncate" title={file.name}>{file.name}</p>
-                              <div className="flex items-center gap-2 mt-1 text-3xs text-slate-400">
-                                <span className="font-mono bg-slate-50 px-1 py-0.2 rounded text-slate-550">{(file.size / 1024).toFixed(1)} KB</span>
-                                <span>•</span>
-                                <span>Modified: {new Date(file.lastModified).toLocaleString()}</span>
+                      {getExplorerFiles().map((file) => {
+                        const isOneDriveCloudFolder = driveTab === "onedrive" && msAccounts.length > 0 && file.isFolder;
+                        const isSyncing = syncingFileId === file.id;
+
+                        const handleFolderOpen = () => {
+                          if (file.id) {
+                            const newPath = [...onedriveFolderPath, { id: file.id, name: file.name }];
+                            setOnedriveFolderId(file.id);
+                            setOnedriveFolderPath(newPath);
+                            fetchFiles("onedrive", false, file.id);
+                          }
+                        };
+
+                        return (
+                          <div key={file.id || file.name} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 hovering hover:bg-slate-50 transition-colors gap-2">
+                            <div 
+                              className={`flex items-center gap-3 ${isOneDriveCloudFolder ? 'cursor-pointer' : ''}`}
+                              onClick={() => {
+                                if (isOneDriveCloudFolder) {
+                                  handleFolderOpen();
+                                }
+                              }}
+                            >
+                              <span className="p-2 bg-slate-100 text-slate-500 rounded-md">
+                                {isOneDriveCloudFolder ? (
+                                  <Folder className="w-4 h-4 text-amber-500 fill-amber-200" />
+                                ) : (
+                                  <FileText className="w-4 h-4 text-slate-650" />
+                                )}
+                              </span>
+                              <div className="text-left font-normal max-w-xs sm:max-w-md">
+                                <p className={`font-semibold text-xs text-slate-800 truncate ${isOneDriveCloudFolder ? 'hover:text-blue-600 transition-colors' : ''}`} title={file.name}>
+                                  {file.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1 text-3xs text-slate-400">
+                                  {isOneDriveCloudFolder ? (
+                                    <span className="font-semibold text-amber-750/80 bg-amber-50 px-1 py-0.2 rounded text-[10px]">Folder</span>
+                                  ) : (
+                                    <span className="font-mono bg-slate-50 px-1 py-0.2 rounded text-slate-550">{(file.size / 1024).toFixed(1)} KB</span>
+                                  )}
+                                  <span>•</span>
+                                  <span>Modified: {new Date(file.lastModified).toLocaleString()}</span>
+                                </div>
                               </div>
                             </div>
+
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isOneDriveCloudFolder ? (
+                                <button
+                                  onClick={handleFolderOpen}
+                                  className="px-2.5 py-1 border hover:bg-slate-50 hover:border-slate-350 rounded text-3xs font-semibold text-slate-700 shadow-3xs flex items-center gap-1 bg-white cursor-pointer"
+                                >
+                                  Open Folder
+                                </button>
+                              ) : (
+                                <>
+                                  {/* Sync / Replicate button for real OneDrive cloud file */}
+                                  {driveTab === "onedrive" && msAccounts.length > 0 && file.id && (
+                                    <button
+                                      disabled={isSyncing}
+                                      onClick={() => syncOneDriveCloudFileToBackend(file.id!, file.name)}
+                                      className="p-1 px-1.5 border hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded bg-white shadow-3xs disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                                      title="Sync this cloud file to server-side directory for physical scheduler operations"
+                                    >
+                                      {isSyncing ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                                      ) : (
+                                        <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
+                                      )}
+                                      <span className="text-[10px] font-bold text-slate-500">Sync to Server</span>
+                                    </button>
+                                  )}
+
+                                  {/* Run shortcut trigger */}
+                                  <button
+                                    onClick={() => {
+                                      setTabModeForFile(file, driveTab);
+                                    }}
+                                    className="px-2.5 py-1 border hover:bg-slate-50 hover:border-slate-350 rounded text-3xs font-semibold text-slate-700 shadow-3xs flex items-center gap-1 bg-white cursor-pointer"
+                                    title="Import records instantly to crm database"
+                                  >
+                                    <Play className="w-2.5 h-2.5 text-slate-600 fill-slate-500" /> Instant Import
+                                  </button>
+
+                                  {/* Download file */}
+                                  <button
+                                    onClick={() => handleFileDownload(file.name, driveTab, file.id)}
+                                    className="p-1 px-1.5 border hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded bg-white shadow-3xs cursor-pointer"
+                                    title="Download backup file"
+                                  >
+                                    <Download className="w-3.5 h-3.5 text-slate-600" />
+                                  </button>
+
+                                  {/* Delete File */}
+                                  <button
+                                    onClick={() => handleFileDelete(file.name, driveTab)}
+                                    className="p-1 px-1.5 border hover:border-red-200 hover:bg-red-50 text-red-500 hover:text-red-700 rounded bg-white shadow-3xs cursor-pointer"
+                                    title={driveTab === "onedrive" && msAccounts.length > 0 ? "Delete synchronized server-side mirror file copy" : "Delete file permanently"}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
-
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Run shortcut trigger */}
-                            <button
-                              onClick={() => {
-                                setTabModeForFile(file, driveTab);
-                              }}
-                              className="px-2.5 py-1 border hover:bg-slate-50 hover:border-slate-350 rounded text-3xs font-semibold text-slate-700 shadow-3xs flex items-center gap-1 bg-white"
-                              title="Import records instantly to crm database"
-                            >
-                              <Play className="w-2.5 h-2.5 text-slate-600 fill-slate-500" /> Instant Import
-                            </button>
-
-                            {/* Download file */}
-                            <button
-                              onClick={() => handleFileDownload(file.name, driveTab)}
-                              className="p-1 px-1.5 border hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded bg-white shadow-3xs"
-                              title="Download backup file"
-                            >
-                              <Download className="w-3.5 h-3.5 text-slate-600" />
-                            </button>
-
-                            {/* Delete File */}
-                            <button
-                              onClick={() => handleFileDelete(file.name, driveTab)}
-                              className="p-1 px-1.5 border hover:border-red-200 hover:bg-red-50 text-red-500 hover:text-red-700 rounded bg-white shadow-3xs"
-                              title="Delete file permanently"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -2310,7 +2593,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       {/* Helper utility function to auto-fill workflow when file triggers instant import */}
       {(() => {
         // inline function helper defined to change tabs
-        const setTabModeForFile = (file: StorageFile, currentDrive: "local" | "onedrive") => {
+        const setTabModeForFile = async (file: StorageFile, currentDrive: "local" | "onedrive") => {
           setManualType("import");
           setManualStorage(currentDrive);
           setManualFileName(file.name);
@@ -2319,6 +2602,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           else if (file.name.toLowerCase().includes("inventory")) setManualModule("inventory");
           else if (file.name.toLowerCase().includes("deals")) setManualModule("deals");
           
+          if (currentDrive === "onedrive" && msAccounts.length > 0 && file.id) {
+            try {
+              await syncOneDriveCloudFileToBackend(file.id, file.name);
+            } catch (err: any) {
+              toast.error(`Auto-synchronization of cloud file failed: ${err.message || err}. Please try manual replication.`);
+              return;
+            }
+          }
+
           setActiveTab("manual");
           toast.info(`Configured Loader workspace. Complete your target CRM dropdown mapping and click Import!`);
         };
