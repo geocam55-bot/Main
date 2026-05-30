@@ -1401,6 +1401,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
           <button 
             onClick={() => {
+              testBackendConnection();
               fetchTasks();
               fetchStats();
               fetchHistory();
