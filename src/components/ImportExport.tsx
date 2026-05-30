@@ -838,7 +838,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         body: JSON.stringify({
           email: activeEmail,
           userId: session.user.id,
-          itemId: fileId
+          itemId: fileId,
+          fileId: fileId
         })
       });
       if (!res.ok) {
@@ -846,7 +847,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         throw new Error(err.error || `HTTP error ${res.status}`);
       }
       const data = await res.json();
-      if (!data.success || !data.contentBase64) {
+      const finalBase64 = data.contentBase64 || data.base64;
+      if (!finalBase64) {
         throw new Error(data.error || "Failed to download OneDrive file content from cloud");
       }
 
@@ -855,7 +857,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: fileName,
-          fileContent: data.contentBase64
+          fileContent: finalBase64
         })
       });
 
@@ -1010,15 +1012,21 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             "Authorization": `Bearer ${session.access_token}`,
             "X-User-Token": session.access_token
           },
-          body: JSON.stringify({ email: activeEmail, userId: session.user.id, itemId: fileId })
+          body: JSON.stringify({ 
+            email: activeEmail, 
+            userId: session.user.id, 
+            itemId: fileId,
+            fileId: fileId
+          })
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || `HTTP error ${res.status}`);
         }
         const data = await res.json();
-        if (data.success && data.contentBase64) {
-          const raw = window.atob(data.contentBase64);
+        const finalBase64 = data.contentBase64 || data.base64;
+        if (finalBase64) {
+          const raw = window.atob(finalBase64);
           const rawLength = raw.length;
           const uInt8Array = new Uint8Array(rawLength);
           for (let i = 0; i < rawLength; ++i) {
