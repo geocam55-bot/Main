@@ -1311,9 +1311,7 @@ app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
         frontendOrigin = frontendOrigin.replace('prospacescrm.com', 'www.prospacescrm.com');
       }
       redirectUri = frontendOrigin
-        ? (frontendOrigin.includes('prospaces.vercel.app')
-            ? frontendOrigin.replace(/\/+$/, '')
-            : frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
+        ? (frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
         : (Deno.env.get('AZURE_REDIRECT_URI') ?? '');
     }
 
@@ -1605,9 +1603,7 @@ app.post(`${PREFIX}/google-oauth-init`, async (c) => {
         frontendOrigin = frontendOrigin.replace('prospacescrm.com', 'www.prospacescrm.com');
       }
       redirectUri = frontendOrigin
-        ? (frontendOrigin.includes('prospaces.vercel.app')
-            ? frontendOrigin.replace(/\/+$/, '')
-            : frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
+        ? (frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
         : (Deno.env.get('GOOGLE_REDIRECT_URI') ?? '');
     }
 

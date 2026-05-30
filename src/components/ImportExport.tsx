@@ -197,7 +197,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
         if (customOAuthOrigin === 'prospaces_vercel') {
-          bodyPayload.redirectUri = 'https://prospaces.vercel.app';
+          bodyPayload.redirectUri = 'https://prospaces.vercel.app/oauth-callback';
         } else if (customOAuthOrigin === 'prospaces_crm') {
           bodyPayload.redirectUri = 'https://www.prospacescrm.com/oauth-callback';
         } else if (customOAuthOrigin.startsWith('http://') || customOAuthOrigin.startsWith('https://')) {
@@ -1651,9 +1651,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                       ? customOauthOriginUrl
                       : window.location.origin;
 
-                    const activeRedirectUriValue = activeOriginValue.includes('prospaces.vercel.app')
-                      ? activeOriginValue.replace(/\/+$/, '')
-                      : activeOriginValue.replace(/\/+$/, '') + '/oauth-callback';
+                    const activeRedirectUriValue = activeOriginValue.replace(/\/+$/, '') + '/oauth-callback';
 
                     return (
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">

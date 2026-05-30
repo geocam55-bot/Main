@@ -172,7 +172,7 @@ export function CalendarAccountSetup({ isOpen, onClose, onAccountAdded, editingA
 
       if (customOAuthOrigin && customOAuthOrigin !== 'auto') {
         if (customOAuthOrigin === 'prospaces_vercel') {
-          bodyPayload.redirectUri = 'https://prospaces.vercel.app';
+          bodyPayload.redirectUri = 'https://prospaces.vercel.app/oauth-callback';
         } else if (customOAuthOrigin === 'prospaces_crm') {
           bodyPayload.redirectUri = 'https://www.prospacescrm.com/oauth-callback';
         } else if (customOAuthOrigin.startsWith('http://') || customOAuthOrigin.startsWith('https://')) {
