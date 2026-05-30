@@ -457,9 +457,35 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         if (res.ok && data.status === "ok") {
           setHealthStatus("connected");
         } else {
+          // Auto-heal incorrect or stale local backend URLs
+          if (sanitizedUrl !== window.location.origin) {
+            try {
+              const fallbackRes = await fetch(`${window.location.origin}/api/health`, { method: "GET" });
+              const fallbackData = await fallbackRes.json();
+              if (fallbackRes.ok && fallbackData.status === "ok") {
+                setBackendUrl(window.location.origin);
+                localStorage.setItem("import_export_server_url", window.location.origin);
+                setHealthStatus("connected");
+                return;
+              }
+            } catch {}
+          }
           setHealthStatus("failed");
         }
       } catch {
+        const sanitizedUrl = backendUrl.replace(/\/$/, "");
+        if (sanitizedUrl !== window.location.origin) {
+          try {
+            const fallbackRes = await fetch(`${window.location.origin}/api/health`, { method: "GET" });
+            const fallbackData = await fallbackRes.json();
+            if (fallbackRes.ok && fallbackData.status === "ok") {
+              setBackendUrl(window.location.origin);
+              localStorage.setItem("import_export_server_url", window.location.origin);
+              setHealthStatus("connected");
+              return;
+            }
+          } catch {}
+        }
         setHealthStatus("failed");
       }
     };
@@ -589,6 +615,33 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       return res;
     } catch (err: any) {
       clearTimeout(timeoutId);
+      
+      // If the request fails & the target URL is different from window.location.origin, fall back to window.location.origin!
+      const fallbackBase = window.location.origin;
+      if (base !== fallbackBase) {
+        console.warn(`Fetch to ${resolvedUrl} failed. Falling back to local origin: ${fallbackBase}`);
+        try {
+          const fallbackResolvedUrl = url.startsWith("http") ? url : `${fallbackBase}${url}`;
+          const fallbackCacheBuster = isGet ? `${fallbackResolvedUrl}${fallbackResolvedUrl.includes("?") ? "&" : "?"}_t=${Date.now()}` : fallbackResolvedUrl;
+          
+          const fallbackController = new AbortController();
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), timeoutMs);
+          const fallbackOptions = { ...extendedOptions, signal: fallbackController.signal };
+          
+          const res = await fetch(fallbackCacheBuster, fallbackOptions);
+          clearTimeout(fallbackTimeoutId);
+          
+          // Permanently reset the backendUrl to auto-heal other API queries as well
+          setBackendUrl(window.location.origin);
+          localStorage.setItem("import_export_server_url", window.location.origin);
+          setHealthStatus("connected");
+          
+          return res;
+        } catch (fallbackErr) {
+          clearTimeout(fallbackTimeoutId);
+          throw err; // throw original if fallback fails too
+        }
+      }
       throw err;
     }
   };

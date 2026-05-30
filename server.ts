@@ -163,58 +163,68 @@ seedStorageFiles();
 
 // Calculate next run time
 function calculateNextRunTime(task: any, baseDate = new Date()): Date {
-  const { recurrence, triggerDetail } = task;
-  let nextDate = new Date(baseDate);
+  try {
+    if (!task) return new Date(baseDate.getTime() + 86400000);
+    const recurrence = task.recurrence || 'daily';
+    const triggerDetail = task.triggerDetail || {};
+    let nextDate = new Date(baseDate);
 
-  if (recurrence === 'one-time') {
-    const triggerTime = new Date(triggerDetail.dateTime);
-    return triggerTime > baseDate ? triggerTime : null;
-  }
-
-  if (!triggerDetail.time) {
-    triggerDetail.time = '00:00';
-  }
-  const [hours, minutes] = triggerDetail.time.split(':').map(Number);
-  nextDate.setHours(hours, minutes, 0, 0);
-
-  const addDays = (d: Date, days: number) => {
-    const res = new Date(d);
-    res.setDate(res.getDate() + days);
-    return res;
-  };
-
-  if (recurrence === 'daily') {
-    const interval = triggerDetail.intervalDays || 1;
-    while (nextDate <= baseDate) {
-      nextDate = addDays(nextDate, interval);
-    }
-    return nextDate;
-  }
-
-  if (recurrence === 'weekly') {
-    const daysOfWeek = triggerDetail.daysOfWeek || [1]; // 0: Sun, 1: Mon, etc.
-    let candidate = new Date(nextDate);
-    for (let i = 0; i < 15; i++) {
-      if (candidate > baseDate && daysOfWeek.includes(candidate.getDay())) {
-        return candidate;
+    if (recurrence === 'one-time') {
+      if (!triggerDetail.dateTime) {
+        return new Date(baseDate.getTime() + 3600000); // 1 hr from now fallback
       }
-      candidate = addDays(candidate, 1);
+      const triggerTime = new Date(triggerDetail.dateTime);
+      return isNaN(triggerTime.getTime()) ? new Date(baseDate.getTime() + 3600000) : triggerTime;
     }
-    return candidate;
-  }
 
-  if (recurrence === 'monthly') {
-    const daysOfMonth = triggerDetail.daysOfMonth || [1];
-    let candidate = new Date(nextDate);
-    for (let i = 0; i < 366; i++) {
-      if (candidate > baseDate && daysOfMonth.includes(candidate.getDate())) {
-        return candidate;
+    if (!triggerDetail.time) {
+      triggerDetail.time = '09:00';
+    }
+    const [hours, minutes] = String(triggerDetail.time).split(':').map(Number);
+    nextDate.setHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
+
+    const addDays = (d: Date, days: number) => {
+      const res = new Date(d);
+      res.setDate(res.getDate() + days);
+      return res;
+    };
+
+    if (recurrence === 'daily') {
+      const interval = Number(triggerDetail.intervalDays) || 1;
+      while (nextDate <= baseDate) {
+        nextDate = addDays(nextDate, interval);
       }
-      candidate = addDays(candidate, 1);
+      return nextDate;
     }
-  }
 
-  return addDays(nextDate, 1);
+    if (recurrence === 'weekly') {
+      const daysOfWeek = Array.isArray(triggerDetail.daysOfWeek) ? triggerDetail.daysOfWeek : [1]; // 0: Sun, 1: Mon, etc.
+      let candidate = new Date(nextDate);
+      for (let i = 0; i < 15; i++) {
+        if (candidate > baseDate && daysOfWeek.includes(candidate.getDay())) {
+          return candidate;
+        }
+        candidate = addDays(candidate, 1);
+      }
+      return candidate;
+    }
+
+    if (recurrence === 'monthly') {
+      const daysOfMonth = Array.isArray(triggerDetail.daysOfMonth) ? triggerDetail.daysOfMonth : [1];
+      let candidate = new Date(nextDate);
+      for (let i = 0; i < 366; i++) {
+        if (candidate > baseDate && daysOfMonth.includes(candidate.getDate())) {
+          return candidate;
+        }
+        candidate = addDays(candidate, 1);
+      }
+    }
+
+    return addDays(nextDate, 1);
+  } catch (err) {
+    console.error('Error in calculateNextRunTime:', err);
+    return new Date(baseDate.getTime() + 86400000); // Fail-safe to tomorrow
+  }
 }
 
 // Background scheduler tick execution function
