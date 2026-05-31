@@ -142,22 +142,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (isBackendCapable) {
       return origin;
     }
-    return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
+    return localStorage.getItem("import_export_server_url") || origin;
   };
 
   // Load custom Express API base URL
   const [backendUrl, setBackendUrl] = useState(() => {
-    const origin = window.location.origin;
-    const isBackendCapable = 
-      origin.includes("run.app") || 
-      origin.includes("localhost") || 
-      origin.includes("127.0.0.1") ||
-      origin.includes("3000");
-    if (isBackendCapable) {
-      // Sandbox container always routes relatively to the current window origin to bypass sandbox IAP & CORS blocks
-      return origin;
-    }
-    return localStorage.getItem("import_export_server_url") || "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
+    return localStorage.getItem("import_export_server_url") || window.location.origin;
   });
   const [healthStatus, setHealthStatus] = useState<"unknown" | "connected" | "failed">("unknown");
   const [checkingHealth, setCheckingHealth] = useState(false);
@@ -472,15 +462,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       // Configure cross-origin credentials to enable sandbox iframe cookie flow
       const isCrossOrigin = sanitizedUrl && sanitizedUrl.startsWith("http") && !sanitizedUrl.startsWith(window.location.origin);
       const fetchOptions: RequestInit = { 
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0"
-        }
+        method: "GET"
       };
       if (isCrossOrigin) {
         fetchOptions.credentials = "include";
+        fetchOptions.headers = {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        };
       }
       // Add dynamic timestamp query parameter to bust browser, cloud-edge, and service-worker caches completely
       const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, fetchOptions);
@@ -509,76 +499,43 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
+   // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
   useEffect(() => {
     const healOnMount = async () => {
       const origin = window.location.origin;
-      const isBackendCapable = 
-        origin.includes("run.app") || 
-        origin.includes("localhost") || 
-        origin.includes("127.0.0.1") ||
-        origin.includes("3000");
-
-      if (isBackendCapable) {
-        // Enforce relative path for 100% reliable sandbox connection
-        setBackendUrl(origin);
-        localStorage.setItem("import_export_server_url", origin);
-        
-        try {
-          const res = await fetch(`/api/health?_t=${Date.now()}`, {
-            headers: { "Cache-Control": "no-cache, no-store, must-revalidate" }
-          });
-          const text = await res.text();
-          const data = JSON.parse(text);
-          if (res.ok && data.status === "ok") {
+      try {
+        const res = await fetch(`/api/health?_t=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "ok") {
             setHealthStatus("connected");
+            setBackendUrl(origin);
+            localStorage.setItem("import_export_server_url", origin);
             return;
           }
-        } catch (err) {
-          console.error("Local sandbox healthcheck failed:", err);
         }
-        setHealthStatus("failed");
-        return;
+      } catch (err) {
+        console.error("Relative sandbox healthcheck failed:", err);
       }
 
-      const currentStored = localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
-      const candidates = [
-        currentStored,
-        "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app",
-        "https://ais-dev-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app"
-      ];
-
-      const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean).map(c => c.trim().replace(/\/$/, ""))));
-
-      for (const candidate of uniqueCandidates) {
-        try {
-          const targetUrl = candidate === window.location.origin ? "" : candidate;
-          const isCrossOrigin = targetUrl && targetUrl.startsWith("http") && !targetUrl.startsWith(window.location.origin);
-          const fetchOptions: RequestInit = { 
-            method: "GET",
-            headers: { 
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              "Pragma": "no-cache",
-              "Expires": "0" 
+      // Fallback: test absolute stored backendUrl
+      try {
+        const currentStored = localStorage.getItem("import_export_server_url") || origin;
+        if (currentStored !== origin) {
+          const res = await fetch(`${currentStored}/api/health?_t=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === "ok") {
+              setHealthStatus("connected");
+              setBackendUrl(currentStored);
+              return;
             }
-          };
-          if (isCrossOrigin) {
-            fetchOptions.credentials = "include";
           }
-          const res = await fetch(`${targetUrl}/api/health?_t=${Date.now()}`, fetchOptions);
-          const text = await res.text();
-          const data = JSON.parse(text);
-          
-          if (res.ok && data.status === "ok") {
-            setBackendUrl(candidate);
-            localStorage.setItem("import_export_server_url", candidate);
-            setHealthStatus("connected");
-            return;
-          }
-        } catch {
-          // If a candidate fails, try next
         }
+      } catch (err) {
+        console.error("Absolute candidate fallback failed:", err);
       }
+      
       setHealthStatus("failed");
     };
     healOnMount();
@@ -596,15 +553,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         }
         const isCrossOrigin = sanitizedUrl && sanitizedUrl.startsWith("http") && !sanitizedUrl.startsWith(window.location.origin);
         const fetchOptions: RequestInit = { 
-          method: "GET",
-          headers: { 
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0" 
-          }
+          method: "GET"
         };
         if (isCrossOrigin) {
           fetchOptions.credentials = "include";
+          fetchOptions.headers = { 
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0" 
+          };
         }
         const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, fetchOptions);
         const text = await res.text();
@@ -1523,41 +1480,33 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto rounded-xl">
+    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       
       {/* Visual Workspace Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200 pb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
           <div className="flex items-center gap-3">
-            <span className="p-2.5 bg-blue-50 text-blue-600 rounded-lg">
-              <Clock className="h-6 w-6" id="header-scheduler-icon" />
+            <span className="p-2 bg-slate-50 text-slate-600 rounded-lg border border-slate-100 shadow-2xs">
+              <Clock className="h-5 w-5" id="header-scheduler-icon" />
             </span>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">
                 Unattended Task Scheduler
-                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded border font-normal">v2.1 Client + Backend</span>
               </h1>
-              <p className="text-sm text-slate-500">
-                Enterprise automation & scheduler for imports and exports matching system records with Microsoft OneDrive & Local Storage.
+              <p className="text-xs text-slate-500 mt-0.5">
+                Automate system records synchronization and folder backups.
               </p>
             </div>
           </div>
         </div>
 
         {/* Database/Storage metrics indicators */}
-        <div className="flex flex-wrap gap-4">
-          <div className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-lg flex items-center gap-3 shadow-xs">
-            <Database className="h-4 w-4 text-slate-500" />
-            <div className="text-left">
-              <p className="text-2xs text-slate-400 leading-none">DATABASE RECORDS</p>
-              <div className="flex items-center gap-1.5 mt-1 font-mono text-sm font-semibold text-slate-800">
-                <span>{crmStats.contacts} Contacts</span>
-                <span className="text-slate-300">|</span>
-                <span>{crmStats.inventory} Inventory</span>
-                <span className="text-slate-300">|</span>
-                <span>{crmStats.deals} Deals</span>
-              </div>
-            </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs">
+            <Database className="h-3.5 w-3.5 text-slate-400" />
+            <span className="font-medium text-slate-600">
+              CRM Storage: <span className="font-mono text-slate-900 font-semibold">{crmStats.contacts}</span> Contacts · <span className="font-mono text-slate-900 font-semibold">{crmStats.inventory}</span> Inventory · <span className="font-mono text-slate-900 font-semibold">{crmStats.deals}</span> Deals
+            </span>
           </div>
 
           <button
