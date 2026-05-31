@@ -119,22 +119,18 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // Determine smart fallback backend url depending on runtime host type (Static SPA vs Sandbox Node Container)
   const getSmartDefaultUrl = () => {
     const origin = window.location.origin;
-    // Determine if the current window origin is a backend-capable environment (is dynamic sandbox or local dev)
     const isBackendCapable = 
       origin.includes("run.app") || 
       origin.includes("localhost") || 
       origin.includes("127.0.0.1") ||
       origin.includes("3000");
 
-    // If the frontend is loaded on a static hosting custom domain (like ProSpaces CRM, Vercel, or Netlify),
-    // it cannot host dynamic API endpoints. Default to the dedicated Cloud Run Production container.
     if (!isBackendCapable) {
       return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
     }
     return origin;
   };
 
-  // Retrieve the recommended Bridge URL dynamically depending on whether they're in development, preview, or static domains
   const getRecommendedBridgeUrl = () => {
     const origin = window.location.origin;
     const isBackendCapable = 
@@ -144,16 +140,24 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       origin.includes("3000");
 
     if (isBackendCapable) {
-      // If the current window origin is already a container (like ais-dev or ais-pre), the most appropriate bridge is the origin itself.
       return origin;
     }
-    // If they're on a static server (like Vercel or Custom Apex Domain page), bridge directly to the dedicated production container.
     return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
   };
 
   // Load custom Express API base URL
   const [backendUrl, setBackendUrl] = useState(() => {
-    return localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
+    const origin = window.location.origin;
+    const isBackendCapable = 
+      origin.includes("run.app") || 
+      origin.includes("localhost") || 
+      origin.includes("127.0.0.1") ||
+      origin.includes("3000");
+    if (isBackendCapable) {
+      // Sandbox container always routes relatively to the current window origin to bypass sandbox IAP & CORS blocks
+      return origin;
+    }
+    return localStorage.getItem("import_export_server_url") || "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
   });
   const [healthStatus, setHealthStatus] = useState<"unknown" | "connected" | "failed">("unknown");
   const [checkingHealth, setCheckingHealth] = useState(false);
@@ -163,7 +167,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [msAccounts, setMsAccounts] = useState<any[]>([]);
   const [fetchingMsAccounts, setFetchingMsAccounts] = useState(false);
   const [isConnectingMs, setIsConnectingMs] = useState(false);
-  const [showMsDiagnosticGuide, setShowMsDiagnosticGuide] = useState(true);
+  const [showMsDiagnosticGuide, setShowMsDiagnosticGuide] = useState(false);
   const [copiedUri, setCopiedUri] = useState(false);
   const [oauthRedirectOrigin, setOauthRedirectOriginState] = useState<string>(() => {
     return localStorage.getItem('oauth_redirect_origin') || 'auto';
@@ -508,21 +512,46 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
   useEffect(() => {
     const healOnMount = async () => {
+      const origin = window.location.origin;
+      const isBackendCapable = 
+        origin.includes("run.app") || 
+        origin.includes("localhost") || 
+        origin.includes("127.0.0.1") ||
+        origin.includes("3000");
+
+      if (isBackendCapable) {
+        // Enforce relative path for 100% reliable sandbox connection
+        setBackendUrl(origin);
+        localStorage.setItem("import_export_server_url", origin);
+        
+        try {
+          const res = await fetch(`/api/health?_t=${Date.now()}`, {
+            headers: { "Cache-Control": "no-cache, no-store, must-revalidate" }
+          });
+          const text = await res.text();
+          const data = JSON.parse(text);
+          if (res.ok && data.status === "ok") {
+            setHealthStatus("connected");
+            return;
+          }
+        } catch (err) {
+          console.error("Local sandbox healthcheck failed:", err);
+        }
+        setHealthStatus("failed");
+        return;
+      }
+
       const currentStored = localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
       const candidates = [
         currentStored,
-        window.location.origin,
         "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app",
-        "https://ais-dev-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app",
-        "http://localhost:3000"
+        "https://ais-dev-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app"
       ];
 
-      // De-duplicate, filter empty values and trim trailing slashes
       const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean).map(c => c.trim().replace(/\/$/, ""))));
 
       for (const candidate of uniqueCandidates) {
         try {
-          // If the candidate matches the current origin, request relatively to bypass sandbox iframe blocks
           const targetUrl = candidate === window.location.origin ? "" : candidate;
           const isCrossOrigin = targetUrl && targetUrl.startsWith("http") && !targetUrl.startsWith(window.location.origin);
           const fetchOptions: RequestInit = { 
@@ -538,10 +567,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           }
           const res = await fetch(`${targetUrl}/api/health?_t=${Date.now()}`, fetchOptions);
           const text = await res.text();
-          let data: any = {};
-          try {
-            data = JSON.parse(text);
-          } catch {}
+          const data = JSON.parse(text);
           
           if (res.ok && data.status === "ok") {
             setBackendUrl(candidate);
@@ -550,7 +576,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             return;
           }
         } catch {
-          // If a candidate is offline, try the next in line
+          // If a candidate fails, try next
         }
       }
       setHealthStatus("failed");
@@ -1568,117 +1594,172 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         </div>
       </div>
 
-      {showBackendConfig && (
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800 font-sans">Unattended Express API Server Settings</h3>
-              <p className="text-xs text-slate-500">
-                Configure the target endpoint for the Express backend scheduler, file-system explorer, and backups.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowBackendConfig(false)}
-              className="text-slate-400 hover:text-slate-600 text-xs font-semibold px-2 py-0.5 border rounded hover:bg-slate-100"
-            >
-              Close
-            </button>
-          </div>
+      {showBackendConfig && (() => {
+        const origin = window.location.origin;
+        const isBackendCapable = 
+          origin.includes("run.app") || 
+          origin.includes("localhost") || 
+          origin.includes("127.0.0.1") ||
+          origin.includes("3000");
 
-          <div className="flex flex-col md:flex-row items-end gap-3">
-            <div className="flex-1 space-y-1.5">
-              <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Backend Server URL Address</label>
-              <div className="relative shadow-xs rounded-lg">
-                <input
-                  type="text"
-                  placeholder="e.g. http://localhost:3000"
-                  value={backendUrl}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setBackendUrl(val);
-                    setHealthStatus("unknown");
+        if (isBackendCapable) {
+          return (
+            <div className="bg-emerald-50/40 border border-emerald-100 rounded-lg p-5 space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-emerald-950 font-sans flex items-center gap-2">
+                    <span>🔒 AI Studio Sandbox Mode</span>
+                    <span className="text-[10px] bg-emerald-100 px-2 py-0.5 rounded-full font-bold text-emerald-800 border border-emerald-250">Active & Connected</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                    CRM automated background jobs, OneDrive synchronization, and directory backups route relatively. This bypasses all cross-domain sandbox controls or CORS headers.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowBackendConfig(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-all text-xs font-semibold px-2 py-0.5 border rounded hover:bg-slate-100 bg-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1.5 border-t border-emerald-200/50">
+                <div className="text-3xs text-emerald-850 font-mono flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Sandbox Route: <code className="bg-emerald-100/60 px-1 py-0.5 rounded font-bold font-mono">/api/*</code></span>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    testBackendConnection(window.location.origin);
                   }}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono text-slate-700 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                />
+                  disabled={checkingHealth}
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-md font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  {checkingHealth ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  Re-Verify Connection
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 font-sans">Unattended Express API Server Settings</h3>
+                <p className="text-xs text-slate-500">
+                  Configure the target endpoint for the Express backend scheduler, file-system explorer, and backups.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowBackendConfig(false)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-semibold px-2 py-0.5 border rounded hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex flex-col md:flex-row items-end gap-3">
+              <div className="flex-1 space-y-1.5">
+                <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Backend Server URL Address</label>
+                <div className="relative shadow-xs rounded-lg">
+                  <input
+                    type="text"
+                    placeholder="e.g. http://localhost:3000"
+                    value={backendUrl}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBackendUrl(val);
+                      setHealthStatus("unknown");
+                    }}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono text-slate-700 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    localStorage.setItem("import_export_server_url", backendUrl);
+                    testBackendConnection(backendUrl);
+                  }}
+                  disabled={checkingHealth}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
+                >
+                  {checkingHealth ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  )}
+                  Save & Test Connection
+                </button>
+
+                <button
+                  onClick={() => {
+                    const defaultUrl = getSmartDefaultUrl();
+                    setBackendUrl(defaultUrl);
+                    localStorage.setItem("import_export_server_url", defaultUrl);
+                    testBackendConnection(defaultUrl);
+                  }}
+                  className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-semibold text-xs transition-all shadow-sm"
+                >
+                  Reset to Default
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const bridgeUrl = getRecommendedBridgeUrl();
+                    setBackendUrl(bridgeUrl);
+                    localStorage.setItem("import_export_server_url", bridgeUrl);
+                    toast.info(`Connecting to: ${bridgeUrl}`);
+                    await testBackendConnection(bridgeUrl);
+                  }}
+                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
+                  title="Establish cloud bridge directly to the running full-stack container on Google Cloud Run"
+                >
+                  <span>🔌 Bridge Cloud Run Backend</span>
+                </button>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  localStorage.setItem("import_export_server_url", backendUrl);
-                  testBackendConnection(backendUrl);
-                }}
-                disabled={checkingHealth}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
-              >
-                {checkingHealth ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <CheckCircle className="w-3.5 h-3.5" />
-                )}
-                Save & Test Connection
-              </button>
+            {/* Quick Diagnostics Info */}
+            <div className="bg-white border border-slate-150 rounded-lg p-3.5 text-xs text-slate-600 space-y-3 font-sans leading-relaxed">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-700">Self-Healing Diagnostics:</span>
+                <span className={`px-2 py-0.5 rounded-full text-4xs uppercase font-bold tracking-wider ${
+                  healthStatus === "connected" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                  healthStatus === "failed" ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                  "bg-amber-50 text-amber-700 border border-amber-200"
+                }`}>
+                  {healthStatus || "Checking..."}
+                </span>
+              </div>
+              
+              <div className="bg-amber-50/70 border border-amber-200 text-slate-700 p-3 rounded-lg flex flex-col gap-1.5">
+                <p className="font-semibold text-xs text-amber-900 flex items-center gap-1.5">
+                  ☁️ Production Custom Domain Cloud Bridge:
+                </p>
+                <p className="text-3xs text-amber-800 leading-relaxed">
+                  When visiting your custom Apex domain (e.g., <code className="font-mono bg-amber-100 px-1 py-0.2 rounded font-bold">www.prospacescrm.com</code>), the application is served as static web pages. Static servers do not run persistent background processes. 
+                  To run background schedulers, folder observers, and backups under your production custom domains, we bridge your static frontend directly to your dedicated Node.js full-stack container on Google Cloud Run:
+                  <code className="block mt-1 font-mono text-4xs bg-zinc-800 text-zinc-100 p-1.5 rounded select-all text-center">https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app</code>
+                  Click the <strong>"Bridge Cloud Run Backend"</strong> button above to establish the cloud link instantly!
+                </p>
+              </div>
 
-              <button
-                onClick={() => {
-                  const defaultUrl = getSmartDefaultUrl();
-                  setBackendUrl(defaultUrl);
-                  localStorage.setItem("import_export_server_url", defaultUrl);
-                  testBackendConnection(defaultUrl);
-                }}
-                className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-semibold text-xs transition-all shadow-sm"
-              >
-                Reset to Default
-              </button>
-
-              <button
-                onClick={async () => {
-                  const bridgeUrl = getRecommendedBridgeUrl();
-                  setBackendUrl(bridgeUrl);
-                  localStorage.setItem("import_export_server_url", bridgeUrl);
-                  toast.info(`Connecting to: ${bridgeUrl}`);
-                  await testBackendConnection(bridgeUrl);
-                }}
-                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
-                title="Establish cloud bridge directly to the running full-stack container on Google Cloud Run"
-              >
-                <span>🔌 Bridge Cloud Run Backend</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Diagnostics Info */}
-          <div className="bg-white border border-slate-150 rounded-lg p-3.5 text-xs text-slate-600 space-y-3 font-sans leading-relaxed">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">Self-Healing Diagnostics:</span>
-              <span className={`px-2 py-0.5 rounded-full text-4xs uppercase font-bold tracking-wider ${
-                healthStatus === "connected" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                healthStatus === "failed" ? "bg-rose-50 text-rose-700 border border-rose-200" :
-                "bg-amber-50 text-amber-700 border border-amber-200"
-              }`}>
-                {healthStatus || "Checking..."}
-              </span>
-            </div>
-            
-            <div className="bg-amber-50/70 border border-amber-200 text-slate-700 p-3 rounded-lg flex flex-col gap-1.5">
-              <p className="font-semibold text-xs text-amber-900 flex items-center gap-1.5">
-                ☁️ Production Custom Domain Cloud Bridge:
-              </p>
-              <p className="text-3xs text-amber-800 leading-relaxed">
-                When visiting your custom Apex domain (e.g., <code className="font-mono bg-amber-100 px-1 py-0.2 rounded font-bold">www.prospacescrm.com</code>), the application is served as static web pages. Static servers do not run persistent background processes. 
-                To run background schedulers, folder observers, and backups under your production custom domains, we bridge your static frontend directly to your dedicated Node.js full-stack container on Google Cloud Run:
-                <code className="block mt-1 font-mono text-4xs bg-zinc-800 text-zinc-100 p-1.5 rounded select-all text-center">https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app</code>
-                Click the <strong>"Bridge Cloud Run Backend"</strong> button above to establish the cloud link instantly!
+              <p className="text-slate-500">
+                💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend but run the Express server on a separate server machine, POST files are intercepted by proxies with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server middleware and send requests directly to your API service.
               </p>
             </div>
-
-            <p className="text-slate-500">
-              💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend but run the Express server on a separate server machine, POST files are intercepted by proxies with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server middleware and send requests directly to your API service.
-            </p>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Tabs Menu Navigation */}
       <div className="flex gap-2 border-b border-zinc-200">
