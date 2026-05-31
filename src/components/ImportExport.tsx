@@ -1594,9 +1594,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
               <button
                 onClick={async () => {
-                  const bridgeUrl = "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
+                  const bridgeUrl = getRecommendedBridgeUrl();
                   setBackendUrl(bridgeUrl);
                   localStorage.setItem("import_export_server_url", bridgeUrl);
+                  toast.info(`Connecting to: ${bridgeUrl}`);
                   await testBackendConnection(bridgeUrl);
                 }}
                 className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
