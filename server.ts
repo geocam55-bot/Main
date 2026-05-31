@@ -420,19 +420,33 @@ async function startServer() {
     console.error('Diag write failed:', err);
   }
 
-  app.use(cors({
-    origin: (origin, callback) => {
-      // Dynamic origin replication to support Access-Control-Allow-Credentials: true
-      if (!origin) {
-        callback(null, '*');
-      } else {
-        callback(null, origin);
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires']
-  }));
+  // Highly robust custom CORS middleware supporting dynamic origin and header replication
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    
+    // Dynamically replicate any headers requested by preflight OPTIONS to bypass CORS blocks on custom headers
+    const requestHeaders = req.headers['access-control-request-headers'];
+    if (requestHeaders) {
+      res.setHeader('Access-Control-Allow-Headers', requestHeaders);
+    } else {
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires');
+    }
+
+    // Handle OPTIONS requests preflight immediately
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
 

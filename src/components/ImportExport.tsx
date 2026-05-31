@@ -122,8 +122,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const isBackendCapable = 
       origin.includes("run.app") || 
       origin.includes("localhost") || 
-      origin.includes("127.0.0.1") ||
-      origin.includes("3000");
+      origin.includes("127.0.0.1") || 
+      origin.includes("3000") ||
+      origin.includes("google-aistudio-apps.com") ||
+      origin.includes("aistudio") ||
+      origin.includes("web-platform") ||
+      origin.includes("sandbox");
 
     if (!isBackendCapable) {
       return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
@@ -136,8 +140,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const isBackendCapable = 
       origin.includes("run.app") || 
       origin.includes("localhost") || 
-      origin.includes("127.0.0.1") ||
-      origin.includes("3000");
+      origin.includes("127.0.0.1") || 
+      origin.includes("3000") ||
+      origin.includes("google-aistudio-apps.com") ||
+      origin.includes("aistudio") ||
+      origin.includes("web-platform") ||
+      origin.includes("sandbox");
 
     if (isBackendCapable) {
       return origin;
@@ -147,7 +155,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Load custom Express API base URL
   const [backendUrl, setBackendUrl] = useState(() => {
-    return localStorage.getItem("import_export_server_url") || window.location.origin;
+    return localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
   });
   const [healthStatus, setHealthStatus] = useState<"unknown" | "connected" | "failed">("unknown");
   const [checkingHealth, setCheckingHealth] = useState(false);
@@ -499,7 +507,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-   // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
+    // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
   useEffect(() => {
     const healOnMount = async () => {
       const origin = window.location.origin;
@@ -518,16 +526,26 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         console.error("Relative sandbox healthcheck failed:", err);
       }
 
-      // Fallback: test absolute stored backendUrl
+      // Fallback: test absolute stored backendUrl or the smart default backend URL
       try {
-        const currentStored = localStorage.getItem("import_export_server_url") || origin;
-        if (currentStored !== origin) {
-          const res = await fetch(`${currentStored}/api/health?_t=${Date.now()}`);
+        const currentStored = localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
+        if (currentStored && currentStored !== origin) {
+          const fetchOptions: RequestInit = {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+              "Expires": "0"
+            }
+          };
+          const res = await fetch(`${currentStored}/api/health?_t=${Date.now()}`, fetchOptions);
           if (res.ok) {
             const data = await res.json();
             if (data.status === "ok") {
               setHealthStatus("connected");
               setBackendUrl(currentStored);
+              localStorage.setItem("import_export_server_url", currentStored);
               return;
             }
           }
@@ -1548,8 +1566,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         const isBackendCapable = 
           origin.includes("run.app") || 
           origin.includes("localhost") || 
-          origin.includes("127.0.0.1") ||
-          origin.includes("3000");
+          origin.includes("127.0.0.1") || 
+          origin.includes("3000") ||
+          origin.includes("google-aistudio-apps.com") ||
+          origin.includes("aistudio") ||
+          origin.includes("web-platform") ||
+          origin.includes("sandbox");
 
         if (isBackendCapable) {
           return (
