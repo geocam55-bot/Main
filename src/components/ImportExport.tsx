@@ -119,11 +119,36 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // Determine smart fallback backend url depending on runtime host type (Static SPA vs Sandbox Node Container)
   const getSmartDefaultUrl = () => {
     const origin = window.location.origin;
-    const isStaticSite = 
-      origin.includes("vercel.app") || 
-      origin.includes("netlify.app") || 
-      origin.includes("github.io");
-    return isStaticSite ? "http://localhost:3000" : origin;
+    // Determine if the current window origin is a backend-capable environment (is dynamic sandbox or local dev)
+    const isBackendCapable = 
+      origin.includes("run.app") || 
+      origin.includes("localhost") || 
+      origin.includes("127.0.0.1") ||
+      origin.includes("3000");
+
+    // If the frontend is loaded on a static hosting custom domain (like ProSpaces CRM, Vercel, or Netlify),
+    // it cannot host dynamic API endpoints. Default to the dedicated Cloud Run Production container.
+    if (!isBackendCapable) {
+      return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
+    }
+    return origin;
+  };
+
+  // Retrieve the recommended Bridge URL dynamically depending on whether they're in development, preview, or static domains
+  const getRecommendedBridgeUrl = () => {
+    const origin = window.location.origin;
+    const isBackendCapable = 
+      origin.includes("run.app") || 
+      origin.includes("localhost") || 
+      origin.includes("127.0.0.1") ||
+      origin.includes("3000");
+
+    if (isBackendCapable) {
+      // If the current window origin is already a container (like ais-dev or ais-pre), the most appropriate bridge is the origin itself.
+      return origin;
+    }
+    // If they're on a static server (like Vercel or Custom Apex Domain page), bridge directly to the dedicated production container.
+    return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
   };
 
   // Load custom Express API base URL
@@ -435,10 +460,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setCheckingHealth(true);
     try {
       const sanitizedUrl = targetUrl.replace(/\/$/, "");
-      const res = await fetch(`${sanitizedUrl}/api/health`, { 
+      // Add dynamic timestamp query parameter to bust browser, cloud-edge, and service-worker caches completely
+      const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, { 
         method: "GET",
         headers: {
-          "Cache-Control": "no-cache"
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
         }
       });
       const text = await res.text();
@@ -483,9 +511,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       for (const candidate of uniqueCandidates) {
         try {
-          const res = await fetch(`${candidate}/api/health`, { 
+          const res = await fetch(`${candidate}/api/health?_t=${Date.now()}`, { 
             method: "GET",
-            headers: { "Cache-Control": "no-cache" }
+            headers: { 
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+              "Expires": "0" 
+            }
           });
           const text = await res.text();
           let data: any = {};
@@ -515,7 +547,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       if (!backendUrl) return;
       try {
         const sanitizedUrl = backendUrl.replace(/\/$/, "");
-        const res = await fetch(`${sanitizedUrl}/api/health`, { method: "GET" });
+        const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, { 
+          method: "GET",
+          headers: { 
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0" 
+          }
+        });
         const text = await res.text();
         let data: any = {};
         try {
