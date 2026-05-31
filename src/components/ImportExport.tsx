@@ -120,7 +120,6 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const getSmartDefaultUrl = () => {
     const origin = window.location.origin;
     const isStaticSite = 
-      origin.includes("prospacescrm.com") || 
       origin.includes("vercel.app") || 
       origin.includes("netlify.app") || 
       origin.includes("github.io");
@@ -467,50 +466,79 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
+  // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
   useEffect(() => {
-    // Check connection health in background on mount / backendUrl change
-    const checkOnMount = async () => {
-      const defaultUrl = getSmartDefaultUrl();
+    const healOnMount = async () => {
+      const currentStored = localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
+      const candidates = [
+        currentStored,
+        window.location.origin,
+        "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app",
+        "https://ais-dev-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app",
+        "http://localhost:3000"
+      ];
+
+      // De-duplicate, filter empty values and trim trailing slashes
+      const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean).map(c => c.replace(/\/$/, ""))));
+
+      for (const candidate of uniqueCandidates) {
+        try {
+          const res = await fetch(`${candidate}/api/health`, { 
+            method: "GET",
+            headers: { "Cache-Control": "no-cache" }
+          });
+          const text = await res.text();
+          let data: any = {};
+          try {
+            data = JSON.parse(text);
+          } catch {}
+          
+          if (res.ok && data.status === "ok") {
+            setBackendUrl(candidate);
+            localStorage.setItem("import_export_server_url", candidate);
+            setHealthStatus("connected");
+            return;
+          }
+        } catch {
+          // If a candidate is offline, try the next in line
+        }
+      }
+      setHealthStatus("failed");
+    };
+    healOnMount();
+  }, []);
+
+  // 2. Track health of current backendUrl when it changes, without auto-resetting the user's manual keystrokes
+  useEffect(() => {
+    let active = true;
+    const checkCurrentHealth = async () => {
+      if (!backendUrl) return;
       try {
         const sanitizedUrl = backendUrl.replace(/\/$/, "");
         const res = await fetch(`${sanitizedUrl}/api/health`, { method: "GET" });
-        const data = await res.json();
-        if (res.ok && data.status === "ok") {
-          setHealthStatus("connected");
-        } else {
-          // Auto-heal incorrect or stale local backend URLs
-          if (sanitizedUrl !== defaultUrl) {
-            try {
-              const fallbackRes = await fetch(`${defaultUrl}/api/health`, { method: "GET" });
-              const fallbackData = await fallbackRes.json();
-              if (fallbackRes.ok && fallbackData.status === "ok") {
-                setBackendUrl(defaultUrl);
-                localStorage.setItem("import_export_server_url", defaultUrl);
-                setHealthStatus("connected");
-                return;
-              }
-            } catch {}
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {}
+        
+        if (active) {
+          if (res.ok && data.status === "ok") {
+            setHealthStatus("connected");
+          } else {
+            setHealthStatus("failed");
           }
-          setHealthStatus("failed");
         }
       } catch {
-        const sanitizedUrl = backendUrl.replace(/\/$/, "");
-        if (sanitizedUrl !== defaultUrl) {
-          try {
-            const fallbackRes = await fetch(`${defaultUrl}/api/health`, { method: "GET" });
-            const fallbackData = await fallbackRes.json();
-            if (fallbackRes.ok && fallbackData.status === "ok") {
-              setBackendUrl(defaultUrl);
-              localStorage.setItem("import_export_server_url", defaultUrl);
-              setHealthStatus("connected");
-              return;
-            }
-          } catch {}
+        if (active) {
+          setHealthStatus("failed");
         }
-        setHealthStatus("failed");
       }
     };
-    checkOnMount();
+    checkCurrentHealth();
+    return () => {
+      active = false;
+    };
   }, [backendUrl]);
 
   useEffect(() => {
@@ -1524,11 +1552,24 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               >
                 Reset to Default
               </button>
+
+              <button
+                onClick={async () => {
+                  const bridgeUrl = "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
+                  setBackendUrl(bridgeUrl);
+                  localStorage.setItem("import_export_server_url", bridgeUrl);
+                  await testBackendConnection(bridgeUrl);
+                }}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
+                title="Establish cloud bridge directly to the running full-stack container on Google Cloud Run"
+              >
+                <span>🔌 Bridge Cloud Run Backend</span>
+              </button>
             </div>
           </div>
 
           {/* Quick Diagnostics Info */}
-          <div className="bg-white border border-slate-150 rounded-lg p-3.5 text-xs text-slate-600 space-y-1.5 font-sans leading-relaxed">
+          <div className="bg-white border border-slate-150 rounded-lg p-3.5 text-xs text-slate-600 space-y-3 font-sans leading-relaxed">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-slate-700">Self-Healing Diagnostics:</span>
               <span className={`px-2 py-0.5 rounded-full text-4xs uppercase font-bold tracking-wider ${
@@ -1539,11 +1580,21 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 {healthStatus || "Checking..."}
               </span>
             </div>
-            <p>
-              By default, the client requests standard relative pathname endpoints starting with <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-800 text-3xs">/api/import-export/...</code>.
-            </p>
+            
+            <div className="bg-amber-50/70 border border-amber-200 text-slate-700 p-3 rounded-lg flex flex-col gap-1.5">
+              <p className="font-semibold text-xs text-amber-900 flex items-center gap-1.5">
+                ☁️ Production Custom Domain Cloud Bridge:
+              </p>
+              <p className="text-3xs text-amber-800 leading-relaxed">
+                When visiting your custom Apex domain (e.g., <code className="font-mono bg-amber-100 px-1 py-0.2 rounded font-bold">www.prospacescrm.com</code>), the application is served as static web pages. Static servers do not run persistent background processes. 
+                To run background schedulers, folder observers, and backups under your production custom domains, we bridge your static frontend directly to your dedicated Node.js full-stack container on Google Cloud Run:
+                <code className="block mt-1 font-mono text-4xs bg-zinc-800 text-zinc-100 p-1.5 rounded select-all text-center">https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app</code>
+                Click the <strong>"Bridge Cloud Run Backend"</strong> button above to establish the cloud link instantly!
+              </p>
+            </div>
+
             <p className="text-slate-500">
-              💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend (e.g. on Netlify or Vercel) but run the Express server on a separate server machine or port, POST file-system operations are intercepted by Netlify/Vercel with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server firewall!
+              💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend but run the Express server on a separate server machine, POST files are intercepted by proxies with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server middleware and send requests directly to your API service.
             </p>
           </div>
         </div>
