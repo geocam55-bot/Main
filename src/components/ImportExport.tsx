@@ -465,15 +465,21 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       if (sanitizedUrl === window.location.origin) {
         sanitizedUrl = "";
       }
-      // Add dynamic timestamp query parameter to bust browser, cloud-edge, and service-worker caches completely
-      const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, { 
+      // Configure cross-origin credentials to enable sandbox iframe cookie flow
+      const isCrossOrigin = sanitizedUrl && sanitizedUrl.startsWith("http") && !sanitizedUrl.startsWith(window.location.origin);
+      const fetchOptions: RequestInit = { 
         method: "GET",
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           "Pragma": "no-cache",
           "Expires": "0"
         }
-      });
+      };
+      if (isCrossOrigin) {
+        fetchOptions.credentials = "include";
+      }
+      // Add dynamic timestamp query parameter to bust browser, cloud-edge, and service-worker caches completely
+      const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, fetchOptions);
       const text = await res.text();
       let data: any = {};
       try {
@@ -518,14 +524,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         try {
           // If the candidate matches the current origin, request relatively to bypass sandbox iframe blocks
           const targetUrl = candidate === window.location.origin ? "" : candidate;
-          const res = await fetch(`${targetUrl}/api/health?_t=${Date.now()}`, { 
+          const isCrossOrigin = targetUrl && targetUrl.startsWith("http") && !targetUrl.startsWith(window.location.origin);
+          const fetchOptions: RequestInit = { 
             method: "GET",
             headers: { 
               "Cache-Control": "no-cache, no-store, must-revalidate",
               "Pragma": "no-cache",
               "Expires": "0" 
             }
-          });
+          };
+          if (isCrossOrigin) {
+            fetchOptions.credentials = "include";
+          }
+          const res = await fetch(`${targetUrl}/api/health?_t=${Date.now()}`, fetchOptions);
           const text = await res.text();
           let data: any = {};
           try {
@@ -557,14 +568,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         if (sanitizedUrl === window.location.origin) {
           sanitizedUrl = "";
         }
-        const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, { 
+        const isCrossOrigin = sanitizedUrl && sanitizedUrl.startsWith("http") && !sanitizedUrl.startsWith(window.location.origin);
+        const fetchOptions: RequestInit = { 
           method: "GET",
           headers: { 
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
             "Expires": "0" 
           }
-        });
+        };
+        if (isCrossOrigin) {
+          fetchOptions.credentials = "include";
+        }
+        const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, fetchOptions);
         const text = await res.text();
         let data: any = {};
         try {
@@ -695,6 +711,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       ...options
     };
 
+    // Configure cross-origin credentials to support iframe and custom domain session handshakes
+    const isCrossOrigin = resolvedUrl && resolvedUrl.startsWith("http") && !resolvedUrl.startsWith(window.location.origin);
+    if (isCrossOrigin) {
+      extendedOptions.credentials = "include";
+    }
+
     if (isGet) {
       extendedOptions.headers = {
         ...(options?.headers || {}),
@@ -751,6 +773,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           const fallbackController = new AbortController();
           const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), timeoutMs);
           const fallbackOptions = { ...extendedOptions, signal: fallbackController.signal };
+          
+          const isFallbackCrossOrigin = fallbackResolvedUrl && fallbackResolvedUrl.startsWith("http") && !fallbackResolvedUrl.startsWith(window.location.origin);
+          if (isFallbackCrossOrigin) {
+            fallbackOptions.credentials = "include";
+          }
           
           const res = await fetch(fallbackCacheBuster, fallbackOptions);
           clearTimeout(fallbackTimeoutId);

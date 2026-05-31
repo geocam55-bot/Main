@@ -420,7 +420,19 @@ async function startServer() {
     console.error('Diag write failed:', err);
   }
 
-  app.use(cors());
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Dynamic origin replication to support Access-Control-Allow-Credentials: true
+      if (!origin) {
+        callback(null, '*');
+      } else {
+        callback(null, origin);
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires']
+  }));
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
