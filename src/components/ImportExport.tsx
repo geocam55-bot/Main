@@ -459,7 +459,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const testBackendConnection = async (targetUrl = backendUrl) => {
     setCheckingHealth(true);
     try {
-      const sanitizedUrl = targetUrl.replace(/\/$/, "");
+      let sanitizedUrl = targetUrl.trim().replace(/\/$/, "");
+      // If the target URL matches the current window location's origin, use a relative path.
+      // This is highly robust since relative fetches bypass iframe sandbox constraints, ad blockers, and CORS preflight triggers.
+      if (sanitizedUrl === window.location.origin) {
+        sanitizedUrl = "";
+      }
       // Add dynamic timestamp query parameter to bust browser, cloud-edge, and service-worker caches completely
       const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, { 
         method: "GET",
@@ -507,11 +512,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       ];
 
       // De-duplicate, filter empty values and trim trailing slashes
-      const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean).map(c => c.replace(/\/$/, ""))));
+      const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean).map(c => c.trim().replace(/\/$/, ""))));
 
       for (const candidate of uniqueCandidates) {
         try {
-          const res = await fetch(`${candidate}/api/health?_t=${Date.now()}`, { 
+          // If the candidate matches the current origin, request relatively to bypass sandbox iframe blocks
+          const targetUrl = candidate === window.location.origin ? "" : candidate;
+          const res = await fetch(`${targetUrl}/api/health?_t=${Date.now()}`, { 
             method: "GET",
             headers: { 
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -546,7 +553,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const checkCurrentHealth = async () => {
       if (!backendUrl) return;
       try {
-        const sanitizedUrl = backendUrl.replace(/\/$/, "");
+        let sanitizedUrl = backendUrl.trim().replace(/\/$/, "");
+        if (sanitizedUrl === window.location.origin) {
+          sanitizedUrl = "";
+        }
         const res = await fetch(`${sanitizedUrl}/api/health?_t=${Date.now()}`, { 
           method: "GET",
           headers: { 
@@ -674,7 +684,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const isGet = !options?.method || options.method.toUpperCase() === "GET";
     
     // Resolve absolute URL basing on backendUrl settings
-    const base = backendUrl.replace(/\/$/, "");
+    let base = backendUrl.trim().replace(/\/$/, "");
+    if (base === window.location.origin) {
+      base = "";
+    }
     const resolvedUrl = url.startsWith("http") ? url : `${base}${url}`;
     const cacheBusterUrl = isGet ? `${resolvedUrl}${resolvedUrl.includes("?") ? "&" : "?"}_t=${Date.now()}` : resolvedUrl;
 
