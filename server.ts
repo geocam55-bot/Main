@@ -190,7 +190,10 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
     };
 
     if (recurrence === 'daily') {
-      const interval = Number(triggerDetail.intervalDays) || 1;
+      let interval = Number(triggerDetail.intervalDays) || 1;
+      if (isNaN(interval) || interval <= 0) {
+        interval = 1;
+      }
       while (nextDate <= baseDate) {
         nextDate = addDays(nextDate, interval);
       }

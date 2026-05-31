@@ -966,7 +966,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  const syncOneDriveCloudFileToBackend = async (fileId: string, fileName: string) => {
+  const syncOneDriveCloudFileToBackend = async (fileId: string, fileName: string, isBackground = false) => {
     setSyncingFileId(fileId);
     const syncToastId = toast.loading(`Synchronizing "${fileName}" from OneDrive Cloud to server storage...`);
     try {
@@ -1024,8 +1024,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       toast.success(`Successfully synchronized "${fileName}" to server's OneDrive folder!`, { id: syncToastId });
     } catch (e: any) {
       console.error("Cloud sync error:", e);
-      toast.error(`Cloud sync failed: ${e.message}`, { id: syncToastId });
-      throw e; // rethrow so calling procedures are aware of failure
+      if (isBackground) {
+        toast.warning(`Note: Background cloud sync preview reported an issue (${e.message || e}). This is non-blocking — you can still fully save and schedule your task.`, { id: syncToastId, duration: 6000 });
+      } else {
+        toast.error(`Cloud sync failed: ${e.message}`, { id: syncToastId });
+        throw e; // rethrow so calling procedures are aware of failure
+      }
     } finally {
       setSyncingFileId(null);
     }
@@ -2911,10 +2915,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           
           if (currentDrive === "onedrive" && msAccounts.length > 0 && file.id) {
             try {
-              await syncOneDriveCloudFileToBackend(file.id, file.name);
+              await syncOneDriveCloudFileToBackend(file.id, file.name, true);
             } catch (err: any) {
-              toast.error(`Auto-synchronization of cloud file failed: ${err.message || err}. Please try manual replication.`);
-              return;
+              toast.warning(`Note: Auto-synchronization of cloud file failed (${err.message || err}). Proceeding with local configuration workspace configuration.`);
             }
           }
 
@@ -3281,7 +3284,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                      toast.success(`Selected file "${e.target.value}"`);
                                      // Auto sync from cloud to backend if it's OneDrive
                                      if (actionStorage === "onedrive" && msAccounts.length > 0 && selectedFile?.id) {
-                                       syncOneDriveCloudFileToBackend(selectedFile.id, selectedFile.name).catch(() => {});
+                                       syncOneDriveCloudFileToBackend(selectedFile.id, selectedFile.name, true).catch(() => {});
                                      }
                                    }
                                  }}
