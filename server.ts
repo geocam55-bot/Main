@@ -789,7 +789,7 @@ self.addEventListener('activate', (event) => {
     });
   });
 
-  const distPath = path.join(process.cwd(), 'build');
+  const distPath = path.join(process.cwd(), 'dist');
   const isProduction = process.env.NODE_ENV === "production" && fs.existsSync(distPath);
 
 
