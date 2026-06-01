@@ -1705,10 +1705,43 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 <p className="text-3xs text-amber-800 leading-relaxed">
                   When visiting your custom Apex domain (e.g., <code className="font-mono bg-amber-100 px-1 py-0.2 rounded font-bold">www.prospacescrm.com</code>), the application is served as static web pages. Static servers do not run persistent background processes. 
                   To run background schedulers, folder observers, and backups under your production custom domains, we bridge your static frontend directly to your dedicated Node.js full-stack container on Google Cloud Run:
-                  <code className="block mt-1 font-mono text-4xs bg-zinc-800 text-zinc-100 p-1.5 rounded select-all text-center">https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app</code>
+                  <code className="block mt-1 font-mono text-4xs bg-zinc-800 text-zinc-100 p-1.5 rounded select-all text-center">{getSmartDefaultUrl()}</code>
                   Click the <strong>"Bridge Cloud Run Backend"</strong> button above to establish the cloud link instantly!
                 </p>
               </div>
+
+              {healthStatus === "failed" && (
+                <div className="bg-rose-50/95 border border-rose-200 text-rose-950 p-4 rounded-lg flex flex-col gap-2.5">
+                  <p className="font-semibold text-xs text-rose-800 flex items-center gap-1.5">
+                    ⚠️ Connection Block Details (Modern Browser Block Info)
+                  </p>
+                  <div className="text-3xs text-rose-800 leading-relaxed space-y-1.5">
+                    <p>
+                      Google AI Studio workspaces are highly secure and require platform verification cookies (<code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">__Host-</code> / <code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">ais-applet-session</code>) to authorize access to your Express background core container.
+                    </p>
+                    <p>
+                      Because you are loading the CRM via your custom apex domain (<code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">{window.location.origin}</code>), modern browsers <strong>automatically block third-party cookies</strong> from being sent to <code className="font-mono bg-rose-100 px-0.5 py-0.1 rounded font-normal">*.run.app</code>. This triggers a CORS network fetch exception!
+                    </p>
+                    <p className="font-semibold pt-1 text-slate-800 text-3xs">
+                      ✅ Recommended Immediate Solution:
+                    </p>
+                    <p>
+                      Instead of bridging cross-origin, load the app directly from its native Cloud Run URL. It serves the identical full-stack application and establishes a <strong>same-origin connection</strong> with the scheduling node natively—no cookie blocks, no CORS filters:
+                    </p>
+                    <a 
+                      href={getSmartDefaultUrl()} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 w-full mt-1.5 bg-rose-600 hover:bg-rose-750 text-white font-bold py-2 px-3 rounded-md shadow-sm transition-colors text-center text-3xs"
+                    >
+                      🛰️ Open Full same-origin app on Cloud Run (Full Capabilities Active)
+                    </a>
+                    <p className="text-[10px] text-slate-500 pt-0.5">
+                      Or alternatively: Go to your browser Settings, check "Privacy & Security", and add an exception to allow third-party cookies for <code className="font-mono bg-rose-100/50 px-1 py-0.1 rounded font-normal">*.run.app</code>.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <p className="text-slate-500">
                 💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend but run the Express server on a separate server machine, POST files are intercepted by proxies with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server middleware and send requests directly to your API service.
