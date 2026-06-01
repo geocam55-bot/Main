@@ -26,7 +26,7 @@
     },
     build: {
       target: 'esnext',
-      outDir: 'dist',
+      outDir: 'build',
       modulePreload: false,
       rollupOptions: {
         input: {

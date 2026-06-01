@@ -789,8 +789,19 @@ self.addEventListener('activate', (event) => {
     });
   });
 
-  const distPath = path.join(process.cwd(), 'dist');
-  const isProduction = process.env.NODE_ENV === "production" && fs.existsSync(distPath);
+  const locations = [
+    path.join(process.cwd(), 'build'),
+    path.join(process.cwd(), 'dist')
+  ];
+  let distPath = locations[0];
+  for (const loc of locations) {
+    if (fs.existsSync(loc)) {
+      distPath = loc;
+      break;
+    }
+  }
+
+  const isProduction = process.env.NODE_ENV === "production";
 
 
   if (!isProduction) {
