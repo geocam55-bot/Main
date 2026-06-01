@@ -525,6 +525,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const testBackendConnection = async (targetUrl = backendUrl) => {
     setCheckingHealth(true);
     try {
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const { error } = await supabase.from('kv_store_8405be07').select('key').limit(1);
+        if (error) throw error;
+        setHealthStatus("connected");
+        toast.success("Successfully connected to Supabase CRM Database cluster!");
+        return;
+      }
+
       let sanitizedUrl = targetUrl.trim().replace(/\/$/, "");
       // If the target URL matches the current window location's origin, use a relative path.
       // This is highly robust since relative fetches bypass iframe sandbox constraints, ad blockers, and CORS preflight triggers.
@@ -569,9 +578,24 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-    // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
+  // 1. Check health and perform multi-origin candidacy auto-healing ONCE on mount
   useEffect(() => {
     const healOnMount = async () => {
+      if (connectionMode === "supabase") {
+        try {
+          const supabase = createClient();
+          const { error } = await supabase.from('kv_store_8405be07').select('key').limit(1);
+          if (!error) {
+            setHealthStatus("connected");
+            return;
+          }
+        } catch (e) {
+          console.error("Supabase direct auth check failed:", e);
+        }
+        setHealthStatus("failed");
+        return;
+      }
+
       const origin = window.location.origin;
       try {
         const res = await fetch(`/api/health?_t=${Date.now()}`);
@@ -619,12 +643,29 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       setHealthStatus("failed");
     };
     healOnMount();
-  }, []);
+  }, [connectionMode]);
 
   // 2. Track health of current backendUrl when it changes, without auto-resetting the user's manual keystrokes
   useEffect(() => {
     let active = true;
     const checkCurrentHealth = async () => {
+      if (connectionMode === "supabase") {
+        try {
+          const supabase = createClient();
+          const { error } = await supabase.from('kv_store_8405be07').select('key').limit(1);
+          if (active) {
+            if (!error) {
+              setHealthStatus("connected");
+            } else {
+              setHealthStatus("failed");
+            }
+          }
+        } catch {
+          if (active) setHealthStatus("failed");
+        }
+        return;
+      }
+
       if (!backendUrl) return;
       try {
         let sanitizedUrl = backendUrl.trim().replace(/\/$/, "");
@@ -667,7 +708,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     return () => {
       active = false;
     };
-  }, [backendUrl]);
+  }, [backendUrl, connectionMode]);
 
   useEffect(() => {
     fetchCrmRecords(previewModule);
@@ -2149,194 +2190,268 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           origin.includes("web-platform") ||
           origin.includes("sandbox");
 
-        if (isBackendCapable) {
-          return (
-            <div className="bg-emerald-50/40 border border-emerald-100 rounded-lg p-5 space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-emerald-950 font-sans flex items-center gap-2">
-                    <span>🔒 AI Studio Sandbox Mode</span>
-                    <span className="text-[10px] bg-emerald-100 px-2 py-0.5 rounded-full font-bold text-emerald-800 border border-emerald-250">Active & Connected</span>
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-                    CRM automated background jobs, OneDrive synchronization, and directory backups route relatively. This bypasses all cross-domain sandbox controls or CORS headers.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowBackendConfig(false)}
-                  className="text-slate-400 hover:text-slate-600 transition-all text-xs font-semibold px-2 py-0.5 border rounded hover:bg-slate-100 bg-white"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1.5 border-t border-emerald-200/50">
-                <div className="text-3xs text-emerald-850 font-mono flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Sandbox Route: <code className="bg-emerald-100/60 px-1 py-0.5 rounded font-bold font-mono">/api/*</code></span>
-                </div>
-                
-                <button
-                  onClick={() => {
-                    testBackendConnection(window.location.origin);
-                  }}
-                  disabled={checkingHealth}
-                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-md font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  {checkingHealth ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-3 h-3" />
-                  )}
-                  Re-Verify Connection
-                </button>
-              </div>
-            </div>
-          );
-        }
-
         return (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-slate-800 font-sans">Unattended Express API Server Settings</h3>
+                <h3 className="text-sm font-semibold text-slate-800 font-sans">Active Connection & Scheduler Settings</h3>
                 <p className="text-xs text-slate-500">
-                  Configure the target endpoint for the Express backend scheduler, file-system explorer, and backups.
+                  Configure the primary connection mode for the CRM scheduler, database records, and transaction logs.
                 </p>
               </div>
               <button
                 onClick={() => setShowBackendConfig(false)}
-                className="text-slate-400 hover:text-slate-600 text-xs font-semibold px-2 py-0.5 border rounded hover:bg-slate-100"
+                className="text-slate-400 hover:text-slate-600 text-xs font-semibold px-2 py-0.5 border rounded hover:bg-slate-100 bg-white cursor-pointer transition"
               >
                 Close
               </button>
             </div>
 
-            <div className="flex flex-col md:flex-row items-end gap-3">
-              <div className="flex-1 space-y-1.5">
-                <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Backend Server URL Address</label>
-                <div className="relative shadow-xs rounded-lg">
-                  <input
-                    type="text"
-                    placeholder="e.g. http://localhost:3000"
-                    value={backendUrl}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setBackendUrl(val);
-                      setHealthStatus("unknown");
-                    }}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono text-slate-700 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2">
+            {/* Connection Mode Toggle Selector */}
+            <div className="bg-white border border-slate-150 rounded-lg p-3.5 space-y-2">
+              <span className="block text-4xs uppercase text-slate-450 font-bold font-mono tracking-wider">Database & Scheduler Connection Mode</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <button
+                  type="button"
                   onClick={() => {
-                    localStorage.setItem("import_export_server_url", backendUrl);
-                    testBackendConnection(backendUrl);
+                    setConnectionMode("supabase");
+                    localStorage.setItem("import_export_connection_mode", "supabase");
+                    testBackendConnection();
+                    toast.success("Successfully set connection to Supabase direct tables!");
                   }}
-                  disabled={checkingHealth}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
+                  className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between min-h-20 cursor-pointer ${
+                    connectionMode === "supabase"
+                      ? "border-emerald-500 bg-emerald-50/50 text-emerald-950 shadow-xs"
+                      : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+                  }`}
                 >
-                  {checkingHealth ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-3.5 h-3.5" />
-                  )}
-                  Save & Test Connection
-                </button>
-
-                <button
-                  onClick={() => {
-                    const defaultUrl = getSmartDefaultUrl();
-                    setBackendUrl(defaultUrl);
-                    localStorage.setItem("import_export_server_url", defaultUrl);
-                    testBackendConnection(defaultUrl);
-                  }}
-                  className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-semibold text-xs transition-all shadow-sm"
-                >
-                  Reset to Default
-                </button>
-
-                <button
-                  onClick={async () => {
-                    const bridgeUrl = getRecommendedBridgeUrl();
-                    setBackendUrl(bridgeUrl);
-                    localStorage.setItem("import_export_server_url", bridgeUrl);
-                    toast.info(`Connecting to: ${bridgeUrl}`);
-                    await testBackendConnection(bridgeUrl);
-                  }}
-                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
-                  title="Establish cloud bridge directly to the running full-stack container on Google Cloud Run"
-                >
-                  <span>🔌 Bridge Cloud Run Backend</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Diagnostics Info */}
-            <div className="bg-white border border-slate-150 rounded-lg p-3.5 text-xs text-slate-600 space-y-3 font-sans leading-relaxed">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-700">Self-Healing Diagnostics:</span>
-                <span className={`px-2 py-0.5 rounded-full text-4xs uppercase font-bold tracking-wider ${
-                  healthStatus === "connected" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                  healthStatus === "failed" ? "bg-rose-50 text-rose-700 border border-rose-200" :
-                  "bg-amber-50 text-amber-700 border border-amber-200"
-                }`}>
-                  {healthStatus || "Checking..."}
-                </span>
-              </div>
-              
-              <div className="bg-amber-50/70 border border-amber-200 text-slate-700 p-3 rounded-lg flex flex-col gap-1.5">
-                <p className="font-semibold text-xs text-amber-900 flex items-center gap-1.5">
-                  ☁️ Production Custom Domain Cloud Bridge:
-                </p>
-                <p className="text-3xs text-amber-800 leading-relaxed">
-                  When visiting your custom Apex domain (e.g., <code className="font-mono bg-amber-100 px-1 py-0.2 rounded font-bold">www.prospacescrm.com</code>), the application is served as static web pages. Static servers do not run persistent background processes. 
-                  To run background schedulers, folder observers, and backups under your production custom domains, we bridge your static frontend directly to your dedicated Node.js full-stack container on Google Cloud Run:
-                  <code className="block mt-1 font-mono text-4xs bg-zinc-800 text-zinc-100 p-1.5 rounded select-all text-center">{getSmartDefaultUrl()}</code>
-                  Click the <strong>"Bridge Cloud Run Backend"</strong> button above to establish the cloud link instantly!
-                </p>
-              </div>
-
-              {healthStatus === "failed" && (
-                <div className="bg-rose-50/95 border border-rose-200 text-rose-950 p-4 rounded-lg flex flex-col gap-2.5">
-                  <p className="font-semibold text-xs text-rose-800 flex items-center gap-1.5">
-                    ⚠️ Connection Block Details (Modern Browser Block Info)
-                  </p>
-                  <div className="text-3xs text-rose-800 leading-relaxed space-y-1.5">
-                    <p>
-                      Google AI Studio workspaces are highly secure and require platform verification cookies (<code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">__Host-</code> / <code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">ais-applet-session</code>) to authorize access to your Express background core container.
-                    </p>
-                    <p>
-                      Because you are loading the CRM via your custom apex domain (<code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">{window.location.origin}</code>), modern browsers <strong>automatically block third-party cookies</strong> from being sent to <code className="font-mono bg-rose-100 px-0.5 py-0.1 rounded font-normal">*.run.app</code>. This triggers a CORS network fetch exception!
-                    </p>
-                    <p className="font-semibold pt-1 text-slate-800 text-3xs">
-                      ✅ Recommended Immediate Solution:
-                    </p>
-                    <p>
-                      Instead of bridging cross-origin, load the app directly from its native Cloud Run URL. It serves the identical full-stack application and establishes a <strong>same-origin connection</strong> with the scheduling node natively—no cookie blocks, no CORS filters:
-                    </p>
-                    <a 
-                      href={getSmartDefaultUrl()} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1.5 w-full mt-1.5 bg-rose-600 hover:bg-rose-750 text-white font-bold py-2 px-3 rounded-md shadow-sm transition-colors text-center text-3xs"
-                    >
-                      🛰️ Open Full same-origin app on Cloud Run (Full Capabilities Active)
-                    </a>
-                    <p className="text-[10px] text-slate-500 pt-0.5">
-                      Or alternatively: Go to your browser Settings, check "Privacy & Security", and add an exception to allow third-party cookies for <code className="font-mono bg-rose-100/50 px-1 py-0.1 rounded font-normal">*.run.app</code>.
-                    </p>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${connectionMode === "supabase" ? "bg-emerald-500 animate-pulse" : "bg-slate-350"}`} />
+                    <span className="font-semibold text-xs text-slate-800">Supabase CRM cluster (Superbase Direct)</span>
                   </div>
-                </div>
-              )}
+                  <span className="text-3xs text-slate-500 leading-normal mt-1">
+                    Connect and save virtual files and database queries directly in Supabase. Bypasses secondary compute nodes. (Recommended & Robust)
+                  </span>
+                </button>
 
-              <p className="text-slate-500">
-                💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend but run the Express server on a separate server machine, POST files are intercepted by proxies with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server middleware and send requests directly to your API service.
-              </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConnectionMode("express");
+                    localStorage.setItem("import_export_connection_mode", "express");
+                    testBackendConnection();
+                    toast.success("Connection mode switched to Express API Backend!");
+                  }}
+                  className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between min-h-20 cursor-pointer ${
+                    connectionMode === "express"
+                      ? "border-blue-500 bg-blue-50/50 text-blue-950 shadow-xs"
+                      : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${connectionMode === "express" ? "bg-blue-500 animate-pulse" : "bg-slate-350"}`} />
+                    <span className="font-semibold text-xs text-slate-800">Express Node container</span>
+                  </div>
+                  <span className="text-3xs text-slate-500 leading-normal mt-1">
+                    Route pipeline jobs, file-system directories, and backups via dedicated micro-services framework on your hosting node.
+                  </span>
+                </button>
+              </div>
             </div>
+
+            {connectionMode === "supabase" ? (
+              <div className="bg-emerald-50/40 border border-emerald-100 rounded-lg p-4 space-y-2">
+                <h4 className="text-xs font-semibold text-emerald-900 flex items-center gap-1.5">
+                  <span className="inline-block w-2h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Supabase Direct Tables — Active</span>
+                </h4>
+                <p className="text-3xs text-slate-600 leading-normal">
+                  All synchronization processes, file transfers, logs, and schedule registrations bypass Node container ports entirely. You are communicating from the browser client direct to the CRM backend database. No API keys are exposed to third-party endpoints.
+                </p>
+                <div className="flex justify-end pt-1">
+                  <button
+                    onClick={() => testBackendConnection()}
+                    disabled={checkingHealth}
+                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-md font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {checkingHealth ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-3.5 h-3.5" />
+                    )}
+                    Verify Supabase Database Connection
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {isBackendCapable ? (
+                  <div className="bg-emerald-50/40 border border-emerald-100 rounded-lg p-5 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-emerald-950 font-sans flex items-center gap-2">
+                          <span>🔒 AI Studio Sandbox Mode</span>
+                          <span className="text-[10px] bg-emerald-100 px-2 py-0.5 rounded-full font-bold text-emerald-800 border border-emerald-250">Active & Connected</span>
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                          CRM automated background jobs, OneDrive synchronization, and directory backups route relatively. This bypasses all cross-domain sandbox controls or CORS headers.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1.5 border-t border-emerald-200/50">
+                      <div className="text-3xs text-emerald-850 font-mono flex items-center gap-1.5">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Sandbox Route: <code className="bg-emerald-100/60 px-1 py-0.5 rounded font-bold font-mono">/api/*</code></span>
+                      </div>
+                      
+                      <button
+                        onClick={() => {
+                          testBackendConnection(window.location.origin);
+                        }}
+                        disabled={checkingHealth}
+                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-md font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {checkingHealth ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                        Re-Verify Connection
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex flex-col md:flex-row items-end gap-3">
+                      <div className="flex-1 space-y-1.5">
+                        <label className="block text-4xs uppercase text-slate-450 font-bold font-mono">Backend Server URL Address</label>
+                        <div className="relative shadow-xs rounded-lg">
+                          <input
+                            type="text"
+                            placeholder="e.g. http://localhost:3000"
+                            value={backendUrl}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setBackendUrl(val);
+                              setHealthStatus("unknown");
+                            }}
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono text-slate-700 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            localStorage.setItem("import_export_server_url", backendUrl);
+                            testBackendConnection(backendUrl);
+                          }}
+                          disabled={checkingHealth}
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        >
+                          {checkingHealth ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-3.5 h-3.5" />
+                          )}
+                          Save & Test Connection
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            const defaultUrl = getSmartDefaultUrl();
+                            setBackendUrl(defaultUrl);
+                            localStorage.setItem("import_export_server_url", defaultUrl);
+                            testBackendConnection(defaultUrl);
+                          }}
+                          className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-semibold text-xs transition-all shadow-sm cursor-pointer"
+                        >
+                          Reset to Default
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            const bridgeUrl = getRecommendedBridgeUrl();
+                            setBackendUrl(bridgeUrl);
+                            localStorage.setItem("import_export_server_url", bridgeUrl);
+                            toast.info(`Connecting to: ${bridgeUrl}`);
+                            await testBackendConnection(bridgeUrl);
+                          }}
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                          title="Establish cloud bridge directly to the running full-stack container on Google Cloud Run"
+                        >
+                          <span>🔌 Bridge Cloud Run Backend</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Diagnostics Info */}
+                    <div className="bg-white border border-slate-150 rounded-lg p-3.5 text-xs text-slate-600 space-y-3 font-sans leading-relaxed">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-700">Self-Healing Diagnostics:</span>
+                        <span className={`px-2 py-0.5 rounded-full text-4xs uppercase font-bold tracking-wider ${
+                          healthStatus === "connected" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                          healthStatus === "failed" ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                          "bg-amber-50 text-amber-700 border border-amber-200"
+                        }`}>
+                          {healthStatus || "Checking..."}
+                        </span>
+                      </div>
+                      
+                      <div className="bg-amber-50/70 border border-amber-200 text-slate-700 p-3 rounded-lg flex flex-col gap-1.5">
+                        <p className="font-semibold text-xs text-amber-900 flex items-center gap-1.5">
+                          ☁️ Production Custom Domain Cloud Bridge:
+                        </p>
+                        <p className="text-3xs text-amber-800 leading-relaxed">
+                          When visiting your custom Apex domain (e.g., <code className="font-mono bg-amber-100 px-1 py-0.2 rounded font-bold">www.prospacescrm.com</code>), the application is served as static web pages. Static servers do not run persistent background processes. 
+                          To run background schedulers, folder observers, and backups under your production custom domains, we bridge your static frontend directly to your dedicated Node.js full-stack container on Google Cloud Run:
+                          <code className="block mt-1 font-mono text-4xs bg-zinc-800 text-zinc-100 p-1.5 rounded select-all text-center">{getSmartDefaultUrl()}</code>
+                          Click the <strong>"Bridge Cloud Run Backend"</strong> button above to establish the cloud link instantly!
+                        </p>
+                      </div>
+
+                      {healthStatus === "failed" && (
+                        <div className="bg-rose-50/95 border border-rose-200 text-rose-950 p-4 rounded-lg flex flex-col gap-2.5">
+                          <p className="font-semibold text-xs text-rose-800 flex items-center gap-1.5">
+                            ⚠️ Connection Block Details (Modern Browser Block Info)
+                          </p>
+                          <div className="text-3xs text-rose-800 leading-relaxed space-y-1.5">
+                            <p>
+                              Google AI Studio workspaces are highly secure and require platform verification cookies (<code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">__Host-</code> / <code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">ais-applet-session</code>) to authorize access to your Express background core container.
+                            </p>
+                            <p>
+                              Because you are loading the CRM via your custom apex domain (<code className="font-mono bg-rose-100 px-1 py-0.2 rounded font-bold">{window.location.origin}</code>), modern browsers <strong>automatically block third-party cookies</strong> from being sent to <code className="font-mono bg-rose-100 px-0.5 py-0.1 rounded font-normal">*.run.app</code>. This triggers a CORS network fetch exception!
+                            </p>
+                            <p className="font-semibold pt-1 text-slate-800 text-3xs">
+                              ✅ Recommended Immediate Solution:
+                            </p>
+                            <p>
+                              Instead of bridging cross-origin, load the app directly from its native Cloud Run URL. It serves the identical full-stack application and establishes a <strong>same-origin connection</strong> with the scheduling node natively—no cookie blocks, no CORS filters:
+                            </p>
+                            <a 
+                              href={getSmartDefaultUrl()} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 w-full mt-1.5 bg-rose-600 hover:bg-rose-750 text-white font-bold py-2 px-3 rounded-md shadow-sm transition-colors text-center text-3xs"
+                            >
+                              🛰️ Open Full same-origin app on Cloud Run (Full Capabilities Active)
+                            </a>
+                            <p className="text-[10px] text-slate-500 pt-0.5">
+                              Or alternatively: Go to your browser Settings, check "Privacy & Security", and add an exception to allow third-party cookies for <code className="font-mono bg-rose-100/50 px-1 py-0.1 rounded font-normal">*.run.app</code>.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-slate-500 text-3xs pt-1.5">
+                        💡 <span className="font-semibold text-slate-650">Note for custom rollouts:</span> If you run the React static frontend but run the Express server on a separate server machine, POST files are intercepted by proxies with error <code className="text-rose-600 font-mono">405 Method Not Allowed</code>. Input your customized Express host URL above to directly bypass the static server middleware and send requests directly to your API service.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         );
       })()}
