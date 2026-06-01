@@ -425,12 +425,11 @@ async function startServer() {
 
   // Use standard cors middleware for robust multi-origin preflight handling, supporting dynamic origins with credentials
   app.use(cors({
-    origin: (origin, callback) => {
-      // Automatically reflect requesting origin to allow credentials-mode CORS from any origin (e.g. www.prospacescrm.com)
-      callback(null, true);
-    },
+    origin: true,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires', 'X-Requested-With', 'Accept'],
+    optionsSuccessStatus: 200
   }));
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));

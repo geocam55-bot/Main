@@ -136,21 +136,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   };
 
   const getRecommendedBridgeUrl = () => {
-    const origin = window.location.origin;
-    const isBackendCapable = 
-      origin.includes("run.app") || 
-      origin.includes("localhost") || 
-      origin.includes("127.0.0.1") || 
-      origin.includes("3000") ||
-      origin.includes("google-aistudio-apps.com") ||
-      origin.includes("aistudio") ||
-      origin.includes("web-platform") ||
-      origin.includes("sandbox");
-
-    if (isBackendCapable) {
-      return origin;
-    }
-    return localStorage.getItem("import_export_server_url") || origin;
+    return getSmartDefaultUrl();
   };
 
   // Load custom Express API base URL
@@ -475,9 +461,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       if (isCrossOrigin) {
         fetchOptions.credentials = "include";
         fetchOptions.headers = {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0"
+          "Cache-Control": "no-cache"
         };
       }
       // Add dynamic timestamp query parameter to bust browser, cloud-edge, and service-worker caches completely
@@ -721,9 +705,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (isGet) {
       extendedOptions.headers = {
         ...(options?.headers || {}),
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0"
+        "Cache-Control": "no-cache"
       };
     } else if (options?.headers) {
       extendedOptions.headers = options.headers;
