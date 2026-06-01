@@ -147,6 +147,80 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [checkingHealth, setCheckingHealth] = useState(false);
   const [showBackendConfig, setShowBackendConfig] = useState(false);
 
+  // Load custom connection mode: 'supabase' (highly robust CRM database direct) vs 'express' (unattended API container)
+  const [connectionMode, setConnectionMode] = useState<"supabase" | "express">(() => {
+    return (localStorage.getItem("import_export_connection_mode") as any) || "supabase";
+  });
+
+  // Helper function to decode base64 robustly
+  const decodeBase64Robust = (base64Str: string): string => {
+    try {
+      return decodeURIComponent(escape(window.atob(base64Str)));
+    } catch {
+      try {
+        return window.atob(base64Str);
+      } catch {
+        return base64Str;
+      }
+    }
+  };
+
+  // Helper function to save a virtual file on Supabase DB kv_store_8405be07 table
+  const saveVirtualFile = async (fileName: string, base64Content: string) => {
+    const supabase = createClient();
+    const textContent = decodeBase64Robust(base64Content);
+
+    // 1. Store contents inside kv_store_8405be07
+    await supabase.from('kv_store_8405be07').upsert({
+      key: `import_export_file_content:${fileName}`,
+      value: { content: textContent }
+    });
+
+    // 2. Load and add to files catalog
+    const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
+    let currentFiles = catData?.value || [];
+    if (!Array.isArray(currentFiles)) currentFiles = [];
+
+    currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
+    currentFiles.push({
+      name: fileName,
+      size: textContent.length,
+      lastModified: new Date().toISOString(),
+      extension: fileName.split('.').pop()?.toLowerCase() || ''
+    });
+
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'import_export_local_files',
+      value: currentFiles
+    });
+  };
+
+  // Helper function to delete a virtual file on Supabase DB kv_store_8405be07 table
+  const deleteVirtualFile = async (fileName: string) => {
+    const supabase = createClient();
+    // 1. Delete content
+    await supabase.from('kv_store_8405be07').delete().eq('key', `import_export_file_content:${fileName}`);
+    
+    // 2. Remove from files catalog
+    const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
+    let currentFiles = catData?.value || [];
+    if (Array.isArray(currentFiles)) {
+      currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
+      await supabase.from('kv_store_8405be07').upsert({
+        key: 'import_export_local_files',
+        value: currentFiles
+      });
+    }
+  };
+
+  // Helper function to read a virtual file from Supabase DB kv_store_8405be07 table
+  const readVirtualFile = async (fileName: string): Promise<string> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', `import_export_file_content:${fileName}`).maybeSingle();
+    if (error || !data) return '';
+    return data.value?.content || '';
+  };
+
   // Microsoft/OneDrive Accounts integration
   const [msAccounts, setMsAccounts] = useState<any[]>([]);
   const [fetchingMsAccounts, setFetchingMsAccounts] = useState(false);
@@ -417,14 +491,18 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Bootstrap initial configurations
   useEffect(() => {
+    fetchMsAccounts();
+  }, []);
+
+  // Synchronize and re-load data whenever connection mode or active preview module changes
+  useEffect(() => {
     fetchTasks();
     fetchStats();
     fetchFiles("local");
     fetchFiles("onedrive");
     fetchHistory();
     fetchCrmRecords(previewModule);
-    fetchMsAccounts();
-  }, []);
+  }, [connectionMode, previewModule]);
 
   // Synchronize cloud OneDrive files when microsoft accounts become ready
   useEffect(() => {
@@ -802,53 +880,102 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const fetchTasks = async () => {
     setLoadingTasks(true);
     try {
-      const res = await safeFetch("/api/import-export/tasks");
-      const data = await res.json();
-      const serverTasks = Array.isArray(data) ? data : [];
-      setTasks(serverTasks);
-
-      // --- PERSISTENCE AUTO-RESTORE SYSTEM ---
-      const backupStr = localStorage.getItem("unattended_scheduler_tasks_backup");
-      if (backupStr) {
-        try {
-          const backupTasks = JSON.parse(backupStr);
-          if (Array.isArray(backupTasks)) {
-            // Locate user-defined custom tasks in local backup that are missing on the live server 
-            const missingTasks = backupTasks.filter(bt => 
-              bt && bt.id && bt.id !== "task-demo-1" && !serverTasks.some(st => st && st.id === bt.id)
-            );
-
-            if (missingTasks.length > 0) {
-              console.log("[Auto-Restore] Discovered missing tasks on the server. Re-scheduling from local browser backup...", missingTasks);
-              toast.info(`Restoring ${missingTasks.length} offline/scheduled tasks that were cleared by a server restart...`, { id: "restoring-tasks" });
-              
-              // Restore individual tasks using POST requests to the API router
-              for (const taskToRestore of missingTasks) {
-                await safeFetch("/api/import-export/tasks", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(taskToRestore)
-                });
-              }
-
-              // Re-fetch the fully synchronized tasks list from the backend
-              const refreshedRes = await safeFetch("/api/import-export/tasks");
-              const refreshedData = await refreshedRes.json();
-              const finalTasks = Array.isArray(refreshedData) ? refreshedData : serverTasks;
-              setTasks(finalTasks);
-              localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(finalTasks));
-              
-              toast.success(`Successfully restored ${missingTasks.length} scheduled tasks from your secure local browser backup.`, { id: "restoring-tasks" });
-              return;
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks')
+          .maybeSingle();
+        
+        if (error) throw error;
+        
+        let serverTasks = data?.value;
+        if (!Array.isArray(serverTasks)) {
+          // Setup a demo task if list is empty
+          serverTasks = [
+            {
+              id: "task-demo-1",
+              name: "Automated Daily Portal Export",
+              description: "Export daily construction pipeline leads directly into OneDrive Backup storage folder.",
+              status: "active",
+              recurrence: "daily",
+              triggerDetail: { time: "23:00" },
+              action: {
+                type: "export",
+                module: "contacts",
+                fileStorage: "local",
+                fileName: "daily_contacts_backup.csv",
+                format: "csv"
+              },
+              settings: {
+                stopIfRunningHours: 1,
+                retryCount: 3,
+                retryIntervalMinutes: 5
+              },
+              lastRunTime: new Date(Date.now() - 3600000 * 12).toISOString(),
+              lastRunResult: "success",
+              nextRunTime: new Date(Date.now() + 3600000 * 12).toISOString(),
+              createdAt: new Date().toISOString(),
+              creator: "System Scheduler"
             }
-          }
-        } catch (backupErr) {
-          console.error("Local storage backup read/restore fail:", backupErr);
+          ];
+          await supabase.from('kv_store_8405be07').upsert({
+            key: 'import_export_tasks',
+            value: serverTasks
+          });
         }
-      }
+        setTasks(serverTasks);
+        localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(serverTasks));
+      } else {
+        const res = await safeFetch("/api/import-export/tasks");
+        const data = await res.json();
+        const serverTasks = Array.isArray(data) ? data : [];
+        setTasks(serverTasks);
 
-      // If fully synchronized and no restoration was needed, update browser backup with the server's current list
-      localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(serverTasks));
+        // --- PERSISTENCE AUTO-RESTORE SYSTEM ---
+        const backupStr = localStorage.getItem("unattended_scheduler_tasks_backup");
+        if (backupStr) {
+          try {
+            const backupTasks = JSON.parse(backupStr);
+            if (Array.isArray(backupTasks)) {
+              // Locate user-defined custom tasks in local backup that are missing on the live server 
+              const missingTasks = backupTasks.filter(bt => 
+                bt && bt.id && bt.id !== "task-demo-1" && !serverTasks.some(st => st && st.id === bt.id)
+              );
+
+              if (missingTasks.length > 0) {
+                console.log("[Auto-Restore] Discovered missing tasks on the server. Re-scheduling from local browser backup...", missingTasks);
+                toast.info(`Restoring ${missingTasks.length} offline/scheduled tasks that were cleared by a server restart...`, { id: "restoring-tasks" });
+                
+                // Restore individual tasks using POST requests to the API router
+                for (const taskToRestore of missingTasks) {
+                  await safeFetch("/api/import-export/tasks", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(taskToRestore)
+                  });
+                }
+
+                // Re-fetch the fully synchronized tasks list from the backend
+                const refreshedRes = await safeFetch("/api/import-export/tasks");
+                const refreshedData = await refreshedRes.json();
+                const finalTasks = Array.isArray(refreshedData) ? refreshedData : serverTasks;
+                setTasks(finalTasks);
+                localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(finalTasks));
+                
+                toast.success(`Successfully restored ${missingTasks.length} scheduled tasks from your secure local browser backup.`, { id: "restoring-tasks" });
+                return;
+              }
+            }
+          } catch (backupErr) {
+            console.error("Local storage backup read/restore fail:", backupErr);
+          }
+        }
+
+        // If fully synchronized and no restoration was needed, update browser backup with the server's current list
+        localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(serverTasks));
+      }
     } catch (e: any) {
       console.error("Failed to fetch live tasks:", e);
       toast.error("Failed to load scheduled tasks from Live server. Attempting to fall back to browser offline task cache.");
@@ -870,9 +997,23 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   const fetchStats = async () => {
     try {
-      const res = await safeFetch("/api/import-export/crm-stats");
-      const data = await res.json();
-      setCrmStats(data);
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const [{ count: cCount }, { count: iCount }, { count: dCount }] = await Promise.all([
+          supabase.from("contacts").select("id", { count: "exact", head: true }),
+          supabase.from("inventory").select("id", { count: "exact", head: true }),
+          supabase.from("opportunities").select("id", { count: "exact", head: true })
+        ]);
+        setCrmStats({
+          contacts: cCount || 0,
+          inventory: iCount || 0,
+          deals: dCount || 0
+        });
+      } else {
+        const res = await safeFetch("/api/import-export/crm-stats");
+        const data = await res.json();
+        setCrmStats(data);
+      }
     } catch (e: any) {
       console.error("Failed to load live CRM stats:", e);
     }
@@ -923,17 +1064,44 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           throw new Error(data.error || "Failed to list OneDrive files");
         }
       } else {
-        const res = await safeFetch(`/api/import-export/storage/${drive}`);
-        if (!res.ok) {
-          throw new Error(`HTTP status ${res.status}`);
-        }
-         const data = await res.json();
-        if (data.success) {
-          const filesList = data.files || [];
-          if (drive === "local") setLocalFiles(filesList);
-          else setOnedriveFiles(filesList);
+        if (connectionMode === "supabase") {
+          if (drive === "local") {
+            const supabase = createClient();
+            const { data } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
+            let filesList = data?.value || [];
+            if (!Array.isArray(filesList) || filesList.length === 0) {
+              // Populate standard default sample file if directory is blank
+              filesList = [
+                { name: "sample_contacts_import.csv", size: 385, lastModified: new Date().toISOString(), extension: "csv" },
+                { name: "quick_crm_export.csv", size: 512, lastModified: new Date().toISOString(), extension: "csv" }
+              ];
+              await supabase.from('kv_store_8405be07').upsert({
+                key: 'import_export_local_files',
+                value: filesList
+              });
+              // Save a sample content so downloading or running it immediately has a success path
+              await supabase.from('kv_store_8405be07').upsert({
+                key: "import_export_file_content:sample_contacts_import.csv",
+                value: { content: `"Name","Email","Phone","Address"\n"John Doe","john@test.com","555-0199","123 Main St"\n"Jane Smith","jane@test.com","555-0100","456 Oak Ave"` }
+              });
+            }
+            setLocalFiles(filesList);
+          } else {
+            setOnedriveFiles([]);
+          }
         } else {
-          throw new Error(data.error || "Unknown backend error");
+          const res = await safeFetch(`/api/import-export/storage/${drive}`);
+          if (!res.ok) {
+            throw new Error(`HTTP status ${res.status}`);
+          }
+           const data = await res.json();
+          if (data.success) {
+            const filesList = data.files || [];
+            if (drive === "local") setLocalFiles(filesList);
+            else setOnedriveFiles(filesList);
+          } else {
+            throw new Error(data.error || "Unknown backend error");
+          }
         }
       }
     } catch (e: any) {
@@ -986,21 +1154,25 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         throw new Error(data.error || "Failed to download OneDrive file content from cloud");
       }
 
-      const uploadRes = await safeFetch(`/api/import-export/storage/onedrive/upload-base64`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: fileName,
-          fileContent: finalBase64
-        })
-      });
+      if (connectionMode === "supabase") {
+        await saveVirtualFile(fileName, finalBase64);
+      } else {
+        const uploadRes = await safeFetch(`/api/import-export/storage/onedrive/upload-base64`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: fileName,
+            fileContent: finalBase64
+          })
+        });
 
-      if (!uploadRes.ok) {
-        throw new Error(`Failed to upload to server storage: ${uploadRes.statusText}`);
-      }
-      const uploadData = await uploadRes.json();
-      if (!uploadData.success) {
-        throw new Error(uploadData.error || "Failed to save file on server storage");
+        if (!uploadRes.ok) {
+          throw new Error(`Failed to upload to server storage: ${uploadRes.statusText}`);
+        }
+        const uploadData = await uploadRes.json();
+        if (!uploadData.success) {
+          throw new Error(uploadData.error || "Failed to save file on server storage");
+        }
       }
 
       toast.success(`Successfully synchronized "${fileName}" to server's OneDrive folder!`, { id: syncToastId });
@@ -1020,9 +1192,20 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const fetchHistory = async () => {
     setLoadingHistory(true);
     try {
-      const res = await safeFetch("/api/import-export/history");
-      const data = await res.json();
-      setHistory(data || []);
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_history')
+          .maybeSingle();
+        if (error) throw error;
+        setHistory(data?.value || []);
+      } else {
+        const res = await safeFetch("/api/import-export/history");
+        const data = await res.json();
+        setHistory(data || []);
+      }
     } catch (e: any) {
       console.error("Failed to load scheduler logs history:", e);
     } finally {
@@ -1032,11 +1215,278 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   const fetchCrmRecords = async (mod: "contacts" | "inventory" | "deals") => {
     try {
-      const res = await safeFetch(`/api/import-export/crm-data/${mod}`);
-      const data = await res.json();
-      setCrmRecords(data || []);
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const table = mod === "deals" ? "opportunities" : mod;
+        const { data, error } = await supabase.from(table).select("*");
+        if (error) throw error;
+        setCrmRecords(data || []);
+      } else {
+        const res = await safeFetch(`/api/import-export/crm-data/${mod}`);
+        const data = await res.json();
+        setCrmRecords(data || []);
+      }
     } catch (e: any) {
       console.error(`Failed to load live crm preview module [${mod}]:`, e);
+    }
+  };
+
+  const getAuthContext = async (supabase: any) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { userId: null, organizationId: null };
+    const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).maybeSingle();
+    return {
+      userId: user.id,
+      organizationId: profile?.organization_id || user.user_metadata?.organizationId || null
+    };
+  };
+
+  const parseCsvMatrix = (text: string): string[][] => {
+    const result: string[][] = [];
+    let row: string[] = [];
+    let entry = "";
+    let insideQuote = false;
+    
+    for (let i = 0; i < text.length; i++) {
+       const char = text[i];
+       const nextChar = text[i + 1];
+       
+       if (insideQuote) {
+         if (char === '"') {
+           if (nextChar === '"') {
+             entry += '"';
+             i++; // skip next quote
+           } else {
+             insideQuote = false;
+           }
+         } else {
+           entry += char;
+         }
+       } else {
+         if (char === '"') {
+           insideQuote = true;
+         } else if (char === ',') {
+           row.push(entry);
+           entry = "";
+         } else if (char === '\r' || char === '\n') {
+           row.push(entry);
+           entry = "";
+           if (row.some(val => val !== "")) {
+             result.push(row);
+           }
+           row = [];
+           if (char === '\r' && nextChar === '\n') {
+             i++;
+           }
+         } else {
+           entry += char;
+         }
+       }
+    }
+    if (row.length > 0 || entry !== "") {
+       row.push(entry);
+       if (row.some(val => val !== "")) {
+         result.push(row);
+       }
+    }
+    return result;
+  };
+
+  const executeTaskSupabaseDirect = async (taskId: string): Promise<{ success: boolean; logResult?: any; error?: string }> => {
+    try {
+      const supabase = createClient();
+      
+      // 1. Get the task
+      const { data: taskData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+      const currentTasks = taskData?.value || [];
+      const task = currentTasks.find((t: any) => t.id === taskId);
+      if (!task) {
+        return { success: false, error: "Task not found." };
+      }
+
+      const { userId, organizationId } = await getAuthContext(supabase);
+      if (!organizationId) {
+        return { success: false, error: "User is not logged in or organization ID is missing in profiles." };
+      }
+
+      const mType = task.action.type; // 'import' or 'export'
+      const mModule = task.action.module; // 'contacts' | 'inventory' | 'deals'
+      const table = mModule === "deals" ? "opportunities" : mModule;
+      const fileName = task.action.fileName;
+      const format = task.action.format; // 'csv' or 'json'
+
+      let logMsg = "";
+      let executionStatus: "success" | "failed" = "success";
+
+      if (mType === "export") {
+        // Query target table
+        const { data: dbRecords, error: dbErr } = await supabase
+          .from(table)
+          .select("*")
+          .eq('organization_id', organizationId);
+        
+        if (dbErr) throw dbErr;
+
+        let fileText = "";
+        if (format === "json") {
+          fileText = JSON.stringify(dbRecords || [], null, 2);
+        } else {
+          // csv format
+          if (!dbRecords || dbRecords.length === 0) {
+            fileText = "";
+          } else {
+            // Find all columns
+            const keysSet = new Set<string>();
+            dbRecords.forEach((r: any) => {
+              Object.keys(r).forEach(k => keysSet.add(k));
+            });
+            const keys = Array.from(keysSet);
+            const escapeCsvVal = (val: any) => {
+              if (val === null || val === undefined) return "";
+              const str = String(val);
+              if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            };
+            const headerRow = keys.map(escapeCsvVal).join(",");
+            const bodyRows = dbRecords.map((r: any) => keys.map(k => escapeCsvVal(r[k])).join(","));
+            fileText = [headerRow, ...bodyRows].join("\n");
+          }
+        }
+
+        // Save as base64 content
+        const base64Str = btoa(unescape(encodeURIComponent(fileText)));
+        await saveVirtualFile(fileName, base64Str);
+        logMsg = `Successfully exported ${dbRecords?.length || 0} ${mModule} to virtual file "${fileName}" in direct Supabase connection mode.`;
+      } else {
+        // import format
+        const fileContent = await readVirtualFile(fileName);
+        if (!fileContent) {
+          executionStatus = "failed";
+          logMsg = `Failed to run import: virtual source file "${fileName}" could not be found or was empty in Supabase.`;
+        } else {
+          let parsedRecords: any[] = [];
+          if (format === "json") {
+            try {
+              const resJson = JSON.parse(fileContent);
+              parsedRecords = Array.isArray(resJson) ? resJson : [resJson];
+            } catch (jsonErr: any) {
+              throw new Error(`JSON parsing failed: ${jsonErr.message}`);
+            }
+          } else {
+            // csv parser
+            try {
+              const parsedMatrix = parseCsvMatrix(fileContent);
+              if (parsedMatrix.length >= 2) {
+                const headers = parsedMatrix[0].map(h => h.trim());
+                parsedRecords = parsedMatrix.slice(1).map(row => {
+                  const item: any = {};
+                  headers.forEach((h, idx) => {
+                    const rowVal = row[idx];
+                    if (rowVal !== undefined) {
+                      item[h] = rowVal.trim();
+                    }
+                  });
+                  return item;
+                });
+              }
+            } catch (csvErr: any) {
+              throw new Error(`CSV parsing failed: ${csvErr.message}`);
+            }
+          }
+
+          if (parsedRecords.length === 0) {
+            logMsg = `Import completed with 0 records processed from virtual file "${fileName}".`;
+          } else {
+            let insertCount = 0;
+            let errorCount = 0;
+            let lastErrDetail = "";
+
+            for (const rec of parsedRecords) {
+              const cleanedRec: any = { ...rec };
+              if (!cleanedRec.id || String(cleanedRec.id).trim() === "" || cleanedRec.id === "null" || cleanedRec.id === "undefined") {
+                cleanedRec.id = crypto.randomUUID();
+              }
+              cleanedRec.organization_id = organizationId;
+
+              if (table === "inventory") {
+                if (cleanedRec.unit_price) {
+                  const priceVal = parseFloat(cleanedRec.unit_price);
+                  if (!isNaN(priceVal)) {
+                    cleanedRec.unit_price = cleanedRec.unit_price.includes(".") 
+                      ? Math.round(priceVal * 100) 
+                      : Math.round(priceVal);
+                  }
+                }
+              }
+
+              const { error: upsertErr } = await supabase
+                .from(table)
+                .upsert(cleanedRec);
+              
+              if (upsertErr) {
+                errorCount++;
+                lastErrDetail = upsertErr.message;
+              } else {
+                insertCount++;
+              }
+            }
+
+            if (errorCount > 0) {
+              if (insertCount === 0) executionStatus = "failed";
+              logMsg = `Import processed: ${insertCount} succeeded, ${errorCount} errors. Last error: ${lastErrDetail || 'Unknown RLS rejection'}`;
+            } else {
+              logMsg = `Successfully imported and upserted ${insertCount} ${mModule} records directly from virtual file "${fileName}".`;
+            }
+          }
+        }
+      }
+
+      // 3. Write dynamic history log
+      const logRecord = {
+        id: "log-" + Math.random().toString(36).slice(2, 11),
+        taskId: taskId,
+        taskName: task.name,
+        time: new Date().toISOString(),
+        status: executionStatus,
+        message: logMsg
+      };
+
+      const { data: histData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_history').maybeSingle();
+      let currentHist = histData?.value || [];
+      if (!Array.isArray(currentHist)) currentHist = [];
+      currentHist.unshift(logRecord);
+      await supabase.from('kv_store_8405be07').upsert({
+        key: 'import_export_history',
+        value: currentHist
+      });
+
+      // 4. Update task metrics
+      const updatedTasks = currentTasks.map((t: any) => {
+        if (t.id === taskId) {
+          return {
+            ...t,
+            lastRunTime: logRecord.time,
+            lastRunResult: executionStatus,
+            nextRunTime: new Date(Date.now() + 3600000 * (t.recurrence === "hourly" ? 1 : t.recurrence === "daily" ? 24 : 168)).toISOString()
+          };
+        }
+        return t;
+      });
+      await supabase.from('kv_store_8405be07').upsert({
+        key: 'import_export_tasks',
+        value: updatedTasks
+      });
+
+      return {
+        success: executionStatus === "success",
+        logResult: logRecord,
+        error: executionStatus === "failed" ? logMsg : undefined
+      };
+    } catch (e: any) {
+      console.error("Direct Supabase task runner failure:", e);
+      return { success: false, error: e.message || "Unknown error executing job." };
     }
   };
 
@@ -1049,24 +1499,32 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
     try {
       const base64Data = await readFileAsBase64(file);
-      const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileContent: base64Data
-        })
-      }, 120000);
-      const data = await parseResponseJson(res);
-      toast.dismiss(uploadToastId);
-      if (data.success) {
-        toast.success(`Uploaded "${file.name}" successfully!`);
+      if (connectionMode === "supabase") {
+        await saveVirtualFile(file.name, base64Data);
+        toast.dismiss(uploadToastId);
+        toast.success(`Uploaded "${file.name}" successfully to virtual storage!`);
         setExplorerUploading(false);
         await fetchFiles(target, true);
       } else {
-        throw new Error(data.error || "File upload response was not successful");
+        const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileContent: base64Data
+          })
+        }, 120000);
+        const data = await parseResponseJson(res);
+        toast.dismiss(uploadToastId);
+        if (data.success) {
+          toast.success(`Uploaded "${file.name}" successfully!`);
+          setExplorerUploading(false);
+          await fetchFiles(target, true);
+        } else {
+          throw new Error(data.error || "File upload response was not successful");
+        }
       }
     } catch (e: any) {
       toast.dismiss(uploadToastId);
@@ -1084,25 +1542,34 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
     try {
       const base64Data = await readFileAsBase64(file);
-      const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileContent: base64Data
-        })
-      }, 120000);
-      const data = await parseResponseJson(res);
-      toast.dismiss(uploadToastId);
-      if (data.success) {
-        toast.success(`Uploaded & mapped "${file.name}" to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
+      if (connectionMode === "supabase") {
+        await saveVirtualFile(file.name, base64Data);
+        toast.dismiss(uploadToastId);
+        toast.success(`Uploaded & mapped "${file.name}" to virtual storage successfully!`);
         setActionFileName(file.name);
         setModalUploading(false);
         fetchFiles(target);
       } else {
-        throw new Error(data.error || "File upload response was not successful");
+        const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileContent: base64Data
+          })
+        }, 120000);
+        const data = await parseResponseJson(res);
+        toast.dismiss(uploadToastId);
+        if (data.success) {
+          toast.success(`Uploaded & mapped "${file.name}" to ${target === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
+          setActionFileName(file.name);
+          setModalUploading(false);
+          fetchFiles(target);
+        } else {
+          throw new Error(data.error || "File upload response was not successful");
+        }
       }
     } catch (e: any) {
       toast.dismiss(uploadToastId);
@@ -1117,15 +1584,21 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!confirm(`Are you sure you want to permanently delete ${fileName} from ${target === 'local' ? 'Local Drive' : 'OneDrive'}?`)) return;
 
     try {
-      const res = await safeFetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
-        method: "DELETE"
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`${fileName} deleted successfully.`);
+      if (connectionMode === "supabase") {
+        await deleteVirtualFile(fileName);
+        toast.success(`${fileName} deleted successfully from virtual storage.`);
         fetchFiles(target);
       } else {
-        toast.error("Deletion failed");
+        const res = await safeFetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
+          method: "DELETE"
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success(`${fileName} deleted successfully.`);
+          fetchFiles(target);
+        } else {
+          toast.error("Deletion failed");
+        }
       }
     } catch (e) {
       toast.error("Network error deleting file");
@@ -1186,30 +1659,66 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         toast.error(`Download failed: ${err.message}`, { id: downloadToastId });
       }
     } else {
-      window.open(`/api/import-export/storage/${target}/download/${encodeURIComponent(fileName)}`, "_blank");
+      if (connectionMode === "supabase") {
+        const downloadToastId = toast.loading(`Downloading "${fileName}"...`);
+        try {
+          const content = await readVirtualFile(fileName);
+          if (content !== null && content !== undefined) {
+            const blob = new Blob([content], { type: "text/plain" });
+            const urlStr = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = urlStr;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(urlStr);
+            toast.success(`Downloaded "${fileName}" successfully!`, { id: downloadToastId });
+          } else {
+            throw new Error("File content is empty or not found in virtual storage.");
+          }
+        } catch (err: any) {
+          toast.error(`Download failed: ${err.message}`, { id: downloadToastId });
+        }
+      } else {
+        window.open(`/api/import-export/storage/${target}/download/${encodeURIComponent(fileName)}`, "_blank");
+      }
     }
   };
 
   // Forces an immediate execution of scheduled task unattended
   const handleRunTaskImmediately = async (taskId: string) => {
     setRunningTaskId(taskId);
-    toast.info("Triggering unattended background job on backend...", { id: "job-run" });
+    toast.info(connectionMode === "supabase" ? "Triggering direct Supabase job execution..." : "Triggering unattended background job on backend...", { id: "job-run" });
 
     try {
-      const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
-        method: "POST"
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`Job run completed: status "${data.logResult.status}"`, { id: "job-run" });
-        fetchTasks();
-        fetchHistory();
-        fetchStats();
-        fetchFiles("local");
-        fetchFiles("onedrive");
-        fetchCrmRecords(previewModule);
+      if (connectionMode === "supabase") {
+        const result = await executeTaskSupabaseDirect(taskId);
+        if (result.success) {
+          toast.success(`Job run completed: status "${result.logResult.status}"`, { id: "job-run" });
+          fetchTasks();
+          fetchHistory();
+          fetchStats();
+          fetchFiles("local");
+          fetchFiles("onedrive");
+          fetchCrmRecords(previewModule);
+        } else {
+          toast.error("Unattended job run failed: " + result.error, { id: "job-run" });
+        }
       } else {
-        toast.error("Unattended job run failed: " + data.error, { id: "job-run" });
+        const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
+          method: "POST"
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success(`Job run completed: status "${data.logResult.status}"`, { id: "job-run" });
+          fetchTasks();
+          fetchHistory();
+          fetchStats();
+          fetchFiles("local");
+          fetchFiles("onedrive");
+          fetchCrmRecords(previewModule);
+        } else {
+          toast.error("Unattended job run failed: " + data.error, { id: "job-run" });
+        }
       }
     } catch (e: any) {
       toast.error("Execution failed: " + e.message, { id: "job-run" });
@@ -1223,13 +1732,23 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!confirm("Are you sure you want to clear all scheduler logs history?")) return;
 
     try {
-      const res = await safeFetch("/api/import-export/history/clear", {
-        method: "POST"
-      });
-      const data = await res.json();
-      if (data.success) {
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_history',
+          value: []
+        });
         toast.success("Execution logs cleared.");
         fetchHistory();
+      } else {
+        const res = await safeFetch("/api/import-export/history/clear", {
+          method: "POST"
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success("Execution logs cleared.");
+          fetchHistory();
+        }
       }
     } catch (e) {
       toast.error("Could not clear logs");
@@ -1241,13 +1760,28 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!confirm("Are you sure you want to permanently delete this scheduled task?")) return;
 
     try {
-      const res = await safeFetch(`/api/import-export/tasks/${taskId}`, {
-        method: "DELETE"
-      });
-      const data = await res.json();
-      if (data.success) {
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        let currentTasks = catData?.value || [];
+        if (Array.isArray(currentTasks)) {
+          currentTasks = currentTasks.filter((t: any) => t.id !== taskId);
+          await supabase.from('kv_store_8405be07').upsert({
+            key: 'import_export_tasks',
+            value: currentTasks
+          });
+        }
         toast.success("Scheduled task deleted.");
         fetchTasks();
+      } else {
+        const res = await safeFetch(`/api/import-export/tasks/${taskId}`, {
+          method: "DELETE"
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success("Scheduled task deleted.");
+          fetchTasks();
+        }
       }
     } catch (e) {
       toast.error("Failed to delete task");
@@ -1259,18 +1793,38 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const nextStatus = task.status === "active" ? "disabled" : "active";
 
     try {
-      const res = await safeFetch("/api/import-export/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...task,
-          status: nextStatus
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        let currentTasks = catData?.value || [];
+        if (Array.isArray(currentTasks)) {
+          currentTasks = currentTasks.map((t: any) => {
+            if (t.id === task.id) {
+              return { ...t, status: nextStatus };
+            }
+            return t;
+          });
+          await supabase.from('kv_store_8405be07').upsert({
+            key: 'import_export_tasks',
+            value: currentTasks
+          });
+        }
         toast.success(`Task is now ${nextStatus === "active" ? "Enabled" : "Disabled"}`);
         fetchTasks();
+      } else {
+        const res = await safeFetch("/api/import-export/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...task,
+            status: nextStatus
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success(`Task is now ${nextStatus === "active" ? "Enabled" : "Disabled"}`);
+          fetchTasks();
+        }
       }
     } catch (e) {
       toast.error("Failed to toggle task state");
@@ -1321,18 +1875,54 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
 
     try {
-      const res = await safeFetch("/api/import-export/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.success) {
+      if (connectionMode === "supabase") {
+        const supabase = createClient();
+        const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        let currentTasks = catData?.value || [];
+        if (!Array.isArray(currentTasks)) currentTasks = [];
+
+        if (modalMode === "edit" && editingTaskId) {
+          currentTasks = currentTasks.map((t: any) => {
+            if (t.id === editingTaskId) {
+              return { 
+                ...payload, 
+                lastRunTime: t.lastRunTime, 
+                lastRunResult: t.lastRunResult, 
+                nextRunTime: t.nextRunTime, 
+                createdAt: t.createdAt 
+              };
+            }
+            return t;
+          });
+        } else {
+          payload.id = "task-" + Math.random().toString(36).slice(2, 11);
+          payload.createdAt = new Date().toISOString();
+          payload.nextRunTime = new Date().toISOString();
+          currentTasks.push(payload);
+        }
+
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_tasks',
+          value: currentTasks
+        });
+
         toast.success(modalMode === "create" ? "Scheduled task created!" : "Scheduled task updated!");
         setShowTaskModal(false);
         fetchTasks();
       } else {
-        toast.error("Saving task failed: " + data.error);
+        const res = await safeFetch("/api/import-export/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success(modalMode === "create" ? "Scheduled task created!" : "Scheduled task updated!");
+          setShowTaskModal(false);
+          fetchTasks();
+        } else {
+          toast.error("Saving task failed: " + data.error);
+        }
       }
     } catch (err) {
       toast.error("Could not save task to backend");
