@@ -522,10 +522,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   }, [showTaskModal, actionStorage]);
 
-  const testBackendConnection = async (targetUrl = backendUrl) => {
+  const testBackendConnection = async (targetUrl = backendUrl, mode = connectionMode) => {
     setCheckingHealth(true);
     try {
-      if (connectionMode === "supabase") {
+      if (mode === "supabase") {
         const supabase = createClient();
         const { error } = await supabase.from('kv_store_8405be07').select('key').limit(1);
         if (error) throw error;
@@ -920,6 +920,16 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // Fetches lists with integrated browser storage backup & recovery to handle Cloud Run ephemeral container restarts
   const fetchTasks = async () => {
     setLoadingTasks(true);
+    const backupKey = `unattended_scheduler_tasks_backup_${connectionMode}`;
+    
+    // Migrate legacy backup to mode-specific backup key if needed
+    if (!localStorage.getItem(backupKey)) {
+      const legacyBackup = localStorage.getItem("unattended_scheduler_tasks_backup");
+      if (legacyBackup) {
+        localStorage.setItem(backupKey, legacyBackup);
+      }
+    }
+
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
@@ -967,7 +977,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           });
         }
         setTasks(serverTasks);
-        localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(serverTasks));
+        localStorage.setItem(backupKey, JSON.stringify(serverTasks));
       } else {
         const res = await safeFetch("/api/import-export/tasks");
         const data = await res.json();
@@ -975,7 +985,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         setTasks(serverTasks);
 
         // --- PERSISTENCE AUTO-RESTORE SYSTEM ---
-        const backupStr = localStorage.getItem("unattended_scheduler_tasks_backup");
+        const backupStr = localStorage.getItem(backupKey);
         if (backupStr) {
           try {
             const backupTasks = JSON.parse(backupStr);
@@ -1003,7 +1013,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 const refreshedData = await refreshedRes.json();
                 const finalTasks = Array.isArray(refreshedData) ? refreshedData : serverTasks;
                 setTasks(finalTasks);
-                localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(finalTasks));
+                localStorage.setItem(backupKey, JSON.stringify(finalTasks));
                 
                 toast.success(`Successfully restored ${missingTasks.length} scheduled tasks from your secure local browser backup.`, { id: "restoring-tasks" });
                 return;
@@ -1015,14 +1025,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         }
 
         // If fully synchronized and no restoration was needed, update browser backup with the server's current list
-        localStorage.setItem("unattended_scheduler_tasks_backup", JSON.stringify(serverTasks));
+        localStorage.setItem(backupKey, JSON.stringify(serverTasks));
       }
     } catch (e: any) {
       console.error("Failed to fetch live tasks:", e);
       toast.error("Failed to load scheduled tasks from Live server. Attempting to fall back to browser offline task cache.");
       
       // Offline Fallback: If server is completely unreachable, load tasks from browser backup
-      const backupStr = localStorage.getItem("unattended_scheduler_tasks_backup");
+      const backupStr = localStorage.getItem(backupKey);
       if (backupStr) {
         try {
           const backupTasks = JSON.parse(backupStr);
@@ -1800,6 +1810,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const handleDeleteTask = async (taskId: string) => {
     if (!confirm("Are you sure you want to permanently delete this scheduled task?")) return;
 
+    const backupKey = `unattended_scheduler_tasks_backup_${connectionMode}`;
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
@@ -1812,6 +1823,18 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             value: currentTasks
           });
         }
+        
+        // Remove from local storage backup immediately
+        const backupStr = localStorage.getItem(backupKey);
+        if (backupStr) {
+          try {
+            const backupTasks = JSON.parse(backupStr);
+            if (Array.isArray(backupTasks)) {
+              localStorage.setItem(backupKey, JSON.stringify(backupTasks.filter((t: any) => t.id !== taskId)));
+            }
+          } catch {}
+        }
+        
         toast.success("Scheduled task deleted.");
         fetchTasks();
       } else {
@@ -1820,6 +1843,17 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         });
         const data = await res.json();
         if (data.success) {
+          // Remove from local storage backup immediately
+          const backupStr = localStorage.getItem(backupKey);
+          if (backupStr) {
+            try {
+              const backupTasks = JSON.parse(backupStr);
+              if (Array.isArray(backupTasks)) {
+                localStorage.setItem(backupKey, JSON.stringify(backupTasks.filter((t: any) => t.id !== taskId)));
+              }
+            } catch {}
+          }
+          
           toast.success("Scheduled task deleted.");
           fetchTasks();
         }
@@ -2216,7 +2250,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   onClick={() => {
                     setConnectionMode("supabase");
                     localStorage.setItem("import_export_connection_mode", "supabase");
-                    testBackendConnection();
+                    testBackendConnection(backendUrl, "supabase");
                     toast.success("Successfully set connection to Supabase direct tables!");
                   }}
                   className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between min-h-20 cursor-pointer ${
@@ -2239,7 +2273,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   onClick={() => {
                     setConnectionMode("express");
                     localStorage.setItem("import_export_connection_mode", "express");
-                    testBackendConnection();
+                    testBackendConnection(backendUrl, "express");
                     toast.success("Connection mode switched to Express API Backend!");
                   }}
                   className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between min-h-20 cursor-pointer ${

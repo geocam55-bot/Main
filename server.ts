@@ -89,39 +89,43 @@ function seedStorageFiles() {
   fs.writeFileSync(path.join(ONEDRIVE_DIR, 'onedrive_contacts_import.csv'), sampleContactsCsv, 'utf8');
   fs.writeFileSync(path.join(ONEDRIVE_DIR, 'onedrive_inventory_import.csv'), sampleInventoryCsv, 'utf8');
 
-  // Seed sample task if empty
-  const tasks = loadJson(TASKS_FILE, []);
-  if (tasks.length === 0) {
-    const demoTask = {
-      id: 'task-demo-1',
-      name: 'Unattended Nightly Contacts Backup',
-      description: 'Automatically exports all active contacts from the CRM system into a CSV spreadsheet saved on the Local Drive.',
-      status: 'active',
-      recurrence: 'daily',
-      triggerDetail: {
-        time: '02:00',
-        intervalDays: 1
-      },
-      action: {
-        type: 'export',
-        module: 'contacts',
-        fileStorage: 'local',
-        fileName: 'nightly_contacts_backup.csv',
-        format: 'csv'
-      },
-      settings: {
-        stopIfRunningHours: 1,
-        retryCount: 3,
-        retryIntervalMinutes: 5
-      },
-      lastRunTime: null,
-      lastRunResult: null,
-      nextRunTime: null,
-      createdAt: new Date().toISOString(),
-      creator: 'System Administrator'
-    };
-    demoTask.nextRunTime = calculateNextRunTime(demoTask).toISOString();
-    saveJson(TASKS_FILE, [demoTask]);
+  // Seed sample task if empty and we haven't seeded yet
+  const tasksSeededFlag = path.join(DATA_DIR, 'scheduler_tasks_seeded.flag');
+  if (!fs.existsSync(tasksSeededFlag)) {
+    const tasks = loadJson(TASKS_FILE, []);
+    if (tasks.length === 0) {
+      const demoTask = {
+        id: 'task-demo-1',
+        name: 'Unattended Nightly Contacts Backup',
+        description: 'Automatically exports all active contacts from the CRM system into a CSV spreadsheet saved on the Local Drive.',
+        status: 'active',
+        recurrence: 'daily',
+        triggerDetail: {
+          time: '02:00',
+          intervalDays: 1
+        },
+        action: {
+          type: 'export',
+          module: 'contacts',
+          fileStorage: 'local',
+          fileName: 'nightly_contacts_backup.csv',
+          format: 'csv'
+        },
+        settings: {
+          stopIfRunningHours: 1,
+          retryCount: 3,
+          retryIntervalMinutes: 5
+        },
+        lastRunTime: null,
+        lastRunResult: null,
+        nextRunTime: null,
+        createdAt: new Date().toISOString(),
+        creator: 'System Administrator'
+      };
+      demoTask.nextRunTime = calculateNextRunTime(demoTask).toISOString();
+      saveJson(TASKS_FILE, [demoTask]);
+    }
+    fs.writeFileSync(tasksSeededFlag, 'seeded', 'utf8');
   }
 
   // Seed sample log history if empty
