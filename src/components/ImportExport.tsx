@@ -930,9 +930,21 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       }
     }
 
+    const demoDeletedKey = `unattended_demo_task_deleted_${connectionMode}`;
+    const hasDeletedDemo = localStorage.getItem(demoDeletedKey) === "true";
+
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
+
+        // Check if we've already initialized/seeded tasks in Supabase
+        const { data: seedFlagData } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks_seeded')
+          .maybeSingle();
+        const hasSeeded = seedFlagData?.value === true;
+
         const { data, error } = await supabase
           .from('kv_store_8405be07')
           .select('value')
@@ -943,45 +955,70 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         
         let serverTasks = data?.value;
         if (!Array.isArray(serverTasks)) {
-          // Setup a demo task if list is empty
-          serverTasks = [
-            {
-              id: "task-demo-1",
-              name: "Automated Daily Portal Export",
-              description: "Export daily construction pipeline leads directly into OneDrive Backup storage folder.",
-              status: "active",
-              recurrence: "daily",
-              triggerDetail: { time: "23:00" },
-              action: {
-                type: "export",
-                module: "contacts",
-                fileStorage: "local",
-                fileName: "daily_contacts_backup.csv",
-                format: "csv"
-              },
-              settings: {
-                stopIfRunningHours: 1,
-                retryCount: 3,
-                retryIntervalMinutes: 5
-              },
-              lastRunTime: new Date(Date.now() - 3600000 * 12).toISOString(),
-              lastRunResult: "success",
-              nextRunTime: new Date(Date.now() + 3600000 * 12).toISOString(),
-              createdAt: new Date().toISOString(),
-              creator: "System Scheduler"
-            }
-          ];
-          await supabase.from('kv_store_8405be07').upsert({
-            key: 'import_export_tasks',
-            value: serverTasks
-          });
+          if (hasSeeded || hasDeletedDemo) {
+            serverTasks = [];
+          } else {
+            // Setup a demo task if list is empty
+            serverTasks = [
+              {
+                id: "task-demo-1",
+                name: "Automated Daily Portal Export",
+                description: "Export daily construction pipeline leads directly into OneDrive Backup storage folder.",
+                status: "active",
+                recurrence: "daily",
+                triggerDetail: { time: "23:00" },
+                action: {
+                  type: "export",
+                  module: "contacts",
+                  fileStorage: "local",
+                  fileName: "daily_contacts_backup.csv",
+                  format: "csv"
+                },
+                settings: {
+                  stopIfRunningHours: 1,
+                  retryCount: 3,
+                  retryIntervalMinutes: 5
+                },
+                lastRunTime: new Date(Date.now() - 3600000 * 12).toISOString(),
+                lastRunResult: "success",
+                nextRunTime: new Date(Date.now() + 3600000 * 12).toISOString(),
+                createdAt: new Date().toISOString(),
+                creator: "System Scheduler"
+              }
+            ];
+
+            // Mark as seeded in DB
+            const { error: seedErr } = await supabase.from('kv_store_8405be07').upsert({
+              key: 'import_export_tasks_seeded',
+              value: true
+            });
+            if (seedErr) throw seedErr;
+
+            const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
+              key: 'import_export_tasks',
+              value: serverTasks
+            });
+            if (upsertErr) throw upsertErr;
+          }
         }
+
+        // Apply active delete filter
+        if (hasDeletedDemo) {
+          serverTasks = serverTasks.filter((t: any) => t.id !== "task-demo-1");
+        }
+
         setTasks(serverTasks);
         localStorage.setItem(backupKey, JSON.stringify(serverTasks));
       } else {
         const res = await safeFetch("/api/import-export/tasks");
         const data = await res.json();
-        const serverTasks = Array.isArray(data) ? data : [];
+        let serverTasks = Array.isArray(data) ? data : [];
+
+        // Apply active delete filter
+        if (hasDeletedDemo) {
+          serverTasks = serverTasks.filter((t: any) => t.id !== "task-demo-1");
+        }
+
         setTasks(serverTasks);
 
         // --- PERSISTENCE AUTO-RESTORE SYSTEM ---
@@ -1011,7 +1048,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 // Re-fetch the fully synchronized tasks list from the backend
                 const refreshedRes = await safeFetch("/api/import-export/tasks");
                 const refreshedData = await refreshedRes.json();
-                const finalTasks = Array.isArray(refreshedData) ? refreshedData : serverTasks;
+                let finalTasks = Array.isArray(refreshedData) ? refreshedData : serverTasks;
+                
+                if (hasDeletedDemo) {
+                  finalTasks = finalTasks.filter((t: any) => t.id !== "task-demo-1");
+                }
+
                 setTasks(finalTasks);
                 localStorage.setItem(backupKey, JSON.stringify(finalTasks));
                 
@@ -1811,17 +1853,32 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!confirm("Are you sure you want to permanently delete this scheduled task?")) return;
 
     const backupKey = `unattended_scheduler_tasks_backup_${connectionMode}`;
+    const demoDeletedKey = `unattended_demo_task_deleted_${connectionMode}`;
+
     try {
+      // Mark demo task as deleted locally to prevent cold-boot re-seeding
+      if (taskId === "task-demo-1") {
+        localStorage.setItem(demoDeletedKey, "true");
+      }
+
       if (connectionMode === "supabase") {
         const supabase = createClient();
-        const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        const { data: catData, error: selectError } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks')
+          .maybeSingle();
+
+        if (selectError) throw selectError;
+
         let currentTasks = catData?.value || [];
         if (Array.isArray(currentTasks)) {
           currentTasks = currentTasks.filter((t: any) => t.id !== taskId);
-          await supabase.from('kv_store_8405be07').upsert({
+          const { error: upsertError } = await supabase.from('kv_store_8405be07').upsert({
             key: 'import_export_tasks',
             value: currentTasks
           });
+          if (upsertError) throw upsertError;
         }
         
         // Remove from local storage backup immediately
@@ -1858,8 +1915,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           fetchTasks();
         }
       }
-    } catch (e) {
-      toast.error("Failed to delete task");
+    } catch (e: any) {
+      toast.error(`Failed to delete task: ${e.message || e}`);
     }
   };
 
@@ -1870,7 +1927,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
-        const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        const { data: catData, error: loadErr } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks')
+          .maybeSingle();
+
+        if (loadErr) throw loadErr;
+
         let currentTasks = catData?.value || [];
         if (Array.isArray(currentTasks)) {
           currentTasks = currentTasks.map((t: any) => {
@@ -1879,10 +1943,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             }
             return t;
           });
-          await supabase.from('kv_store_8405be07').upsert({
+          const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
             key: 'import_export_tasks',
             value: currentTasks
           });
+          if (upsertErr) throw upsertErr;
         }
         toast.success(`Task is now ${nextStatus === "active" ? "Enabled" : "Disabled"}`);
         fetchTasks();
@@ -1952,7 +2017,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
-        const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        const { data: catData, error: loadErr } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks')
+          .maybeSingle();
+
+        if (loadErr) throw loadErr;
+
         let currentTasks = catData?.value || [];
         if (!Array.isArray(currentTasks)) currentTasks = [];
 
@@ -1976,10 +2048,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           currentTasks.push(payload);
         }
 
-        await supabase.from('kv_store_8405be07').upsert({
+        const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
           key: 'import_export_tasks',
           value: currentTasks
         });
+
+        if (upsertErr) throw upsertErr;
 
         toast.success(modalMode === "create" ? "Scheduled task created!" : "Scheduled task updated!");
         setShowTaskModal(false);
