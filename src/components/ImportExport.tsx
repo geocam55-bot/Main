@@ -1582,25 +1582,154 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           if (parsedRecords.length === 0) {
             logMsg = `Import completed with 0 records processed from virtual file "${fileName}".`;
           } else {
+            // First, probe to discover actually existing database columns for the target table
+            const { data: sampleColsData } = await supabase.from(table).select("*").limit(1);
+            const existingDbCols = new Set<string>();
+            if (sampleColsData && sampleColsData.length > 0) {
+              Object.keys(sampleColsData[0]).forEach(k => existingDbCols.add(k));
+            } else {
+              // Fallback based on standard schemas
+              const fallbackCols: Record<string, string[]> = {
+                contacts: [
+                  "id", "organization_id", "owner_id", "name", "email", "phone", "company", 
+                  "trade", "status", "price_level", "legacy_number", "account_owner_number", 
+                  "address", "city", "province", "postal_code", "notes", "tags", "created_at", "updated_at"
+                ],
+                inventory: [
+                  "id", "organization_id", "sku", "name", "description", "unit_price", "cost", 
+                  "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location"
+                ],
+                opportunities: [
+                  "id", "organization_id", "owner_id", "created_by", "title", "description", 
+                  "customer_id", "value", "expected_close_date", "status", "stage", "created_at", "updated_at"
+                ]
+              };
+              (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
+            }
+
             let insertCount = 0;
             let errorCount = 0;
             let lastErrDetail = "";
 
             for (const rec of parsedRecords) {
-              const cleanedRec: any = { ...rec };
-              if (!cleanedRec.id || String(cleanedRec.id).trim() === "" || cleanedRec.id === "null" || cleanedRec.id === "undefined") {
-                cleanedRec.id = crypto.randomUUID();
-              }
-              cleanedRec.organization_id = organizationId;
+              const mappedRec: any = {};
+              
+              // Map spreadsheet headers to database-compatible columns
+              for (const [k, v] of Object.entries(rec)) {
+                if (v === undefined || v === null) continue;
+                const cleanVal = typeof v === "string" ? v.trim() : v;
+                const lowerKey = k.toLowerCase().replace(/[\s\-_#/()]/g, "");
 
-              if (table === "inventory") {
-                if (cleanedRec.unit_price) {
-                  const priceVal = parseFloat(cleanedRec.unit_price);
-                  if (!isNaN(priceVal)) {
-                    cleanedRec.unit_price = cleanedRec.unit_price.includes(".") 
-                      ? Math.round(priceVal * 100) 
-                      : Math.round(priceVal);
+                if (table === "contacts") {
+                  if (lowerKey === "name") mappedRec.name = cleanVal;
+                  else if (lowerKey === "email" || lowerKey === "emailaddress") mappedRec.email = cleanVal;
+                  else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone") mappedRec.phone = cleanVal;
+                  else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") mappedRec.company = cleanVal;
+                  else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") mappedRec.trade = cleanVal;
+                  else if (lowerKey === "status") mappedRec.status = cleanVal;
+                  else if (lowerKey === "pricelevel" || lowerKey === "level") mappedRec.price_level = cleanVal;
+                  else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno") mappedRec.legacy_number = cleanVal;
+                  else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner") mappedRec.account_owner_number = cleanVal;
+                  else if (lowerKey === "address" || lowerKey === "streetaddress") mappedRec.address = cleanVal;
+                  else if (lowerKey === "city") mappedRec.city = cleanVal;
+                  else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") mappedRec.province = cleanVal;
+                  else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip") mappedRec.postal_code = cleanVal;
+                  else if (lowerKey === "notes" || lowerKey === "comments") mappedRec.notes = cleanVal;
+                  else if (lowerKey === "tags") mappedRec.tags = cleanVal;
+                  else if (lowerKey === "ptdsales") mappedRec.ptd_sales = parseFloat(String(cleanVal)) || 0;
+                  else if (lowerKey === "ptdgppercent" || lowerKey === "ptdgp") mappedRec.ptd_gp_percent = parseFloat(String(cleanVal)) || 0;
+                  else if (lowerKey === "ytdsales") mappedRec.ytd_sales = parseFloat(String(cleanVal)) || 0;
+                  else if (lowerKey === "ytdgppercent" || lowerKey === "ytdgp") mappedRec.ytd_gp_percent = parseFloat(String(cleanVal)) || 0;
+                  else if (lowerKey === "lyrsales") mappedRec.lyr_sales = parseFloat(String(cleanVal)) || 0;
+                  else if (lowerKey === "lyrgppercent" || lowerKey === "lyrgp") mappedRec.lyr_gp_percent = parseFloat(String(cleanVal)) || 0;
+                } 
+                else if (table === "inventory") {
+                  if (lowerKey === "itemname" || lowerKey === "name") mappedRec.name = cleanVal;
+                  else if (lowerKey === "description") mappedRec.description = cleanVal;
+                  else if (lowerKey === "sku" || lowerKey === "skucode" || lowerKey === "partnumber" || lowerKey === "partno") mappedRec.sku = cleanVal;
+                  else if (lowerKey === "category") mappedRec.category = cleanVal;
+                  else if (lowerKey === "quantity" || lowerKey === "quantityonhand" || lowerKey === "instock" || lowerKey === "qty") {
+                    const qtyNum = parseFloat(String(cleanVal));
+                    mappedRec.quantity = isNaN(qtyNum) ? 0 : Math.round(qtyNum);
                   }
+                  else if (lowerKey === "quantityonorder") {
+                    const qtyNum = parseFloat(String(cleanVal));
+                    mappedRec.quantity_on_order = isNaN(qtyNum) ? 0 : Math.round(qtyNum);
+                  }
+                  else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
+                  else if (lowerKey === "status" || lowerKey === "availability") mappedRec.status = cleanVal;
+                  else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice") {
+                    const pr = parseFloat(String(cleanVal));
+                    mappedRec.unit_price = isNaN(pr) ? 0 : Math.round(pr * (String(cleanVal).includes(".") ? 100 : 1));
+                  }
+                  else if (lowerKey === "cost") {
+                    const cs = parseFloat(String(cleanVal));
+                    mappedRec.cost = isNaN(cs) ? 0 : Math.round(cs * (String(cleanVal).includes(".") ? 100 : 1));
+                  }
+                  else if (lowerKey === "imageurl" || lowerKey === "image") mappedRec.image_url = cleanVal;
+                }
+                else if (table === "opportunities") {
+                  if (lowerKey === "projectname" || lowerKey === "title" || lowerKey === "dealname" || lowerKey === "deal" || lowerKey === "project") mappedRec.title = cleanVal;
+                  else if (lowerKey === "description" || lowerKey === "notes" || lowerKey === "detail") mappedRec.description = cleanVal;
+                  else if (lowerKey === "dealvalue" || lowerKey === "value" || lowerKey === "amount" || lowerKey === "price") {
+                    const vl = parseFloat(String(cleanVal));
+                    mappedRec.value = isNaN(vl) ? 0 : Math.round(vl);
+                  }
+                  else if (lowerKey === "closedate" || lowerKey === "expectedclosedate") mappedRec.expected_close_date = cleanVal;
+                  else if (lowerKey === "stage" || lowerKey === "status" || lowerKey === "state") {
+                    mappedRec.status = cleanVal;
+                    mappedRec.stage = cleanVal;
+                  }
+                  else if (lowerKey === "clientname" || lowerKey === "customername" || lowerKey === "customerid" || lowerKey === "client") {
+                    mappedRec.customer_id = cleanVal;
+                  }
+                }
+              }
+
+              // Resolve ID intelligently
+              if (!mappedRec.id || String(mappedRec.id).trim() === "" || mappedRec.id === "null" || mappedRec.id === "undefined") {
+                let existingId: string | null = null;
+                if (table === "inventory" && mappedRec.sku) {
+                  const { data: matchItem } = await supabase.from("inventory").select("id").eq("sku", mappedRec.sku).eq("organization_id", organizationId).maybeSingle();
+                  if (matchItem?.id) existingId = matchItem.id;
+                } else if (table === "contacts" && mappedRec.legacy_number) {
+                  const { data: matchContact } = await supabase.from("contacts").select("id").eq("legacy_number", mappedRec.legacy_number).eq("organization_id", organizationId).maybeSingle();
+                  if (matchContact?.id) existingId = matchContact.id;
+                }
+                mappedRec.id = existingId || crypto.randomUUID();
+              }
+              mappedRec.organization_id = organizationId;
+
+              // Resolve owner from account owner email
+              if (table === "contacts" && mappedRec.account_owner_number) {
+                const aoEmail = String(mappedRec.account_owner_number).trim();
+                if (aoEmail) {
+                  const { data: p } = await supabase.from("profiles").select("id").ilike("email", aoEmail).maybeSingle();
+                  if (p?.id) {
+                    mappedRec.owner_id = p.id;
+                  }
+                }
+              }
+
+              // Resolve client reference to contact ID
+              if (table === "opportunities" && mappedRec.customer_id) {
+                const custIdOrName = String(mappedRec.customer_id).trim();
+                const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(custIdOrName);
+                if (!isUuid) {
+                  const { data: c } = await supabase.from("contacts").select("id").ilike("name", custIdOrName).eq("organization_id", organizationId).maybeSingle();
+                  if (c?.id) {
+                    mappedRec.customer_id = c.id;
+                  } else {
+                    delete mappedRec.customer_id;
+                  }
+                }
+              }
+
+              // Filter keys to prevent raw column errors
+              const cleanedRec: any = {};
+              for (const [k, v] of Object.entries(mappedRec)) {
+                if (existingDbCols.has(k)) {
+                  cleanedRec[k] = v;
                 }
               }
 
