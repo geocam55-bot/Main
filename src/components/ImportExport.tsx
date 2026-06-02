@@ -167,7 +167,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   };
 
   // Helper function to save a virtual file on Supabase DB kv_store_8405be07 table
-  const saveVirtualFile = async (fileName: string, base64Content: string) => {
+  const saveVirtualFile = async (fileName: string, base64Content: string, target: "local" | "onedrive" = "local") => {
     const supabase = createClient();
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const isBinary = ["xlsx", "xls", "zip", "pdf", "png", "jpg", "jpeg", "gif"].includes(ext);
@@ -192,7 +192,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
 
     // 2. Load and add to files catalog
-    const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
+    const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
+    const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', catKey).maybeSingle();
     let currentFiles = catData?.value || [];
     if (!Array.isArray(currentFiles)) currentFiles = [];
 
@@ -205,7 +206,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     });
 
     const { error: catUpsertErr } = await supabase.from('kv_store_8405be07').upsert({
-      key: 'import_export_local_files',
+      key: catKey,
       value: currentFiles
     });
     if (catUpsertErr) {
@@ -556,6 +557,17 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       }
     }
   }, [showTaskModal, actionStorage]);
+
+  // Keep Interactive Loader Hub choices fresh based on manualStorage selection or active tab switching
+  useEffect(() => {
+    if (activeTab === "manual") {
+      if (manualStorage === "onedrive" && msAccounts.length > 0) {
+        fetchFiles("onedrive", false, onedriveFolderId);
+      } else {
+        fetchFiles(manualStorage, false);
+      }
+    }
+  }, [activeTab, manualStorage, onedriveFolderId, msAccounts]);
 
   const testBackendConnection = async (targetUrl = backendUrl, mode = connectionMode) => {
     setCheckingHealth(true);
@@ -1215,7 +1227,26 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             }
             setLocalFiles(filesList);
           } else {
-            setOnedriveFiles([]);
+            const supabase = createClient();
+            const { data } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_onedrive_files').maybeSingle();
+            let filesList = data?.value || [];
+            if (!Array.isArray(filesList) || filesList.length === 0) {
+              // Populate default standard sample file if blank
+              filesList = [
+                { name: "Customer_Export_List.xlsx", size: 127078, lastModified: new Date().toISOString(), extension: "xlsx" }
+              ];
+              await supabase.from('kv_store_8405be07').upsert({
+                key: 'import_export_onedrive_files',
+                value: filesList
+              });
+              // Save a sample content so downloading or running it immediately has content
+              const initialB64 = "PK"; // minimal PKZIP header
+              await supabase.from('kv_store_8405be07').upsert({
+                key: "import_export_file_content:Customer_Export_List.xlsx",
+                value: { content: "", base64: initialB64, isBinary: true }
+              });
+            }
+            setOnedriveFiles(filesList);
           }
         } else {
           const res = await safeFetch(`/api/import-export/storage/${drive}`);
@@ -1283,7 +1314,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       }
 
       if (connectionMode === "supabase") {
-        await saveVirtualFile(fileName, finalBase64);
+        await saveVirtualFile(fileName, finalBase64, "onedrive");
       } else {
         const uploadRes = await safeFetch(`/api/import-export/storage/onedrive/upload-base64`, {
           method: "POST",
@@ -1485,7 +1516,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
         // Save as base64 content
         const base64Str = btoa(unescape(encodeURIComponent(fileText)));
-        await saveVirtualFile(fileName, base64Str);
+        await saveVirtualFile(fileName, base64Str, task.action.fileStorage || "local");
         logMsg = `Successfully exported ${dbRecords?.length || 0} ${mModule} to virtual file "${fileName}" in direct Supabase connection mode.`;
       } else {
         // import format
@@ -1652,7 +1683,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       const base64Data = await readFileAsBase64(file);
       if (connectionMode === "supabase") {
-        await saveVirtualFile(file.name, base64Data);
+        await saveVirtualFile(file.name, base64Data, target);
         toast.dismiss(uploadToastId);
         toast.success(`Uploaded "${file.name}" successfully to virtual storage!`);
         setExplorerUploading(false);
@@ -1695,7 +1726,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       const base64Data = await readFileAsBase64(file);
       if (connectionMode === "supabase") {
-        await saveVirtualFile(file.name, base64Data);
+        await saveVirtualFile(file.name, base64Data, target);
         toast.dismiss(uploadToastId);
         toast.success(`Uploaded & mapped "${file.name}" to virtual storage successfully!`);
         setActionFileName(file.name);
@@ -3565,26 +3596,34 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                             
                             try {
                               const base64Data = await readFileAsBase64(file);
-                              const res = await safeFetch(`/api/import-export/storage/${manualStorage}/upload-base64`, {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json"
-                                },
-                                body: JSON.stringify({
-                                  fileName: file.name,
-                                  fileContent: base64Data
-                                })
-                              }, 120000);
-                              
-                              const data = await parseResponseJson(res);
-                              toast.dismiss(uploadToastId);
-
-                              if (data.success) {
-                                toast.success(`Uploaded & loaded "${file.name}" to ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
+                              if (connectionMode === "supabase") {
+                                await saveVirtualFile(file.name, base64Data, manualStorage);
+                                toast.dismiss(uploadToastId);
+                                toast.success(`Uploaded & loaded "${file.name}" to virtual ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
                                 setManualFileName(file.name);
                                 fetchFiles(manualStorage);
                               } else {
-                                throw new Error(data.error || "File upload response was not successful");
+                                const res = await safeFetch(`/api/import-export/storage/${manualStorage}/upload-base64`, {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json"
+                                  },
+                                  body: JSON.stringify({
+                                    fileName: file.name,
+                                    fileContent: base64Data
+                                  })
+                                }, 120000);
+                                
+                                const data = await parseResponseJson(res);
+                                toast.dismiss(uploadToastId);
+
+                                if (data.success) {
+                                  toast.success(`Uploaded & loaded "${file.name}" to ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
+                                  setManualFileName(file.name);
+                                  fetchFiles(manualStorage);
+                                } else {
+                                  throw new Error(data.error || "File upload response was not successful");
+                                }
                               }
                             } catch (err: any) {
                               toast.dismiss(uploadToastId);
