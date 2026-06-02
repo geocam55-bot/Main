@@ -93,7 +93,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'audit-log',      label: 'Audit Log',            icon: History,    color: 'text-fuchsia-600', bgColor: 'bg-fuchsia-50', module: 'security' },
   { id: 'settings',       label: 'Settings',             icon: Settings,   color: 'text-slate-600',   bgColor: 'bg-slate-100',  module: 'settings' },
   { id: 'import-export',  label: 'Import / Export',      icon: Upload,     color: 'text-cyan-600',    bgColor: 'bg-cyan-50',    module: 'import-export' },
-  { id: 'scheduled-jobs', label: 'Scheduled Jobs',       icon: Clock,      color: 'text-amber-600',   bgColor: 'bg-amber-50',   module: 'admin' },
   { id: 'billing',        label: 'Billing',              icon: CreditCard, color: 'text-emerald-600', bgColor: 'bg-emerald-50', module: 'admin' },
   { id: 'agreement',      label: 'Subscription',         icon: FileText,   color: 'text-blue-600',    bgColor: 'bg-blue-50',    superAdminOnly: true, module: 'admin' },
   { id: 'portal-admin',   label: 'Message Space',        icon: MessageSquare, color: 'text-rose-600', bgColor: 'bg-rose-50', module: 'messages' },
