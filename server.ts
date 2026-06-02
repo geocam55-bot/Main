@@ -171,7 +171,6 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
     if (!task) return new Date(baseDate.getTime() + 86400000);
     const recurrence = task.recurrence || 'daily';
     const triggerDetail = task.triggerDetail || {};
-    let nextDate = new Date(baseDate);
 
     if (recurrence === 'one-time') {
       if (!triggerDetail.dateTime) {
@@ -181,11 +180,17 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
       return isNaN(triggerTime.getTime()) ? new Date(baseDate.getTime() + 3600000) : triggerTime;
     }
 
+    const timezoneOffset = typeof task.timezoneOffset === 'number' ? task.timezoneOffset : 0;
+    
+    // Transform baseDate to user's local time perspective
+    const localBaseDate = new Date(baseDate.getTime() - timezoneOffset * 60 * 1000);
+    let nextLocalDate = new Date(localBaseDate);
+
     if (!triggerDetail.time) {
       triggerDetail.time = '09:00';
     }
     const [hours, minutes] = String(triggerDetail.time).split(':').map(Number);
-    nextDate.setHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
+    nextLocalDate.setHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
 
     const addDays = (d: Date, days: number) => {
       const res = new Date(d);
@@ -193,41 +198,49 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
       return res;
     };
 
+    let resultLocalDate = nextLocalDate;
+
     if (recurrence === 'daily') {
       let interval = Number(triggerDetail.intervalDays) || 1;
       if (isNaN(interval) || interval <= 0) {
         interval = 1;
       }
-      while (nextDate <= baseDate) {
-        nextDate = addDays(nextDate, interval);
+      while (nextLocalDate <= localBaseDate) {
+        nextLocalDate = addDays(nextLocalDate, interval);
       }
-      return nextDate;
-    }
-
-    if (recurrence === 'weekly') {
+      resultLocalDate = nextLocalDate;
+    } else if (recurrence === 'weekly') {
       const daysOfWeek = Array.isArray(triggerDetail.daysOfWeek) ? triggerDetail.daysOfWeek : [1]; // 0: Sun, 1: Mon, etc.
-      let candidate = new Date(nextDate);
+      let candidate = new Date(nextLocalDate);
+      let found = false;
       for (let i = 0; i < 15; i++) {
-        if (candidate > baseDate && daysOfWeek.includes(candidate.getDay())) {
-          return candidate;
+        if (candidate > localBaseDate && daysOfWeek.includes(candidate.getDay())) {
+          resultLocalDate = candidate;
+          found = true;
+          break;
         }
         candidate = addDays(candidate, 1);
       }
-      return candidate;
-    }
-
-    if (recurrence === 'monthly') {
+      if (!found) resultLocalDate = candidate;
+    } else if (recurrence === 'monthly') {
       const daysOfMonth = Array.isArray(triggerDetail.daysOfMonth) ? triggerDetail.daysOfMonth : [1];
-      let candidate = new Date(nextDate);
+      let candidate = new Date(nextLocalDate);
+      let found = false;
       for (let i = 0; i < 366; i++) {
-        if (candidate > baseDate && daysOfMonth.includes(candidate.getDate())) {
-          return candidate;
+        if (candidate > localBaseDate && daysOfMonth.includes(candidate.getDate())) {
+          resultLocalDate = candidate;
+          found = true;
+          break;
         }
         candidate = addDays(candidate, 1);
       }
+      if (!found) resultLocalDate = addDays(nextLocalDate, 1);
+    } else {
+      resultLocalDate = addDays(nextLocalDate, 1);
     }
 
-    return addDays(nextDate, 1);
+    // Convert back from user's local time perspective to server's UTC absolute time sequence
+    return new Date(resultLocalDate.getTime() + timezoneOffset * 60 * 1000);
   } catch (err) {
     console.error('Error in calculateNextRunTime:', err);
     return new Date(baseDate.getTime() + 86400000); // Fail-safe to tomorrow
@@ -396,12 +409,17 @@ async function runSchedulerTick() {
 
         const result = await executeScheduledTask(task);
 
-        task.status = 'active';
+        if (task.recurrence === 'one-time') {
+          task.status = 'completed';
+          task.nextRunTime = null;
+        } else {
+          task.status = 'active';
+          const nextTime = calculateNextRunTime(task, new Date());
+          task.nextRunTime = nextTime ? nextTime.toISOString() : null;
+        }
+
         task.lastRunTime = now.toISOString();
         task.lastRunResult = result.status;
-        
-        const nextTime = calculateNextRunTime(task, new Date());
-        task.nextRunTime = nextTime ? nextTime.toISOString() : null;
         updated = true;
       }
     }

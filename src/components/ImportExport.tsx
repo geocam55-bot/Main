@@ -57,6 +57,7 @@ interface ScheduledTask {
   description: string;
   status: "active" | "disabled" | "running";
   recurrence: "one-time" | "daily" | "weekly" | "monthly";
+  timezoneOffset?: number;
   triggerDetail: {
     dateTime?: string;
     time?: string;
@@ -114,6 +115,95 @@ const readFileAsBase64 = (file: File): Promise<string> => {
     reader.onerror = (err) => reject(err);
     reader.readAsDataURL(file);
   });
+};
+
+const formatToLocalValue = (isoString: string): string => {
+  if (!isoString) return "";
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return "";
+  }
+};
+
+const calculateNextRunTimeFrontend = (task: ScheduledTask, baseDate = new Date()): Date => {
+  try {
+    const recurrence = task.recurrence || 'daily';
+    const triggerDetail = task.triggerDetail || {};
+
+    if (recurrence === 'one-time') {
+      if (!triggerDetail.dateTime) {
+        return new Date(baseDate.getTime() + 3600000); 
+      }
+      const triggerTime = new Date(triggerDetail.dateTime);
+      return isNaN(triggerTime.getTime()) ? new Date(baseDate.getTime() + 3600000) : triggerTime;
+    }
+
+    const timezoneOffset = task.timezoneOffset !== undefined ? task.timezoneOffset : new Date().getTimezoneOffset();
+    const localBaseDate = new Date(baseDate.getTime() - timezoneOffset * 60 * 1000);
+    let nextLocalDate = new Date(localBaseDate);
+
+    if (!triggerDetail.time) {
+      triggerDetail.time = '09:00';
+    }
+    const [hours, minutes] = String(triggerDetail.time).split(':').map(Number);
+    nextLocalDate.setHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
+
+    const addDays = (d: Date, days: number) => {
+      const res = new Date(d);
+      res.setDate(res.getDate() + days);
+      return res;
+    };
+
+    let resultLocalDate = nextLocalDate;
+
+    if (recurrence === 'daily') {
+      let interval = Number(triggerDetail.intervalDays) || 1;
+      if (isNaN(interval) || interval <= 0) {
+        interval = 1;
+      }
+      while (nextLocalDate <= localBaseDate) {
+        nextLocalDate = addDays(nextLocalDate, interval);
+      }
+      resultLocalDate = nextLocalDate;
+    } else if (recurrence === 'weekly') {
+      const daysOfWeek = Array.isArray(triggerDetail.daysOfWeek) ? triggerDetail.daysOfWeek : [1];
+      let candidate = new Date(nextLocalDate);
+      let found = false;
+      for (let i = 0; i < 15; i++) {
+        if (candidate > localBaseDate && daysOfWeek.includes(candidate.getDay())) {
+          resultLocalDate = candidate;
+          found = true;
+          break;
+        }
+        candidate = addDays(candidate, 1);
+      }
+      if (!found) resultLocalDate = candidate;
+    } else if (recurrence === 'monthly') {
+      const daysOfMonth = Array.isArray(triggerDetail.daysOfMonth) ? triggerDetail.daysOfMonth : [1];
+      let candidate = new Date(nextLocalDate);
+      let found = false;
+      for (let i = 0; i < 366; i++) {
+        if (candidate > localBaseDate && daysOfMonth.includes(candidate.getDate())) {
+          resultLocalDate = candidate;
+          found = true;
+          break;
+        }
+        candidate = addDays(candidate, 1);
+      }
+      if (!found) resultLocalDate = addDays(nextLocalDate, 1);
+    } else {
+      resultLocalDate = addDays(nextLocalDate, 1);
+    }
+
+    return new Date(resultLocalDate.getTime() + timezoneOffset * 60 * 1000);
+  } catch (err) {
+    console.error('Error in calculateNextRunTimeFrontend:', err);
+    return new Date(baseDate.getTime() + 86400000);
+  }
 };
 
 export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (view: string) => void }) {
@@ -2224,8 +2314,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       description: taskDesc,
       status: taskStatus as any,
       recurrence: taskRecurrence,
+      timezoneOffset: new Date().getTimezoneOffset(),
       triggerDetail: {
-        dateTime: taskRecurrence === "one-time" ? triggerDateTime : undefined,
+        dateTime: (() => {
+          if (taskRecurrence !== "one-time" || !triggerDateTime) return undefined;
+          const d = new Date(triggerDateTime);
+          return isNaN(d.getTime()) ? undefined : d.toISOString();
+        })(),
         time: taskRecurrence !== "one-time" ? triggerTime : undefined,
         daysOfWeek: taskRecurrence === "weekly" ? triggerDaysOfWeek : undefined,
         daysOfMonth: taskRecurrence === "monthly" ? triggerDaysOfMonth : undefined,
@@ -2267,11 +2362,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         if (modalMode === "edit" && editingTaskId) {
           currentTasks = currentTasks.map((t: any) => {
             if (t.id === editingTaskId) {
+              const updatedPayload = { ...payload };
+              const nextTime = calculateNextRunTimeFrontend(updatedPayload);
               return { 
-                ...payload, 
+                ...updatedPayload, 
                 lastRunTime: t.lastRunTime, 
                 lastRunResult: t.lastRunResult, 
-                nextRunTime: t.nextRunTime, 
+                nextRunTime: nextTime ? nextTime.toISOString() : null, 
                 createdAt: t.createdAt 
               };
             }
@@ -2280,7 +2377,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         } else {
           payload.id = "task-" + Math.random().toString(36).slice(2, 11);
           payload.createdAt = new Date().toISOString();
-          payload.nextRunTime = new Date().toISOString();
+          const nextTime = calculateNextRunTimeFrontend(payload);
+          payload.nextRunTime = nextTime ? nextTime.toISOString() : null;
           currentTasks.push(payload);
         }
 
@@ -2346,7 +2444,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setTaskDesc(task.description);
     setTaskStatus(task.status === "active" ? "active" : "disabled");
     setTaskRecurrence(task.recurrence);
-    setTriggerDateTime(task.triggerDetail?.dateTime || "");
+    setTriggerDateTime(task.recurrence === "one-time" && task.triggerDetail?.dateTime ? formatToLocalValue(task.triggerDetail.dateTime) : "");
     setTriggerTime(task.triggerDetail?.time || "09:00");
     setTriggerIntervalDays(task.triggerDetail?.intervalDays || 1);
     setTriggerDaysOfWeek(task.triggerDetail?.daysOfWeek || []);

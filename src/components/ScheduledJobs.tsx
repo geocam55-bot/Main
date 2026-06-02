@@ -36,6 +36,18 @@ import {
   sanitizeFilename
 } from '../utils/export-engine';
 
+const formatToLocalValue = (isoString: string): string => {
+  if (!isoString) return "";
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return "";
+  }
+};
+
 function ScheduledJobs({ user, onNavigate }) {
   // State for editing a job
   const [jobs, setJobs] = useState([]);
@@ -692,7 +704,7 @@ function ScheduledJobs({ user, onNavigate }) {
                     size="sm"
                     onClick={() => {
                       setEditJob(job);
-                      setEditScheduleDateTime(job.scheduled_time.slice(0, 16));
+                      setEditScheduleDateTime(formatToLocalValue(job.scheduled_time));
                       setEditRepeatType(job.repeat_type || 'none');
                       setEditRepeatInterval(job.repeat_interval || 1);
                       setEditRepeatCustomUnit(job.repeat_custom_unit || 'days');
