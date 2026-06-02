@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, useCallback, lazy } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router';
+import { createBrowserRouter, RouterProvider, useRouteError } from 'react-router';
 import { Navigation } from './components/Navigation';
 
 // ── Eagerly loaded (always needed on auth'd shell) ──
@@ -11,7 +11,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { DailyBriefingPopup } from './components/DailyBriefingPopup';
 import { Toaster } from './components/ui/sonner';
-import ErrorBoundary from './components/ErrorBoundary';
+import ErrorBoundary, { ErrorBoundaryFallback } from './components/ErrorBoundary';
 import { toast } from 'sonner@2.0.3';
 import { GettingStarted } from './components/GettingStarted';
 import { createClient } from './utils/supabase/client';
@@ -23,7 +23,27 @@ import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 const lazyNamed = <T extends Record<string, any>>(
   factory: () => Promise<T>,
   name: keyof T
-) => lazy(() => factory().then((m) => ({ default: m[name] as React.ComponentType<any> })));
+) => lazy(() => 
+  factory()
+    .then((m) => ({ default: m[name] as React.ComponentType<any> }))
+    .catch((err) => {
+      const isDynamicImportError = 
+        err.message?.includes('Failed to fetch dynamically imported module') ||
+        err.message?.includes('Importing a module script failed') ||
+        err.message?.includes('chunk') ||
+        err.name === 'TypeError';
+
+      if (isDynamicImportError) {
+        const lastReload = sessionStorage.getItem('last-chunk-reload');
+        const now = Date.now();
+        if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+          sessionStorage.setItem('last-chunk-reload', String(now));
+          window.location.reload();
+        }
+      }
+      throw err;
+    })
+);
 
 // Lazy load non-critical authentication or secondary dashboard entry screens
 const LandingPage = lazyNamed(() => import('./components/LandingPage'), 'LandingPage');
@@ -927,11 +947,40 @@ export function AppContent() {
   );
 }
 
+function RouterErrorBoundary() {
+  const error = useRouteError() as any;
+  console.error("Router caught an error:", error);
+
+  // If it's a dynamic import / chunk loading error, refresh the page to get the latest bundle/manifest
+  const isDynamicImportError = 
+    error?.message?.includes('Failed to fetch dynamically imported module') ||
+    error?.message?.includes('Importing a module script failed') ||
+    error?.message?.includes('chunk') ||
+    error?.name === 'TypeError';
+
+  if (isDynamicImportError) {
+    const lastReload = sessionStorage.getItem('last-chunk-reload');
+    const now = Date.now();
+    if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+      sessionStorage.setItem('last-chunk-reload', String(now));
+      window.location.reload();
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <p className="text-sm font-medium animate-pulse">Updating application with latest version...</p>
+        </div>
+      );
+    }
+  }
+
+  return <ErrorBoundaryFallback error={error} />;
+}
+
 // Router definition — Data mode pattern (parent layout + wildcard child)
 const router = createBrowserRouter([
   {
     path: "/",
     Component: AppContent,
+    ErrorBoundary: RouterErrorBoundary,
     children: [
       // Catch-all child so React Router never reports "no route matched"
       { path: "*", Component: () => null },
