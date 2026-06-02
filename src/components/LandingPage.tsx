@@ -9,7 +9,33 @@ import { InsightsSpaceInfo } from './InsightsSpaceInfo';
 import { MarketingSpaceInfo } from './MarketingSpaceInfo';
 import { ITSpaceInfo } from './ITSpaceInfo';
 import { motion } from 'motion/react';
-import { Info, ChevronRight } from 'lucide-react';
+import { 
+  Info, 
+  ChevronRight, 
+  Store, 
+  ChevronDown, 
+  Monitor, 
+  Building2, 
+  Users, 
+  MapPin, 
+  Search, 
+  ArrowRight, 
+  Check, 
+  Play, 
+  Database, 
+  TrendingUp, 
+  Layers, 
+  Package, 
+  FileText, 
+  Clock, 
+  Plus, 
+  ChevronLeft,
+  Briefcase,
+  Layers2,
+  FileSpreadsheet,
+  AlertBubble,
+  HelpCircle
+} from 'lucide-react';
 
 /* ── Image Asset Imports ── */
 import spaceSalesSvg from '../assets/landing/spaces/space-sales.svg';
@@ -258,265 +284,852 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
     );
   }
 
+  // Local state to keep track of the interactive mockup dashboard tab
+  const [activeTab, setActiveTab] = useState<SpaceKey>('sales');
+  // State for header sub-menus information modals
+  const [activeNavTab, setActiveNavTab] = useState<'features' | 'why' | 'pricing' | null>(null);
+
+  const spaceLabels: Record<SpaceKey, string> = {
+    sales: 'Sales Space',
+    build: 'Design Space',
+    inventory: 'Inventory Space',
+    insights: 'Insights Space',
+    marketing: 'Marketing Space',
+    it: 'IT Space'
+  };
+
+  const currentSpaceInfo = SPACES.find(s => s.key === activeTab);
+
   return (
     <div
-      className="relative min-h-screen overflow-hidden flex flex-col"
-      style={{ background: '#E8ECF0', fontFamily: 'Inter, "SF Pro", Arial, system-ui, sans-serif' }}
+      className="relative min-h-screen flex flex-col bg-slate-50/50"
+      style={{ fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif' }}
     >
+      {/* ── HEADER ── */}
+      <header className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-md border-b border-slate-100">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 h-18 flex items-center justify-between">
+          {/* Logo brand with navigation triggers */}
+          <div className="flex items-center gap-4 sm:gap-10">
+            <div className="flex items-center cursor-pointer" onClick={() => { setSelectedSpaceInfo(null); setActiveNavTab(null); }}>
+              <Logo size="sm" className="h-[44px] w-auto" />
+            </div>
 
-      {/* ═══ BACKGROUND STACK — Full lobby photo ═══ */}
-
-      {/* Layer 1 — Environment photo (full opacity, visible background) */}
-      {environmentBg && (
-        <div className="pointer-events-none absolute inset-0 z-0" style={{
-          backgroundImage: `url(${environmentBg})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center 30%',
-          opacity: 1,
-        }} />
-      )}
-
-      {/* Layer 2 — Soft white veil for readability */}
-      <div className="pointer-events-none absolute inset-0 z-[1]" style={{
-        background: 'radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.15) 60%, rgba(240,238,235,0.25) 100%)',
-      }} />
-
-      {/* Layer 3 — Bottom floor fade for grounding */}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[35%] z-[1]" style={{
-        background: 'linear-gradient(to top, rgba(215,210,200,0.40) 0%, transparent 100%)',
-      }} />
-
-      {/* Layer 4 — Subtle grain */}
-      <div
-        className="pointer-events-none absolute inset-0 z-[2] mix-blend-multiply"
-        style={{
-          backgroundImage: `url(${grainOverlay})`,
-          backgroundRepeat: 'repeat',
-          backgroundSize: '200px 200px',
-          opacity: 0.03,
-        }}
-      />
-
-      {/* ═══ CONTENT ═══ */}
-      <div
-        className="relative z-10 mx-auto w-full flex flex-col min-h-screen justify-between"
-        style={{ maxWidth: 1240, paddingLeft: 32, paddingRight: 32, paddingTop: 24, paddingBottom: 16 }}
-      >
-
-        {/* ── HERO ── */}
-        <header className="flex flex-col items-center text-center pt-6 sm:pt-10">
-          <motion.h1
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.05 }}
-            style={{ fontSize: 48, fontWeight: 300, lineHeight: 1.15, color: '#1E293B', margin: 0 }}
-          >
-            Welcome to{' '}
-            <span style={{ color: '#1E5FD8', fontWeight: 700 }}>ProSpaces CRM</span>
-          </motion.h1>
-
-          <motion.h2
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.14 }}
-            style={{ fontSize: 22, fontWeight: 400, color: '#334155', marginTop: 10 }}
-          >
-            Each team. Each task. Its own space.
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.22 }}
-            style={{ fontSize: 15, color: '#475569', marginTop: 8 }}
-          >
-            Sales. Projects. Inventory. Marketing &mdash; All in one connected platform.
-          </motion.p>
-
-          {/* Buttons */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.28 }}
-            className="flex flex-col items-center gap-3 mt-6"
-          >
-            {/* Primary & Secondary CTAs - Side by side */}
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              {/* Enter ProSpaces Button */}
-              <button
-                onClick={() => onMemberLogin ? onMemberLogin() : undefined}
-                className="transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
-                style={{
-                  padding: '14px 36px',
-                  borderRadius: 24,
-                  border: 'none',
-                  color: '#FFFFFF',
-                  fontWeight: 600,
-                  fontSize: 16,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                  background: 'linear-gradient(180deg, #1E5FD8 0%, #153F8A 100%)',
-                  boxShadow: '0 4px 16px rgba(21,63,138,0.35)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = '0 6px 24px rgba(21,63,138,0.50)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(21,63,138,0.35)';
-                }}
+            {/* Desktop Center Navigation Links */}
+            <nav className="hidden md:flex items-center gap-8 text-base font-semibold text-[#002f5d]">
+              <button 
+                onClick={() => setActiveNavTab('features')}
+                className={`group flex items-center gap-1.5 hover:text-[#1E6FD9] transition-all py-1 px-1 cursor-pointer ${activeNavTab === 'features' ? 'text-[#1E6FD9] border-b-2 border-[#1E6FD9]' : ''}`}
+                id="nav-btn-features"
               >
-                Enter ProSpaces
+                <span>Features</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
-
-              {/* Free Trial Button */}
-              <button
-                onClick={() => onGetStarted()}
-                className="transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
-                style={{
-                  padding: '14px 36px',
-                  borderRadius: 24,
-                  border: '2px solid #1E5FD8',
-                  color: '#1E5FD8',
-                  fontWeight: 600,
-                  fontSize: 16,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                  background: 'transparent',
-                  boxShadow: '0 2px 8px rgba(21,63,138,0.15)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(30,95,216,0.08)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(21,63,138,0.25)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(21,63,138,0.15)';
-                }}
+              <button 
+                onClick={() => setActiveNavTab('why')}
+                className={`group flex items-center gap-1.5 hover:text-[#1E6FD9] transition-all py-1 px-1 cursor-pointer ${activeNavTab === 'why' ? 'text-[#1E6FD9] border-b-2 border-[#1E6FD9]' : ''}`}
+                id="nav-btn-why"
               >
-                Start Free Trial
+                <span>Why ProSpaces CRM</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
+              </button>
+              <button 
+                onClick={() => setActiveNavTab('pricing')}
+                className={`group flex items-center gap-1.5 hover:text-[#1E6FD9] transition-all py-1 px-1 cursor-pointer ${activeNavTab === 'pricing' ? 'text-[#1E6FD9] border-b-2 border-[#1E6FD9]' : ''}`}
+                id="nav-btn-pricing"
+              >
+                <span>Pricing</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
+              </button>
+            </nav>
+          </div>
+
+          {/* Right Header Navigation with support for mobile tab views */}
+          <div className="flex items-center gap-3 sm:gap-6">
+            {/* Mobile Navigation controls */}
+            <div className="flex md:hidden items-center gap-2 text-xs font-bold text-slate-500 mr-1 select-none">
+              <button 
+                onClick={() => setActiveNavTab('features')}
+                className={`group flex items-center gap-1 px-2 py-1 rounded ${activeNavTab === 'features' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
+              >
+                <span>Features</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
+              </button>
+              <button 
+                onClick={() => setActiveNavTab('why')}
+                className={`group flex items-center gap-1 px-2 py-1 rounded ${activeNavTab === 'why' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
+              >
+                <span>Why Us</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
+              </button>
+              <button 
+                onClick={() => setActiveNavTab('pricing')}
+                className={`group flex items-center gap-1 px-2 py-1 rounded ${activeNavTab === 'pricing' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
+              >
+                <span>Pricing</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
             </div>
 
-            {/* Secondary CTA — text link style */}
             <button
-              onClick={() => { window.location.href = '?view=promo'; }}
-              className="flex items-center gap-1 transition-all duration-200 hover:opacity-80"
-              style={{
-                padding: '8px 4px',
-                border: 'none',
-                background: 'transparent',
-                color: '#334155',
-                fontWeight: 500,
-                fontSize: 14,
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-              }}
+              onClick={onGetStarted}
+              className="bg-[#1E6FD9] hover:bg-[#155FBC] text-white text-xs sm:text-sm font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-blue-500/10 active:scale-[0.98]"
             >
-              Watch How It Works
-              <ChevronRight className="h-4 w-4" />
+              Start Free Trial
             </button>
-          </motion.div>
-        </header>
-
-        {/* ── SPACE SELECTOR GRID (spec §6 — 2×2) ── */}
-        <section className="mt-8 sm:mt-10">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {SPACES.map((space, i) => (
-              <div key={space.key}>
-                <SpaceTile
-                  space={space}
-                  index={i}
-                  onClick={() => setSelectedSpaceInfo(space.key)}
-                />
-              </div>
-            ))}
           </div>
-        </section>
+        </div>
+      </header>
 
-        {/* ── BUILT FOR (spec §7) ── */}
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.7 }}
-          className="mt-8 sm:mt-10"
-        >
-          <Divider label="Built For" />
-          <div className="flex flex-wrap justify-center gap-6 sm:gap-10 mt-5">
-            {AUDIENCES.map(({ icon, label }, i) => (
-              <div
-                key={i}
-                className="flex flex-col items-center gap-2"
-                style={{ minWidth: 100 }}
-              >
-                <img
-                  src={icon}
-                  alt={label}
-                  style={{ width: 56, height: 56, opacity: 0.90 }}
-                  loading="lazy"
-                />
-                <span style={{ fontSize: 12, color: '#334155', textAlign: 'center', lineHeight: 1.3, fontWeight: 500 }}>
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </motion.section>
+      {/* ── HERO SECTION ── */}
+      <main className="flex-grow max-w-7xl mx-auto px-6 sm:px-8 py-12 md:py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+        
+        {/* Left Column Text Content */}
+        <div className="lg:col-span-5 flex flex-col justify-center">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          >
+            <h1 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold text-slate-800 tracking-tight leading-[1.08] lg:-mr-4">
+              Built for How You Actually Sell, Build, and Deliver
+            </h1>
+            
+            <p className="text-slate-600 font-normal text-base sm:text-lg mt-6 leading-relaxed max-w-xl">
+              Prospaces CRM connects sales, projects, inventory, and teams – designed specifically for home improvement, lumber, and project-based businesses.
+            </p>
+            
+            <p className="text-sm font-semibold text-slate-500 mt-4 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#1E6FD9]"></span>
+              No generic CRM workflows. Everything is tailored to your industry.
+            </p>
 
-        {/* ── ACCESS PANEL (Functional Footer) ── */}
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.9 }}
-          className="mt-6 sm:mt-8"
-        >
-          <div className="flex flex-wrap justify-center gap-3">
-            {[
-              { label: 'Enter ProSpaces',     action: () => onMemberLogin ? onMemberLogin() : onGetStarted() },
-              { label: 'Start Free Trial',    action: onGetStarted },
-              { label: 'Book a Demo',         action: () => { window.location.href = '?view=promo'; } },
-            ].map(({ label, action }, i) => (
+            {/* Direct CRM Access buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 mt-8">
               <button
-                key={i}
-                onClick={action}
-                className="transition-all duration-200 hover:bg-white/80"
-                style={{
-                  padding: '10px 22px',
-                  borderRadius: 8,
-                  border: '1px solid rgba(255,255,255,0.6)',
-                  background: 'rgba(255,255,255,0.55)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  color: '#1E293B',
-                  fontWeight: 500,
-                  fontSize: 14,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                }}
+                onClick={() => onMemberLogin ? onMemberLogin() : onGetStarted()}
+                className="bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-sm"
               >
-                {label}
+                <span>Enter CRM Workspace</span>
+                <ArrowRight className="h-4 w-4" />
               </button>
-            ))}
-          </div>
-        </motion.section>
+            </div>
+          </motion.div>
+        </div>
 
-        {/* ── FOOTER ── */}
-        <footer className="mt-4 pt-3 pb-2 flex flex-col sm:flex-row items-center justify-between gap-2" style={{ borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-          <div className="flex items-center gap-2">
-            <Logo size="sm" />
+        {/* Right Column: Premium CSS Dashboard Interactive Mockup */}
+        <div className="lg:col-span-7">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
+            className="flex w-full rounded-2xl overflow-hidden shadow-2xl border border-slate-100 bg-[#E8EFF8] p-1.5 sm:p-2.5"
+          >
+            {/* Dashboard Sidebar Navigation Rail */}
+            <div className="w-12 sm:w-16 bg-[#1D5EBE] rounded-xl flex flex-col items-center py-4 sm:py-6 gap-4 sm:gap-6 shrink-0 shadow-lg shadow-blue-900/10">
+              {/* Brand logo inside rail */}
+              <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center mb-2">
+                <Building2 className="h-4 w-4 text-white" />
+              </div>
+
+              {/* Navigation Items in mockup */}
+              {SPACES.map((space) => {
+                const isSelected = activeTab === space.key;
+                let SpaceIcon = Briefcase;
+                if (space.key === 'build') SpaceIcon = Layers2;
+                if (space.key === 'inventory') SpaceIcon = Package;
+                if (space.key === 'insights') SpaceIcon = TrendingUp;
+                if (space.key === 'marketing') SpaceIcon = Users;
+                if (space.key === 'it') SpaceIcon = Monitor;
+
+                return (
+                  <button
+                    key={space.key}
+                    onClick={() => setActiveTab(space.key)}
+                    title={space.title}
+                    className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all duration-150 relative ${
+                      isSelected 
+                        ? 'bg-white text-[#1E6FD9] shadow-sm font-semibold' 
+                        : 'text-white/75 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <SpaceIcon className="h-4 w-4" />
+                    {isSelected && (
+                      <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-white rounded-l-md" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Inner Main Dashboard Screen Frame */}
+            <div className="flex-1 bg-white rounded-xl ml-1.5 sm:ml-2.5 overflow-hidden flex flex-col border border-slate-100 min-h-[380px] sm:min-h-[420px] shadow-inner">
+              
+              {/* Fake Dashboard Top Header */}
+              <div className="border-b border-slate-100 px-4 py-3 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="text-xs font-bold text-slate-800 tracking-tight">
+                    {spaceLabels[activeTab]}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="hidden sm:flex items-center gap-1.5 bg-slate-100 rounded-md px-2 py-1 text-[10px] text-slate-500">
+                    <Search className="h-2.5 w-2.5" />
+                    <span className="opacity-80">Search specs...</span>
+                  </div>
+                  <div className="h-5 w-5 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-[10px] text-white font-bold select-none shadow-sm">
+                    JD
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Workspace Container depending on state */}
+              <div className="flex-1 p-4 sm:p-5 flex flex-col justify-between overflow-auto">
+                {activeTab === 'sales' && (
+                  <div className="space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sales Quote Tracker</span>
+                        <div className="flex gap-1">
+                          <span className="px-2 py-0.5 rounded text-[9px] bg-blue-50 text-[#1E6FD9] font-semibold">Today</span>
+                          <span className="px-2 py-0.5 rounded text-[9px] text-slate-400">Reporting</span>
+                          <span className="px-2 py-0.5 rounded text-[9px] text-slate-400">Wins</span>
+                        </div>
+                      </div>
+
+                      {/* Main Financial stats representation */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-50/70 rounded-xl p-3 border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-medium block">Total Pipeline Value</span>
+                          <span className="text-lg sm:text-xl font-extrabold text-slate-700 block tracking-tight mt-0.5">5,909</span>
+                          <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: '65%' }}></div>
+                          </div>
+                        </div>
+                        <div className="bg-slate-50/70 rounded-xl p-3 border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-medium block">Materials Orders</span>
+                          <span className="text-lg sm:text-xl font-extrabold text-slate-700 block tracking-tight mt-0.5">5300</span>
+                          <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
+                            <div className="h-full bg-teal-500 rounded-full" style={{ width: '80%' }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Product overview simulation */}
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block mb-2 uppercase tracking-wider">Product Overview</span>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-teal-50/40 border border-teal-100/50">
+                          <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+                            <span className="text-xs font-semibold text-slate-700">Wall Studs 2x4</span>
+                          </div>
+                          <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full">In Stock</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50/40 border border-amber-100/50">
+                          <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            <span className="text-xs font-semibold text-slate-700">Window Trim & Trim Sets</span>
+                          </div>
+                          <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Pending</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-blue-50/40 border border-[#1E6FD9]/10">
+                          <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                            <span className="text-xs font-semibold text-slate-700">Corner Pine Boards</span>
+                          </div>
+                          <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Completed</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'build' && (
+                  <div className="space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Project Estimates & CAD</span>
+                        <span className="text-[10px] bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded-full">3D Active</span>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center py-6">
+                        <div className="h-10 w-10 mx-auto rounded-full bg-orange-100 flex items-center justify-center text-orange-600 mb-2">
+                          <Layers className="h-5 w-5" />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-700">Estimator Pro Layout</h4>
+                        <p className="text-[10px] text-slate-400 mt-1">Configure lumber lists, trusses, sheathing and layout boards in real-time.</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-slate-50/50 border border-slate-100 rounded-lg p-2.5 text-center">
+                        <span className="text-[9px] text-slate-400 block font-medium">Bids Sent</span>
+                        <span className="text-sm font-extrabold text-slate-700 mt-0.5 block">24 active</span>
+                      </div>
+                      <div className="bg-slate-50/50 border border-slate-100 rounded-lg p-2.5 text-center block">
+                        <span className="text-[9px] text-slate-400 block font-medium">Auto-Calculation</span>
+                        <span className="text-sm font-extrabold text-emerald-600 mt-0.5 block">100% accurate</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'inventory' && (
+                  <div className="space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Live Inventory Sync</span>
+                        <span className="text-[10px] text-slate-400 font-semibold">4 Locations Joined</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-indigo-50/50 border border-indigo-100/40 text-xs">
+                          <span className="font-bold text-indigo-900 block truncate">Lumber 2"x4"x8' Studs</span>
+                          <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-100/80 px-1.5 py-0.5 rounded">1,540 units</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50/50 border border-slate-100 text-xs">
+                          <span className="font-bold text-slate-700 block truncate">OSB Sheathing 4x8</span>
+                          <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">410 units</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-teal-50/50 border border-teal-100/40 text-xs">
+                          <span className="font-bold text-teal-900 block truncate">Asphalt Architecture Shingles</span>
+                          <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded">80 Bundles</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#1E6FD9]/5 rounded-xl p-3 border border-[#1E6FD9]/10 text-center">
+                      <p className="text-[9px] text-slate-500 font-medium">Automatic low-inventory order generation triggers instantly.</p>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'insights' && (
+                  <div className="space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block mb-2 uppercase tracking-wider">Performance Analytics</span>
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex items-center justify-center min-h-[120px]">
+                        {/* Mini vector SVG graph */}
+                        <svg viewBox="0 0 100 35" className="w-full h-24 text-[#1E6FD9] overflow-visible">
+                          <path
+                            d="M0,30 Q15,10 30,22 T60,5 T85,18 T100,2"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M0,30 Q15,10 30,22 T60,5 T85,18 T100,2 L100,35 L0,35 Z"
+                            fill="url(#gradient-blue)"
+                            opacity="0.1"
+                          />
+                          <defs>
+                            <linearGradient id="gradient-blue" x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="currentColor" />
+                              <stop offset="100%" stopColor="white" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100 text-[10px]">
+                      <span className="font-semibold text-slate-600">GP Target Margin</span>
+                      <span className="font-bold text-emerald-600">+34.8% average</span>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'marketing' && (
+                  <div className="space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block mb-1 uppercase tracking-wider">Campaign Hub & Leads</span>
+                      <p className="text-[10px] text-slate-400 mb-2">Automate client check-ins and target local custom builders.</p>
+                      <div className="space-y-1.5">
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 text-xs flex justify-between">
+                          <span className="font-semibold text-slate-700">"New Home Spring Build" campaign</span>
+                          <span className="text-teal-600 font-bold">81.4% Open</span>
+                        </div>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 text-xs flex justify-between">
+                          <span className="font-semibold text-slate-700">Inbound Web Estimates</span>
+                          <span className="font-bold text-slate-600">+12 Leads</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button className="w-full bg-[#1E6FD9] hover:bg-[#155fc2] text-white text-[11px] font-bold py-2 rounded-lg transition-colors">
+                      Send Mass Broadcast Email
+                    </button>
+                  </div>
+                )}
+
+                {activeTab === 'it' && (
+                  <div className="space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block mb-2 uppercase tracking-wider">Systems & Permissions</span>
+                      <div className="bg-slate-900 text-slate-300 font-mono text-[9px] rounded-lg p-3 select-all overflow-hidden whitespace-nowrap">
+                        <p className="text-emerald-400"># system running optimally</p>
+                        <p className="text-slate-400 mt-1">DATABASE: OK (Supabase Direct)</p>
+                        <p className="text-slate-400">ORGANIZATION_ID: verified</p>
+                        <p className="text-slate-400">API Gateway 3000: active</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="h-6 w-1/2 bg-slate-50 rounded border border-slate-100 flex items-center justify-center text-[9px] font-medium text-slate-500">
+                        99.98% Uptime
+                      </div>
+                      <div className="h-6 w-1/2 bg-slate-50 rounded border border-slate-100 flex items-center justify-center text-[9px] font-medium text-slate-500">
+                        SSO Bound
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Simulated workspace entry footer inside preview */}
+                <div className="mt-2 pt-2 border-t border-slate-50 flex items-center justify-center text-xs text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Info className="h-3.5 w-3.5" />
+                    Interactive Preview Sandbox
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          </motion.div>
+        </div>
+
+      </main>
+
+      {/* ── LOWER AUDIENCES SECTION (Built for Teams) ── */}
+      <section id="features-section" className="bg-white border-t border-slate-100 py-16 md:py-24">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8">
+          
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 text-center tracking-tight mb-14">
+            Built for Teams That Manage Real-World Projects
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-10">
+            {/* Feature 1 — Home Improvement Centres */}
+            <div 
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            >
+              <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center mb-5 transition-transform duration-150">
+                <Store className="h-7 w-7 text-[#1E6FD9]" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 leading-tight">
+                Home Improvement Centres
+              </h3>
+              <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
+                Track quotes, suppliers, and contractor installations ahead sequentially.
+              </p>
+            </div>
+
+            {/* Feature 2 — Lumber & Building Suppliers */}
+            <div 
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            >
+              <div className="h-16 w-16 rounded-full bg-orange-100 flex items-center justify-center mb-5 transition-transform duration-150">
+                <Layers className="h-7 w-7 text-orange-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 leading-tight">
+                Lumber & Building Suppliers
+              </h3>
+              <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
+                Generate material bids and manage stock yard across local yards.
+              </p>
+            </div>
+
+            {/* Feature 3 — Pro Desk Sales Teams */}
+            <div 
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            >
+              <div className="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center mb-5 transition-transform duration-150">
+                <Users className="h-7 w-7 text-indigo-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 leading-tight">
+                Pro Desk Sales Teams
+              </h3>
+              <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
+                Streamline volume customer accounts, contract pricing, and material bundles.
+              </p>
+            </div>
+
+            {/* Feature 4 — Multi-Location Operations */}
+            <div 
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            >
+              <div className="h-16 w-16 rounded-full bg-teal-100 flex items-center justify-center mb-5 transition-transform duration-150">
+                <MapPin className="h-7 w-7 text-teal-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 leading-tight">
+                Multi-Location Operations
+              </h3>
+              <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
+                Manage high-volume inventories and coordinate dispatch across multiple branches.
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3" style={{ fontSize: 11, color: '#64748B' }}>
-            <button onClick={() => setShowAbout(true)} className="hover:text-slate-600 transition-colors flex items-center gap-1">
-              <Info className="h-3 w-3" /> About
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer className="bg-slate-50 border-t border-slate-100 mt-auto py-8 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="font-extrabold text-[#1E6FD9] text-sm">ProSpaces</span>
+            <span>&copy; {new Date().getFullYear()} ProSpaces CRM Corp. All rights reserved.</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+               onClick={() => setShowAbout(true)}
+               className="hover:text-slate-800 transition-colors flex items-center gap-1.5 font-semibold"
+            >
+              <Info className="h-3.5 w-3.5" /> About ProSpaces
             </button>
             <span>|</span>
-            <a href="?view=privacy-policy" className="hover:text-slate-600 transition-colors">Privacy</a>
+            <a href="?view=privacy-policy" className="hover:text-slate-800 transition-colors">Privacy Policy</a>
             <span>|</span>
-            <a href="?view=terms-of-service" className="hover:text-slate-600 transition-colors">Terms</a>
+            <a href="?view=terms-of-service" className="hover:text-slate-800 transition-colors">Terms of Service</a>
           </div>
-          <p style={{ fontSize: 11, color: '#64748B' }}>&copy; {new Date().getFullYear()} ProSpaces CRM</p>
-        </footer>
-      </div>
+        </div>
+      </footer>
+
+      {/* ── INTERACTIVE TOP NAV OVERLAYS (Features, Why CRM, Pricing) ── */}
+
+      {/* FEATURES MODAL OVERLAY */}
+      {activeNavTab === 'features' && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col border border-slate-100"
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                  <Layers className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-extrabold text-slate-800">Advanced Industry Features</h3>
+                  <p className="text-xs text-slate-500">Fully integrated ERP-CRM workflow tailored for construction and supply spaces</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActiveNavTab(null)}
+                className="h-10 w-10 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors font-bold text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Scrollable Contents */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Feature Card: Sales Workspace */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-sm transition-all duration-150">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-8 w-8 rounded-lg bg-blue-100 text-[#1E6FD9] flex items-center justify-center">
+                      <Store className="h-4 w-4" />
+                    </div>
+                    <span className="font-bold text-slate-800 text-sm">Lumber & CRM Sales Space</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Track contractor quotes with full material breakdown. Handle tier-discounts for custom home builders dynamically and sync with multi-location stock levels automatically in real-time.
+                  </p>
+                  <ul className="mt-3 space-y-1.5 text-xs text-slate-500">
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Multi-tiered contractor price lists</li>
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Direct bid-to-quote conversion builder</li>
+                  </ul>
+                </div>
+
+                {/* Feature Card: CAD Design Estimations */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-sm transition-all duration-150">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-8 w-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                      <Layers2 className="h-4 w-4" />
+                    </div>
+                    <span className="font-bold text-slate-800 text-sm">Estimator Pro Plan suite</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Built-in linear lumber, roofing tile and deck material calculators. Generate precise blueprints with waste allowances included, exporting professional line lists in seconds.
+                  </p>
+                  <ul className="mt-3 space-y-1.5 text-xs text-slate-500">
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Roof, Garage, Deck, and Shed project planners</li>
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Automatic lumber-sheet checklist tools</li>
+                  </ul>
+                </div>
+
+                {/* Feature Card: Live Inventory Sync */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-sm transition-all duration-150">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                      <Package className="h-4 w-4" />
+                    </div>
+                    <span className="font-bold text-slate-800 text-sm">Global Inventory & Logistics</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Track material stock levels in real-time across four distinct yards. Set low stock alerts and automatically generate purchase orders matching contractor request volume.
+                  </p>
+                  <ul className="mt-3 space-y-1.5 text-xs text-slate-500">
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Automatic supplier order creation</li>
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Live stock level updates in warehouses</li>
+                  </ul>
+                </div>
+
+                {/* Feature Card: Profit margin Tracking */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-sm transition-all duration-150">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-8 w-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center">
+                      <TrendingUp className="h-4 w-4" />
+                    </div>
+                    <span className="font-bold text-slate-800 text-sm">Margin Tracking & Insights</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Instantly view overall gross margin per project, with dynamic timber price index updates. Keep track of materials cost variances, delivery costs, and sales commission structures.
+                  </p>
+                  <ul className="mt-3 space-y-1.5 text-xs text-slate-500">
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Real-time materials value indexing</li>
+                    <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Visual dashboard reporting charts</li>
+                  </ul>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <span className="text-xs text-slate-400">Want to test-drive these features?</span>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setActiveNavTab(null)}
+                  className="px-4 py-2 border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+                >
+                  Close
+                </button>
+                <button 
+                  onClick={() => { setActiveNavTab(null); onGetStarted(); }}
+                  className="px-5 py-2 bg-[#1E6FD9] hover:bg-blue-600 text-white text-sm font-bold rounded-lg transition-all shadow-sm"
+                >
+                  Take Free Trial
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* WHY PROSPACES MODAL OVERLAY */}
+      {activeNavTab === 'why' && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col border border-slate-100"
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-extrabold text-slate-800">Why ProSpaces CRM?</h3>
+                  <p className="text-xs text-slate-500">The first construction-aware CRM ever built</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActiveNavTab(null)}
+                className="h-10 w-10 rounded-full hover:bg-slate-200 text-slate-400 hover:text-[#1E6FD9] flex items-center justify-center transition-colors font-bold text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Scrollable Contents */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              <div className="text-sm text-slate-600 leading-relaxed space-y-4">
+                <p>
+                  Most CRMs are designed for software sales or simple retail shops. They don't understand <strong>lumber grades, volume timber packages, linear footage, or dispatch coordination across physical yards.</strong>
+                </p>
+                <p>
+                  ProSpaces CRM acts as a unified operating system that interfaces directly with lumber merchant systems, estimating workflows, and live dispatch pipelines.
+                </p>
+              </div>
+
+              {/* Comparison Section */}
+              <div className="border border-slate-200/50 rounded-2xl overflow-hidden mt-6">
+                <div className="grid grid-cols-2 bg-slate-50 p-3 text-xs font-bold text-slate-700 border-b border-slate-100 text-center">
+                  <div>Generic CRM (HubSpot/Salesforce)</div>
+                  <div className="text-[#1E6FD9] font-bold">ProSpaces CRM</div>
+                </div>
+                <div className="divide-y divide-slate-100 text-xs text-slate-600">
+                  <div className="grid grid-cols-2 p-3 text-center">
+                    <span className="text-slate-400">Generic items with standard numbers only</span>
+                    <span className="text-slate-700 font-semibold flex items-center justify-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-500" /> Lumber, sheets area calculations</span>
+                  </div>
+                  <div className="grid grid-cols-2 p-3 text-center">
+                    <span className="text-slate-400">Siloed systems with no 3D blueprints helper</span>
+                    <span className="text-slate-700 font-semibold flex items-center justify-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-500" /> Integrated real-time 3D CAD design estimator</span>
+                  </div>
+                  <div className="grid grid-cols-2 p-3 text-center">
+                    <span className="text-slate-400">Contractor accounts require massive custom code</span>
+                    <span className="text-slate-700 font-semibold flex items-center justify-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-500" /> Native pro desk contractor tier discount pricing</span>
+                  </div>
+                  <div className="grid grid-cols-2 p-3 text-center">
+                    <span className="text-slate-400">No multi-yard inventory tracking logic</span>
+                    <span className="text-slate-700 font-semibold flex items-center justify-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-500" /> Real-time 4 location inventory sync with alerts</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3">
+              <button 
+                onClick={() => setActiveNavTab(null)}
+                className="px-4 py-2 border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+              >
+                Go Back
+              </button>
+              <button 
+                onClick={() => { setActiveNavTab(null); onGetStarted(); }}
+                className="px-5 py-2 bg-[#1E6FD9] hover:bg-blue-600 text-white text-sm font-bold rounded-lg transition-all shadow-sm"
+              >
+                Join Today
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* PRICING MODAL OVERLAY */}
+      {activeNavTab === 'pricing' && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-3xl w-full max-w-5xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col border border-slate-100"
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center bg-gradient-to-r from-slate-50 to-blue-50/20">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-extrabold text-slate-800">Fair, Transparent Pricing</h3>
+                  <p className="text-xs text-slate-500">Pick the perfect plan for your lumber yards & supply stores</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActiveNavTab(null)}
+                className="h-10 w-10 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors font-bold text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Scrollable Contents - Pricing Tiers */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* Starter Plan */}
+                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Starter Desk</span>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Single Store Office</h4>
+                    <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                      Elegantly handle all your sales quotes and local stocks in one yard.
+                    </p>
+                    <div className="mt-4 flex items-baseline">
+                      <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$79</span>
+                      <span className="text-xs text-slate-400 ml-1">/ month, billed annually</span>
+                    </div>
+                    <ul className="mt-5 space-y-2.5 text-xs text-slate-600 border-t border-slate-200/50 pt-4">
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Up to 5 crew members</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Main Sales CRM suite</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Basic stock checks module</li>
+                    </ul>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveNavTab(null); onGetStarted(); }}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg mt-6 transition-all"
+                  >
+                    Get Started
+                  </button>
+                </div>
+
+                {/* Professional Plan (Most Popular) */}
+                <div className="p-6 rounded-2xl bg-[#E8EFF8] border-2 border-[#1E6FD9] flex flex-col justify-between shadow-md relative">
+                  <span className="absolute -top-3 right-4 bg-[#1E6FD9] text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-0.5 rounded-full">
+                    Most Popular
+                  </span>
+                  <div>
+                    <span className="text-xs font-bold text-[#1E6FD9] uppercase tracking-wider block">Pro Spaces</span>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Lumber Merchant Group</h4>
+                    <p className="text-xs text-slate-600 mt-2 leading-relaxed font-semibold">
+                      Integrates professional 3D CAD design estimators, and locks in multi-location dispatch.
+                    </p>
+                    <div className="mt-4 flex items-baseline">
+                      <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$149</span>
+                      <span className="text-xs text-slate-600 ml-1 font-semibold">/ month, billed annually</span>
+                    </div>
+                    <ul className="mt-5 space-y-2.5 text-xs text-slate-600 border-t border-[#1E6FD9]/20 pt-4">
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Unlimited team members</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> 4 location instant stock sync</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> All 3D project planners</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> B2B Contractor portals</li>
+                    </ul>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveNavTab(null); onGetStarted(); }}
+                    className="w-full py-3 bg-[#1E6FD9] hover:bg-[#155FBC] text-white text-xs font-bold rounded-xl mt-6 transition-all shadow-sm"
+                  >
+                    Unlock Pro Desks
+                  </button>
+                </div>
+
+                {/* Enterprise Plan */}
+                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Enterprise Setup</span>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Sawmill & Logistics Setup</h4>
+                    <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                      Custom ERP-CRM endpoints for large lumber brands and advanced sawmills.
+                    </p>
+                    <div className="mt-4 flex items-baseline">
+                      <span className="text-2xl font-black text-slate-800 tracking-tight">Custom Quote</span>
+                    </div>
+                    <ul className="mt-5 space-y-2.5 text-xs text-slate-600 border-t border-slate-200/50 pt-4">
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Enterprise SSO & custom roles</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> API access to raw wood metrics</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Dedicated support team 24/7</li>
+                    </ul>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveNavTab(null); onGetStarted(); }}
+                    className="w-full py-2 border border-slate-300 text-[#1E6FD9] hover:bg-slate-100 text-xs font-bold rounded-lg mt-6 transition-all"
+                  >
+                    Contact Sales Desk
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-400">
+              <span>All plans include a 14-day free trial sandbox with mock data. No credit card required.</span>
+              <button 
+                onClick={() => setActiveNavTab(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-all font-semibold"
+              >
+                Close View
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
