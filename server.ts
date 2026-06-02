@@ -165,6 +165,24 @@ function seedStorageFiles() {
 
 seedStorageFiles();
 
+// Auto-reset any tasks stuck in "running" state on startup / reboot to prevent frozen triggers
+try {
+  const tasks = loadJson(TASKS_FILE, []);
+  let changed = false;
+  tasks.forEach((t: any) => {
+    if (t.status === 'running') {
+      t.status = 'active';
+      changed = true;
+    }
+  });
+  if (changed) {
+    saveJson(TASKS_FILE, tasks);
+    console.log('[Scheduler] Resolved stuck executing tasks on container bootstrap.');
+  }
+} catch (err) {
+  console.error('[Scheduler] Initialization tasks sanitization failed:', err);
+}
+
 // Calculate next run time
 function calculateNextRunTime(task: any, baseDate = new Date()): Date {
   try {
@@ -182,7 +200,7 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
 
     const timezoneOffset = typeof task.timezoneOffset === 'number' ? task.timezoneOffset : 0;
     
-    // Transform baseDate to user's local time perspective
+    // Transform baseDate to user's local time perspective (represented as UTC hours)
     const localBaseDate = new Date(baseDate.getTime() - timezoneOffset * 60 * 1000);
     let nextLocalDate = new Date(localBaseDate);
 
@@ -190,11 +208,11 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
       triggerDetail.time = '09:00';
     }
     const [hours, minutes] = String(triggerDetail.time).split(':').map(Number);
-    nextLocalDate.setHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
+    nextLocalDate.setUTCHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
 
     const addDays = (d: Date, days: number) => {
       const res = new Date(d);
-      res.setDate(res.getDate() + days);
+      res.setUTCDate(res.getUTCDate() + days);
       return res;
     };
 
@@ -214,7 +232,7 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
       let candidate = new Date(nextLocalDate);
       let found = false;
       for (let i = 0; i < 15; i++) {
-        if (candidate > localBaseDate && daysOfWeek.includes(candidate.getDay())) {
+        if (candidate > localBaseDate && daysOfWeek.includes(candidate.getUTCDay())) {
           resultLocalDate = candidate;
           found = true;
           break;
@@ -227,7 +245,7 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
       let candidate = new Date(nextLocalDate);
       let found = false;
       for (let i = 0; i < 366; i++) {
-        if (candidate > localBaseDate && daysOfMonth.includes(candidate.getDate())) {
+        if (candidate > localBaseDate && daysOfMonth.includes(candidate.getUTCDate())) {
           resultLocalDate = candidate;
           found = true;
           break;

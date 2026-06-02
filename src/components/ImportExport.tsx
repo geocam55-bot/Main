@@ -150,11 +150,11 @@ const calculateNextRunTimeFrontend = (task: ScheduledTask, baseDate = new Date()
       triggerDetail.time = '09:00';
     }
     const [hours, minutes] = String(triggerDetail.time).split(':').map(Number);
-    nextLocalDate.setHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
+    nextLocalDate.setUTCHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
 
     const addDays = (d: Date, days: number) => {
       const res = new Date(d);
-      res.setDate(res.getDate() + days);
+      res.setUTCDate(res.getUTCDate() + days);
       return res;
     };
 
@@ -174,7 +174,7 @@ const calculateNextRunTimeFrontend = (task: ScheduledTask, baseDate = new Date()
       let candidate = new Date(nextLocalDate);
       let found = false;
       for (let i = 0; i < 15; i++) {
-        if (candidate > localBaseDate && daysOfWeek.includes(candidate.getDay())) {
+        if (candidate > localBaseDate && daysOfWeek.includes(candidate.getUTCDay())) {
           resultLocalDate = candidate;
           found = true;
           break;
@@ -187,7 +187,7 @@ const calculateNextRunTimeFrontend = (task: ScheduledTask, baseDate = new Date()
       let candidate = new Date(nextLocalDate);
       let found = false;
       for (let i = 0; i < 366; i++) {
-        if (candidate > localBaseDate && daysOfMonth.includes(candidate.getDate())) {
+        if (candidate > localBaseDate && daysOfMonth.includes(candidate.getUTCDate())) {
           resultLocalDate = candidate;
           found = true;
           break;
@@ -850,6 +850,55 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   useEffect(() => {
     fetchCrmRecords(previewModule);
   }, [previewModule]);
+
+  // Background polling routine for due direct Supabase-mode tasks to ensure scheduled tasks run unattended
+  useEffect(() => {
+    if (connectionMode !== "supabase") return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        const currentTasks = data?.value || [];
+        if (!Array.isArray(currentTasks)) return;
+
+        let anyRan = false;
+        const now = new Date();
+
+        for (const task of currentTasks) {
+          if (task.status === "active" && task.nextRunTime) {
+            const nextRun = new Date(task.nextRunTime);
+            if (now >= nextRun) {
+              console.log(`[Auto-Scheduler] Client background running due task: "${task.name}" (${task.id})`);
+              anyRan = true;
+              
+              // Transition task to running status inside DB immediately to avoid concurrent races
+              task.status = "running";
+              await supabase.from('kv_store_8405be07').upsert({
+                key: 'import_export_tasks',
+                value: currentTasks
+              });
+
+              await executeTaskSupabaseDirect(task.id);
+            }
+          }
+        }
+
+        if (anyRan) {
+          fetchTasks();
+          fetchHistory();
+          fetchStats();
+          fetchFiles("local");
+          fetchFiles("onedrive");
+          fetchCrmRecords(previewModule);
+        }
+      } catch (err) {
+        console.error("Auto-scheduler background check error:", err);
+      }
+    }, 15000); // Check every 15 seconds
+
+    return () => clearInterval(intervalId);
+  }, [connectionMode, tasks, previewModule]);
 
   // Browser-direct/Supabase fallback handlers
   const parseCsv = (text: string): any[] => {
@@ -1867,11 +1916,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       // 4. Update task metrics
       const updatedTasks = currentTasks.map((t: any) => {
         if (t.id === taskId) {
+          const nextTime = t.recurrence === "one-time" ? null : calculateNextRunTimeFrontend(t, new Date());
           return {
             ...t,
             lastRunTime: logRecord.time,
             lastRunResult: executionStatus,
-            nextRunTime: new Date(Date.now() + 3600000 * (t.recurrence === "hourly" ? 1 : t.recurrence === "daily" ? 24 : 168)).toISOString()
+            status: t.recurrence === "one-time" ? "completed" : t.status,
+            nextRunTime: nextTime ? nextTime.toISOString() : null
           };
         }
         return t;
