@@ -120,7 +120,6 @@ interface ITShellProps {
 export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
   const { theme } = useTheme();
   const [currentView, setCurrentView] = useState<ITView>('home');
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [organization, setOrganization] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<User>(user);
   const [, setPermissionVersion] = useState(0);
@@ -191,44 +190,27 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
 
   return (
     <div
-      className="flex h-screen overflow-hidden"
+      className="flex flex-col h-screen overflow-hidden"
       style={{
         background: theme.colors.backgroundSecondary,
         color: theme.colors.text,
       }}
     >
-      {/* ── Sidebar ── */}
-      <aside
-        className={`flex flex-col transition-all duration-300 ${
-          isCollapsed ? 'w-20' : 'w-72'
-        }`}
+      {/* ── Top Sticky Navbar ── */}
+      <header
+        className="sticky top-0 z-50 w-full shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-6 py-2.5 md:py-0 md:h-16 gap-3 md:gap-4 shadow-sm"
         style={{
           background: theme.colors.navBackground,
-          borderRight: `1px solid ${theme.colors.border}`,
+          borderColor: theme.colors.border,
           color: theme.colors.navText,
         }}
       >
-        {/* Brand header */}
-        <div
-          className="flex items-center gap-3 px-5 h-16 shrink-0"
-          style={{ borderBottom: `1px solid ${theme.colors.border}` }}
-        >
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
-            <Monitor className="h-5 w-5 text-white" />
-          </div>
-          {!isCollapsed && (
-            <div className="overflow-hidden">
-              <span className="text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
-                IT Space
-              </span>
-              <span className="text-[10px] font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
-                Administration
-              </span>
-            </div>
-          )}
+        {/* Brand & Left Control */}
+        <div className="flex items-center gap-3 shrink-0">
           <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="ml-auto transition-colors p-1 rounded-lg"
+            onClick={handleBackToSpaces}
+            className="flex items-center justify-center p-2 rounded-xl transition-colors shrink-0"
+            title="Back to Spaces"
             style={{ color: theme.colors.textMuted }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = theme.colors.navHover;
@@ -239,16 +221,24 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
               e.currentTarget.style.color = theme.colors.textMuted;
             }}
           >
-            {isCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
+            <ArrowLeft className="h-5 w-5" />
           </button>
+
+          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+            <Monitor className="h-5 w-5 text-white" />
+          </div>
+          <div className="overflow-hidden">
+            <span className="text-sm md:text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
+              IT Space
+            </span>
+            <span className="text-[9px] md:text-[10px] font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
+              Administration
+            </span>
+          </div>
         </div>
 
-        {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        {/* Horizontal Navigation Tab Bar */}
+        <nav className="flex-1 flex items-center gap-1.5 overflow-x-auto py-1 px-1 -mx-2 md:mx-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
@@ -256,13 +246,8 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
               <button
                 key={item.id}
                 onClick={() => handleNavigate(item.id)}
-                title={isCollapsed ? item.label : undefined}
-                className={`w-full flex items-center gap-3 rounded-xl transition-all duration-150 group ${
-                  isCollapsed ? 'justify-center px-2 py-3' : 'px-4 py-3'
-                } ${
-                  isActive
-                    ? `${item.color} font-semibold shadow-sm`
-                    : ''
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium ${
+                  isActive ? `${item.color} ${item.bgColor} shadow-sm border border-current/10 font-semibold` : ''
                 }`}
                 style={{
                   color: isActive ? undefined : theme.colors.navText,
@@ -275,36 +260,19 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
                   if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
-                <div
-                  className={`shrink-0 rounded-lg p-1.5 transition-colors ${
-                    isActive ? item.bgColor : ''
-                  }`}
-                  style={!isActive ? { backgroundColor: 'transparent' } : undefined}
-                >
-                  <Icon className="h-5 w-5" />
-                </div>
-                {!isCollapsed && (
-                  <>
-                    <span className="text-sm truncate">{item.label}</span>
-                    {isActive && (
-                      <ChevronRight className="h-4 w-4 ml-auto opacity-50" />
-                    )}
-                  </>
-                )}
+                <Icon className="h-3.5 w-3.5" />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        {/* Bottom: account menu */}
-        <div className="p-3 space-y-2 shrink-0" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
+        {/* Right side: account menu */}
+        <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
           <DropdownMenu>
-            <DropdownMenuTrigger className="w-full focus:outline-none">
+            <DropdownMenuTrigger className="focus:outline-none">
               <div
-                title={isCollapsed ? 'Open account menu' : undefined}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
-                  isCollapsed ? 'justify-center' : ''
-                }`}
+                className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 transition-all text-left cursor-pointer"
                 style={{ backgroundColor: theme.colors.backgroundTertiary }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = theme.colors.navHover;
@@ -313,43 +281,34 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
                   e.currentTarget.style.backgroundColor = theme.colors.backgroundTertiary;
                 }}
               >
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center shrink-0">
+                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center shrink-0">
                   {currentUser.avatar_url ? (
                     <img
                       src={currentUser.avatar_url}
                       alt=""
-                      className="h-8 w-8 rounded-full object-cover"
+                      className="h-7 w-7 rounded-full object-cover"
                     />
                   ) : (
-                    <UserIcon className="h-4 w-4 text-white" />
+                    <UserIcon className="h-3.5 w-3.5 text-white" />
                   )}
                 </div>
-                {!isCollapsed && (
-                  <>
-                    <div className="overflow-hidden flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: theme.colors.text }}>
-                        {currentUser.full_name || currentUser.email}
-                      </p>
-                      <p className="text-[11px] truncate" style={{ color: theme.colors.textMuted }}>
-                        Account menu
-                      </p>
-                    </div>
-                    <ChevronDown className="h-4 w-4 shrink-0" style={{ color: theme.colors.textMuted }} />
-                  </>
-                )}
+                <span className="text-xs font-medium max-w-[100px] truncate hidden md:inline-block" style={{ color: theme.colors.text }}>
+                  {currentUser.full_name?.split(' ')[0] || currentUser.email}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" style={{ color: theme.colors.textMuted }} />
               </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="top" className="w-56">
+            <DropdownMenuContent align="end" side="bottom" className="w-56 mt-1">
               <DropdownMenuLabel>
                 <div>
-                  <p className="font-medium">{currentUser.full_name || currentUser.email}</p>
-                  <p className="text-xs text-muted-foreground font-normal mt-1">{currentUser.email || 'No email'}</p>
+                  <p className="font-medium text-sm">{currentUser.full_name || currentUser.email}</p>
+                  <p className="text-xs text-muted-foreground font-normal mt-0.5 truncate">{currentUser.email || 'No email'}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleOpenProfile}>
                 <UserIcon className="mr-2 h-4 w-4" />
-                Profile
+                Profile Settings
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleBackToSpaces}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -363,7 +322,7 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </aside>
+      </header>
 
       {/* ── Main content ── */}
       <main className="flex-1 overflow-auto" style={{ background: theme.colors.backgroundSecondary }}>
