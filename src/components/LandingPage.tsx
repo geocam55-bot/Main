@@ -8,6 +8,10 @@ import { InventorySpaceInfo } from './InventorySpaceInfo';
 import { InsightsSpaceInfo } from './InsightsSpaceInfo';
 import { MarketingSpaceInfo } from './MarketingSpaceInfo';
 import { ITSpaceInfo } from './ITSpaceInfo';
+import { HomeImprovementBenefits } from './HomeImprovementBenefits';
+import { LumberSuppliersBenefits } from './LumberSuppliersBenefits';
+import { ProDeskBenefits } from './ProDeskBenefits';
+import { MultiLocationBenefits } from './MultiLocationBenefits';
 import { motion } from 'motion/react';
 import { 
   Info, 
@@ -216,6 +220,20 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [selectedSpaceInfo, setSelectedSpaceInfo] = useState<SpaceKey | null>(null);
+  const [selectedAudience, setSelectedAudience] = useState<string | null>(null);
+
+  if (selectedAudience === 'home-improvement') {
+    return <HomeImprovementBenefits onBack={() => setSelectedAudience(null)} onGetStarted={onGetStarted} />;
+  }
+  if (selectedAudience === 'lumber-suppliers') {
+    return <LumberSuppliersBenefits onBack={() => setSelectedAudience(null)} onGetStarted={onGetStarted} />;
+  }
+  if (selectedAudience === 'pro-desk') {
+    return <ProDeskBenefits onBack={() => setSelectedAudience(null)} onGetStarted={onGetStarted} />;
+  }
+  if (selectedAudience === 'multi-location') {
+    return <MultiLocationBenefits onBack={() => setSelectedAudience(null)} onGetStarted={onGetStarted} />;
+  }
 
   if (showAbout) return <About onClose={() => setShowAbout(false)} />;
   if (selectedModule) return <ModuleDetail moduleId={selectedModule} onBack={() => setSelectedModule(null)} />;
@@ -708,64 +726,84 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-10">
             {/* Feature 1 — Home Improvement Centres */}
-            <div 
-              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            <button 
+              onClick={() => setSelectedAudience('home-improvement')}
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-white border border-slate-150 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-blue-300 cursor-pointer group text-left w-full active:scale-98"
             >
-              <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center mb-5 transition-transform duration-150">
+              <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center mb-5 transition-transform duration-200 group-hover:scale-110">
                 <Store className="h-7 w-7 text-[#1E6FD9]" />
               </div>
-              <h3 className="text-base font-bold text-slate-800 leading-tight">
+              <h3 className="text-base font-black text-slate-800 leading-tight group-hover:text-[#1E6FD9] transition-colors">
                 Home Improvement Centres
               </h3>
               <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
                 Track quotes, suppliers, and contractor installations ahead sequentially.
               </p>
-            </div>
+              <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-[#1E6FD9] opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>Explore Benefits</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </div>
+            </button>
 
             {/* Feature 2 — Lumber & Building Suppliers */}
-            <div 
-              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            <button 
+              onClick={() => setSelectedAudience('lumber-suppliers')}
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-white border border-slate-150 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-orange-300 cursor-pointer group text-left w-full active:scale-98"
             >
-              <div className="h-16 w-16 rounded-full bg-orange-100 flex items-center justify-center mb-5 transition-transform duration-150">
+              <div className="h-16 w-16 rounded-full bg-orange-100 flex items-center justify-center mb-5 transition-transform duration-200 group-hover:scale-110">
                 <Layers className="h-7 w-7 text-orange-600" />
               </div>
-              <h3 className="text-base font-bold text-slate-800 leading-tight">
+              <h3 className="text-base font-black text-slate-800 leading-tight group-hover:text-orange-600 transition-colors">
                 Lumber & Building Suppliers
               </h3>
               <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
                 Generate material bids and manage stock yard across local yards.
               </p>
-            </div>
+              <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>Explore Benefits</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </div>
+            </button>
 
             {/* Feature 3 — Pro Desk Sales Teams */}
-            <div 
-              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            <button 
+              onClick={() => setSelectedAudience('pro-desk')}
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-white border border-slate-150 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-indigo-300 cursor-pointer group text-left w-full active:scale-98"
             >
-              <div className="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center mb-5 transition-transform duration-150">
+              <div className="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center mb-5 transition-transform duration-200 group-hover:scale-110">
                 <Users className="h-7 w-7 text-indigo-600" />
               </div>
-              <h3 className="text-base font-bold text-slate-800 leading-tight">
+              <h3 className="text-base font-black text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">
                 Pro Desk Sales Teams
               </h3>
               <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
                 Streamline volume customer accounts, contract pricing, and material bundles.
               </p>
-            </div>
+              <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>Explore Benefits</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </div>
+            </button>
 
             {/* Feature 4 — Multi-Location Operations */}
-            <div 
-              className="flex flex-col items-center text-center p-6 rounded-2xl bg-slate-50/20 border border-slate-100/50 shadow-sm transition-all duration-200 hover:shadow-md"
+            <button 
+              onClick={() => setSelectedAudience('multi-location')}
+              className="flex flex-col items-center text-center p-6 rounded-2xl bg-white border border-slate-150 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-teal-300 cursor-pointer group text-left w-full active:scale-98"
             >
-              <div className="h-16 w-16 rounded-full bg-teal-100 flex items-center justify-center mb-5 transition-transform duration-150">
+              <div className="h-16 w-16 rounded-full bg-teal-100 flex items-center justify-center mb-5 transition-transform duration-200 group-hover:scale-110">
                 <MapPin className="h-7 w-7 text-teal-600" />
               </div>
-              <h3 className="text-base font-bold text-slate-800 leading-tight">
+              <h3 className="text-base font-black text-slate-800 leading-tight group-hover:text-teal-600 transition-colors">
                 Multi-Location Operations
               </h3>
               <p className="text-sm text-slate-500 mt-2.5 leading-relaxed">
                 Manage high-volume inventories and coordinate dispatch across multiple branches.
               </p>
-            </div>
+              <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>Explore Benefits</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </div>
+            </button>
           </div>
         </div>
       </section>
