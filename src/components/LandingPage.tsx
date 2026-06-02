@@ -221,6 +221,10 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
   const [showAbout, setShowAbout] = useState(false);
   const [selectedSpaceInfo, setSelectedSpaceInfo] = useState<SpaceKey | null>(null);
   const [selectedAudience, setSelectedAudience] = useState<string | null>(null);
+  // Local state to keep track of the interactive mockup dashboard tab
+  const [activeTab, setActiveTab] = useState<SpaceKey>('sales');
+  // State for header sub-menus information modals
+  const [activeNavTab, setActiveNavTab] = useState<'features' | 'why' | 'pricing' | null>(null);
 
   if (selectedAudience === 'home-improvement') {
     return <HomeImprovementBenefits onBack={() => setSelectedAudience(null)} onGetStarted={onGetStarted} />;
@@ -302,11 +306,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
     );
   }
 
-  // Local state to keep track of the interactive mockup dashboard tab
-  const [activeTab, setActiveTab] = useState<SpaceKey>('sales');
-  // State for header sub-menus information modals
-  const [activeNavTab, setActiveNavTab] = useState<'features' | 'why' | 'pricing' | null>(null);
-
+  // Using state variables initialized at the top of the component
   const spaceLabels: Record<SpaceKey, string> = {
     sales: 'Sales Space',
     build: 'Design Space',
@@ -429,6 +429,14 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
               >
                 <span>Enter CRM Workspace</span>
                 <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => {
+                  document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-sm"
+              >
+                <span>View Benefits</span>
               </button>
             </div>
           </motion.div>
