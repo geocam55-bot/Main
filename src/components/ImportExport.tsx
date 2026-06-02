@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { createClient } from "../utils/supabase/client";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { 
@@ -168,13 +169,27 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // Helper function to save a virtual file on Supabase DB kv_store_8405be07 table
   const saveVirtualFile = async (fileName: string, base64Content: string) => {
     const supabase = createClient();
-    const textContent = decodeBase64Robust(base64Content);
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    const isBinary = ["xlsx", "xls", "zip", "pdf", "png", "jpg", "jpeg", "gif"].includes(ext);
 
-    // 1. Store contents inside kv_store_8405be07
-    await supabase.from('kv_store_8405be07').upsert({
+    let textContent = "";
+    if (!isBinary) {
+      textContent = decodeBase64Robust(base64Content);
+    }
+
+    // 1. Store contents and raw base64 inside kv_store_8405be07
+    const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
       key: `import_export_file_content:${fileName}`,
-      value: { content: textContent }
+      value: { 
+        content: textContent, 
+        base64: base64Content,
+        isBinary: isBinary
+      }
     });
+    if (upsertErr) {
+      console.error("Failed to upsert virtual file content to Supabase:", upsertErr);
+      throw upsertErr;
+    }
 
     // 2. Load and add to files catalog
     const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
@@ -184,15 +199,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
     currentFiles.push({
       name: fileName,
-      size: textContent.length,
+      size: isBinary ? Math.round(base64Content.length * 0.75) : textContent.length,
       lastModified: new Date().toISOString(),
-      extension: fileName.split('.').pop()?.toLowerCase() || ''
+      extension: ext
     });
 
-    await supabase.from('kv_store_8405be07').upsert({
+    const { error: catUpsertErr } = await supabase.from('kv_store_8405be07').upsert({
       key: 'import_export_local_files',
       value: currentFiles
     });
+    if (catUpsertErr) {
+      console.error("Failed to update virtual files list catalog:", catUpsertErr);
+      throw catUpsertErr;
+    }
   };
 
   // Helper function to delete a virtual file on Supabase DB kv_store_8405be07 table
@@ -218,7 +237,23 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const supabase = createClient();
     const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', `import_export_file_content:${fileName}`).maybeSingle();
     if (error || !data) return '';
-    return data.value?.content || '';
+    const val = data.value;
+    if (!val) return '';
+    if (val.content !== undefined && val.content !== null && !val.isBinary) {
+      return val.content;
+    }
+    if (val.base64) {
+      return decodeBase64Robust(val.base64);
+    }
+    return val.content || '';
+  };
+
+  // Helper function to read raw virtual file object from Supabase DB kv_store_8405be07 table
+  const readVirtualFileRaw = async (fileName: string): Promise<{ content?: string; base64?: string; isBinary?: boolean } | null> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', `import_export_file_content:${fileName}`).maybeSingle();
+    if (error || !data) return null;
+    return data.value || null;
   };
 
   // Microsoft/OneDrive Accounts integration
@@ -1467,6 +1502,30 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             } catch (jsonErr: any) {
               throw new Error(`JSON parsing failed: ${jsonErr.message}`);
             }
+          } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || format === 'xlsx' || format === 'xls') {
+            // excel parser
+            try {
+              const fileObj = await readVirtualFileRaw(fileName);
+              let b64 = "";
+              if (fileObj && fileObj.base64) {
+                b64 = fileObj.base64;
+                if (b64.startsWith('data:')) {
+                  b64 = b64.split(';base64,')[1] || '';
+                }
+              }
+              if (!b64 && fileContent) {
+                b64 = btoa(unescape(encodeURIComponent(fileContent)));
+              }
+              if (!b64) {
+                throw new Error("No database content found for active Excel import task file.");
+              }
+              const workbook = XLSX.read(b64, { type: 'base64' });
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              parsedRecords = XLSX.utils.sheet_to_json(worksheet);
+            } catch (xlsxErr: any) {
+              throw new Error(`Excel workbook parsing failed: ${xlsxErr.message}`);
+            }
           } else {
             // csv parser
             try {
@@ -1755,9 +1814,26 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       if (connectionMode === "supabase") {
         const downloadToastId = toast.loading(`Downloading "${fileName}"...`);
         try {
-          const content = await readVirtualFile(fileName);
-          if (content !== null && content !== undefined) {
-            const blob = new Blob([content], { type: "text/plain" });
+          const fileData = await readVirtualFileRaw(fileName);
+          if (fileData) {
+            let blob: Blob;
+            if (fileData.base64) {
+              let b64 = fileData.base64;
+              if (b64.startsWith('data:')) {
+                b64 = b64.split(';base64,')[1] || '';
+              }
+              const raw = window.atob(b64);
+              const rawLength = raw.length;
+              const uInt8Array = new Uint8Array(rawLength);
+              for (let i = 0; i < rawLength; ++i) {
+                uInt8Array[i] = raw.charCodeAt(i);
+              }
+              const ext = fileName.split('.').pop()?.toLowerCase();
+              const mime = ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : (ext === 'xls' ? 'application/vnd.ms-excel' : 'application/octet-stream');
+              blob = new Blob([uInt8Array], { type: mime });
+            } else {
+              blob = new Blob([fileData.content || ''], { type: "text/plain" });
+            }
             const urlStr = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = urlStr;
@@ -2073,8 +2149,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           toast.error("Saving task failed: " + data.error);
         }
       }
-    } catch (err) {
-      toast.error("Could not save task to backend");
+    } catch (err: any) {
+      toast.error(`Could not save task to backend: ${err.message || err}`);
     }
   };
 
