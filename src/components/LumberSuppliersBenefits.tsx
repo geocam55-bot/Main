@@ -147,7 +147,7 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
             <div className="w-full lg:w-[420px] shrink-0">
               <div className="relative rounded-2xl overflow-hidden border border-slate-100 shadow-md bg-slate-50 p-2">
                 <img
-                  src="/src/assets/images/lumber_yard_estimator_1780423237551.png"
+                  src="/images/lumber_yard_estimator_1780423237551.png"
                   alt="Lumber Yard Estimation System Workflow"
                   className="w-full h-auto rounded-xl object-cover"
                   referrerPolicy="no-referrer"

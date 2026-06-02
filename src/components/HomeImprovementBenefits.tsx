@@ -160,7 +160,7 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
             <div className="w-full lg:w-[420px] shrink-0">
               <div className="relative rounded-2xl overflow-hidden border border-slate-100 shadow-md bg-slate-50 p-2">
                 <img 
-                  src="/src/assets/images/home_center_workflow_1780423222767.png" 
+                  src="/images/home_center_workflow_1780423222767.png" 
                   alt="Home Improvement Centre Workflow" 
                   className="w-full h-auto rounded-xl object-cover"
                   referrerPolicy="no-referrer"

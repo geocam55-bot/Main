@@ -136,7 +136,7 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
             <div className="w-full lg:w-[420px] shrink-0">
               <div className="relative rounded-2xl overflow-hidden border border-slate-100 shadow-md bg-slate-50 p-2">
                 <img
-                  src="/src/assets/images/multi_depot_dispatcher_1780423267159.png"
+                  src="/images/multi_depot_dispatcher_1780423267159.png"
                   alt="Multi Location Logistics Regional Mapping"
                   className="w-full h-auto rounded-xl object-cover"
                   referrerPolicy="no-referrer"
