@@ -780,6 +780,7 @@ export function AppContent() {
           onContactSupport={() => {
             window.location.href = 'mailto:support@prospacescrm.ca';
           }}
+          onLogout={handleLogout}
         />
       </ErrorBoundary>
     );
