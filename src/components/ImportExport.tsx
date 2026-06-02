@@ -1186,6 +1186,24 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             });
             if (upsertErr) throw upsertErr;
           }
+        } else {
+          // Reset any tasks stuck in "running" back to "active"
+          let tasksChanged = false;
+          const sanitizedTasks = serverTasks.map((t: any) => {
+            if (t.status === "running") {
+              tasksChanged = true;
+              return { ...t, status: "active" };
+            }
+            return t;
+          });
+          if (tasksChanged) {
+            serverTasks = sanitizedTasks;
+            await supabase.from('kv_store_8405be07').upsert({
+              key: 'import_export_tasks',
+              value: serverTasks
+            });
+            console.log("[Scheduler] Auto-resolved stuck scheduler running tasks on page fetch.");
+          }
         }
 
         // Apply active delete filter
@@ -1615,6 +1633,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       let logMsg = "";
       let executionStatus: "success" | "failed" = "success";
+      let processedRecordCount = 0;
 
       if (mType === "export") {
         // Query target table
@@ -1624,6 +1643,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           .eq('organization_id', organizationId);
         
         if (dbErr) throw dbErr;
+        if (dbRecords) {
+          processedRecordCount = dbRecords.length;
+        }
 
         let fileText = "";
         if (format === "json") {
@@ -1884,6 +1906,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               }
             }
 
+            processedRecordCount = insertCount;
             if (errorCount > 0) {
               if (insertCount === 0) executionStatus = "failed";
               logMsg = `Import processed: ${insertCount} succeeded, ${errorCount} errors. Last error: ${lastErrDetail || 'Unknown RLS rejection'}`;
@@ -1900,7 +1923,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         taskId: taskId,
         taskName: task.name,
         time: new Date().toISOString(),
+        timestamp: new Date().toISOString(), // Ensure BOTH key formats exist for robust rendering
+        actionType: mType,
+        module: mModule,
+        fileStorage: task.action.fileStorage || "local",
+        fileName: fileName,
         status: executionStatus,
+        recordCount: processedRecordCount,
         message: logMsg
       };
 
@@ -1921,7 +1950,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             ...t,
             lastRunTime: logRecord.time,
             lastRunResult: executionStatus,
-            status: t.recurrence === "one-time" ? "completed" : t.status,
+            status: t.recurrence === "one-time" ? "completed" : "active",
             nextRunTime: nextTime ? nextTime.toISOString() : null
           };
         }
@@ -3075,7 +3104,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                   task.status === "running" ? "bg-blue-50 text-blue-700 border-blue-150 animate-pulse" :
                                   "bg-slate-100 text-slate-500 border-slate-200"
                                 }`}>
-                                  {task.status.toUpperCase()}
+                                  {(task.status || '').toUpperCase()}
                                 </span>
                               </div>
                             </div>
@@ -4103,13 +4132,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                               {log.actionType}
                             </span>
                             <span className="text-slate-600">to</span>
-                            <span className="text-slate-350">{log.fileStorage?.toUpperCase()} // {log.fileName}</span>
+                            <span className="text-slate-350">{(log.fileStorage || 'local').toUpperCase()} // {log.fileName || 'unknown'}</span>
                           </p>
                           <p className={`${log.status === "success" ? "text-slate-300" : "text-rose-400"} text-2xs leading-relaxed`}>
                             {log.message}
                           </p>
                           <div className="text-4xs text-slate-500 mt-1 select-none">
-                            MODULE = {log.module.toUpperCase()} | PROCESS_STATUS = {log.status.toUpperCase()} | IMPACTED_ROWS = {log.recordCount}
+                            MODULE = {(log.module || 'unknown').toUpperCase()} | PROCESS_STATUS = {(log.status || 'unknown').toUpperCase()} | IMPACTED_ROWS = {log.recordCount ?? 0}
                           </div>
                         </div>
                       </div>
