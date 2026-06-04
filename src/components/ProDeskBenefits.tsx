@@ -17,23 +17,23 @@ const METRICS_CARDS = [
 const BENEFIT_PILLARS = [
   {
     icon: Award,
-    title: 'Multi-Tier Account Classing',
-    details: 'Assign personalized price lists per contractor level. Home builders, framing subcontractors, and local handymen instantly pull their contract-pricing rows during quick quoting sessions.'
+    title: 'Custom Deal & Catalog Pricing',
+    details: 'Never fumble builder rates. Subcontractors, installers, and commercial builders can be managed as customized CRM Deals with structured line-item overrides and custom margins.'
   },
   {
     icon: ShieldAlert,
-    title: 'Instant Margin Guards',
-    details: 'Protect team profits. If a desk rep manually discounts items past absolute brand margin allowances, ProSpaces flags it and locks the quote path until authorized by a desk manager.'
+    title: 'Secure CRM Document Folders',
+    details: 'Keep project documents audit-compliant. Store municipal permits, architectural drawings, active estimates, and signed master agreements directly inside their customer profile folder.'
   },
   {
     icon: CreditCard,
-    title: 'Live Commercial Credit Balances',
-    details: 'Prevent unpaid risk. Real-time balance integration checks if builder account limits are cleared before releasing high-volume special delivery orders.'
+    title: 'Complete Customer Interaction History',
+    details: 'Strengthen contractor relationships. Look up unified customer histories, log customer calls, assign follow-up tasks, and manage active project deals inside a detailed contact dashboard.'
   },
   {
     icon: Users,
-    title: 'Builder Loyalty Sandbox',
-    details: 'Give contractors autonomy. Let builders view active orders, request fast jobsite loads, review invoices, or sign off on design changes anywhere on their smartphones.'
+    title: 'Dedicated Builder Portals',
+    details: 'Provide absolute commercial autonomy. Empower builders with a secure, password-protected portal to review project quotes, download files, message their rep, and instantly approve contracts.'
   }
 ];
 
@@ -117,10 +117,10 @@ export function ProDeskBenefits({ onBack, onGetStarted }: ProDeskProps) {
                 Pro Desk Sales Teams
               </h1>
               <p className="text-base text-slate-600 leading-relaxed">
-                Empower your dedicated builder accounts division. ProSpaces CRM provides deep relationship visibility, customized tier pricing structures, instant credit verification, and robust mobile contractor tools in one rapid console.
+                Empower your dedicated builder accounts division. ProSpaces CRM provides deep relationship visibility, customized tier pricing trackers, active deal pipelines, and client-facing project portals in one rapid console.
               </p>
               <p className="text-sm font-semibold text-slate-500">
-                Architected specifically for builders reps, commercial dispatch key managers, and pro credit analysts. Turn casual builders into permanent, loyal account-holding advocates.
+                Architected specifically for builders reps, commercial account managers, and pro coordinators. Turn casual builders into permanent, loyal account-holding advocates.
               </p>
 
               {/* Stats Metrics Grid */}

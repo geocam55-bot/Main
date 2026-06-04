@@ -17,23 +17,23 @@ const METRICS_CARDS = [
 const BENEFIT_PILLARS = [
   {
     icon: DollarSign,
-    title: 'Commodity Index Connection',
-    details: 'Never quote old, underpriced rates during commodity swings. ProSpaces connects to daily material price index matrices (SPF, Doug Fir, OSB), updating quotes automatically.'
+    title: 'Custom Catalog & Price Management',
+    details: 'Never quote old, out-of-date pricing during cost swings. Easily maintain lumber, sheet goods, and structural product catalogs with customized unit prices and dealer margins.'
   },
   {
     icon: Calculator,
-    title: 'Native Dimensional Calculations',
-    details: 'Bid easily across dimensions. Manage, quote, and translate units seamlessly — buy bundles in board-measure feet, estimate lists in linear feet, and dispatch yard pick tickets in piece counts.'
+    title: 'Integrated 3D Estimating & Takeoffs',
+    details: 'Configure structures visually. ProSpaces specialized 3D Project Planners (Roof, Deck, Garage, Shed, and Kitchen) calculate exact material volumes and lengths automatically from visual drawings.'
   },
   {
     icon: Layers,
-    title: 'Multi-Yard Open Stock Sync',
-    details: 'Prevent inventory mismatch. Monitor physical items across multiple dry sheathing depots, treated racks, and open gravel stacks with exact geolocation map pins.'
+    title: 'Multi-Category Inventory Tracking',
+    details: 'Keep precise counts of drywall, framing board, structural sheathing, and roofing bundles. Search materials, organize stock by category, and update counts with swift bulk imports.'
   },
   {
-    icon: Navigation,
-    title: 'Integrated Banding & Loading slips',
-    details: 'Coordinate picker tasks. Generate sequential loading slips grouped by drop-off sequence, weight allowances, and flatbed strap configurations.'
+    icon: Settings,
+    title: 'Interactive Estimator Formulas',
+    details: 'Negotiate and lock your bids with confidence. Work with dynamic estimators that calculate board-measure volume factors, waste allowance buffers, and shipping surcharges on the fly.'
   }
 ];
 
@@ -124,10 +124,10 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
                 Lumber & Building Suppliers
               </h1>
               <p className="text-base text-slate-600 leading-relaxed">
-                Connect the bidding table, the logistics coordinator desk, and the physical lumberyard. ProSpaces CRM handles volumetric item codes, manages structural commodity prices, and minimizes margin errors on every bundle.
+                Connect your client relationships with interactive inventory controls. ProSpaces CRM handles custom-defined item codes, tracks physical lumberyard stock, and supports detailed estimation bids.
               </p>
               <p className="text-sm font-semibold text-slate-500">
-                Created to support timber sales reps, takeoff estimators, and yard managers. Lock bids instantly based on certified daily mill pricing logs.
+                Created to support wood sales reps, takeoff estimators, and yard managers. Configure quotes and margins instantly inside a robust single platform.
               </p>
 
               {/* Stats Cards */}

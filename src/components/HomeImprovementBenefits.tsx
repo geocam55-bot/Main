@@ -10,23 +10,23 @@ interface HomeImprovementProps {
 const BENEFIT_PILLARS = [
   {
     icon: Clock,
-    title: 'Automated Sequential Scheduling',
-    details: 'Keep installations on tight, error-free timelines. From contract signature, ProSpaces triggers calendar slots for measurement teams, material load dates, delivery trucks, and subcontractor labor sequentially.'
+    title: 'Unified Appointment & Task Schedules',
+    details: 'Coordinate customer site measures, material load dates, and crew timelines. Schedule precise calendar appointments and assign trackable tasks to keep installation phases organized.'
   },
   {
     icon: ShieldCheck,
-    title: 'Supplier Lead Time Syncing',
-    details: 'Prevent crew idleness. The platform cross-references actual vendor lead-times for custom cabinetry, countertops, and special-order windows to assign site work ONLY when ingredients are confirmed in-yard.'
+    title: 'Comprehensive Inventory Sourcing',
+    details: 'Prevent material shortages by tracking real-time stock counts in standard construction categories. Manage catalog lists, item storage codes, and inventory levels directly in the app.'
   },
   {
     icon: Users,
-    title: 'Integrated Subcontractor Hub',
-    details: 'Stop chasing paperwork. Let your installer network submit blueprints, upload site completion photos, sign off on safety checklists, and receive automated payout approvals from their mobile phones.'
+    title: 'Collaborative Customer Portals',
+    details: 'Give clients instant project visibility. Let homeowners and contractor contacts view active designs, read messages, and securely access uploaded documents through their dedicated login.'
   },
   {
     icon: ClipboardCheck,
-    title: 'Real-Time Margin Safeguards',
-    details: 'Protect retail profitability on complex projects. ProSpaces pulls live warehouse costs, estimated waste thresholds, and sub-assembly labor rates of custom designs to secure your 40%+ gross-product-margin.'
+    title: 'Real-Time Project Estimating',
+    details: 'Protect your job margins on complex custom plans. Easily draft construction quotes, customize itemized line items, adjust pricing structures, and manage approvals on the Deals board.'
   }
 ];
 
@@ -137,7 +137,7 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
                 Home Improvement Centres
               </h1>
               <p className="text-base text-slate-600 leading-relaxed">
-                Unlock frictionless retail installation workflows. ProSpaces ties front-counter quote generation with supplier procurement systems, 3D design software, and on-site contractor installation scheduling.
+                Unlock frictionless retail installation workflows. ProSpaces ties relationship management with interactive 3D design software, project bidding, and customer-facing progress portal tracking.
               </p>
               <p className="text-sm font-semibold text-slate-500">
                 No more paper estimating records, spreadsheet errors, or scheduling blindspots. Manage complex homeowner bids sequentially with real-time confidence.

@@ -17,23 +17,23 @@ const METRICS_CARDS = [
 const BENEFIT_PILLARS = [
   {
     icon: Compass,
-    title: 'Inter-Branch Inventory Sourcing',
-    details: 'Never lose a builder contract to temporary local shortages. Check stock counts across all regional depots instantly, request secure yard transfers, and lock items in 3 clicks.'
+    title: 'Unified Inventory Sourcing',
+    details: 'Check stock counts across your organization instantly. Support secure catalog searches, category filtering, and inventory updates inside a unified database.'
   },
   {
     icon: Truck,
-    title: 'Shared Flatbed Fleet Dispatch',
-    details: 'Coordinate regional logistics seamlessly. Group and route bulky crane, boom, and flatbed trucks across branches with automated texting to dispatchers and site supervisors.'
+    title: 'Shared Task & Delivery Coordination',
+    details: 'Coordinate regional operations seamlessly. Assign trackable tasks, set delivery dates, and update progress statuses to keep your entire field force connected.'
   },
   {
     icon: BarChart3,
-    title: 'Consolidated Regional Analytics',
-    details: 'Stop manually updating spreadsheets. Roll up sales, margins, open estimates, and logistics output automatically to a stunning corporate hub with detailed drilldowns.'
+    title: 'Interactive Business Analytics',
+    details: 'Stop manually updating spreadsheet metrics. View real-time closed deals, pending pipeline totals, and team performance roll-ups inside an interactive charts dashboard.'
   },
   {
     icon: ShieldAlert,
-    title: 'Enterprise Access Permissions',
-    details: 'Keep data secure. Enable single sign-on (SSO), manage branch access, audit transactions, and lock yard edits per role to secure financial transparency.'
+    title: 'Role-Based Access Controls',
+    details: 'Maintain absolute data isolation. Manage granular worker permissions (Admin, Director, Manager, Rep) and monitor system actions using our secure enterprise Audit Ledger.'
   }
 ];
 
@@ -113,10 +113,10 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
                 Multi-Location Operations
               </h1>
               <p className="text-base text-slate-600 leading-relaxed">
-                Connect your business holdings, lumber yards, and distribution depots into a single synchronized system. ProSpaces CRM provides multi-warehouse stock visibility, integrated transfer tickets, and shared regional logistics tracking.
+                Connect your business holdings, lumber yards, and distribution depots into a single synchronized system. ProSpaces CRM provides centralized stock visibility, synchronized organizational lists, and shared calendar scheduler trackers.
               </p>
               <p className="text-sm font-semibold text-slate-500">
-                Designed to support regional managers, logistics vice presidents, dispatchers, and corporate teams. Maintain complete operational visibility across all branches simultaneously.
+                Designed to support regional managers, logistics leaders, project estimators, and corporate teams. Maintain complete CRM and analytical visibility across all branches.
               </p>
 
               {/* Stats Metrics Grid */}
