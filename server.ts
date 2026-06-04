@@ -118,9 +118,9 @@ const initialCrmDb = {
     { id: '3', Name: 'Bob Builder', Email: 'bob@constructions.com', Phone: '555-0200', Company: 'Bob Constructions', Trade: 'Carpenter', Status: 'Active', PriceLevel: 'Contractor', Notes: 'Prefers SMS updates' }
   ],
   inventory: [
-    { id: '1', Name: 'Premium Oak Decking Tile', SKU: 'DEC-OAK-01', Category: 'Timber', Quantity: 450, Location: 'Warehouse A', Status: 'In Stock', UnitPrice: 12.50, Cost: 7.20 },
-    { id: '2', Name: 'Stainless Concrete Anchors 4x', SKU: 'ANC-CON-04', Category: 'Fasteners', Quantity: 1200, Location: 'Shelf 12B', Status: 'In Stock', UnitPrice: 1.80, Cost: 0.90 },
-    { id: '3', Name: 'Outdoor Composite Plank Green', SKU: 'PLK-COMP-09', Category: 'Planks', Quantity: 80, Location: 'Warehouse B', Status: 'Low Stock', UnitPrice: 24.00, Cost: 15.00 }
+    { id: '1', Name: 'Premium Oak Decking Tile', SKU: 'DEC-OAK-01', Category: 'Timber', Quantity: 450, Location: 'Warehouse A', Status: 'In Stock', UnitPrice: 12.50, Cost: 7.20, PriceTier1: 12.50, PriceTier2: 12.00, PriceTier3: 11.50, PriceTier4: 11.00, PriceTier5: 10.50, Unit: 'ea' },
+    { id: '2', Name: 'Stainless Concrete Anchors 4x', SKU: 'ANC-CON-04', Category: 'Fasteners', Quantity: 1200, Location: 'Shelf 12B', Status: 'In Stock', UnitPrice: 1.80, Cost: 0.90, PriceTier1: 1.80, PriceTier2: 1.70, PriceTier3: 1.60, PriceTier4: 1.50, PriceTier5: 1.40, Unit: 'ea' },
+    { id: '3', Name: 'Outdoor Composite Plank Green', SKU: 'PLK-COMP-09', Category: 'Planks', Quantity: 80, Location: 'Warehouse B', Status: 'Low Stock', UnitPrice: 24.00, Cost: 15.00, PriceTier1: 24.00, PriceTier2: 23.00, PriceTier3: 22.00, PriceTier4: 21.00, PriceTier5: 20.00, Unit: 'lf' }
   ],
   deals: [
     { id: '1', ClientName: 'Acme Corp', ProjectName: 'Corporate Deck Expansion', DealValue: 24500, Stage: 'Negotiation', CloseDate: '2026-06-15', Notes: 'Pending custom board approval' },
@@ -140,9 +140,9 @@ function seedStorageFiles() {
     '"Michael Smith","michael@smithbuild.com","555-9011","Smith Framing","Contractor","Lead","Wholesale"\n' +
     '"Emma Watson","emma@wattarch.com","555-8854","Watson Architects","Architect","Customer","Premium"';
   
-  const sampleInventoryCsv = '"Item Name","SKU","Category","Quantity","Location","UnitPrice","Cost"\n' +
-    '"Douglas Fir Post 4x4","POST-FIR-44","Timber","300","Yard East","18.50","10.00"\n' +
-    '"Titan Decking Screws 500pk","SCR-TIT-500","Fasteners","65","Shelf C1","45.00","28.00"';
+  const sampleInventoryCsv = '"Item Name","SKU","Category","Quantity","Location","UnitPrice","Cost","PriceTier1","PriceTier2","PriceTier3","PriceTier4","PriceTier5","Unit"\n' +
+    '"Douglas Fir Post 4x4","POST-FIR-44","Timber","300","Yard East","18.50","10.00","18.50","17.50","16.50","15.50","14.50","ea"\n' +
+    '"Titan Decking Screws 500pk","SCR-TIT-500","Fasteners","65","Shelf C1","45.00","28.00","45.00","43.00","41.00","39.00","37.00","ea"';
 
   fs.writeFileSync(path.join(LOCAL_DRIVE_DIR, 'sample_contacts_import.csv'), sampleContactsCsv, 'utf8');
   fs.writeFileSync(path.join(LOCAL_DRIVE_DIR, 'sample_inventory_import.csv'), sampleInventoryCsv, 'utf8');
@@ -454,14 +454,37 @@ async function executeScheduledTask(task: any) {
         Object.entries(item).forEach(([k, v]) => {
           // Normalize spreadsheet column titles
           let key = k;
-          if (k.toLowerCase() === 'item name') key = 'Name';
-          if (k.toLowerCase() === 'unit price' || k.toLowerCase() === 'unitprice') key = 'UnitPrice';
-          if (k.toLowerCase() === 'client name') key = 'ClientName';
-          if (k.toLowerCase() === 'project name') key = 'ProjectName';
-          if (k.toLowerCase() === 'deal value' || k.toLowerCase() === 'dealvalue') key = 'DealValue';
-          if (k.toLowerCase() === 'close date' || k.toLowerCase() === 'closedate') key = 'CloseDate';
+          const lowerK = k.toLowerCase();
+          if (lowerK === 'item name' || lowerK === 'itemname') key = 'Name';
+          else if (lowerK === 'unit price' || lowerK === 'unitprice') key = 'UnitPrice';
+          else if (lowerK === 'client name' || lowerK === 'clientname') key = 'ClientName';
+          else if (lowerK === 'project name' || lowerK === 'projectname') key = 'ProjectName';
+          else if (lowerK === 'deal value' || lowerK === 'dealvalue') key = 'DealValue';
+          else if (lowerK === 'close date' || lowerK === 'closedate') key = 'CloseDate';
+          else if (lowerK === 'pricetier1' || lowerK === 'price_tier_1' || lowerK === 'tier1') key = 'PriceTier1';
+          else if (lowerK === 'pricetier2' || lowerK === 'price_tier_2' || lowerK === 'tier2') key = 'PriceTier2';
+          else if (lowerK === 'pricetier3' || lowerK === 'price_tier_3' || lowerK === 'tier3') key = 'PriceTier3';
+          else if (lowerK === 'pricetier4' || lowerK === 'price_tier_4' || lowerK === 'tier4') key = 'PriceTier4';
+          else if (lowerK === 'pricetier5' || lowerK === 'price_tier_5' || lowerK === 'tier5') key = 'PriceTier5';
+          else if (lowerK === 'unit' || lowerK === 'unitofmeasure' || lowerK === 'unit_of_measure' || lowerK === 'uom') key = 'Unit';
           normalizedRecord[key] = v;
         });
+
+        if (moduleKey === 'inventory') {
+          if (normalizedRecord.UnitPrice !== undefined && normalizedRecord.PriceTier1 === undefined) {
+            normalizedRecord.PriceTier1 = Number(normalizedRecord.UnitPrice);
+          }
+          if (normalizedRecord.PriceTier1 !== undefined && normalizedRecord.UnitPrice === undefined) {
+            normalizedRecord.UnitPrice = Number(normalizedRecord.PriceTier1);
+          }
+          const defaultPrice = normalizedRecord.UnitPrice !== undefined ? Number(normalizedRecord.UnitPrice) : 0;
+          if (normalizedRecord.PriceTier1 === undefined) normalizedRecord.PriceTier1 = defaultPrice;
+          if (normalizedRecord.PriceTier2 === undefined) normalizedRecord.PriceTier2 = normalizedRecord.PriceTier1;
+          if (normalizedRecord.PriceTier3 === undefined) normalizedRecord.PriceTier3 = normalizedRecord.PriceTier1;
+          if (normalizedRecord.PriceTier4 === undefined) normalizedRecord.PriceTier4 = normalizedRecord.PriceTier1;
+          if (normalizedRecord.PriceTier5 === undefined) normalizedRecord.PriceTier5 = normalizedRecord.PriceTier1;
+          if (normalizedRecord.Unit === undefined) normalizedRecord.Unit = 'ea';
+        }
 
         if (existingIdx !== -1) {
           crmDb[moduleKey][existingIdx] = { ...crmDb[moduleKey][existingIdx], ...normalizedRecord };

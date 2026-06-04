@@ -255,6 +255,12 @@ const INVENTORY_TEMPLATE_SAMPLE = [
     "Status": "instock",
     "UnitPrice": 89.99,
     "Cost": 55.00,
+    "PriceTier1": 89.99,
+    "PriceTier2": 84.99,
+    "PriceTier3": 79.99,
+    "PriceTier4": 74.99,
+    "PriceTier5": 69.99,
+    "Unit": "ea",
     "ImageUrl": "https://example.com/images/elec-wir.jpg"
   },
   {
@@ -268,6 +274,12 @@ const INVENTORY_TEMPLATE_SAMPLE = [
     "Status": "instock",
     "UnitPrice": 6.49,
     "Cost": 2.10,
+    "PriceTier1": 6.49,
+    "PriceTier2": 5.99,
+    "PriceTier3": 5.49,
+    "PriceTier4": 4.99,
+    "PriceTier5": 4.49,
+    "Unit": "ea",
     "ImageUrl": "https://example.com/images/pvc-pipe.jpg"
   }
 ];
@@ -323,6 +335,12 @@ const SCHEMA_GUIDES = {
       { name: "Location", req: false, desc: "Warehouse coordinates or bin code reference." },
       { name: "UnitPrice", req: false, desc: "Active selling price (decimal format, e.g. 59.99)." },
       { name: "Cost", req: false, desc: "Sourcing acquire unit cost (decimal format, e.g. 24.50)." },
+      { name: "PriceTier1", req: false, desc: "Tier 1 - Retail Price (equals base UnitPrice, e.g. 59.99)." },
+      { name: "PriceTier2", req: false, desc: "Tier 2 - VIP Price (decimal format, e.g. 54.99)." },
+      { name: "PriceTier3", req: false, desc: "Tier 3 - Premium Price (decimal format, e.g. 49.99)." },
+      { name: "PriceTier4", req: false, desc: "Tier 4 - Preferred Price (decimal format, e.g. 44.99)." },
+      { name: "PriceTier5", req: false, desc: "Tier 5 - Preferred VIP Price (decimal format, e.g. 39.99)." },
+      { name: "Unit / UnitOfMeasure", req: false, desc: "Unit of Measure multiplier standard code (e.g. ea, lf, bf, pc)." },
       { name: "ImageUrl", req: false, desc: "Raw web URL for material thumb image cataloging." }
     ]
   },
@@ -1165,6 +1183,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         else if (/location/i.test(header)) key = "location";
         else if (/unitprice|unit_price/i.test(header)) key = "unitPrice";
         else if (/cost/i.test(header)) key = "cost";
+        else if (/pricetier1|price_tier_1|tier1/i.test(header)) key = "priceTier1";
+        else if (/pricetier2|price_tier_2|tier2/i.test(header)) key = "priceTier2";
+        else if (/pricetier3|price_tier_3|tier3/i.test(header)) key = "priceTier3";
+        else if (/pricetier4|price_tier_4|tier4/i.test(header)) key = "priceTier4";
+        else if (/pricetier5|price_tier_5|tier5/i.test(header)) key = "priceTier5";
+        else if (/unit_of_measure|unitofmeasure|unit|uom/i.test(header)) key = "unit";
         else if (/email/i.test(header)) key = "email";
         else if (/phone/i.test(header)) key = "phone";
         else if (/company/i.test(header)) key = "company";
@@ -1983,7 +2007,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 ],
                 inventory: [
                   "id", "organization_id", "sku", "name", "description", "unit_price", "cost", 
-                  "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location"
+                  "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location",
+                  "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"
                 ],
                 opportunities: [
                   "id", "organization_id", "owner_id", "created_by", "title", "description", 
@@ -1991,6 +2016,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 ]
               };
               (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
+            }
+
+            // Always explicitly allow price tiers and unit of measure columns for inventory mapping
+            if (table === "inventory") {
+              ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"].forEach(k => existingDbCols.add(k));
             }
 
             // --- PERFORMANCE OPTIMIZATION CACHING ---
@@ -2087,6 +2117,29 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     const cs = parseFloat(String(cleanVal));
                     mappedRec.cost = isNaN(cs) ? 0 : Math.round(cs * 100);
                   }
+                  else if (lowerKey === "pricetier1" || lowerKey === "tier1") {
+                    const pr = parseFloat(String(cleanVal));
+                    mappedRec.price_tier_1 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                  }
+                  else if (lowerKey === "pricetier2" || lowerKey === "tier2") {
+                    const pr = parseFloat(String(cleanVal));
+                    mappedRec.price_tier_2 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                  }
+                  else if (lowerKey === "pricetier3" || lowerKey === "tier3") {
+                    const pr = parseFloat(String(cleanVal));
+                    mappedRec.price_tier_3 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                  }
+                  else if (lowerKey === "pricetier4" || lowerKey === "tier4") {
+                    const pr = parseFloat(String(cleanVal));
+                    mappedRec.price_tier_4 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                  }
+                  else if (lowerKey === "pricetier5" || lowerKey === "tier5") {
+                     const pr = parseFloat(String(cleanVal));
+                     mappedRec.price_tier_5 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                  }
+                  else if (lowerKey === "unit" || lowerKey === "unitofmeasure" || lowerKey === "uom" || lowerKey === "unit_of_measure") {
+                    mappedRec.unit_of_measure = cleanVal;
+                  }
                   else if (lowerKey === "imageurl" || lowerKey === "image") mappedRec.image_url = cleanVal;
                 }
                 else if (table === "opportunities") {
@@ -2105,6 +2158,23 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     mappedRec.customer_id = cleanVal;
                   }
                 }
+              }
+
+              // Post-mapping normalization for inventory pricing tiers and unit of measure
+              if (table === "inventory") {
+                if (mappedRec.unit_price !== undefined && mappedRec.price_tier_1 === undefined) {
+                  mappedRec.price_tier_1 = mappedRec.unit_price;
+                }
+                if (mappedRec.price_tier_1 !== undefined && mappedRec.unit_price === undefined) {
+                  mappedRec.unit_price = mappedRec.price_tier_1;
+                }
+                const defaultPrice = mappedRec.unit_price || 0;
+                if (mappedRec.price_tier_1 === undefined) mappedRec.price_tier_1 = defaultPrice;
+                if (mappedRec.price_tier_2 === undefined) mappedRec.price_tier_2 = defaultPrice;
+                if (mappedRec.price_tier_3 === undefined) mappedRec.price_tier_3 = defaultPrice;
+                if (mappedRec.price_tier_4 === undefined) mappedRec.price_tier_4 = defaultPrice;
+                if (mappedRec.price_tier_5 === undefined) mappedRec.price_tier_5 = defaultPrice;
+                if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
               }
 
               // Resolve ID intelligently using pre-fetched caches (eliminates sequential select query)

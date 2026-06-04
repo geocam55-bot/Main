@@ -1,0 +1,110 @@
+{
+  "contacts": [
+    {
+      "id": "1",
+      "Name": "John Doe",
+      "Email": "john@example.com",
+      "Phone": "555-0199",
+      "Company": "Acme Corp",
+      "Trade": "Builder",
+      "Status": "Lead",
+      "PriceLevel": "Standard",
+      "Notes": "Met at builders convention"
+    },
+    {
+      "id": "2",
+      "Name": "Sarah Jenkins",
+      "Email": "sarah@design.com",
+      "Phone": "555-0144",
+      "Company": "Jenkins Design",
+      "Trade": "Architect",
+      "Status": "Customer",
+      "PriceLevel": "Wholesale",
+      "Notes": "Premium client"
+    },
+    {
+      "id": "3",
+      "Name": "Bob Builder",
+      "Email": "bob@constructions.com",
+      "Phone": "555-0200",
+      "Company": "Bob Constructions",
+      "Trade": "Carpenter",
+      "Status": "Active",
+      "PriceLevel": "Contractor",
+      "Notes": "Prefers SMS updates"
+    }
+  ],
+  "inventory": [
+    {
+      "id": "1",
+      "Name": "Premium Oak Decking Tile",
+      "SKU": "DEC-OAK-01",
+      "Category": "Timber",
+      "Quantity": 450,
+      "Location": "Warehouse A",
+      "Status": "In Stock",
+      "UnitPrice": 12.5,
+      "Cost": 7.2,
+      "PriceTier1": 12.5,
+      "PriceTier2": 12.00,
+      "PriceTier3": 11.50,
+      "PriceTier4": 11.00,
+      "PriceTier5": 10.50,
+      "Unit": "ea"
+    },
+    {
+      "id": "2",
+      "Name": "Stainless Concrete Anchors 4x",
+      "SKU": "ANC-CON-04",
+      "Category": "Fasteners",
+      "Quantity": 1200,
+      "Location": "Shelf 12B",
+      "Status": "In Stock",
+      "UnitPrice": 1.8,
+      "Cost": 0.9,
+      "PriceTier1": 1.80,
+      "PriceTier2": 1.70,
+      "PriceTier3": 1.60,
+      "PriceTier4": 1.50,
+      "PriceTier5": 1.40,
+      "Unit": "ea"
+    },
+    {
+      "id": "3",
+      "Name": "Outdoor Composite Plank Green",
+      "SKU": "PLK-COMP-09",
+      "Category": "Planks",
+      "Quantity": 80,
+      "Location": "Warehouse B",
+      "Status": "Low Stock",
+      "UnitPrice": 24,
+      "Cost": 15,
+      "PriceTier1": 24.00,
+      "PriceTier2": 23.00,
+      "PriceTier3": 22.00,
+      "PriceTier4": 21.00,
+      "PriceTier5": 20.00,
+      "Unit": "lf"
+    }
+  ],
+  "deals": [
+    {
+      "id": "1",
+      "ClientName": "Acme Corp",
+      "ProjectName": "Corporate Deck Expansion",
+      "DealValue": 24500,
+      "Stage": "Negotiation",
+      "CloseDate": "2026-06-15",
+      "Notes": "Pending custom board approval"
+    },
+    {
+      "id": "2",
+      "ClientName": "Jenkins Family",
+      "ProjectName": "Pool House Framing",
+      "DealValue": 12800,
+      "Stage": "Proposal Sent",
+      "CloseDate": "2026-07-02",
+      "Notes": "Includes hardware kits supply"
+    }
+  ]
+}
