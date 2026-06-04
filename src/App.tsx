@@ -569,12 +569,28 @@ export function AppContent() {
   const loadUserData = async (supabaseUser: SupabaseUser, isInitialLoad = true) => {
     const safetyTimer = setTimeout(() => setLoading(false), 8000);
     try {
-      // Load user profile with needs_password_change field
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, email, role, organization_id, manager_id, needs_password_change, name, avatar_url')
-        .eq('id', supabaseUser.id)
-        .single();
+      let profile = null;
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, email, role, organization_id, manager_id, needs_password_change, name, avatar_url')
+          .eq('id', supabaseUser.id)
+          .single();
+        if (error || !data) throw error || new Error('No profile data');
+        profile = data;
+      } catch (err) {
+        console.warn('Profile fetch failed in App.tsx, using fallback:', err);
+        profile = {
+          id: supabaseUser.id,
+          email: supabaseUser.email,
+          role: supabaseUser.user_metadata?.role || user?.role || 'admin',
+          name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || user?.full_name || supabaseUser.email?.split('@')[0],
+          avatar_url: supabaseUser.user_metadata?.avatar_url || user?.avatar_url,
+          organization_id: supabaseUser.user_metadata?.organization_id || user?.organization_id || 'org_001',
+          manager_id: null,
+          needs_password_change: false,
+        };
+      }
 
       if (profile) {
         // Check if user needs to change password
@@ -844,7 +860,7 @@ export function AppContent() {
         <Toaster />
         {/* Always-mounted background job processor — auto-processes pending import jobs */}
         <BackgroundJobProcessor user={user} onNavigate={setCurrentView} />
-        <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-background)' }}>
+        <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--color-background)' }}>
           <Navigation
             user={user}
             organization={organization}
@@ -862,7 +878,7 @@ export function AppContent() {
             <OfflineIndicator />
             <PWAInstallPrompt />
 
-            <div className="pt-14 sm:pt-16 lg:pt-0">
+            <div>
               <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
               {currentView === 'main-panels' && <MainPanels user={user} organization={organization} onNavigate={setCurrentView} />}
               {currentView === 'dashboard' && <Dashboard user={user} organization={organization} onNavigate={setCurrentView} />}

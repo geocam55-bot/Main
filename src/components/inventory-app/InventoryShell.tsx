@@ -10,8 +10,6 @@ import {
   LogOut,
   ChevronRight,
   ChevronDown,
-  PanelLeftClose,
-  PanelLeftOpen,
   ArrowLeft,
   User as UserIcon,
   Wrench,
@@ -27,6 +25,7 @@ import {
 import { createClient } from '../../utils/supabase/client';
 import { canAccessSpace, canView, onPermissionsChanged } from '../../utils/permissions';
 import type { User } from '../../App';
+import { useTheme } from '../ThemeProvider';
 
 // ── Lazy-load inventory sub-component ──
 const lazyNamed = <T extends Record<string, any>>(
@@ -82,10 +81,14 @@ interface InventoryShellProps {
 }
 
 export function InventoryShell({ user, accessToken, onLogout }: InventoryShellProps) {
+  const { theme } = useTheme();
   const [currentView, setCurrentView] = useState<InventoryView>('home');
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [currentUser, setCurrentUser] = useState<User>(user);
   const [, setPermissionVersion] = useState(0);
+
+  useEffect(() => {
+    setCurrentUser(user);
+  }, [user]);
 
   useEffect(() => onPermissionsChanged(() => setPermissionVersion((version) => version + 1)), []);
 
@@ -134,42 +137,56 @@ export function InventoryShell({ user, accessToken, onLogout }: InventoryShellPr
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      {/* ── Sidebar ── */}
-      <aside
-        className={`flex flex-col border-r border-slate-200 bg-white transition-all duration-300 ${
-          isCollapsed ? 'w-20' : 'w-72'
-        }`}
+    <div
+      className="flex flex-col h-screen overflow-hidden"
+      style={{
+        background: theme.colors.backgroundSecondary,
+        color: theme.colors.text,
+      }}
+    >
+      {/* ── Top Sticky Navbar ── */}
+      <header
+        className="sticky top-0 z-50 w-full shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-6 py-2.5 md:py-0 md:h-16 gap-3 md:gap-4 shadow-sm"
+        style={{
+          background: theme.colors.navBackground,
+          borderColor: theme.colors.border,
+          color: theme.colors.navText,
+        }}
       >
-        {/* Brand header */}
-        <div className="flex items-center gap-3 px-5 h-16 border-b border-slate-100 shrink-0">
+        {/* Brand & Left Control */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={handleBackToSpaces}
+            className="flex items-center justify-center p-2 rounded-xl transition-colors shrink-0"
+            title="Back to Spaces"
+            style={{ color: theme.colors.textMuted }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme.colors.navHover;
+              e.currentTarget.style.color = theme.colors.navText;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = theme.colors.textMuted;
+            }}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
           <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
             <Package className="h-5 w-5 text-white" />
           </div>
-          {!isCollapsed && (
-            <div className="overflow-hidden">
-              <span className="text-base font-bold text-slate-900 tracking-tight block truncate">
-                Inventory Space
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">
-                Desktop
-              </span>
-            </div>
-          )}
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="ml-auto text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
-          >
-            {isCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
-          </button>
+          <div className="overflow-hidden">
+            <span className="text-sm md:text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
+              Inventory Space
+            </span>
+            <span className="text-[9px] md:text-[10px] font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
+              Supplies & Catalog
+            </span>
+          </div>
         </div>
 
-        {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        {/* Horizontal Navigation Tab Bar */}
+        <nav className="flex-1 flex items-center gap-1.5 overflow-x-auto py-1 px-1 -mx-2 md:mx-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
@@ -177,82 +194,69 @@ export function InventoryShell({ user, accessToken, onLogout }: InventoryShellPr
               <button
                 key={item.id}
                 onClick={() => handleNavigate(item.id)}
-                title={isCollapsed ? item.label : undefined}
-                className={`w-full flex items-center gap-3 rounded-xl transition-all duration-150 group ${
-                  isCollapsed ? 'justify-center px-2 py-3' : 'px-4 py-3'
-                } ${
-                  isActive
-                    ? `${item.bgColor} ${item.color} font-semibold shadow-sm`
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium ${
+                  isActive ? `${item.color} ${item.bgColor} shadow-sm border border-current/10 font-semibold` : ''
                 }`}
+                style={{
+                  color: isActive ? undefined : theme.colors.navText,
+                  backgroundColor: isActive ? theme.colors.navActive : 'transparent',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
               >
-                <div
-                  className={`shrink-0 rounded-lg p-1.5 transition-colors ${
-                    isActive ? item.bgColor : 'group-hover:bg-slate-100'
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                </div>
-                {!isCollapsed && (
-                  <>
-                    <span className="text-sm truncate">{item.label}</span>
-                    {isActive && (
-                      <ChevronRight className="h-4 w-4 ml-auto opacity-50" />
-                    )}
-                  </>
-                )}
+                <Icon className="h-3.5 w-3.5" />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        {/* Bottom: account menu */}
-        <div className="border-t border-slate-100 p-3 space-y-2 shrink-0">
+        {/* Right side: account menu */}
+        <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
           <DropdownMenu>
-            <DropdownMenuTrigger className="w-full focus:outline-none">
+            <DropdownMenuTrigger className="focus:outline-none">
               <div
-                title={isCollapsed ? 'Open account menu' : undefined}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 bg-slate-50 text-left transition-all hover:bg-slate-100 ${
-                  isCollapsed ? 'justify-center' : ''
-                }`}
+                className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 transition-all text-left cursor-pointer"
+                style={{ backgroundColor: theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)';
+                }}
               >
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shrink-0">
+                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shrink-0">
                   {currentUser.avatar_url ? (
                     <img
                       src={currentUser.avatar_url}
                       alt=""
-                      className="h-8 w-8 rounded-full object-cover"
+                      className="h-7 w-7 rounded-full object-cover"
                     />
                   ) : (
-                    <UserIcon className="h-4 w-4 text-white" />
+                    <UserIcon className="h-3.5 w-3.5 text-white" />
                   )}
                 </div>
-                {!isCollapsed && (
-                  <>
-                    <div className="overflow-hidden flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 truncate">
-                        {currentUser.full_name || currentUser.email}
-                      </p>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        Account menu
-                      </p>
-                    </div>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
-                  </>
-                )}
+                <span className="text-xs font-medium max-w-[100px] truncate hidden md:inline-block" style={{ color: theme.colors.text }}>
+                  {currentUser.full_name?.split(' ')[0] || currentUser.email}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" style={{ color: theme.colors.textMuted }} />
               </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="top" className="w-56">
+            <DropdownMenuContent align="end" side="bottom" className="w-56 mt-1">
               <DropdownMenuLabel>
                 <div>
-                  <p className="font-medium">{currentUser.full_name || currentUser.email}</p>
-                  <p className="text-xs text-muted-foreground font-normal mt-1">{currentUser.email || 'No email'}</p>
+                  <p className="font-medium text-sm">{currentUser.full_name || currentUser.email}</p>
+                  <p className="text-xs text-muted-foreground font-normal mt-0.5 truncate">{currentUser.email || 'No email'}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleOpenProfile}>
                 <UserIcon className="mr-2 h-4 w-4" />
-                Profile
+                Profile Settings
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleBackToSpaces}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -266,10 +270,10 @@ export function InventoryShell({ user, accessToken, onLogout }: InventoryShellPr
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </aside>
+      </header>
 
       {/* ── Main content ── */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto" style={{ background: theme.colors.backgroundSecondary }}>
         {currentView === 'home' && (
           <HomeView user={currentUser} onNavigate={handleNavigate} canOpenCatalog={canOpenCatalog} />
         )}
@@ -318,13 +322,15 @@ function HomeView({
     },
   ];
 
+  const { theme } = useTheme();
+
   return (
     <div className="p-8 lg:p-12 max-w-7xl mx-auto">
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: theme.colors.text }}>
           Welcome back, {user.full_name?.split(' ')[0] || 'Manager'}
         </h1>
-        <p className="mt-2 text-slate-500 text-lg">
+        <p className="mt-2 text-lg font-medium" style={{ color: theme.colors.textMuted }}>
           Your inventory command center. Choose a module to get started.
         </p>
       </div>
@@ -336,7 +342,12 @@ function HomeView({
             <button
               key={card.id}
               onClick={() => onNavigate(card.id)}
-              className={`group relative overflow-hidden rounded-2xl bg-white border border-slate-200 p-6 text-left hover:border-slate-300 hover:shadow-lg ${card.shadow} transition-all duration-200`}
+              className="group relative overflow-hidden rounded-2xl border p-6 text-left hover:shadow-lg transition-all duration-200"
+              style={{
+                backgroundColor: theme.colors.card || '#ffffff',
+                borderColor: theme.colors.border,
+                color: theme.colors.cardText,
+              }}
             >
               <div
                 className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${card.gradient}`}
@@ -346,13 +357,13 @@ function HomeView({
               >
                 <Icon className="h-6 w-6 text-white" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-1.5">
+              <h3 className="text-lg font-semibold mb-1.5 animate-pulse-subtle" style={{ color: theme.colors.text }}>
                 {card.label}
               </h3>
-              <p className="text-sm text-slate-500 leading-relaxed">
+              <p className="text-sm leading-relaxed" style={{ color: theme.colors.textMuted }}>
                 {card.description}
               </p>
-              <div className="mt-4 flex items-center gap-1.5 text-sm font-medium text-emerald-600 group-hover:gap-3 transition-all">
+              <div className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-emerald-600 group-hover:gap-3 transition-all">
                 Open module
                 <ChevronRight className="h-4 w-4" />
               </div>
@@ -362,19 +373,19 @@ function HomeView({
       </div>
 
       <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-sm text-slate-400 font-medium">Modules</p>
-          <p className="text-3xl font-bold text-slate-900 mt-1">1</p>
+        <div className="rounded-2xl border p-6" style={{ backgroundColor: theme.colors.card || '#ffffff', borderColor: theme.colors.border }}>
+          <p className="text-sm font-semibold uppercase tracking-wider" style={{ color: theme.colors.textMuted }}>Modules</p>
+          <p className="text-3xl font-bold mt-1" style={{ color: theme.colors.text }}>1</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-sm text-slate-400 font-medium">Your Role</p>
-          <p className="text-3xl font-bold text-slate-900 mt-1 capitalize">
+        <div className="rounded-2xl border p-6" style={{ backgroundColor: theme.colors.card || '#ffffff', borderColor: theme.colors.border }}>
+          <p className="text-sm font-semibold uppercase tracking-wider" style={{ color: theme.colors.textMuted }}>Your Role</p>
+          <p className="text-3xl font-bold mt-1 capitalize" style={{ color: theme.colors.text }}>
             {user.role.replace('_', ' ')}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-sm text-slate-400 font-medium">Environment</p>
-          <p className="text-3xl font-bold text-slate-900 mt-1">Desktop</p>
+        <div className="rounded-2xl border p-6" style={{ backgroundColor: theme.colors.card || '#ffffff', borderColor: theme.colors.border }}>
+          <p className="text-sm font-semibold uppercase tracking-wider" style={{ color: theme.colors.textMuted }}>Environment</p>
+          <p className="text-3xl font-bold mt-1" style={{ color: theme.colors.text }}>Desktop</p>
         </div>
       </div>
     </div>

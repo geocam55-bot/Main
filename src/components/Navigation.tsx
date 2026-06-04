@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import {
   LayoutDashboard,
@@ -16,32 +16,21 @@ import {
   UserCog,
   Mail,
   MessageSquare,
-  TrendingUp,
-  Package,
   Shield,
   User,
   Upload,
-  Target,
   Folder,
   UsersRound,
-  BarChart3,
   Sparkles,
-  Wand2,
   ChevronDown,
   ChevronRight,
-  ChefHat,
-  Hammer,
-  Warehouse,
   Home,
-  Triangle,
-  Globe,
-  PanelLeftClose,
-  PanelLeftOpen,
   CreditCard,
   History,
   Info,
-  Brush,
   Clock,
+  ArrowLeft,
+  Globe,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -75,14 +64,14 @@ interface NavigationProps {
   onToggleSidebar?: () => void;
 }
 
-export function Navigation({ 
-  user, 
-  organization, 
-  currentView, 
-  onNavigate, 
+export function Navigation({
+  user,
+  organization,
+  currentView,
+  onNavigate,
   onLogout,
   isSidebarCollapsed = false,
-  onToggleSidebar
+  onToggleSidebar,
 }: NavigationProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { suggestions } = useAISuggestions(user);
@@ -90,11 +79,6 @@ export function Navigation({
   const { unreadCount: unreadBidsCount, markAsRead: markBidsRead } = useBidNotifications(user);
   const { taskCount } = useTaskNotifications(user);
   const { appointmentCount } = useAppointmentNotifications(user);
-  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
-    'email': false,
-    'admin': false,
-    'project-wizards': false,
-  });
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
 
   // Load subscription plan to gate enterprise features
@@ -107,52 +91,37 @@ export function Navigation({
         }
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Toggle submenu expansion
-  const toggleSubmenu = (menuId: string) => {
-    setExpandedMenus(prev => ({
-      ...prev,
-      [menuId]: !prev[menuId]
-    }));
-  };
+  // Base navigation items
+  const baseNavItems =
+    user.role !== 'super_admin'
+      ? [
+          { id: 'main-panels', label: 'Home', icon: LayoutDashboard },
+          { id: 'dashboard', label: 'Dashboard', icon: Gauge },
+          ...(organization?.ai_suggestions_enabled
+            ? [{ id: 'ai-suggestions', label: 'AI Suggestions', icon: Sparkles, count: suggestions.length }]
+            : []),
+          { id: 'contacts', label: 'Contacts', icon: Users },
+          { id: 'bids', label: 'Deals', icon: FileText, count: unreadBidsCount },
+          { id: 'messages', label: 'Message Space', icon: MessageSquare },
+          { id: 'notes', label: 'Notes', icon: StickyNote },
+        ]
+      : [];
 
-  // Base navigation items with submenu structure
-  const baseNavItems = user.role !== 'super_admin' ? [
-    { id: 'main-panels', label: 'Home', icon: LayoutDashboard },
-    { id: 'dashboard', label: 'Dashboard', icon: Gauge },
-    // Only show AI Suggestions if enabled for the organization
-    ...(organization?.ai_suggestions_enabled ? [{ id: 'ai-suggestions', label: 'AI Suggestions', icon: Sparkles }] : []),
-    { id: 'contacts', label: 'Contacts', icon: Users },
-    { id: 'bids', label: 'Deals', icon: FileText },
-    { id: 'messages', label: 'Message Space', icon: MessageSquare },
-    { id: 'notes', label: 'Notes', icon: StickyNote },
-    // Show Appointments for all users (including Admin for calendar sync testing)
-    { 
-      id: 'email', 
-      label: 'Email', 
-      icon: Mail,
-      hasSubmenu: true,
-      submenu: [
-        { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-        ...(organization?.appointments_enabled !== false && canView('appointments', user.role) ? [{ id: 'appointments', label: 'Appointments', icon: Calendar }] : []),
-      ]
-    },
-    // Only show Documents if enabled for the organization
-    ...(organization?.documents_enabled !== false ? [{ id: 'documents', label: 'Documents', icon: Folder }] : []),
-  ] : [];
-
-  // Manager/Admin specific items (team dashboard - hidden from SUPER_ADMIN)
-  const managerNavItems = 
-    (user.role === 'manager' || user.role === 'director' || user.role === 'admin') && user.role !== 'super_admin'
+  const managerNavItems =
+    (user.role === 'manager' || user.role === 'director' || user.role === 'admin') &&
+    user.role !== 'super_admin'
       ? [{ id: 'team-dashboard', label: 'Team Dashboard', icon: UsersRound }]
       : [];
 
-  // Build Admin submenu items based on role and permissions
+  // Build Admin submenu items
   const buildAdminSubmenu = () => {
     const submenuItems = [];
-    
+
     if (user.role === 'super_admin') {
       submenuItems.push(
         { id: 'tenants', label: 'Organizations', icon: Building2 },
@@ -162,7 +131,6 @@ export function Navigation({
         { id: 'scheduled-jobs', label: 'Scheduled Jobs', icon: Clock }
       );
     } else {
-      // For non-super_admin, use canView to determine visibility
       if (canView('users', user.role)) {
         submenuItems.push({ id: 'users', label: 'Users', icon: UserCog });
       }
@@ -177,67 +145,27 @@ export function Navigation({
         submenuItems.push({ id: 'scheduled-jobs', label: 'Scheduled Jobs', icon: Clock });
       }
     }
-    
-    // Add Audit Log for admin roles on Enterprise plan
+
     if (['admin', 'super_admin'].includes(user.role) && currentPlanId === 'enterprise') {
       submenuItems.push({ id: 'audit-log', label: 'Audit Log', icon: History });
     }
 
-    // Add Settings for roles that can view it
     if (canView('settings', user.role)) {
       submenuItems.push({ id: 'settings', label: 'Settings', icon: Settings });
     }
 
-    // Add Billing for admin roles
     if (['admin', 'super_admin'].includes(user.role)) {
       submenuItems.push({ id: 'subscription-billing', label: 'Billing', icon: CreditCard });
     }
 
-    // Add Subscription Agreement for super_admin only
     if (user.role === 'super_admin') {
       submenuItems.push({ id: 'subscription-agreement', label: 'Subscription Agreement', icon: FileText });
     }
-    
+
     return submenuItems;
   };
 
   const adminSubmenu = buildAdminSubmenu();
-
-  // Combine and filter based on permissions
-  const navItems = [
-    ...baseNavItems,
-    ...managerNavItems,
-    ...(adminSubmenu.length > 0
-      ? [{ id: 'admin', label: 'Admin', icon: Shield, hasSubmenu: true, submenu: adminSubmenu }]
-      : []),
-  ].filter(item => {
-    // Admin parent menu: show if it has submenu items (already filtered above)
-    if (item.id === 'admin') return true;
-    if (item.id === 'main-panels') return true;
-    // Settings standalone: always show if it got here (already filtered above)
-    if (item.id === 'settings') return true;
-    // Everything else: check canView
-    return canView(item.id, user.role);
-  });
-
-  const safeNavItems = navItems.length > 0
-    ? navItems
-    : [{ id: 'main-panels', label: 'Home', icon: LayoutDashboard }];
-
-  // Auto-expand parent menu when child is active
-  useEffect(() => {
-    safeNavItems.forEach((item) => {
-      if (item.submenu) {
-        const hasActiveChild = item.submenu.some((sub: any) => sub.id === currentView);
-        if (hasActiveChild && !expandedMenus[item.id]) {
-          setExpandedMenus(prev => ({
-            ...prev,
-            [item.id]: true
-          }));
-        }
-      }
-    });
-  }, [currentView, safeNavItems, expandedMenus]);
 
   const handleNavClick = (view: string) => {
     if (view === 'bids') {
@@ -248,148 +176,14 @@ export function Navigation({
   };
 
   const handleBackToSpaces = () => {
-    handleNavClick('space-chooser');
+    window.location.href = '/?view=space-chooser';
   };
 
-  // Render navigation item (with or without submenu)
-  const renderNavItem = (item: any, isSubmenuItem = false) => {
-    const Icon = item.icon;
-    const isActive = currentView === item.id;
-    const isExpanded = expandedMenus[item.id];
-    const hasActiveChild = item.submenu?.some((sub: any) => sub.id === currentView);
-
-    if (item.hasSubmenu) {
-      return (
-        <div key={item.id}>
-          <div className="relative" title={isSidebarCollapsed ? item.label : undefined}>
-            {/* For Admin menu and Project Wizards, make entire button toggle (no navigation). For others, split between navigate and toggle */}
-            {(item.id === 'admin' || item.id === 'project-wizards') ? (
-              <button
-                onClick={() => toggleSubmenu(item.id)}
-                className={`w-full group flex items-center ${isSidebarCollapsed ? 'justify-center px-2 py-3' : 'justify-between px-4 py-3'} text-sm rounded-xl transition-all duration-150 ${
-                  isSubmenuItem && !isSidebarCollapsed ? 'pl-6' : ''
-                }`}
-                style={{
-                  backgroundColor: hasActiveChild ? theme.colors.navActive : 'transparent',
-                  color: theme.colors.navText,
-                }}
-                onMouseEnter={(e) => {
-                  if (!hasActiveChild) {
-                    e.currentTarget.style.backgroundColor = theme.colors.navHover;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!hasActiveChild) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : ''}`}>
-                  <Icon className={`${isSidebarCollapsed ? 'mr-0' : 'mr-3'} h-5 w-5 flex-shrink-0`} 
-                    style={{ opacity: hasActiveChild ? 1 : 0.7 }}
-                  />
-                  {!isSidebarCollapsed && item.label}
-                </div>
-                {!isSidebarCollapsed && (
-                  isExpanded ? (
-                    <ChevronDown className="h-4 w-4" style={{ opacity: 0.7 }} />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" style={{ opacity: 0.7 }} />
-                  )
-                )}
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => handleNavClick(item.id)}
-                  className={`w-full group flex items-center ${isSidebarCollapsed ? 'justify-center px-2 py-3' : 'pr-10 px-4 py-3'} text-sm rounded-xl transition-all duration-150 ${
-                    isSubmenuItem && !isSidebarCollapsed ? 'pl-6' : ''
-                  }`}
-                  style={{
-                    backgroundColor: (isActive || hasActiveChild) ? theme.colors.navActive : 'transparent',
-                    color: theme.colors.navText,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive && !hasActiveChild) {
-                      e.currentTarget.style.backgroundColor = theme.colors.navHover;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive && !hasActiveChild) {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }
-                  }}
-                >
-                  <Icon className={`${isSidebarCollapsed ? 'mr-0' : 'mr-3'} h-5 w-5 flex-shrink-0`} 
-                    style={{ opacity: (isActive || hasActiveChild) ? 1 : 0.7 }}
-                  />
-                  {!isSidebarCollapsed && item.label}
-                </button>
-                {!isSidebarCollapsed && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSubmenu(item.id);
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 transition-colors hover:bg-background/10"
-                    aria-label={isExpanded ? 'Collapse submenu' : 'Expand submenu'}
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4" style={{ opacity: 0.7 }} />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" style={{ opacity: 0.7 }} />
-                    )}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-          {(isExpanded || (isSidebarCollapsed && hasActiveChild)) && item.submenu && (
-            <div className="mt-1 space-y-1">
-              {item.submenu.map((subItem: any) => renderNavItem(subItem, true))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <button
-        key={item.id}
-        onClick={() => handleNavClick(item.id)}
-        className={`w-full group flex items-center ${isSidebarCollapsed ? 'justify-center px-2 py-3' : 'px-4 py-3'} text-sm rounded-xl transition-all duration-150 ${
-          isSubmenuItem && !isSidebarCollapsed ? 'pl-11' : ''
-        }`}
-        style={{
-          backgroundColor: isActive ? theme.colors.navActive : 'transparent',
-          color: theme.colors.navText,
-        }}
-        title={isSidebarCollapsed ? item.label : undefined}
-        onMouseEnter={(e) => {
-          if (!isActive) {
-            e.currentTarget.style.backgroundColor = theme.colors.navHover;
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isActive) {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }
-        }}
-      >
-        <Icon className={`${isSidebarCollapsed ? 'mr-0' : 'mr-3'} h-5 w-5 flex-shrink-0`} 
-          style={{ opacity: isActive ? 1 : 0.7 }}
-        />
-        {!isSidebarCollapsed && item.label}
-      </button>
-    );
-  };
-
-  // Get user initials for avatar fallback
   const getInitials = (name: string | undefined) => {
     if (!name) return 'U';
     return name
       .split(' ')
-      .map(n => n[0])
+      .map((n) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
@@ -397,306 +191,319 @@ export function Navigation({
 
   const { theme } = useTheme();
 
-  // Get page title based on current view
-  const getPageTitle = (view: string) => {
-    // Check main items
-    const item = safeNavItems.find(item => item.id === view);
-    if (item) return item.label;
-    
-    // Check submenu items
-    for (const navItem of safeNavItems) {
-      if (navItem.submenu) {
-        const subItem = navItem.submenu.find((sub: any) => sub.id === view);
-        if (subItem) return subItem.label;
-      }
-    }
-    
-    return 'Dashboard';
-  };
+  // Highlight Email menu if its children are active
+  const isEmailActive =
+    currentView === 'email' || currentView === 'tasks' || currentView === 'appointments';
 
-  // Get page icon based on current view
-  const getPageIcon = (view: string) => {
-    // Check main items
-    const item = safeNavItems.find(item => item.id === view);
-    if (item) return item.icon;
-    
-    // Check submenu items
-    for (const navItem of safeNavItems) {
-      if (navItem.submenu) {
-        const subItem = navItem.submenu.find((sub: any) => sub.id === view);
-        if (subItem) return subItem.icon;
-      }
-    }
-    
-    return LayoutDashboard;
-  };
+  // Highlight Admin menu if its children are active
+  const isAdminActive = adminSubmenu.some((sub) => currentView === sub.id);
 
   return (
     <>
-      {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 border-b border-slate-200 bg-white z-50">
-        <div className="flex items-center justify-between gap-2 px-3 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Logo size="sm" className="h-9 w-9 shrink-0" />
-            <div className="min-w-0">
-              <span className="text-base font-bold text-slate-900 tracking-tight block truncate">
-                Sales Space
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">
-                CRM Workspace
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-0.5">
-            {/* AI Suggestions Icon */}
-            {suggestions.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="relative p-1.5 rounded-full hover:bg-slate-100 transition-colors"
-                onClick={() => handleNavClick('ai-suggestions')}
-                title={`${suggestions.length} AI Suggestions`}
-              >
-                <Sparkles className="h-4 w-4 text-purple-600 animate-pulse" />
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 text-[9px] flex items-center justify-center bg-red-500 text-white rounded-full">
-                  {suggestions.length > 9 ? '9+' : suggestions.length}
-                </span>
-              </Button>
-            )}
-
-            {/* Bid Notifications Icon */}
-            {unreadBidsCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="relative hidden rounded-full p-1.5 transition-colors hover:bg-slate-100 sm:inline-flex"
-                onClick={() => handleNavClick('bids')}
-                title={`${unreadBidsCount} Deal Updates`}
-              >
-                <FileText className="h-4 w-4 text-orange-600 animate-pulse" />
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 text-[9px] flex items-center justify-center bg-red-500 text-white rounded-full">
-                  {unreadBidsCount > 9 ? '9+' : unreadBidsCount}
-                </span>
-              </Button>
-            )}
-
-            {/* Task Notifications Icon */}
-            {taskCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="relative hidden rounded-full p-1.5 transition-colors hover:bg-slate-100 sm:inline-flex"
-                onClick={() => handleNavClick('tasks')}
-                title={`${taskCount} Pending Tasks`}
-              >
-                <CheckSquare className="h-4 w-4 text-green-600 animate-pulse" />
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 text-[9px] flex items-center justify-center bg-red-500 text-white rounded-full">
-                  {taskCount > 9 ? '9+' : taskCount}
-                </span>
-              </Button>
-            )}
-
-            {/* Appointment Notifications Icon */}
-            {appointmentCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="relative hidden rounded-full p-1.5 transition-colors hover:bg-slate-100 sm:inline-flex"
-                onClick={() => handleNavClick('appointments')}
-                title={`${appointmentCount} Upcoming Appointments`}
-              >
-                <Calendar className="h-4 w-4 text-purple-600 animate-pulse" />
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 text-[9px] flex items-center justify-center bg-red-500 text-white rounded-full">
-                  {appointmentCount > 9 ? '9+' : appointmentCount}
-                </span>
-              </Button>
-            )}
-
-            {/* Email Icon */}
-            {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="relative p-1.5 rounded-full hover:bg-slate-100 transition-colors"
-                onClick={() => handleNavClick('email')}
-                title={`${unreadCount} Unread Emails`}
-              >
-                <Mail className="h-4 w-4 text-blue-600 animate-pulse" />
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 text-[9px] flex items-center justify-center bg-red-500 text-white rounded-full">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              </Button>
-            )}
-
-            <DropdownMenu>
-              <DropdownMenuTrigger className="focus:outline-none">
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarImage src={user.avatar_url} alt={user.full_name || user.email || 'User'} />
-                  <AvatarFallback className="bg-blue-600 text-white text-sm">
-                    {getInitials(user.full_name || user.email || '')}
-                  </AvatarFallback>
-                </Avatar>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div>
-                    <p className="font-medium">{user.full_name || user.email || 'User'}</p>
-                    <p className="text-xs text-muted-foreground font-normal mt-1">{user.email || 'No email'}</p>
-                  </div>
-                </DropdownMenuLabel>
-                {organization && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel>
-                      <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground font-normal">Organization</p>
-                          <p className="text-sm font-medium">{organization.name}</p>
-                        </div>
-                      </div>
-                    </DropdownMenuLabel>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleBackToSpaces}>
-                  <Home className="mr-2 h-4 w-4" />
-                  Spaces Main Page
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleNavClick('settings')}>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleNavClick('about')}>
-                  <Info className="mr-2 h-4 w-4" />
-                  About
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout} className="text-red-600">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Log Off
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full p-1.5 hover:bg-slate-100 text-slate-600"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Desktop sidebar */}
-      <aside
-        className={`hidden lg:flex lg:flex-col transition-all duration-300 ${isSidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}`}
+      {/* ── Top Header and Sticky Navigation ── */}
+      <header
+        className="sticky top-0 z-50 w-full shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-6 py-2.5 md:py-0 md:h-16 gap-3 md:gap-4 shadow-sm"
         style={{
           background: theme.colors.navBackground,
-          borderRight: `1px solid ${theme.colors.border}`,
+          borderColor: theme.colors.border,
           color: theme.colors.navText,
         }}
       >
-        <div
-          className="flex items-center gap-3 px-5 h-16 shrink-0"
-          style={{ borderBottom: `1px solid ${theme.colors.border}` }}
-        >
+        {/* Left Side: Space Branding & Navigation back */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={handleBackToSpaces}
+            className="flex items-center justify-center p-2 rounded-xl transition-colors shrink-0"
+            title="Back to Spaces"
+            style={{ color: theme.colors.textMuted }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme.colors.navHover;
+              e.currentTarget.style.color = theme.colors.navText;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = theme.colors.textMuted;
+            }}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
           <Logo size="sm" className="h-9 w-9 shrink-0" />
-          {!isSidebarCollapsed && (
-            <div className="overflow-hidden">
-              <span className="text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
-                Sales Space
-              </span>
-              <span className="text-[10px] font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
-                CRM Workspace
-              </span>
-            </div>
-          )}
-          {onToggleSidebar && (
-            <button
-              onClick={onToggleSidebar}
-              className="ml-auto transition-colors p-1 rounded-lg"
-              style={{ color: theme.colors.textMuted }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme.colors.navHover;
-                e.currentTarget.style.color = theme.colors.navText;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = theme.colors.textMuted;
-              }}
-              title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
-          )}
+          <div className="overflow-hidden">
+            <span className="text-sm md:text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
+              Sales Space
+            </span>
+            <span className="text-[9px] md:text-[10px] font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
+              CRM Workspace
+            </span>
+          </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {safeNavItems.map((item) => renderNavItem(item))}
+        {/* Middle Side: Horizontal Navigation Tab bar */}
+        <nav className="flex-1 flex items-center gap-1.5 overflow-x-auto py-1 px-1 -mx-2 md:mx-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {baseNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+            const hasCount = item.count !== undefined && item.count > 0;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavClick(item.id)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium relative ${
+                  isActive ? 'shadow-sm border border-current/10 font-semibold' : ''
+                }`}
+                style={{
+                  color: isActive ? undefined : theme.colors.navText,
+                  backgroundColor: isActive ? theme.colors.navActive : 'transparent',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{item.label}</span>
+                {hasCount && (
+                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-amber-500 text-white rounded-full leading-none animate-pulse">
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Email Dropdown (Contains Email Inbox, Tasks, Appointments) */}
+          {user.role !== 'super_admin' && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium focus:outline-none ${
+                  isEmailActive ? 'shadow-sm border border-current/10 font-semibold text-blue-600' : ''
+                }`}
+                style={{
+                  backgroundColor: isEmailActive ? theme.colors.navActive : 'transparent',
+                  color: isEmailActive ? undefined : theme.colors.navText,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isEmailActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                }}
+                onMouseLeave={(e) => {
+                  if (!isEmailActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <Mail className="h-3.5 w-3.5" />
+                <span>Email</span>
+                {(unreadCount > 0 || taskCount > 0 || appointmentCount > 0) && (
+                  <span className="h-2 w-2 rounded-full bg-red-500 animate-ping absolute top-1 right-2" />
+                )}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuLabel>Email Channels</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleNavClick('email')}
+                  className={currentView === 'email' ? 'bg-accent font-semibold' : ''}
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Email Inbox
+                  {unreadCount > 0 && (
+                    <span className="ml-auto text-[10px] font-bold bg-blue-500 text-white rounded-full px-1.5 py-0.5">
+                      {unreadCount}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleNavClick('tasks')}
+                  className={currentView === 'tasks' ? 'bg-accent font-semibold' : ''}
+                >
+                  <CheckSquare className="mr-2 h-4 w-4" />
+                  Tasks
+                  {taskCount > 0 && (
+                    <span className="ml-auto text-[10px] font-bold bg-green-500 text-white rounded-full px-1.5 py-0.5">
+                      {taskCount}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                {organization?.appointments_enabled !== false && canView('appointments', user.role) && (
+                  <DropdownMenuItem
+                    onClick={() => handleNavClick('appointments')}
+                    className={currentView === 'appointments' ? 'bg-accent font-semibold' : ''}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Appointments
+                    {appointmentCount > 0 && (
+                      <span className="ml-auto text-[10px] font-bold bg-purple-500 text-white rounded-full px-1.5 py-0.5">
+                        {appointmentCount}
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Documents Tab */}
+          {organization?.documents_enabled !== false && canView('documents', user.role) && (
+            <button
+              onClick={() => handleNavClick('documents')}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium ${
+                currentView === 'documents' ? 'shadow-sm border border-current/10 font-semibold' : ''
+              }`}
+              style={{
+                color: currentView === 'documents' ? undefined : theme.colors.navText,
+                backgroundColor: currentView === 'documents' ? theme.colors.navActive : 'transparent',
+              }}
+              onMouseEnter={(e) => {
+                if (currentView !== 'documents') e.currentTarget.style.backgroundColor = theme.colors.navHover;
+              }}
+              onMouseLeave={(e) => {
+                if (currentView !== 'documents') e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <Folder className="h-3.5 w-3.5" />
+              <span>Documents</span>
+            </button>
+          )}
+
+          {/* Team Dashboard Tab */}
+          {managerNavItems.map((item) => {
+            const isActive = currentView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavClick(item.id)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium ${
+                  isActive ? 'shadow-sm border border-current/10 font-semibold' : ''
+                }`}
+                style={{
+                  color: isActive ? undefined : theme.colors.navText,
+                  backgroundColor: isActive ? theme.colors.navActive : 'transparent',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <UsersRound className="h-3.5 w-3.5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+
+          {/* Admin Dropdown Menu */}
+          {adminSubmenu.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium focus:outline-none ${
+                  isAdminActive ? 'shadow-sm border border-current/10 font-semibold text-rose-600' : ''
+                }`}
+                style={{
+                  backgroundColor: isAdminActive ? theme.colors.navActive : 'transparent',
+                  color: isAdminActive ? undefined : theme.colors.navText,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isAdminActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                }}
+                onMouseLeave={(e) => {
+                  if (!isAdminActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <Shield className="h-3.5 w-3.5" />
+                <span>Admin settings</span>
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52 max-h-96 overflow-y-auto">
+                <DropdownMenuLabel>Admin Operations</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {adminSubmenu.map((subItem) => {
+                  const SubIcon = subItem.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={subItem.id}
+                      onClick={() => handleNavClick(subItem.id)}
+                      className={currentView === subItem.id ? 'bg-accent font-semibold' : ''}
+                    >
+                      <SubIcon className="mr-2 h-4 w-4" />
+                      <span>{subItem.label}</span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </nav>
 
-        <div className="p-3 space-y-2 shrink-0" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
-          {/* Trial Countdown Badge */}
-          {!isSidebarCollapsed && (
-            <div className="mb-2">
-              <TrialCountdown variant="badge" className="w-full justify-center" />
-            </div>
-          )}
-          
+        {/* Right Side: Trialcountdown & Account Profile menu */}
+        <div className="flex items-center gap-2 shrink-0 self-end md:self-auto pb-2 md:pb-0">
+          {/* Trial countdown (visible on wider screens) */}
+          <div className="hidden xl:block">
+            <TrialCountdown variant="badge" className="mr-1" />
+          </div>
+
           <DropdownMenu>
-            <DropdownMenuTrigger className="w-full focus:outline-none">
+            <DropdownMenuTrigger className="focus:outline-none">
               <div
-                title={isSidebarCollapsed ? 'Open account menu' : undefined}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
-                  isSidebarCollapsed ? 'justify-center' : ''
-                }`}
-                style={{ backgroundColor: theme.colors.backgroundTertiary }}
+                className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 transition-all text-left cursor-pointer"
+                style={{ backgroundColor: theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)' }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = theme.colors.navHover;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = theme.colors.backgroundTertiary;
+                  e.currentTarget.style.backgroundColor = theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)';
                 }}
               >
-                <Avatar className="h-8 w-8 shrink-0">
+                <Avatar className="h-7 w-7 rounded-full shrink-0">
                   <AvatarImage src={user.avatar_url} alt={user.full_name || user.email || 'User'} />
-                  <AvatarFallback className="bg-blue-600 text-white text-sm">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs">
                     {getInitials(user.full_name || user.email || '')}
                   </AvatarFallback>
                 </Avatar>
-                {!isSidebarCollapsed && (
-                  <div className="overflow-hidden flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: theme.colors.text }}>
-                      {user.full_name || user.email || 'User'}
-                    </p>
-                    <p className="text-[11px] truncate" style={{ color: theme.colors.textMuted }}>
-                      Account menu
-                    </p>
-                  </div>
-                )}
-                {!isSidebarCollapsed && <ChevronDown className="h-4 w-4 shrink-0" style={{ color: theme.colors.textMuted }} />}
+                <span className="text-xs font-medium max-w-[100px] truncate hidden md:inline-block" style={{ color: theme.colors.text }}>
+                  {user.full_name?.split(' ')[0] || user.email}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" style={{ color: theme.colors.textMuted }} />
               </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="top" className="w-56">
+            <DropdownMenuContent align="end" side="bottom" className="w-56 mt-1">
               <DropdownMenuLabel>
                 <div>
-                  <p className="font-medium">{user.full_name || user.email || 'User'}</p>
-                  <p className="text-xs text-muted-foreground font-normal mt-1">{user.email || 'No email'}</p>
+                  <p className="font-medium text-sm">{user.full_name || user.email}</p>
+                  <p className="text-xs text-muted-foreground font-normal mt-0.5 truncate">{user.email || 'No email'}</p>
                 </div>
               </DropdownMenuLabel>
+              {organization && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="overflow-hidden">
+                        <p className="text-[10px] text-muted-foreground font-normal">Organization</p>
+                        <p className="text-xs font-medium truncate">{organization.name}</p>
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => handleNavClick('settings')}>
                 <User className="mr-2 h-4 w-4" />
-                Profile
+                Profile Settings
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleBackToSpaces}>
-                <Home className="mr-2 h-4 w-4" />
+                <ArrowLeft className="mr-2 h-4 w-4" />
                 Spaces Main Page
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleNavClick('about')}>
+                <Info className="mr-2 h-4 w-4" />
+                About
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onLogout} className="text-red-600">
@@ -706,147 +513,220 @@ export function Navigation({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {!isSidebarCollapsed ? (
-            <div className="flex items-center justify-center gap-3 pt-1">
-              <a
-                href="?view=privacy-policy"
-                className="text-xs transition-colors"
-                style={{ color: theme.colors.navText, opacity: 0.5 }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
-              >
-                Privacy
-              </a>
-              <span className="text-xs" style={{ color: theme.colors.navText, opacity: 0.3 }}>·</span>
-              <a
-                href="?view=terms-of-service"
-                className="text-xs transition-colors"
-                style={{ color: theme.colors.navText, opacity: 0.5 }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
-              >
-                Terms
-              </a>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-1 pt-1">
-              <a
-                href="?view=privacy-policy"
-                className="text-[10px] transition-colors"
-                style={{ color: theme.colors.navText, opacity: 0.5 }}
-                title="Privacy Policy"
-              >
-                Privacy
-              </a>
-              <a
-                href="?view=terms-of-service"
-                className="text-[10px] transition-colors"
-                style={{ color: theme.colors.navText, opacity: 0.5 }}
-                title="Terms of Service"
-              >
-                Terms
-              </a>
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* Mobile menu */}
-      {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-gray-900 bg-opacity-50" onClick={() => setIsMobileMenuOpen(false)}>
-          <div
-            className="fixed inset-y-0 left-0 w-[88vw] max-w-72 bg-white"
-            onClick={(e) => e.stopPropagation()}
+          {/* Mobile hamburger menu toggle */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="md:hidden rounded-full p-1.5 hover:bg-slate-100 text-slate-600 shrink-0"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
-            <div className="flex h-full flex-col overflow-y-auto pb-4">
-              {/* Drawer header */}
-              <div className="flex items-center gap-3 px-5 h-16 border-b border-slate-100 shrink-0">
-                <Logo size="sm" className="h-9 w-9 shrink-0" />
-                <div className="overflow-hidden flex-1 min-w-0">
-                  <span className="text-base font-bold text-slate-900 tracking-tight block truncate">Sales Space</span>
-                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">CRM Workspace</span>
-                </div>
-                <button
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="ml-auto text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        </div>
+      </header>
 
-              <nav className="mt-3 flex-1 space-y-1 px-3">
-                {navItems.map((item) => {
-                  const NavIcon = item.icon;
-                  const isActive = currentView === item.id;
-                  return (
+      {/* ── Mobile Sidebar Slide-out menus ── */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-gray-900 bg-opacity-50" onClick={() => setIsMobileMenuOpen(false)}>
+          <div
+            className="fixed inset-y-0 left-0 w-[88vw] max-w-72 bg-white flex flex-col h-full overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: theme.colors.background || '#ffffff' }}
+          >
+            {/* Drawer header */}
+            <div className="flex h-16 items-center gap-3 px-5 border-b shrink-0" style={{ borderColor: theme.colors.border }}>
+              <Logo size="sm" className="h-9 w-9 shrink-0" />
+              <div className="overflow-hidden flex-1 min-w-0">
+                <span className="text-base font-bold text-slate-900 tracking-tight block truncate" style={{ color: theme.colors.text }}>
+                  Sales Space
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
+                  CRM Workspace
+                </span>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="ml-auto text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Mobile navigation content */}
+            <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+              {baseNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item.id)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-xl transition-all"
+                    style={{
+                      backgroundColor: isActive ? theme.colors.navActive : 'transparent',
+                      color: isActive ? undefined : theme.colors.text,
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-5 w-5 opacity-70" />
+                      <span>{item.label}</span>
+                    </div>
+                    {item.count !== undefined && item.count > 0 && (
+                      <span className="ml-2 text-[10px] bg-amber-500 text-white rounded-full px-1.5 py-0.5">
+                        {item.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              <DropdownMenuSeparator />
+
+              {/* Email Options in mobile menu */}
+              {user.role !== 'super_admin' && (
+                <div className="space-y-1">
+                  <p className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Email Modules</p>
+                  <button
+                    onClick={() => handleNavClick('email')}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all pl-6"
+                    style={{
+                      backgroundColor: currentView === 'email' ? theme.colors.navActive : 'transparent',
+                      color: currentView === 'email' ? undefined : theme.colors.text,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 opacity-70" />
+                      <span>Email Inbox</span>
+                    </div>
+                    {unreadCount > 0 && (
+                      <span className="text-[10px] bg-blue-500 text-white rounded-full px-1.5 py-0.5">{unreadCount}</span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleNavClick('tasks')}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all pl-6"
+                    style={{
+                      backgroundColor: currentView === 'tasks' ? theme.colors.navActive : 'transparent',
+                      color: currentView === 'tasks' ? undefined : theme.colors.text,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckSquare className="h-4 w-4 opacity-70" />
+                      <span>Tasks</span>
+                    </div>
+                    {taskCount > 0 && (
+                      <span className="text-[10px] bg-green-500 text-white rounded-full px-1.5 py-0.5">{taskCount}</span>
+                    )}
+                  </button>
+                  {organization?.appointments_enabled !== false && canView('appointments', user.role) && (
+                    <button
+                      onClick={() => handleNavClick('appointments')}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all pl-6"
+                      style={{
+                        backgroundColor: currentView === 'appointments' ? theme.colors.navActive : 'transparent',
+                        color: currentView === 'appointments' ? undefined : theme.colors.text,
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 opacity-70" />
+                        <span>Appointments</span>
+                      </div>
+                      {appointmentCount > 0 && (
+                        <span className="text-[10px] bg-purple-500 text-white rounded-full px-1.5 py-0.5">{appointmentCount}</span>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {managerNavItems.length > 0 && (
+                <div className="space-y-1">
+                  <p className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Management</p>
+                  {managerNavItems.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => { handleNavClick(item.id); setIsMobileMenuOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-700 font-semibold'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
-                      }`}
+                      onClick={() => handleNavClick(item.id)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all"
+                      style={{
+                        backgroundColor: currentView === item.id ? theme.colors.navActive : 'transparent',
+                        color: currentView === item.id ? undefined : theme.colors.text,
+                      }}
                     >
-                      <NavIcon className="h-5 w-5 flex-shrink-0" />
-                      {item.label}
+                      <UsersRound className="h-5 w-5 opacity-70" />
+                      <span>{item.label}</span>
                     </button>
-                  );
-                })}
-              </nav>
-
-              {/* Mobile footer account block */}
-              <div className="border-t border-slate-100 p-3 mt-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="w-full focus:outline-none">
-                    <div className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 bg-slate-50 text-left transition-all hover:bg-slate-100">
-                      <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarImage src={user.avatar_url} alt={user.full_name || user.email || 'User'} />
-                        <AvatarFallback className="bg-blue-600 text-white text-sm">
-                          {getInitials(user.full_name || user.email || '')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="overflow-hidden flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{user.full_name || user.email || 'User'}</p>
-                        <p className="text-[11px] text-slate-400 truncate">Account menu</p>
-                      </div>
-                      <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
-                    </div>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" side="top" className="w-56">
-                    <DropdownMenuLabel>
-                      <div>
-                        <p className="font-medium">{user.full_name || user.email || 'User'}</p>
-                        <p className="text-xs text-muted-foreground font-normal mt-1">{user.email || 'No email'}</p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => { handleNavClick('settings'); setIsMobileMenuOpen(false); }}>
-                      <User className="mr-2 h-4 w-4" />
-                      Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { handleBackToSpaces(); setIsMobileMenuOpen(false); }}>
-                      <Home className="mr-2 h-4 w-4" />
-                      Spaces Main Page
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onLogout} className="text-red-600">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Log Off
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <div className="flex items-center justify-center gap-3 pt-2">
-                  <a href="?view=privacy-policy" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Privacy</a>
-                  <span className="text-xs text-slate-300">·</span>
-                  <a href="?view=terms-of-service" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Terms</a>
+                  ))}
                 </div>
+              )}
+
+              {adminSubmenu.length > 0 && (
+                <div className="space-y-1">
+                  <p className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Admin Panel</p>
+                  {adminSubmenu.map((subItem) => {
+                    const SubIcon = subItem.icon;
+                    return (
+                      <button
+                        key={subItem.id}
+                        onClick={() => handleNavClick(subItem.id)}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-xl transition-all pl-6"
+                        style={{
+                          backgroundColor: currentView === subItem.id ? theme.colors.navActive : 'transparent',
+                          color: currentView === subItem.id ? undefined : theme.colors.text,
+                        }}
+                      >
+                        <SubIcon className="h-4 w-4 opacity-70" />
+                        <span>{subItem.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </nav>
+
+            {/* Mobile drawer footer account settings */}
+            <div className="border-t p-4 shrink-0" style={{ borderColor: theme.colors.border }}>
+              <div
+                onClick={() => {
+                  handleNavClick('settings');
+                }}
+                className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left cursor-pointer"
+                style={{ backgroundColor: theme.colors.backgroundTertiary }}
+              >
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarImage src={user.avatar_url} alt={user.full_name || user.email || 'User'} />
+                  <AvatarFallback className="bg-blue-600 text-white text-xs">
+                    {getInitials(user.full_name || user.email || '')}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="overflow-hidden flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: theme.colors.text }}>
+                    {user.full_name || user.email}
+                  </p>
+                  <p className="text-[11px]" style={{ color: theme.colors.textMuted }}>
+                    Profile Settings
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-around mt-4">
+                <button
+                  onClick={handleBackToSpaces}
+                  className="text-xs transition-colors"
+                  style={{ color: theme.colors.textMuted }}
+                >
+                  Spaces Main Page
+                </button>
+                <span className="opacity-30">|</span>
+                <button
+                  onClick={onLogout}
+                  className="text-xs text-red-600 hover:underline"
+                >
+                  Log Off
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
-
     </>
   );
 }

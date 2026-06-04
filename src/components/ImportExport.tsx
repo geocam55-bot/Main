@@ -206,6 +206,140 @@ const calculateNextRunTimeFrontend = (task: ScheduledTask, baseDate = new Date()
   }
 };
 
+const CONTACTS_TEMPLATE_SAMPLE = [
+  {
+    "Name": "John Doe",
+    "Email": "john.doe@example.com",
+    "Phone": "555-0192",
+    "Company": "Acme Construction",
+    "Trade": "Electrician",
+    "Status": "Active",
+    "PriceLevel": "Gold",
+    "LegacyNumber": "LEG-101",
+    "AccountOwner": "owner@yourcompany.com",
+    "Address": "123 Main St",
+    "City": "Denver",
+    "Province": "CO",
+    "PostalCode": "80202",
+    "Notes": "Prefers email contact. Leading local rewiring sub-contractor.",
+    "Tags": "residential, electrical, gold-tier"
+  },
+  {
+    "Name": "Acme Builders Support",
+    "Email": "support@acmebuilders.com",
+    "Phone": "555-0143",
+    "Company": "Acme Builders Inc.",
+    "Trade": "General Contractor",
+    "Status": "Lead",
+    "PriceLevel": "Silver",
+    "LegacyNumber": "LEG-102",
+    "AccountOwner": "sales@yourcompany.com",
+    "Address": "789 Industrial Pkwy",
+    "City": "Denver",
+    "Province": "CO",
+    "PostalCode": "80216",
+    "Notes": "Prefers text notifications. Leading regional masonry and drywall firm.",
+    "Tags": "masonry, premium, repeat"
+  }
+];
+
+const INVENTORY_TEMPLATE_SAMPLE = [
+  {
+    "SKU": "ELEC-WIR-122",
+    "ItemName": "Copper Wire Romex 12/2 100ft",
+    "Description": "Non-metallic sheathed electrical residential copper cable.",
+    "Category": "Electrical",
+    "Quantity": 45,
+    "QuantityOnOrder": 15,
+    "Location": "Aisle 3A",
+    "Status": "instock",
+    "UnitPrice": 89.99,
+    "Cost": 55.00,
+    "ImageUrl": "https://example.com/images/elec-wir.jpg"
+  },
+  {
+    "SKU": "PLUM-PVC-075",
+    "ItemName": "PVC Pipe 3/4 Inch 10ft",
+    "Description": "Schedule 40 PVC plumbing water line pipe. Light grey style.",
+    "Category": "Plumbing",
+    "Quantity": 150,
+    "QuantityOnOrder": 0,
+    "Location": "Rack 12",
+    "Status": "instock",
+    "UnitPrice": 6.49,
+    "Cost": 2.10,
+    "ImageUrl": "https://example.com/images/pvc-pipe.jpg"
+  }
+];
+
+const DEALS_TEMPLATE_SAMPLE = [
+  {
+    "ProjectName": "Downtown Office Renovation",
+    "Description": "Retrofitting interior electrical circuits and ambient lighting fixture upgrades.",
+    "DealValue": 18500,
+    "ExpectedCloseDate": "2026-09-15",
+    "Stage": "Proposal Sent",
+    "CustomerName": "John Doe"
+  },
+  {
+    "ProjectName": "Industrial Conduit Upgrade",
+    "Description": "Replacing heavy metallic conduit line and three-phase breaker systems.",
+    "DealValue": 75000,
+    "ExpectedCloseDate": "2026-12-01",
+    "Stage": "Negotiation",
+    "CustomerName": "Acme Builders Support"
+  }
+];
+
+const SCHEMA_GUIDES = {
+  contacts: {
+    title: "CRM Customer Contacts",
+    description: "Map and insert external accounts, sales trade pipelines, contact methods, and location listings.",
+    fields: [
+      { name: "Name", req: true, desc: "Full client name or core organization moniker." },
+      { name: "Email", req: false, desc: "Electronic mail contact string (e.g., mail@corp.com)." },
+      { name: "Phone", req: false, desc: "Direct phone/mobile dialing sequence (e.g., 555-0100)." },
+      { name: "Company", req: false, desc: "Corporate parent or employer designation." },
+      { name: "Trade", req: false, desc: "Client industry / profession role (e.g. Electrician, Builder)." },
+      { name: "Status", req: false, desc: "Active business status string (Active, Lead, Warm, Cold)." },
+      { name: "PriceLevel", req: false, desc: "Custom margin group (Gold, Silver, Retail)." },
+      { name: "LegacyNumber", req: false, desc: "Unique legacy reference to recognize updates." },
+      { name: "AccountOwner", req: false, desc: "Account owner e-mail for matching system profile." },
+      { name: "Address / City / Province / PostalCode", req: false, desc: "Location elements." },
+      { name: "Notes", req: false, desc: "Notes, comment records, or client history logs." },
+      { name: "Tags", req: false, desc: "Comma-separated tag parameters (e.g. repeat, residential)." }
+    ]
+  },
+  inventory: {
+    title: "Product Inventory & Materials",
+    description: "Map and manage hardware material catalogs, on-hand ledger counts, warehouse coordinate details, and pricing margins.",
+    fields: [
+      { name: "SKU", req: true, desc: "Unique inventory SKU part number (e.g., PIPE-PVC-01)." },
+      { name: "ItemName", req: true, desc: "Core material retail name or catalog identifier." },
+      { name: "Description", req: false, desc: "Technical details, packaging, raw material specifics." },
+      { name: "Category", req: false, desc: "Catalog category (Electrical, Plumbing, Flooring)." },
+      { name: "Quantity / QuantityOnHand", req: false, desc: "Internal current ledger count." },
+      { name: "QuantityOnOrder", req: false, desc: "Current pending supplier delivery units count." },
+      { name: "Location", req: false, desc: "Warehouse coordinates or bin code reference." },
+      { name: "UnitPrice", req: false, desc: "Active selling price (decimal format, e.g. 59.99)." },
+      { name: "Cost", req: false, desc: "Sourcing acquire unit cost (decimal format, e.g. 24.50)." },
+      { name: "ImageUrl", req: false, desc: "Raw web URL for material thumb image cataloging." }
+    ]
+  },
+  deals: {
+    title: "Sales Deals & Contracts",
+    description: "Map incoming estimates, client opportunity pipelines, and estimated timeline closings.",
+    fields: [
+      { name: "ProjectName", req: true, desc: "Title describing the opportunity (e.g., Conduit Upgrade)." },
+      { name: "CustomerName", req: true, desc: "Full customer Name matching records in Contacts (e.g., John Doe)." },
+      { name: "DealValue", req: false, desc: "Numeric contract estimate value (e.g., 25000)." },
+      { name: "ExpectedCloseDate", req: false, desc: "Estimated closure date (YYYY-MM-DD)." },
+      { name: "Stage", req: false, desc: "Opportunity state index (Proposal Sent, Under Review, Closed Won)." },
+      { name: "Description", req: false, desc: "Estimator notes, project details or scopes." }
+    ]
+  }
+};
+
 export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (view: string) => void }) {
   // Determine smart fallback backend url depending on runtime host type (Static SPA vs Sandbox Node Container)
   const getSmartDefaultUrl = () => {
@@ -240,7 +374,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Load custom connection mode: 'supabase' (highly robust CRM database direct) vs 'express' (unattended API container)
   const [connectionMode, setConnectionMode] = useState<"supabase" | "express">(() => {
-    return (localStorage.getItem("import_export_connection_mode") as any) || "supabase";
+    return (localStorage.getItem("import_export_connection_mode") as any) || "express";
   });
 
   // Helper function to decode base64 robustly
@@ -602,6 +736,82 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   // Manual execution interactive states
   const [manualModule, setManualModule] = useState<"contacts" | "inventory" | "deals">("contacts");
   const [manualType, setManualType] = useState<"import" | "export">("export");
+
+  // Layout template download states and helpers
+  const [selectedLayoutModule, setSelectedLayoutModule] = useState<"contacts" | "inventory" | "deals">("contacts");
+  const [showLayoutGuide, setShowLayoutGuide] = useState(false);
+
+  const handleDownloadTemplate = (moduleName: "contacts" | "inventory" | "deals", format: "xlsx" | "csv" | "json") => {
+    let sampleData: any[] = [];
+    let fileName = "";
+    
+    if (moduleName === "contacts") {
+      sampleData = CONTACTS_TEMPLATE_SAMPLE;
+      fileName = "contacts_template";
+    } else if (moduleName === "inventory") {
+      sampleData = INVENTORY_TEMPLATE_SAMPLE;
+      fileName = "inventory_template";
+    } else {
+      sampleData = DEALS_TEMPLATE_SAMPLE;
+      fileName = "deals_template";
+    }
+
+    try {
+      if (format === "json") {
+        const jsonStr = JSON.stringify(sampleData, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${fileName}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`Downloaded Layout Template: ${fileName}.json`);
+      } else if (format === "csv") {
+        const worksheet = XLSX.utils.json_to_sheet(sampleData);
+        const csvStr = XLSX.utils.sheet_to_csv(worksheet);
+        const blob = new Blob(["\ufeff" + csvStr], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${fileName}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`Downloaded Layout Template: ${fileName}.csv`);
+      } else if (format === "xlsx") {
+        const worksheet = XLSX.utils.json_to_sheet(sampleData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Layout Template");
+        
+        const wopts: any = { bookType: "xlsx", bookSST: false, type: "binary" };
+        const wbout = XLSX.write(workbook, wopts);
+        
+        function s2ab(s: string) {
+          const buf = new ArrayBuffer(s.length);
+          const view = new Uint8Array(buf);
+          for (let i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+          return buf;
+        }
+        
+        const blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${fileName}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`Downloaded Layout Template: ${fileName}.xlsx`);
+      }
+    } catch (err: any) {
+      toast.error(`Layout generation failed: ${err.message || err}`);
+    }
+  };
   const [manualStorage, setManualStorage] = useState<"local" | "onedrive">("local");
   const [manualFileName, setManualFileName] = useState("");
   const [manualFormat, setManualFormat] = useState<"csv" | "json" | "xml">("csv");
@@ -1768,9 +1978,44 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
             }
 
+            // --- PERFORMANCE OPTIMIZATION CACHING ---
+            const profilesMap = new Map<string, string>(); // email (lowercase) -> id
+            try {
+              const { data: pData } = await supabase.from("profiles").select("id, email");
+              pData?.forEach((p: any) => {
+                if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p.id);
+              });
+            } catch (err) {
+              console.warn("Could not pre-fetch profiles cache:", err);
+            }
+
+            const contactsLegacyMap = new Map<string, string>(); // legacy_number -> id
+            const contactsNameMap = new Map<string, string>(); // name (lowercase) -> id
+            try {
+              const { data: cData } = await supabase.from("contacts").select("id, legacy_number, name").eq("organization_id", organizationId);
+              cData?.forEach((c: any) => {
+                if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
+                if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
+              });
+            } catch (err) {
+              console.warn("Could not pre-fetch contacts cache:", err);
+            }
+
+            const inventorySkuMap = new Map<string, string>(); // sku -> id
+            try {
+              const { data: iData } = await supabase.from("inventory").select("id, sku").eq("organization_id", organizationId);
+              iData?.forEach((inv: any) => {
+                if (inv.sku) inventorySkuMap.set(String(inv.sku).trim(), inv.id);
+              });
+            } catch (err) {
+              console.warn("Could not pre-fetch inventory cache:", err);
+            }
+
             let insertCount = 0;
             let errorCount = 0;
             let lastErrDetail = "";
+
+            const cleanedRecordsList: any[] = [];
 
             for (const rec of parsedRecords) {
               const mappedRec: any = {};
@@ -1821,11 +2066,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   else if (lowerKey === "status" || lowerKey === "availability") mappedRec.status = cleanVal;
                   else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice") {
                     const pr = parseFloat(String(cleanVal));
-                    mappedRec.unit_price = isNaN(pr) ? 0 : Math.round(pr * (String(cleanVal).includes(".") ? 100 : 1));
+                    mappedRec.unit_price = isNaN(pr) ? 0 : Math.round(pr * 100);
                   }
                   else if (lowerKey === "cost") {
                     const cs = parseFloat(String(cleanVal));
-                    mappedRec.cost = isNaN(cs) ? 0 : Math.round(cs * (String(cleanVal).includes(".") ? 100 : 1));
+                    mappedRec.cost = isNaN(cs) ? 0 : Math.round(cs * 100);
                   }
                   else if (lowerKey === "imageurl" || lowerKey === "image") mappedRec.image_url = cleanVal;
                 }
@@ -1847,39 +2092,38 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 }
               }
 
-              // Resolve ID intelligently
-              if (!mappedRec.id || String(mappedRec.id).trim() === "" || mappedRec.id === "null" || mappedRec.id === "undefined") {
-                let existingId: string | null = null;
-                if (table === "inventory" && mappedRec.sku) {
-                  const { data: matchItem } = await supabase.from("inventory").select("id").eq("sku", mappedRec.sku).eq("organization_id", organizationId).maybeSingle();
-                  if (matchItem?.id) existingId = matchItem.id;
-                } else if (table === "contacts" && mappedRec.legacy_number) {
-                  const { data: matchContact } = await supabase.from("contacts").select("id").eq("legacy_number", mappedRec.legacy_number).eq("organization_id", organizationId).maybeSingle();
-                  if (matchContact?.id) existingId = matchContact.id;
+              // Resolve ID intelligently using pre-fetched caches (eliminates sequential select query)
+              let existingId: string | null = null;
+              if (table === "inventory" && mappedRec.sku) {
+                const skuKey = String(mappedRec.sku).trim();
+                if (inventorySkuMap.has(skuKey)) {
+                  existingId = inventorySkuMap.get(skuKey);
                 }
-                mappedRec.id = existingId || crypto.randomUUID();
+              } else if (table === "contacts" && mappedRec.legacy_number) {
+                const legacyKey = String(mappedRec.legacy_number).trim();
+                if (contactsLegacyMap.has(legacyKey)) {
+                  existingId = contactsLegacyMap.get(legacyKey);
+                }
               }
+              mappedRec.id = existingId || crypto.randomUUID();
               mappedRec.organization_id = organizationId;
 
-              // Resolve owner from account owner email
+              // Resolve owner from account owner email using profiles map (eliminates select query)
               if (table === "contacts" && mappedRec.account_owner_number) {
-                const aoEmail = String(mappedRec.account_owner_number).trim();
-                if (aoEmail) {
-                  const { data: p } = await supabase.from("profiles").select("id").ilike("email", aoEmail).maybeSingle();
-                  if (p?.id) {
-                    mappedRec.owner_id = p.id;
-                  }
+                const aoEmail = String(mappedRec.account_owner_number).trim().toLowerCase();
+                if (aoEmail && profilesMap.has(aoEmail)) {
+                  mappedRec.owner_id = profilesMap.get(aoEmail);
                 }
               }
 
-              // Resolve client reference to contact ID
+              // Resolve client reference using contacts name map (eliminates select query)
               if (table === "opportunities" && mappedRec.customer_id) {
                 const custIdOrName = String(mappedRec.customer_id).trim();
                 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(custIdOrName);
                 if (!isUuid) {
-                  const { data: c } = await supabase.from("contacts").select("id").ilike("name", custIdOrName).eq("organization_id", organizationId).maybeSingle();
-                  if (c?.id) {
-                    mappedRec.customer_id = c.id;
+                  const nameKey = custIdOrName.toLowerCase().trim();
+                  if (contactsNameMap.has(nameKey)) {
+                    mappedRec.customer_id = contactsNameMap.get(nameKey);
                   } else {
                     delete mappedRec.customer_id;
                   }
@@ -1893,16 +2137,22 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   cleanedRec[k] = v;
                 }
               }
+              cleanedRecordsList.push(cleanedRec);
+            }
 
+            // Perform batch upserts in chunks of 100 to scale perfectly
+            const chunkSize = 100;
+            for (let chunkIdx = 0; chunkIdx < cleanedRecordsList.length; chunkIdx += chunkSize) {
+              const chunk = cleanedRecordsList.slice(chunkIdx, chunkIdx + chunkSize);
               const { error: upsertErr } = await supabase
                 .from(table)
-                .upsert(cleanedRec);
+                .upsert(chunk);
               
               if (upsertErr) {
-                errorCount++;
+                errorCount += chunk.length;
                 lastErrDetail = upsertErr.message;
               } else {
-                insertCount++;
+                insertCount += chunk.length;
               }
             }
 
@@ -1942,7 +2192,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         value: currentHist
       });
 
-      // 4. Update task metrics
+      // 4. Update task metrics and schedule the next run properly
       const updatedTasks = currentTasks.map((t: any) => {
         if (t.id === taskId) {
           const nextTime = t.recurrence === "one-time" ? null : calculateNextRunTimeFrontend(t, new Date());
@@ -1968,6 +2218,56 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       };
     } catch (e: any) {
       console.error("Direct Supabase task runner failure:", e);
+      try {
+        const supabase = createClient();
+        const { data: taskData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_tasks').maybeSingle();
+        const tasksList = taskData?.value || [];
+        if (Array.isArray(tasksList)) {
+          const updated = tasksList.map((t: any) => {
+            if (t.id === taskId) {
+              const nextTime = t.recurrence === "one-time" ? null : calculateNextRunTimeFrontend(t, new Date());
+              return {
+                ...t,
+                status: t.recurrence === "one-time" ? "completed" : "active",
+                lastRunTime: new Date().toISOString(),
+                lastRunResult: "failed",
+                nextRunTime: nextTime ? nextTime.toISOString() : null
+              };
+            }
+            return t;
+          });
+          await supabase.from('kv_store_8405be07').upsert({
+            key: 'import_export_tasks',
+            value: updated
+          });
+        }
+
+        // Log the failure to history so the logs are clear
+        const errLog = {
+          id: "log-" + Math.random().toString(36).slice(2, 11),
+          taskId: taskId,
+          taskName: "Task Execution Error",
+          time: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+          actionType: "unknown",
+          module: "unknown",
+          fileStorage: "local",
+          fileName: "error",
+          status: "failed",
+          recordCount: 0,
+          message: `Execution failed: ${e.message || 'Unknown error'}`
+        };
+        const { data: histData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_history').maybeSingle();
+        let currentHist = histData?.value || [];
+        if (!Array.isArray(currentHist)) currentHist = [];
+        currentHist.unshift(errLog);
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_history',
+          value: currentHist
+        });
+      } catch (recoveryErr) {
+        console.error("Failed to recover task status to inactive after failure:", recoveryErr);
+      }
       return { success: false, error: e.message || "Unknown error executing job." };
     }
   };
@@ -3778,8 +4078,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         {activeTab === "manual" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* Interactive workflow configure card */}
-            <div className="lg:col-span-1 bg-white border rounded-xl p-5 shadow-2xs space-y-4 text-left font-normal">
+            {/* Left Hand Sidebar wrapping interactive block + layout download guides */}
+            <div className="lg:col-span-1 space-y-5">
+              
+              {/* Interactive workflow configure card */}
+              <div className="bg-white border rounded-xl p-5 shadow-2xs space-y-4 text-left font-normal">
               <div>
                 <h3 className="font-bold text-slate-800 text-sm">Interactive Processing Controls</h3>
                 <p className="text-2xs text-slate-500">Run immediate import or export processes instantly without modifying scheduled unattended triggers.</p>
@@ -4002,8 +4305,106 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               </form>
             </div>
 
-            {/* Right Side live database view */}
-            <div className="lg:col-span-2 space-y-4 max-w-full text-left font-normal">
+            {/* CRM Layout Template Download Hub */}
+            <div className="bg-white border rounded-xl p-5 shadow-2xs text-left font-normal space-y-4">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="p-1 bg-blue-50 text-blue-600 rounded">
+                    <Download className="w-3.5 h-3.5" />
+                  </span>
+                  <h3 className="font-bold text-slate-850 text-sm">File Layout Reference</h3>
+                </div>
+                <p className="text-2xs text-slate-500 font-normal leading-normal">
+                  Download correctly formatted spreadsheet templates to ensure successful bulk spreadsheet uploads.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-4xs uppercase text-slate-400 font-bold mb-1">Table Layout Model</label>
+                  <select
+                    value={selectedLayoutModule}
+                    onChange={(e) => setSelectedLayoutModule(e.target.value as any)}
+                    className="w-full border rounded-lg px-2.5 py-1.5 font-medium text-slate-700 bg-white text-xs outline-none focus:border-blue-500"
+                  >
+                    <option value="contacts">CRM Customer & Team Contacts</option>
+                    <option value="inventory">Product Inventory Materials</option>
+                    <option value="deals">Sales Contracts / Deals Estimations</option>
+                  </select>
+                </div>
+
+                <div className="bg-slate-50 border p-3 rounded-lg text-2xs space-y-2">
+                  <p className="font-semibold text-slate-700 leading-tight">
+                    {SCHEMA_GUIDES[selectedLayoutModule].title} Layout
+                  </p>
+                  <p className="text-[10px] text-slate-500 leading-normal">
+                    {SCHEMA_GUIDES[selectedLayoutModule].description}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowLayoutGuide(!showLayoutGuide)}
+                    className="w-full bg-white border hover:border-slate-350 px-2.5 py-1 rounded text-3xs font-semibold text-slate-600 flex items-center justify-between transition-colors shadow-3xs cursor-pointer"
+                  >
+                    <span>Column Reference Checklist</span>
+                    {showLayoutGuide ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                  </button>
+
+                  {showLayoutGuide && (
+                    <div className="pt-2 max-h-[180px] overflow-y-auto space-y-1.5 border-t border-slate-200 mt-1 scrollbar-thin">
+                      {SCHEMA_GUIDES[selectedLayoutModule].fields.map((f, i) => (
+                        <div key={i} className="text-[10px] leading-relaxed border-b border-slate-100/50 pb-1.5 last:border-0 last:pb-0">
+                          <div className="flex items-center justify-between">
+                            <code className="font-mono text-slate-800 font-bold text-[10px]">{f.name}</code>
+                            <span className={`px-1 rounded text-[8px] font-bold ${f.req ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
+                              {f.req ? "REQUIRED" : "OPTIONAL"}
+                            </span>
+                          </div>
+                          <p className="text-slate-500 text-[10px] mt-0.5">{f.desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-4xs uppercase text-slate-400 font-bold">Download Template Formats</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate(selectedLayoutModule, "xlsx")}
+                      className="py-1.5 border hover:border-emerald-300 hover:bg-emerald-50 text-emerald-800 transition-all bg-white font-bold rounded-lg text-3xs shadow-3xs flex items-center justify-center gap-1 cursor-pointer"
+                      title="Download sample Excel binary sheet template"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>EXCEL</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate(selectedLayoutModule, "csv")}
+                      className="py-1.5 border hover:border-blue-300 hover:bg-blue-50 text-blue-800 transition-all bg-white font-bold rounded-lg text-3xs shadow-3xs flex items-center justify-center gap-1 cursor-pointer"
+                      title="Download standard Comma-Separated Values template"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      <span>CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate(selectedLayoutModule, "json")}
+                      className="py-1.5 border hover:border-slate-400 hover:bg-slate-50 text-slate-800 transition-all bg-white font-bold rounded-lg text-3xs shadow-3xs flex items-center justify-center gap-1 cursor-pointer"
+                      title="Download sample structured JSON array model"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-slate-500" />
+                      <span>JSON</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side live database view */}
+          <div className="lg:col-span-2 space-y-4 max-w-full text-left font-normal">
               <div className="bg-white border rounded-xl overflow-hidden shadow-2xs">
                 
                 {/* Header preview filter */}

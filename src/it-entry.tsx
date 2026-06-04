@@ -104,11 +104,25 @@ function ITApp() {
   const loadProfile = async (session: Session) => {
     const safetyTimer = setTimeout(() => setLoading(false), 8000);
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, email, role, organization_id, name, avatar_url')
-        .eq('id', session.user.id)
-        .single() as { data: any };
+      let profile = null;
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, email, role, organization_id, name, avatar_url')
+          .eq('id', session.user.id)
+          .single() as { data: any };
+        profile = data;
+      } catch (err) {
+        console.warn('Profile fetch failed, using fallback from session or cache:', err);
+        profile = {
+          id: session.user.id,
+          email: session.user.email,
+          role: session.user.user_metadata?.role || user?.role || 'admin',
+          name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || user?.full_name || session.user.email?.split('@')[0],
+          avatar_url: session.user.user_metadata?.avatar_url || user?.avatar_url,
+          organization_id: session.user.user_metadata?.organization_id || user?.organization_id || 'org_001',
+        };
+      }
 
       if (profile) {
         if (profile.organization_id) {

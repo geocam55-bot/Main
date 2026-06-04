@@ -30,6 +30,20 @@ export interface SpaceDefinition {
 
 export const ALL_ROLES: UserRole[] = ['super_admin', 'admin', 'director', 'manager', 'marketing', 'designer', 'standard_user'];
 
+export function getNormalizedRole(role: any): UserRole {
+  if (!role) return 'standard_user';
+  const r = String(role).toLowerCase().trim().replace(' ', '_');
+  if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
+  if (r === 'admin') return 'admin';
+  if (r === 'director') return 'director';
+  if (r === 'manager') return 'manager';
+  if (r === 'marketing') return 'marketing';
+  if (r === 'designer') return 'designer';
+  if (r === 'standard_user' || r === 'standard' || r === 'user') return 'standard_user';
+  return 'standard_user';
+}
+
+
 export const ALL_MODULES = [
   'dashboard', 'ai-suggestions', 'contacts', 'tasks', 'appointments', 'opportunities',
   'bids', 'quotes', 'messages', 'notes', 'email', 'marketing', 'inventory',
@@ -165,11 +179,11 @@ let legacyModuleOnlyDatasetLoaded = false;
 let permissionListeners: Array<() => void> = [];
 
 function permissionKey(module: string, role: UserRole) {
-  return `${module}:${role}`;
+  return `${module}:${getNormalizedRole(role)}`;
 }
 
 function spaceCacheKey(spaceId: SpaceId, role: UserRole) {
-  return `${SPACE_PERMISSION_PREFIX}${spaceId}:${role}`;
+  return `${SPACE_PERMISSION_PREFIX}${spaceId}:${getNormalizedRole(role)}`;
 }
 
 function clonePermission(permission?: Partial<Permission>): Permission {
@@ -258,11 +272,12 @@ export function formatModuleLabel(module: string): string {
  * Space access is applied on top of this role cap.
  */
 function getRoleCapabilityPermission(module: string, role: UserRole): Permission {
-  if (role === 'super_admin') {
+  const normRole = getNormalizedRole(role);
+  if (normRole === 'super_admin') {
     return { visible: true, add: true, change: true, delete: true };
   }
 
-  if (role === 'admin') {
+  if (normRole === 'admin') {
     if (module === 'tenants') {
       return { visible: false, add: false, change: false, delete: false };
     }
@@ -274,7 +289,7 @@ function getRoleCapabilityPermission(module: string, role: UserRole): Permission
     };
   }
 
-  if (role === 'director') {
+  if (normRole === 'director') {
     if (module === 'tenants' || module === 'security' || module === 'import-export') {
       return { visible: false, add: false, change: false, delete: false };
     }
@@ -292,7 +307,7 @@ function getRoleCapabilityPermission(module: string, role: UserRole): Permission
     };
   }
 
-  if (role === 'manager') {
+  if (normRole === 'manager') {
     if (module === 'project-wizards' || module === 'kitchen-planner') {
       return { visible: false, add: false, change: false, delete: false };
     }
@@ -310,7 +325,7 @@ function getRoleCapabilityPermission(module: string, role: UserRole): Permission
     };
   }
 
-  if (role === 'marketing') {
+  if (normRole === 'marketing') {
     if (module === 'project-wizards' || module === 'kitchen-planner') {
       return { visible: false, add: false, change: false, delete: false };
     }
@@ -328,7 +343,7 @@ function getRoleCapabilityPermission(module: string, role: UserRole): Permission
     };
   }
 
-  if (role === 'designer') {
+  if (normRole === 'designer') {
     if (module === 'tenants' || module === 'security' || module === 'users' || module === 'import-export') {
       return { visible: false, add: false, change: false, delete: false };
     }
@@ -373,8 +388,9 @@ function getRoleCapabilityPermission(module: string, role: UserRole): Permission
 }
 
 export function getDefaultSpacePermission(spaceId: SpaceId, role: UserRole): Permission {
+  const normRole = getNormalizedRole(role);
   const anchorModule = SPACE_ACCESS_ANCHOR_MODULE[spaceId];
-  const anchorPermission = getRoleCapabilityPermission(anchorModule, role);
+  const anchorPermission = getRoleCapabilityPermission(anchorModule, normRole);
 
   if (!anchorPermission.visible) {
     return accessLevelToPermission('none');
@@ -390,11 +406,12 @@ export function getDefaultSpacePermission(spaceId: SpaceId, role: UserRole): Per
  * For modules, this returns the role's maximum capability in that module.
  */
 export function getDefaultPermission(module: string, role: UserRole): Permission {
+  const normRole = getNormalizedRole(role);
   const spaceId = getSpaceIdFromPermissionModule(module);
   if (spaceId) {
-    return getDefaultSpacePermission(spaceId, role);
+    return getDefaultSpacePermission(spaceId, normRole);
   }
-  return getRoleCapabilityPermission(module, role);
+  return getRoleCapabilityPermission(module, normRole);
 }
 
 function applySpaceAccessToModule(basePermission: Permission, spacePermission: Permission): Permission {
@@ -421,19 +438,23 @@ function permissionsMatch(a: Permission, b: Permission): boolean {
 }
 
 function getGuardedPermission(module: string, role: UserRole): Permission {
-  const permission = permissionsCache.get(permissionKey(module, role)) ?? { ...EMPTY_PERMISSION };
+  const normRole = getNormalizedRole(role);
+  if (normRole === 'super_admin' || normRole === 'admin') {
+    return permissionsCache.get(permissionKey(module, normRole)) ?? getRoleCapabilityPermission(module, normRole);
+  }
+  const permission = permissionsCache.get(permissionKey(module, normRole)) ?? { ...EMPTY_PERMISSION };
   const spaces = MODULE_TO_SPACES[module] || [];
 
   if (spaces.length === 0 || !permission.visible) {
     return permission;
   }
 
-  const hasViewAccess = spaces.some((spaceId) => canAccessSpace(spaceId, role, 'view'));
+  const hasViewAccess = spaces.some((spaceId) => canAccessSpace(spaceId, normRole, 'view'));
   if (!hasViewAccess) {
     return { ...EMPTY_PERMISSION };
   }
 
-  const hasFullAccess = spaces.some((spaceId) => canAccessSpace(spaceId, role, 'full'));
+  const hasFullAccess = spaces.some((spaceId) => canAccessSpace(spaceId, normRole, 'full'));
   return {
     visible: true,
     add: permission.add && hasFullAccess,
@@ -443,8 +464,12 @@ function getGuardedPermission(module: string, role: UserRole): Permission {
 }
 
 function resolveEffectivePermission(module: string, role: UserRole): Permission {
-  const basePermission = getRoleCapabilityPermission(module, role);
-  const directOverride = directPermissionsCache.get(permissionKey(module, role));
+  const normRole = getNormalizedRole(role);
+  if (normRole === 'super_admin' || normRole === 'admin') {
+    return getRoleCapabilityPermission(module, normRole);
+  }
+  const basePermission = getRoleCapabilityPermission(module, normRole);
+  const directOverride = directPermissionsCache.get(permissionKey(module, normRole));
   const effectiveModulePermission = capPermissionToRole(basePermission, directOverride);
   const spaces = MODULE_TO_SPACES[module] || [];
 
@@ -453,8 +478,8 @@ function resolveEffectivePermission(module: string, role: UserRole): Permission 
   }
 
   return spaces.reduce<Permission>((effective, spaceId) => {
-    const defaultSpacePermission = getDefaultSpacePermission(spaceId, role);
-    const spacePermission = spacePermissionsCache.get(spaceCacheKey(spaceId, role)) || defaultSpacePermission;
+    const defaultSpacePermission = getDefaultSpacePermission(spaceId, normRole);
+    const spacePermission = spacePermissionsCache.get(spaceCacheKey(spaceId, normRole)) || defaultSpacePermission;
     const hasExplicitSpaceOverride = !permissionsMatch(spacePermission, defaultSpacePermission);
 
     if (!hasExplicitSpaceOverride) {
@@ -496,7 +521,7 @@ function normalizeRecord(record: any): PermissionRecord | null {
   if (!record?.module || !record?.role) return null;
   return {
     module: String(record.module),
-    role: record.role as UserRole,
+    role: getNormalizedRole(record.role),
     visible: !!record.visible,
     add: !!record.add,
     change: !!record.change,
@@ -510,7 +535,7 @@ function migrateLegacyPermissions(records: PermissionRecord[]): PermissionRecord
   ALL_ROLES.forEach((role) => {
     ALL_SPACES.forEach((space) => {
       const anchorModule = SPACE_ACCESS_ANCHOR_MODULE[space.id];
-      const anchorRecord = records.find((record) => record.role === role && record.module === anchorModule);
+      const anchorRecord = records.find((record) => getNormalizedRole(record.role) === getNormalizedRole(role) && record.module === anchorModule);
 
       if (!anchorRecord) {
         normalizedSpaceRecords.push({
@@ -677,7 +702,7 @@ export async function initializePermissions(role: UserRole) {
           if (refreshed?.access_token) {
             const retryHeaders = await getServerHeaders();
             const retryRes = await fetch(
-              `${SERVER_BASE}/permissions?organization_id=${encodeURIComponent(orgId)}`,
+               `${SERVER_BASE}/permissions?organization_id=${encodeURIComponent(orgId)}`,
               { headers: retryHeaders }
             );
             if (retryRes.ok) {
@@ -723,7 +748,12 @@ export async function initializePermissions(role: UserRole) {
           // KV backfill failure is non-fatal
         }
       } else if (!kvHadData) {
-        // No DB permissions and no KV permissions: keep defaults.
+        // No DB permissions and no KV permissions: clear stale local storage cache and load code defaults
+        localStorage.removeItem(`permissions_${orgId}`);
+        directPermissionsCache.clear();
+        seedDefaultSpacePermissions();
+        rebuildPermissionsCache();
+        notifyPermissionsChanged();
       }
     } catch {
       // DB reconciliation failed — keep KV/defaults that are already loaded.
@@ -731,6 +761,7 @@ export async function initializePermissions(role: UserRole) {
   } catch {
     // Ignore initialization failures and leave default permissions in place
   }
+  notifyPermissionsChanged();
 }
 
 /**
@@ -782,6 +813,13 @@ async function _backgroundUpdatePermissions(orgId: string) {
         } catch {
           // KV update failure is non-fatal
         }
+      } else if (!kvDataLoaded) {
+        // Both KV and DB are empty of permissions. Clear any stale localStorage cache and seed clean default permissions.
+        localStorage.removeItem(`permissions_${orgId}`);
+        directPermissionsCache.clear();
+        seedDefaultSpacePermissions();
+        rebuildPermissionsCache();
+        notifyPermissionsChanged();
       }
     } catch {
       // Silently ignore background DB reconciliation failures
@@ -827,11 +865,19 @@ export function refreshPermissionsFromStorage() {
 }
 
 export function getSpacePermission(spaceId: SpaceId, role: UserRole): Permission {
-  return spacePermissionsCache.get(spaceCacheKey(spaceId, role)) || getDefaultSpacePermission(spaceId, role);
+  const normRole = getNormalizedRole(role);
+  if (normRole === 'super_admin' || normRole === 'admin') {
+    return accessLevelToPermission('full');
+  }
+  return spacePermissionsCache.get(spaceCacheKey(spaceId, normRole)) || getDefaultSpacePermission(spaceId, normRole);
 }
 
 export function canAccessSpace(spaceId: SpaceId, role: UserRole, requiredLevel: 'view' | 'full' = 'view'): boolean {
-  const spacePermission = getSpacePermission(spaceId, role);
+  const normRole = getNormalizedRole(role);
+  if (normRole === 'super_admin' || normRole === 'admin') {
+    return true;
+  }
+  const spacePermission = getSpacePermission(spaceId, normRole);
   const accessLevel = permissionToAccessLevel(spacePermission);
 
   if (requiredLevel === 'full') {
@@ -852,7 +898,7 @@ export function canAccessSpace(spaceId: SpaceId, role: UserRole, requiredLevel: 
     return false;
   }
 
-  const anchorPermission = permissionsCache.get(permissionKey(anchorModule, role));
+  const anchorPermission = permissionsCache.get(permissionKey(anchorModule, normRole));
   if (!anchorPermission?.visible) {
     return false;
   }

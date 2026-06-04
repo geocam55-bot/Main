@@ -123,6 +123,10 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
   const [currentUser, setCurrentUser] = useState<User>(user);
   const [, setPermissionVersion] = useState(0);
 
+  useEffect(() => {
+    setCurrentUser(user);
+  }, [user]);
+
   useEffect(() => onPermissionsChanged(() => setPermissionVersion((version) => version + 1)), []);
 
   const isSuperAdmin = currentUser.role === 'super_admin';

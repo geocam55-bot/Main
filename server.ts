@@ -6,6 +6,64 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import * as XLSX from 'xlsx';
 import os from 'os';
+import { createClient } from '@supabase/supabase-js';
+
+const projectId = "usorqldwroecyxucmtuw";
+const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
+
+const supabase = createClient(`https://${projectId}.supabase.co`, publicAnonKey);
+
+async function saveVirtualFileServer(fileName: string, base64Content: string) {
+  try {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    const isBinary = ["xlsx", "xls", "zip", "pdf", "png", "jpg", "jpeg", "gif"].includes(ext);
+
+    let textContent = "";
+    if (!isBinary) {
+      try {
+        textContent = Buffer.from(base64Content, 'base64').toString('utf8');
+      } catch {
+        textContent = base64Content;
+      }
+    }
+
+    const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
+      key: `import_export_file_content:${fileName}`,
+      value: {
+        name: fileName,
+        base64: base64Content,
+        textContent: textContent,
+        size: Buffer.from(base64Content, 'base64').length,
+        lastModified: new Date().toISOString()
+      }
+    });
+
+    if (upsertErr) {
+      console.error(`[Server] Supabase fail saving virtual file ${fileName}:`, upsertErr.message);
+    }
+  } catch (err: any) {
+    console.error(`[Server] Error saving virtual file ${fileName}:`, err?.message || err);
+  }
+}
+
+async function loadVirtualFileServer(fileName: string) {
+  try {
+    const { data, error } = await supabase
+      .from('kv_store_8405be07')
+      .select('value')
+      .eq('key', `import_export_file_content:${fileName}`)
+      .maybeSingle();
+    if (error) {
+      console.error(`[Server] Supabase fail loading virtual file ${fileName}:`, error.message);
+      return null;
+    }
+    return data?.value || null;
+  } catch (err: any) {
+    console.error(`[Server] Error loading virtual file ${fileName}:`, err?.message || err);
+    return null;
+  }
+}
+
 
 // Ensure storage and data folders exist
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -316,8 +374,26 @@ async function executeScheduledTask(task: any) {
       logEntry.recordCount = records.length;
       logEntry.message = `Successfully exported ${records.length} records from ${task.action.module} to unattended ${task.action.fileStorage} storage file: ${task.action.fileName}`;
     } else if (task.action.type === 'import') {
+      // Dynamic Recovery: Check if file missing locally and try to load/recover from database
       if (!fs.existsSync(filePath)) {
-        throw new Error(`Execution failed: Import source file '${task.action.fileName}' not found in ${task.action.fileStorage === 'onedrive' ? 'OneDrive' : 'Local Drive'}.`);
+        console.log(`[Scheduler] File '${task.action.fileName}' not found in '${driveDir}'. Attempting to restore virtual copy from Supabase...`);
+        try {
+          const dbFile = await loadVirtualFileServer(task.action.fileName);
+          if (dbFile && dbFile.base64) {
+            let b64 = dbFile.base64;
+            if (b64.startsWith('data:')) {
+              b64 = b64.split(';base64,')[1] || '';
+            }
+            fs.writeFileSync(filePath, Buffer.from(b64, 'base64'));
+            console.log(`[Scheduler] Dynamically restored '${task.action.fileName}' from virtual DB copy.`);
+          }
+        } catch (restoreErr: any) {
+          console.error(`[Scheduler] Failed to restore file from db fallback:`, restoreErr?.message || restoreErr);
+        }
+      }
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Execution failed: Import source file '${task.action.fileName}' not found in ${task.action.fileStorage === 'onedrive' ? 'OneDrive' : 'Local Drive'} (even after DB backup restore attempt).`);
       }
 
       const fileExtension = path.extname(filePath).toLowerCase();
@@ -543,7 +619,7 @@ async function startServer() {
   });
 
   // Base64 robust file receiver - bypasses sandbox streaming issues or buggy multer versions
-  app.post('/api/import-export/storage/:target/upload-base64', (req, res) => {
+  app.post('/api/import-export/storage/:target/upload-base64', async (req, res) => {
     const { target } = req.params;
     const { fileName, fileContent } = req.body;
     const targetDir = target === 'onedrive' ? ONEDRIVE_DIR : LOCAL_DRIVE_DIR;
@@ -558,7 +634,10 @@ async function startServer() {
       const buffer = Buffer.from(fileContent, 'base64');
       fs.writeFileSync(destPath, buffer);
       
-      const logLine = `[${new Date().toISOString()}] [API BASE64 SUCCESS] Saved ${fileName} (${buffer.length} bytes) to ${destPath}\n`;
+      // Dual-write: upload copy to Supabase kv_store database 
+      await saveVirtualFileServer(fileName, fileContent);
+
+      const logLine = `[${new Date().toISOString()}] [API BASE64 SUCCESS] Saved ${fileName} (${buffer.length} bytes) to ${destPath} and uploaded copy to virtual storage\n`;
       try {
         fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
       } catch {}
@@ -603,7 +682,7 @@ async function startServer() {
       console.error('Diag append failed in upload start:', e);
     }
     next();
-  }, upload.single('file'), (req, res) => {
+  }, upload.single('file'), async (req, res) => {
     const { target } = req.params;
     const targetDir = target === 'onedrive' ? ONEDRIVE_DIR : LOCAL_DRIVE_DIR;
 
@@ -619,9 +698,14 @@ async function startServer() {
     try {
       const destPath = path.join(targetDir, req.file.originalname);
       fs.copyFileSync(req.file.path, destPath);
+      
+      // Dual-write uploaded file content as base64 backup to DB
+      const fileContentBase64 = fs.readFileSync(destPath).toString('base64');
+      await saveVirtualFileServer(req.file.originalname, fileContentBase64);
+
       fs.unlinkSync(req.file.path); // remove temp multer file
       
-      const successLine = `[${new Date().toISOString()}] [API SUCCESS] Successfully uploaded & saved ${req.file.originalname} to ${destPath}\n`;
+      const successLine = `[${new Date().toISOString()}] [API SUCCESS] Successfully uploaded & saved ${req.file.originalname} to ${destPath} and uploaded copy to virtual storage\n`;
       try {
         fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), successLine);
       } catch (e) {}

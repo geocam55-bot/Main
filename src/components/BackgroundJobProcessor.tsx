@@ -74,7 +74,7 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
 
-        for (const record of batch) {
+        await Promise.all(batch.map(async (record) => {
           try {
             if (dataType === 'inventory') {
               if (!record.name || !record.sku) {
@@ -174,7 +174,7 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
             failCount++;
             errors.push(`Row ${i + batch.indexOf(record) + 1}: ${error.message}`);
           }
-        }
+        }));
 
         // Update progress
         const progress = Math.round(((i + batch.length) / totalRecords) * 100);
