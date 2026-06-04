@@ -1145,7 +1145,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Browser-direct/Supabase fallback handlers
   const parseCsv = (text: string): any[] => {
-    const lines = text.split(/\r?\n/);
+    const cleanText = text.replace(/^\uFEFF/g, "");
+    const lines = cleanText.split(/\r?\n/);
     if (lines.length < 2) return [];
     
     const parseLine = (line: string) => {
@@ -1807,14 +1808,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   };
 
   const parseCsvMatrix = (text: string): string[][] => {
+    const cleanText = text.replace(/^\uFEFF/g, "");
     const result: string[][] = [];
     let row: string[] = [];
     let entry = "";
     let insideQuote = false;
     
-    for (let i = 0; i < text.length; i++) {
-       const char = text[i];
-       const nextChar = text[i + 1];
+    for (let i = 0; i < cleanText.length; i++) {
+       const char = cleanText[i];
+       const nextChar = cleanText[i + 1];
        
        if (insideQuote) {
          if (char === '"') {
@@ -1998,21 +2000,21 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
             // Analyze headers of the parsed document
             const firstRec = parsedRecords[0];
-            const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/[\s\-_#/()]/g, ""));
+            const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, ""));
             
             // Checking indicators
-            const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku");
-            const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name");
+            const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku" || k === "itemsku" || k === "id");
+            const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name" || k === "product" || k === "item" || k === "material" || k === "title");
             const hasCost = lowerHeaderKeys.some(k => k === "cost" || k === "costprice" || k === "unitcost");
             const hasPriceTiers = lowerHeaderKeys.some(k => k.includes("pricetier") || k.includes("tier1") || k.includes("price_tier"));
 
-            const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project");
-            const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername");
+            const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project" || k === "project_name" || k === "deal_name");
+            const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername" || k === "client_name" || k === "customer_name");
             const hasDealValue = lowerHeaderKeys.some(k => k === "dealvalue" || k === "deal_value" || k === "value");
 
-            const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress");
-            const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber");
-            const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno");
+            const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress" || k === "email_address");
+            const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber" || k === "phone_number" || k === "telephone");
+            const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno" || k === "legacy_number");
 
             if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
               if (activeTable !== "inventory") {
@@ -2138,7 +2140,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               for (const [k, v] of Object.entries(rec)) {
                 if (v === undefined || v === null) continue;
                 const cleanVal = typeof v === "string" ? v.trim() : v;
-                const lowerKey = k.toLowerCase().replace(/[\s\-_#/()]/g, "");
+                const lowerKey = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
 
                 if (table === "contacts") {
                   if (lowerKey === "name") mappedRec.name = cleanVal;
@@ -2164,7 +2166,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   else if (lowerKey === "lyrgppercent" || lowerKey === "lyrgp") mappedRec.lyr_gp_percent = parseFloat(String(cleanVal)) || 0;
                 } 
                 else if (table === "inventory") {
-                  if (lowerKey === "itemname" || lowerKey === "name") mappedRec.name = cleanVal;
+                  if (lowerKey === "itemname" || lowerKey === "name" || lowerKey === "productname" || lowerKey === "materialname" || lowerKey === "product" || lowerKey === "item" || lowerKey === "material" || lowerKey === "title") mappedRec.name = cleanVal;
                   else if (lowerKey === "description") mappedRec.description = cleanVal;
                   else if (lowerKey === "sku" || lowerKey === "skucode" || lowerKey === "partnumber" || lowerKey === "partno") mappedRec.sku = cleanVal;
                   else if (lowerKey === "category") mappedRec.category = cleanVal;

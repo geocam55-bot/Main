@@ -404,7 +404,7 @@ async function executeScheduledTask(task: any) {
       if (fileExtension === '.json') {
         importedRecords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else if (fileExtension === '.csv') {
-        const rawText = fs.readFileSync(filePath, 'utf8');
+        const rawText = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/g, "");
         const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
         if (lines.length > 1) {
           // simple CSV parser
@@ -438,21 +438,21 @@ async function executeScheduledTask(task: any) {
       let moduleKey = task.action.module;
       
       const firstRec = importedRecords[0];
-      const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/[\s\-_#/()]/g, ""));
+      const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, ""));
       
       // Checking indicators
-      const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku");
-      const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name");
+      const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku" || k === "itemsku" || k === "id");
+      const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name" || k === "product" || k === "item" || k === "material" || k === "title");
       const hasCost = lowerHeaderKeys.some(k => k === "cost" || k === "costprice" || k === "unitcost");
       const hasPriceTiers = lowerHeaderKeys.some(k => k.includes("pricetier") || k.includes("tier1") || k.includes("price_tier"));
 
-      const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project");
-      const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername");
+      const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project" || k === "project_name" || k === "deal_name");
+      const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername" || k === "client_name" || k === "customer_name");
       const hasDealValue = lowerHeaderKeys.some(k => k === "dealvalue" || k === "deal_value" || k === "value");
 
-      const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress");
-      const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber");
-      const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno");
+      const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress" || k === "email_address");
+      const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber" || k === "phone_number" || k === "telephone");
+      const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno" || k === "legacy_number");
 
       let resolvedModule = moduleKey;
       if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
@@ -500,8 +500,8 @@ async function executeScheduledTask(task: any) {
         Object.entries(item).forEach(([k, v]) => {
           // Normalize spreadsheet column titles
           let key = k;
-          const lowerK = k.toLowerCase();
-          if (lowerK === 'item name' || lowerK === 'itemname') key = 'Name';
+          const lowerK = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
+          if (lowerK === 'item name' || lowerK === 'itemname' || lowerK === 'name' || lowerK === 'productname' || lowerK === 'materialname' || lowerK === 'product' || lowerK === 'item' || lowerK === 'material' || lowerK === 'title') key = 'Name';
           else if (lowerK === 'unit price' || lowerK === 'unitprice') key = 'UnitPrice';
           else if (lowerK === 'client name' || lowerK === 'clientname') key = 'ClientName';
           else if (lowerK === 'project name' || lowerK === 'projectname') key = 'ProjectName';
