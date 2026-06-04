@@ -513,6 +513,7 @@ async function executeScheduledTask(task: any) {
           else if (lowerK === 'pricetier4' || lowerK === 'price_tier_4' || lowerK === 'tier4') key = 'PriceTier4';
           else if (lowerK === 'pricetier5' || lowerK === 'price_tier_5' || lowerK === 'tier5') key = 'PriceTier5';
           else if (lowerK === 'unit' || lowerK === 'unitofmeasure' || lowerK === 'unit_of_measure' || lowerK === 'uom') key = 'Unit';
+          else if (lowerK === 'imageurl' || lowerK === 'image_url' || lowerK === 'image') key = 'image_url';
           normalizedRecord[key] = v;
         });
 

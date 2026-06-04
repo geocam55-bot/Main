@@ -2216,8 +2216,17 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
 
             {/* Product Image */}
             <div className="space-y-4">
-              <h3 className="text-sm text-foreground">Product Image</h3>
-              <div className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">Product Image</h3>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground font-medium">Image URL</label>
+                  <Input
+                    type="text"
+                    value={formData.imageUrl}
+                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                    placeholder="https://example.com/image.png"
+                  />
+                </div>
                 <div className="flex gap-2">
                   <label className="flex-1">
                     <input
