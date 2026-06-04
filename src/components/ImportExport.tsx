@@ -1875,8 +1875,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       }
 
       const mType = task.action.type; // 'import' or 'export'
-      const mModule = task.action.module; // 'contacts' | 'inventory' | 'deals'
-      const table = mModule === "deals" ? "opportunities" : mModule;
+      let mModule = task.action.module; // 'contacts' | 'inventory' | 'deals'
+      let table = mModule === "deals" ? "opportunities" : mModule;
       const fileName = task.action.fileName;
       const format = task.action.format; // 'csv' or 'json'
 
@@ -1992,6 +1992,75 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           if (parsedRecords.length === 0) {
             logMsg = `Import completed with 0 records processed from virtual file "${fileName}".`;
           } else {
+            // ---> INTELLIGENT AUTO-HEALING MAPPING FOR TABLE MISMATCHES <---
+            let activeTable = table;
+            let activeModule = mModule;
+
+            // Analyze headers of the parsed document
+            const firstRec = parsedRecords[0];
+            const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/[\s\-_#/()]/g, ""));
+            
+            // Checking indicators
+            const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku");
+            const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name");
+            const hasCost = lowerHeaderKeys.some(k => k === "cost" || k === "costprice" || k === "unitcost");
+            const hasPriceTiers = lowerHeaderKeys.some(k => k.includes("pricetier") || k.includes("tier1") || k.includes("price_tier"));
+
+            const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project");
+            const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername");
+            const hasDealValue = lowerHeaderKeys.some(k => k === "dealvalue" || k === "deal_value" || k === "value");
+
+            const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress");
+            const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber");
+            const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno");
+
+            if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
+              if (activeTable !== "inventory") {
+                activeTable = "inventory";
+                activeModule = "inventory";
+                console.log("[Auto-Healing] Detected Inventory data columns in source file. Auto-switching target table to 'inventory'.");
+              }
+            } else if (hasProjectName || hasClientName || hasDealValue) {
+              if (activeTable !== "opportunities") {
+                activeTable = "opportunities";
+                activeModule = "deals";
+                console.log("[Auto-Healing] Detected Opportunity data columns in source file. Auto-switching target table to 'opportunities'.");
+              }
+            } else if (hasEmail || hasPhone || hasLegacyNumber) {
+              if (activeTable !== "contacts") {
+                activeTable = "contacts";
+                activeModule = "contacts";
+                console.log("[Auto-Healing] Detected Contacts data columns in source file. Auto-switching target table to 'contacts'.");
+              }
+            }
+
+            // Let's also update the task in the DB so next time it is configured perfectly, repairing the user's database!
+            if (activeModule !== mModule) {
+              try {
+                const refreshedTasks = currentTasks.map((t: any) => {
+                  if (t.id === taskId) {
+                    return {
+                      ...t,
+                      action: {
+                        ...t.action,
+                        module: activeModule
+                      }
+                    };
+                  }
+                  return t;
+                });
+                await supabase.from('kv_store_8405be07').upsert({
+                  key: 'import_export_tasks',
+                  value: refreshedTasks
+                });
+                console.log("[Auto-Healing] Successfully auto-repaired task configuration in database.");
+                mModule = activeModule;
+                table = activeTable;
+              } catch (tErr) {
+                console.error("[Auto-Healing] Failed to persist task auto-repair to database:", tErr);
+              }
+            }
+
             // First, probe to discover actually existing database columns for the target table
             const { data: sampleColsData } = await supabase.from(table).select("*").limit(1);
             const existingDbCols = new Set<string>();

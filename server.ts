@@ -434,8 +434,54 @@ async function executeScheduledTask(task: any) {
         throw new Error(`Successfully read but found no valid tabular rows to import.`);
       }
 
+      // ---> INTELLIGENT AUTO-HEALING MAPPING FOR TABLE MISMATCHES <---
+      let moduleKey = task.action.module;
+      
+      const firstRec = importedRecords[0];
+      const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/[\s\-_#/()]/g, ""));
+      
+      // Checking indicators
+      const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku");
+      const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name");
+      const hasCost = lowerHeaderKeys.some(k => k === "cost" || k === "costprice" || k === "unitcost");
+      const hasPriceTiers = lowerHeaderKeys.some(k => k.includes("pricetier") || k.includes("tier1") || k.includes("price_tier"));
+
+      const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project");
+      const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername");
+      const hasDealValue = lowerHeaderKeys.some(k => k === "dealvalue" || k === "deal_value" || k === "value");
+
+      const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress");
+      const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber");
+      const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno");
+
+      let resolvedModule = moduleKey;
+      if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
+        resolvedModule = "inventory";
+      } else if (hasProjectName || hasClientName || hasDealValue) {
+        resolvedModule = "deals";
+      } else if (hasEmail || hasPhone || hasLegacyNumber) {
+        resolvedModule = "contacts";
+      }
+
+      if (resolvedModule !== moduleKey) {
+        console.log(`[Auto-Healing] Detected ${resolvedModule} data in file import. Promoting module context from '${moduleKey}' to '${resolvedModule}' for task '${task.name}'.`);
+        moduleKey = resolvedModule as any;
+        
+        // Also update task schedule file to persist this correction
+        try {
+          const tasks = loadJson(TASKS_FILE, []);
+          const matchedTask = tasks.find((t: any) => t.id === task.id);
+          if (matchedTask) {
+            matchedTask.action.module = resolvedModule;
+            saveJson(TASKS_FILE, tasks);
+            console.log(`[Auto-Healing] Successfully updated backend task configuration database.`);
+          }
+        } catch (saveErr) {
+          console.error('[Auto-Healing] Failed to update tasks database on backend:', saveErr);
+        }
+      }
+
       // Upsert records in local crm database
-      const moduleKey = task.action.module;
       if (!crmDb[moduleKey]) crmDb[moduleKey] = [];
 
       let upserts = 0;
