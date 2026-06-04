@@ -944,19 +944,34 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       }
 
       const origin = window.location.origin;
-      try {
-        const res = await fetch(`/api/health?_t=${Date.now()}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.status === "ok") {
-            setHealthStatus("connected");
-            setBackendUrl(origin);
-            localStorage.setItem("import_export_server_url", origin);
-            return;
+      
+      // Perform relative healthcheck with up to 3 self-healing retries & backoff to handle container reboots transparently
+      let relativeSuccess = false;
+      const maxRetries = 3;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const res = await fetch(`/api/health?_t=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === "ok") {
+              setHealthStatus("connected");
+              setBackendUrl(origin);
+              localStorage.setItem("import_export_server_url", origin);
+              relativeSuccess = true;
+              break;
+            }
           }
+        } catch (err) {
+          console.warn(`[Self-Healing] Relative sandbox healthcheck attempt ${attempt}/${maxRetries} failed:`, err);
         }
-      } catch (err) {
-        console.error("Relative sandbox healthcheck failed:", err);
+        if (attempt < maxRetries) {
+          // Wait 2 seconds before retrying
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      if (relativeSuccess) {
+        return;
       }
 
       // Fallback: test absolute stored backendUrl or the smart default backend URL
