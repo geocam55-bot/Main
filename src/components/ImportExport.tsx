@@ -2403,9 +2403,16 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
                     while (attempt < 15 && !retrySuccess) {
                       const regexMessage = String(currentErr?.message || '').toLowerCase();
-                      const quotedWords = [...regexMessage.matchAll(/'([a-zA-Z0-9_\-]+)'/g)].map(m => m[1].toLowerCase());
-                      const regexMatches = regexMessage.match(/column ["'](.*?)["']/i) || regexMessage.match(/column\s+([a-zA-Z0-9_\-]+)/i);
-                      const specificCol = (regexMatches && regexMatches[1] ? regexMatches[1].toLowerCase() : null) || (quotedWords.find(w => w !== table) || null);
+                      const doubleQuoteMatches = [...regexMessage.matchAll(/"([a-zA-Z0-9_\-]+)"/g)].map(m => m[1]);
+                      const singleQuoteMatches = [...regexMessage.matchAll(/'([a-zA-Z0-9_\-]+)'/g)].map(m => m[1]);
+                      const allWordMatches = [...doubleQuoteMatches, ...singleQuoteMatches];
+                      
+                      const excludeWords = new Set([
+                        table.toLowerCase(), "inventory", "profiles", "bids", "opportunities", "contacts", "deals",
+                        "public", "relation", "of"
+                      ]);
+                      
+                      const specificCol = allWordMatches.find(w => !excludeWords.has(w)) || null;
 
                       incrementalChunk = incrementalChunk.map(item => {
                         const repairedItem = { ...item };
