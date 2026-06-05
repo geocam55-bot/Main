@@ -590,6 +590,8 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
         department_code: formData.departmentCode || '',
         unit_of_measure: formData.unitOfMeasure || 'ea',
         image_url: formData.imageUrl || '',
+        location: formData.location || '',
+        status: formData.status || 'active',
       };
 
       if (editingItem) {

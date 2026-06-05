@@ -326,6 +326,50 @@ export async function searchInventoryClient(filters?: {
   }
 }
 
+function injectMetadataIntoDescription(cleanData: any, itemData: any) {
+  const metadata: any = {};
+  
+  // Collect any missing database columns from itemData
+  const imageUrl = itemData.image_url !== undefined ? itemData.image_url : itemData.imageUrl;
+  if (imageUrl !== undefined) {
+    metadata.imageUrl = imageUrl;
+  }
+  if (itemData.location !== undefined) {
+    metadata.location = itemData.location;
+  }
+  if (itemData.status !== undefined) {
+    metadata.status = itemData.status;
+  }
+  if (cleanData.quantity !== undefined) {
+    metadata.quantityOnHand = cleanData.quantity;
+  }
+
+  // Parse any existing metadata in base description so we don't wipe it out
+  const rawDescription = cleanData.description || '';
+  let baseDescription = rawDescription;
+  
+  const markerStart = "<!--metadata:";
+  const markerEnd = "-->";
+  const startIndex = rawDescription.lastIndexOf(markerStart);
+  if (startIndex !== -1) {
+    const endIndex = rawDescription.indexOf(markerEnd, startIndex + markerStart.length);
+    if (endIndex !== -1) {
+      const jsonStr = rawDescription.substring(startIndex + markerStart.length, endIndex);
+      try {
+        const parsedMetadata = JSON.parse(jsonStr);
+        Object.assign(metadata, parsedMetadata);
+        baseDescription = rawDescription.substring(0, startIndex).trim();
+      } catch (e) {
+        // Fallback
+      }
+    }
+  }
+
+  if (Object.keys(metadata).length > 0) {
+    cleanData.description = `${baseDescription}\n\n<!--metadata:${JSON.stringify(metadata)}-->`.trim();
+  }
+}
+
 export async function createInventoryClient(itemData: any) {
   try {
     const supabase = createClient();
@@ -416,6 +460,8 @@ export async function createInventoryClient(itemData: any) {
     if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
     if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
 
+    injectMetadataIntoDescription(cleanData, itemData);
+
     // Creating inventory item with clean data
 
     const keywordData = attachKeywordColumns(cleanData, itemData);
@@ -505,6 +551,9 @@ export async function updateInventoryClient(id: string, itemData: any) {
     }
     if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
     if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
+
+    injectMetadataIntoDescription(cleanData, itemData);
+
     // Note: Cost field temporarily removed from update to avoid PGRST204 error
     // Will be re-enabled after database migration
 
@@ -643,6 +692,9 @@ export async function upsertInventoryBySKUClient(itemData: any) {
     }
     if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
     if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
+
+    injectMetadataIntoDescription(cleanData, itemData);
+
     // Note: Cost field temporarily removed from upsert to avoid PGRST204 error
     // Will be re-enabled after database migration
 
@@ -826,6 +878,8 @@ export async function bulkUpsertInventoryBySKUClient(itemsData: any[]) {
       }
       if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
       if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
+
+      injectMetadataIntoDescription(cleanData, itemData);
 
       return attachKeywordColumns(cleanData, itemData);
     });
@@ -1159,11 +1213,33 @@ function mapInventoryItem(dbItem: any): any {
   const priceTier4 = dbItem.price_tier_4 != null ? dbItem.price_tier_4 / 100 : priceTier1;
   // T5: if tier is inactive, always default to 0 regardless of DB value
   const priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
+
+  // Parse description metadata comments if present
+  let rawDescription = dbItem.description || '';
+  let parsedDescription = rawDescription;
+  let metadata: any = {};
+  
+  const markerStart = "<!--metadata:";
+  const markerEnd = "-->";
+  const startIndex = rawDescription.lastIndexOf(markerStart);
+  if (startIndex !== -1) {
+    const endIndex = rawDescription.indexOf(markerEnd, startIndex + markerStart.length);
+    if (endIndex !== -1) {
+      const jsonStr = rawDescription.substring(startIndex + markerStart.length, endIndex);
+      try {
+        metadata = JSON.parse(jsonStr);
+        parsedDescription = rawDescription.substring(0, startIndex).trim();
+      } catch (e) {
+        // Fallback
+      }
+    }
+  }
   
   return {
     ...snakeToCamel(dbItem),
+    description: parsedDescription,
     // Map simple schema to full schema
-    quantityOnHand: dbItem.quantity || 0,
+    quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : (dbItem.quantity || 0),
     quantityOnOrder: dbItem.quantity_on_order || 0,
     unitPrice: unitPriceInDollars,
     cost: costInDollars,
@@ -1177,7 +1253,9 @@ function mapInventoryItem(dbItem: any): any {
     reorderLevel: 0,
     minStock: 0,
     maxStock: 0,
-    status: 'active',
+    status: metadata.status || dbItem.status || 'active',
+    location: metadata.location || dbItem.location || '',
+    imageUrl: metadata.imageUrl || dbItem.image_url || '',
     tags: [],
     searchKeywords: Array.isArray(dbItem.search_keywords) ? dbItem.search_keywords : [],
     keywordVersion: dbItem.keyword_version || null,

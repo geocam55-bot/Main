@@ -2278,6 +2278,18 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 if (mappedRec.price_tier_4 === undefined) mappedRec.price_tier_4 = defaultPrice;
                 if (mappedRec.price_tier_5 === undefined) mappedRec.price_tier_5 = defaultPrice;
                 if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
+
+                // Package any potentially unsupported columns into description metadata comment so they persist perfectly
+                const metadata: any = {};
+                if (mappedRec.image_url) metadata.imageUrl = mappedRec.image_url;
+                if (mappedRec.location) metadata.location = mappedRec.location;
+                if (mappedRec.status) metadata.status = mappedRec.status;
+                if (mappedRec.quantity) metadata.quantityOnHand = mappedRec.quantity;
+
+                if (Object.keys(metadata).length > 0) {
+                  const baseDesc = mappedRec.description || '';
+                  mappedRec.description = `${baseDesc}\n\n<!--metadata:${JSON.stringify(metadata)}-->`.trim();
+                }
               }
 
               // Resolve ID intelligently using pre-fetched caches (eliminates sequential select query)
