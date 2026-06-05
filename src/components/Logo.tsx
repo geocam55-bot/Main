@@ -13,12 +13,16 @@ export function Logo({ size = 'md', className = '' }: LogoProps) {
     xl: 'h-[192px] w-[576px] shrink-0',
   };
 
+  const hasHeight = className.includes('h-') || className.includes('h[');
+  const hasWidth = className.includes('w-') || className.includes('w[');
+  const sizeToApply = (hasHeight || hasWidth) ? '' : sizeClasses[size];
+
   return (
     <svg
       viewBox="0 0 480 150"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={`${sizeClasses[size]} ${className} object-contain z-50 relative`}
+      className={`${sizeToApply} ${className} object-contain z-50 relative`}
     >
       <defs>
         {/* Sky-blue to deep-royal-blue linear gradient for the majestic P Loop */}
