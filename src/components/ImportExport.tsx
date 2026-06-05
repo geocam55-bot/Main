@@ -2089,9 +2089,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
             }
 
-            // Always explicitly allow price tiers and unit of measure columns for inventory mapping
+            // Always explicitly allow price tiers, unit of measure, and image_url columns for inventory mapping
             if (table === "inventory") {
-              ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"].forEach(k => existingDbCols.add(k));
+              ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url"].forEach(k => existingDbCols.add(k));
             }
 
             // --- PERFORMANCE OPTIMIZATION CACHING ---

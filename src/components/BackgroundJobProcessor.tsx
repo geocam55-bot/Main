@@ -105,7 +105,36 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
               if (record.price_tier_4 != null && record.price_tier_4 !== '') inventoryData.price_tier_4 = parseFloat(record.price_tier_4) || 0;
               if (record.price_tier_5 != null && record.price_tier_5 !== '') inventoryData.price_tier_5 = parseFloat(record.price_tier_5) || 0;
               if (record.department_code != null && record.department_code !== '') inventoryData.department_code = record.department_code;
-              if (record.unit_of_measure != null && record.unit_of_measure !== '') inventoryData.unit_of_measure = record.unit_of_measure;
+              
+              // Extract and normalize image url and unit of measure keys robustly
+              let imageUrlVal = '';
+              let unitOfMeasureVal = '';
+
+              for (const [k, v] of Object.entries(record)) {
+                if (v === undefined || v === null) continue;
+                const cleanVal = typeof v === 'string' ? v.trim() : String(v);
+                const lk = k.toLowerCase().replace(/[\s\-_#/()]/g, '');
+                
+                if (lk === 'imageurl' || lk === 'image') {
+                  imageUrlVal = cleanVal;
+                } else if (lk === 'unit' || lk === 'unitofmeasure' || lk === 'uom') {
+                  unitOfMeasureVal = cleanVal;
+                }
+              }
+
+              if (imageUrlVal) {
+                inventoryData.image_url = imageUrlVal;
+              } else if (record.image_url != null && record.image_url !== '') {
+                inventoryData.image_url = record.image_url;
+              }
+
+              if (unitOfMeasureVal) {
+                inventoryData.unit_of_measure = unitOfMeasureVal;
+              } else if (record.unit_of_measure != null && record.unit_of_measure !== '') {
+                inventoryData.unit_of_measure = record.unit_of_measure;
+              } else {
+                inventoryData.unit_of_measure = 'ea'; // default fallback
+              }
 
               if (existing) {
                 await inventoryAPI.update(existing.id, inventoryData);

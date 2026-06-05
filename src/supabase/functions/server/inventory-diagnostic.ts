@@ -43,7 +43,8 @@ async function smartBatchUpsert(
         price_tier_4: Math.round((parseFloat(record.price_tier_4) || 0) * 100),
         price_tier_5: Math.round((parseFloat(record.price_tier_5) || 0) * 100),
         department_code: record.department_code || null,
-        unit_of_measure: record.unit_of_measure || 'ea',
+        unit_of_measure: record.unit_of_measure || record.unit || record.Unit || record.uom || 'ea',
+        image_url: record.image_url || record.imageUrl || record.image || record.imageURL || null,
       });
     } catch (e: any) {
       result.errors++;
