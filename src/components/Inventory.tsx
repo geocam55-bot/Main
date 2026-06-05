@@ -255,14 +255,35 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
     // T5: if tier is inactive, always default to 0 regardless of DB value
     const priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
     
+    // Parse description metadata comments if present
+    let rawDescription = dbItem.description || '';
+    let parsedDescription = rawDescription;
+    let metadata: any = {};
+    
+    const markerStart = "<!--metadata:";
+    const markerEnd = "-->";
+    const startIndex = rawDescription.lastIndexOf(markerStart);
+    if (startIndex !== -1) {
+      const endIndex = rawDescription.indexOf(markerEnd, startIndex + markerStart.length);
+      if (endIndex !== -1) {
+        const jsonStr = rawDescription.substring(startIndex + markerStart.length, endIndex);
+        try {
+          metadata = JSON.parse(jsonStr);
+          parsedDescription = rawDescription.substring(0, startIndex).trim();
+        } catch (e) {
+          // Fallback
+        }
+      }
+    }
+    
     return {
       id: dbItem.id,
       name: dbItem.name || '',
       sku: dbItem.sku || '',
       category: dbItem.category || '',
-      description: dbItem.description || '',
+      description: parsedDescription,
       unitOfMeasure: dbItem.unit_of_measure || 'ea',
-      quantityOnHand: dbItem.quantity || 0,
+      quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : (dbItem.quantity || 0),
       quantityOnOrder: dbItem.quantity_on_order || 0,
       reorderLevel: 0,
       minStock: 0,
@@ -274,9 +295,10 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       priceTier4,
       priceTier5,
       departmentCode: dbItem.department_code || '',
-      status: 'active',
+      status: metadata.status || dbItem.status || 'active',
       tags: [],
-      imageUrl: dbItem.image_url || '',
+      imageUrl: metadata.imageUrl || dbItem.image_url || '',
+      location: metadata.location || dbItem.location || '',
       createdAt: dbItem.created_at || '',
       updatedAt: dbItem.updated_at || '',
     };
