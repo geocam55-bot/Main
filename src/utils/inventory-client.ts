@@ -31,10 +31,29 @@ function isMissingSearchKeywordsColumnError(error: any): boolean {
   return error?.code === '42703' || message.includes('search_keywords') || message.includes('keywords_generated_at') || message.includes('keyword_version');
 }
 
+function parseMissingColumn(errorMessage: string, table: string): string | null {
+  const errMsgLower = errorMessage.toLowerCase();
+  
+  // 1. Double quotes from standard Postgres message, e.g. column "col_name" does not exist
+  const doubleQuoteMatches = [...errMsgLower.matchAll(/"([a-zA-Z0-9_\-]+)"/g)].map(m => m[1]);
+  // 2. Single quotes from PostgREST cache message, e.g. Could not find the 'col_name' column of 'table'
+  const singleQuoteMatches = [...errMsgLower.matchAll(/'([a-zA-Z0-9_\-]+)'/g)].map(m => m[1]);
+  
+  const allWordMatches = [...doubleQuoteMatches, ...singleQuoteMatches];
+  
+  // Exclude common words like table name, table identifiers, and common Postgres types/words
+  const excludeWords = new Set([
+    table.toLowerCase(), "inventory", "profiles", "bids", "opportunities", "contacts", "deals",
+    "public", "relation", "of"
+  ]);
+  
+  return allWordMatches.find(w => !excludeWords.has(w)) || null;
+}
+
 async function performRobustQuery(
   operation: (data: any) => Promise<{ data: any; error: any }>,
   initialPayload: any,
-  maxRetries = 5
+  maxRetries = 15
 ): Promise<{ data: any; error: any }> {
   let payload = Array.isArray(initialPayload)
     ? initialPayload.map(item => ({ ...item }))
@@ -75,45 +94,55 @@ async function performRobustQuery(
         }
       };
 
-      if (errMsg.includes('image_url') || errMsg.includes('imageurl')) {
-        stripColumn('image_url');
-      } else if (errMsg.includes('unit_of_measure') || errMsg.includes('unitofmeasure')) {
-        stripColumn('unit_of_measure');
-      } else if (errMsg.includes('price_tier_1') || errMsg.includes('price_tier_2') || errMsg.includes('price_tier_3') || errMsg.includes('price_tier_4') || errMsg.includes('price_tier_5')) {
-        stripColumn('price_tier_1');
-        stripColumn('price_tier_2');
-        stripColumn('price_tier_3');
-        stripColumn('price_tier_4');
-        stripColumn('price_tier_5');
-      } else if (errMsg.includes('department_code') || errMsg.includes('departmentcode')) {
-        stripColumn('department_code');
-      } else if (errMsg.includes('search_keywords') || errMsg.includes('keywords_generated_at') || errMsg.includes('keyword_version')) {
-        stripColumn('search_keywords');
-        stripColumn('keywords_generated_at');
-        stripColumn('keyword_version');
-      } else {
-        // Parse column name if possible and strip it specifically
-        const matches = errMsg.match(/column "(.*?)"/i) || errMsg.match(/column '(.*?)'/i) || errMsg.match(/column (.*?)/i);
-        if (matches && matches[1]) {
-          stripColumn(matches[1]);
-        } else {
-          // General cleanup
+      // 1. Try to find the exact problematic column using our robust parser
+      const parsedCol = parseMissingColumn(error.message || '', 'inventory');
+      if (parsedCol) {
+        stripColumn(parsedCol);
+      }
+      
+      // 2. If we didn't strip anything with the parsed column, try explicit checks for safety
+      if (!strippedAny) {
+        if (errMsg.includes('image_url') || errMsg.includes('imageurl')) {
           stripColumn('image_url');
+        } else if (errMsg.includes('unit_of_measure') || errMsg.includes('unitofmeasure')) {
           stripColumn('unit_of_measure');
+        } else if (errMsg.includes('department_code') || errMsg.includes('departmentcode')) {
+          stripColumn('department_code');
+        } else if (errMsg.includes('location')) {
+          stripColumn('location');
+        } else if (errMsg.includes('status')) {
+          stripColumn('status');
+        } else if (errMsg.includes('quantity_on_hand')) {
+          stripColumn('quantity_on_hand');
+        } else if (errMsg.includes('price_tier_1') || errMsg.includes('price_tier_2') || errMsg.includes('price_tier_3') || errMsg.includes('price_tier_4') || errMsg.includes('price_tier_5')) {
           stripColumn('price_tier_1');
           stripColumn('price_tier_2');
           stripColumn('price_tier_3');
           stripColumn('price_tier_4');
           stripColumn('price_tier_5');
-          stripColumn('department_code');
+        } else if (errMsg.includes('search_keywords') || errMsg.includes('keywords_generated_at') || errMsg.includes('keyword_version')) {
           stripColumn('search_keywords');
           stripColumn('keywords_generated_at');
           stripColumn('keyword_version');
         }
       }
       
+      // If we still haven't stripped anything, use general fallback cleanup to be sure we don't loop endlessly
       if (!strippedAny) {
-        // If nothing was stripped, return to avoid an infinite loop
+        const defaultToStrip = [
+          'image_url', 'unit_of_measure', 'department_code', 
+          'location', 'status', 'quantity_on_hand',
+          'price_tier_1', 'price_tier_2', 'price_tier_3', 
+          'price_tier_4', 'price_tier_5',
+          'search_keywords', 'keywords_generated_at', 'keyword_version'
+        ];
+        for (const col of defaultToStrip) {
+          stripColumn(col);
+        }
+      }
+      
+      if (!strippedAny) {
+        // If really nothing was stripped, return to avoid an infinite loop
         return { data, error };
       }
       
