@@ -3,6 +3,7 @@ import { toast } from 'sonner@2.0.3';
 import { ThemeSelector } from './ThemeSelector';
 import { ProjectWizardSettings } from './ProjectWizardSettings';
 import { DataDiagnostic } from './DataDiagnostic';
+import { AddMissingColumns } from './AddMissingColumns';
 import { AIToggleSwitch } from './AIToggleSwitch';
 import { PlannerDefaultsMigrationStatus } from './PlannerDefaultsMigrationStatus';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -2014,6 +2015,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
 
         <TabsContent value="diagnostics" className="space-y-4">
           <DataDiagnostic />
+          <AddMissingColumns />
         </TabsContent>
 
 
