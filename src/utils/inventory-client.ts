@@ -31,6 +31,101 @@ function isMissingSearchKeywordsColumnError(error: any): boolean {
   return error?.code === '42703' || message.includes('search_keywords') || message.includes('keywords_generated_at') || message.includes('keyword_version');
 }
 
+async function performRobustQuery(
+  operation: (data: any) => Promise<{ data: any; error: any }>,
+  initialPayload: any,
+  maxRetries = 5
+): Promise<{ data: any; error: any }> {
+  let payload = Array.isArray(initialPayload)
+    ? initialPayload.map(item => ({ ...item }))
+    : { ...initialPayload };
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    const { data, error } = await operation(payload);
+    if (!error) {
+      return { data, error };
+    }
+    
+    const errMsg = String(error.message || '').toLowerCase();
+    const isColumnError = error.code === '42703' || 
+                          errMsg.includes('column') || 
+                          errMsg.includes('schema cache') || 
+                          errMsg.includes('not find') || 
+                          errMsg.includes('does not exist');
+                          
+    if (isColumnError) {
+      console.warn(`[Robust DB client] Column error detected: "${error.message}". Automatic payload correction attempt ${attempt + 1}...`);
+      
+      let strippedAny = false;
+      
+      const stripColumn = (col: string) => {
+        if (Array.isArray(payload)) {
+          payload.forEach((item: any) => {
+            if (item[col] !== undefined) {
+              delete item[col];
+              strippedAny = true;
+            }
+          });
+        } else {
+          if (payload[col] !== undefined) {
+            delete payload[col];
+            strippedAny = true;
+          }
+        }
+      };
+
+      if (errMsg.includes('image_url') || errMsg.includes('imageurl')) {
+        stripColumn('image_url');
+      } else if (errMsg.includes('unit_of_measure') || errMsg.includes('unitofmeasure')) {
+        stripColumn('unit_of_measure');
+      } else if (errMsg.includes('price_tier_1') || errMsg.includes('price_tier_2') || errMsg.includes('price_tier_3') || errMsg.includes('price_tier_4') || errMsg.includes('price_tier_5')) {
+        stripColumn('price_tier_1');
+        stripColumn('price_tier_2');
+        stripColumn('price_tier_3');
+        stripColumn('price_tier_4');
+        stripColumn('price_tier_5');
+      } else if (errMsg.includes('department_code') || errMsg.includes('departmentcode')) {
+        stripColumn('department_code');
+      } else if (errMsg.includes('search_keywords') || errMsg.includes('keywords_generated_at') || errMsg.includes('keyword_version')) {
+        stripColumn('search_keywords');
+        stripColumn('keywords_generated_at');
+        stripColumn('keyword_version');
+      } else {
+        // Parse column name if possible and strip it specifically
+        const matches = errMsg.match(/column "(.*?)"/i) || errMsg.match(/column '(.*?)'/i) || errMsg.match(/column (.*?)/i);
+        if (matches && matches[1]) {
+          stripColumn(matches[1]);
+        } else {
+          // General cleanup
+          stripColumn('image_url');
+          stripColumn('unit_of_measure');
+          stripColumn('price_tier_1');
+          stripColumn('price_tier_2');
+          stripColumn('price_tier_3');
+          stripColumn('price_tier_4');
+          stripColumn('price_tier_5');
+          stripColumn('department_code');
+          stripColumn('search_keywords');
+          stripColumn('keywords_generated_at');
+          stripColumn('keyword_version');
+        }
+      }
+      
+      if (!strippedAny) {
+        // If nothing was stripped, return to avoid an infinite loop
+        return { data, error };
+      }
+      
+      attempt++;
+    } else {
+      return { data, error };
+    }
+  }
+  
+  return operation(payload);
+}
+
 function buildSearchKeywords(itemData: any): string[] {
   const existingTags = Array.isArray(itemData?.tags)
     ? itemData.tags.filter(Boolean)
@@ -325,19 +420,16 @@ export async function createInventoryClient(itemData: any) {
 
     const keywordData = attachKeywordColumns(cleanData, itemData);
 
-    let { data, error } = await supabase
-      .from('inventory')
-      .insert([keywordData])
-      .select()
-      .single();
-
-    if (error && isMissingSearchKeywordsColumnError(error)) {
-      ({ data, error } = await supabase
-        .from('inventory')
-        .insert([removeKeywordColumns(keywordData)])
-        .select()
-        .single());
-    }
+    const { data, error } = await performRobustQuery(
+      async (payload) => {
+        return await supabase
+          .from('inventory')
+          .insert([payload])
+          .select()
+          .single();
+      },
+      keywordData
+    );
 
     if (error) throw error;
 
@@ -420,21 +512,17 @@ export async function updateInventoryClient(id: string, itemData: any) {
 
     const keywordData = attachKeywordColumns(cleanData, itemData);
 
-    let { data, error } = await supabase
-      .from('inventory')
-      .update(keywordData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error && isMissingSearchKeywordsColumnError(error)) {
-      ({ data, error } = await supabase
-        .from('inventory')
-        .update(removeKeywordColumns(keywordData))
-        .eq('id', id)
-        .select()
-        .single());
-    }
+    const { data, error } = await performRobustQuery(
+      async (payload) => {
+        return await supabase
+          .from('inventory')
+          .update(payload)
+          .eq('id', id)
+          .select()
+          .single();
+      },
+      keywordData
+    );
 
     if (error) throw error;
     
@@ -593,21 +681,17 @@ export async function upsertInventoryBySKUClient(itemData: any) {
       // Updating existing item(s)
       
       // Update all records with this SKU
-      let { data: updatedItems, error: updateError } = await supabase
-        .from('inventory')
-        .update(updateData)
-        .eq('sku', itemData.sku)
-        .eq('organization_id', organizationId)
-        .select();
-
-      if (updateError && isMissingSearchKeywordsColumnError(updateError)) {
-        ({ data: updatedItems, error: updateError } = await supabase
-          .from('inventory')
-          .update(removeKeywordColumns(updateData))
-          .eq('sku', itemData.sku)
-          .eq('organization_id', organizationId)
-          .select());
-      }
+      const { data: updatedItems, error: updateError } = await performRobustQuery(
+        async (payload) => {
+          return await supabase
+            .from('inventory')
+            .update(payload)
+            .eq('sku', itemData.sku)
+            .eq('organization_id', organizationId)
+            .select();
+        },
+        updateData
+      );
       
       if (updateError) {
         // Error updating inventory items
@@ -625,19 +709,16 @@ export async function upsertInventoryBySKUClient(itemData: any) {
       // Create new item
       // Creating new item
       
-      let { data: createdItem, error: createError } = await supabase
-        .from('inventory')
-        .insert([keywordData])
-        .select()
-        .single();
-
-      if (createError && isMissingSearchKeywordsColumnError(createError)) {
-        ({ data: createdItem, error: createError } = await supabase
-          .from('inventory')
-          .insert([removeKeywordColumns(keywordData)])
-          .select()
-          .single());
-      }
+      const { data: createdItem, error: createError } = await performRobustQuery(
+        async (payload) => {
+          return await supabase
+            .from('inventory')
+            .insert([payload])
+            .select()
+            .single();
+        },
+        keywordData
+      );
       
       if (createError) {
         // Error creating inventory item
@@ -816,18 +897,15 @@ export async function bulkUpsertInventoryBySKUClient(itemsData: any[]) {
         // Creating items using direct insert
         
         // Direct insert without RPC to avoid schema cache issues
-        let { data: createdData, error: createError } = await supabase
-          .from('inventory')
-          .insert(itemsToCreate)
-          .select();
-
-        if (createError && isMissingSearchKeywordsColumnError(createError)) {
-          const fallbackItems = itemsToCreate.map(removeKeywordColumns);
-          ({ data: createdData, error: createError } = await supabase
-            .from('inventory')
-            .insert(fallbackItems)
-            .select());
-        }
+        const { data: createdData, error: createError } = await performRobustQuery(
+          async (payload) => {
+            return await supabase
+              .from('inventory')
+              .insert(payload)
+              .select();
+          },
+          itemsToCreate
+        );
 
         if (createError) {
           // Error bulk creating inventory
@@ -849,17 +927,15 @@ export async function bulkUpsertInventoryBySKUClient(itemsData: any[]) {
       for (const { ids, data: updateData, sku } of itemsToUpdate) {
         try {
           for (const id of ids) {
-            let { error: updateError } = await supabase
-              .from('inventory')
-              .update(updateData)
-              .eq('id', id);
-
-            if (updateError && isMissingSearchKeywordsColumnError(updateError)) {
-              ({ error: updateError } = await supabase
-                .from('inventory')
-                .update(removeKeywordColumns(updateData))
-                .eq('id', id));
-            }
+            const { error: updateError } = await performRobustQuery(
+              async (payload) => {
+                return await supabase
+                  .from('inventory')
+                  .update(payload)
+                  .eq('id', id);
+              },
+              updateData
+            );
 
             if (updateError) {
               throw updateError;

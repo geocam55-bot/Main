@@ -2332,13 +2332,52 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             const chunkSize = 100;
             for (let chunkIdx = 0; chunkIdx < cleanedRecordsList.length; chunkIdx += chunkSize) {
               const chunk = cleanedRecordsList.slice(chunkIdx, chunkIdx + chunkSize);
-              const { error: upsertErr } = await supabase
+              let { error: upsertErr } = await supabase
                 .from(table)
                 .upsert(chunk);
               
               if (upsertErr) {
-                errorCount += chunk.length;
-                lastErrDetail = upsertErr.message;
+                const errMsg = String(upsertErr.message || '').toLowerCase();
+                const isColumnError = upsertErr.code === '42703' || 
+                                      errMsg.includes('column') || 
+                                      errMsg.includes('schema cache') || 
+                                      errMsg.includes('not find') || 
+                                      errMsg.includes('does not exist');
+
+                if (isColumnError) {
+                  console.warn(`[Direct Importer] Schema mismatch detected: "${upsertErr.message}". Retrying chunk after filtering out newly added optional columns...`);
+                  
+                  // Filter out optional columns that might be missing in older schemas
+                  const repairedChunk = chunk.map(item => {
+                    const repairedItem = { ...item };
+                    delete repairedItem.image_url;
+                    delete repairedItem.unit_of_measure;
+                    delete repairedItem.department_code;
+                    delete repairedItem.price_tier_1;
+                    delete repairedItem.price_tier_2;
+                    delete repairedItem.price_tier_3;
+                    delete repairedItem.price_tier_4;
+                    delete repairedItem.price_tier_5;
+                    delete repairedItem.search_keywords;
+                    delete repairedItem.keywords_generated_at;
+                    delete repairedItem.keyword_version;
+                    return repairedItem;
+                  });
+
+                  const { error: retryErr } = await supabase
+                    .from(table)
+                    .upsert(repairedChunk);
+
+                  if (retryErr) {
+                    errorCount += chunk.length;
+                    lastErrDetail = retryErr.message;
+                  } else {
+                    insertCount += chunk.length;
+                  }
+                } else {
+                  errorCount += chunk.length;
+                  lastErrDetail = upsertErr.message;
+                }
               } else {
                 insertCount += chunk.length;
               }

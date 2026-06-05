@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS public.inventory (
     cost NUMERIC(12,2) DEFAULT 0,
     category TEXT,
     department_code TEXT,
+    image_url TEXT,
+    unit_of_measure TEXT DEFAULT 'ea',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
