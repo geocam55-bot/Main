@@ -2347,92 +2347,90 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 if (isColumnError) {
                   console.warn(`[Direct Importer] Schema mismatch detected: "${upsertErr.message}". Retrying chunk after filtering out missing columns dynamically...`);
                   
-                  let repairedChunk = chunk.map(item => ({ ...item }));
-                  let retrySuccess = false;
-                  let currentErr: any = upsertErr;
-                  let attempt = 0;
-
-                  while (attempt < 5 && !retrySuccess) {
-                    const currentErrMsg = String(currentErr?.message || '').toLowerCase();
-                    const matches = currentErrMsg.match(/column ["'](.*?)["']/i) || currentErrMsg.match(/column\s+([a-zA-Z0-9_\-]+)/i);
-                    const specificMissingCol = matches && matches[1] ? matches[1].toLowerCase() : null;
-
-                    repairedChunk = repairedChunk.map(item => {
-                      const repairedItem = { ...item };
-                      if (specificMissingCol) {
-                        delete (repairedItem as any)[specificMissingCol];
-                        // Alleviates snake/camel mappings
-                        if (specificMissingCol === 'image_url') delete (repairedItem as any).image_url;
-                        if (specificMissingCol === 'unit_of_measure') delete (repairedItem as any).unit_of_measure;
-                        if (specificMissingCol === 'department_code') delete (repairedItem as any).department_code;
-                      } else {
-                        // Blanket stripping of columns matching message tokens
-                        if (currentErrMsg.includes('image_url') || currentErrMsg.includes('imageurl')) {
-                          delete (repairedItem as any).image_url;
-                        } else if (currentErrMsg.includes('unit_of_measure') || currentErrMsg.includes('unitofmeasure')) {
-                          delete (repairedItem as any).unit_of_measure;
-                        } else if (currentErrMsg.includes('department_code') || currentErrMsg.includes('departmentcode')) {
-                          delete (repairedItem as any).department_code;
-                        } else if (currentErrMsg.includes('price_tier_1') || currentErrMsg.includes('price_tier_2') || currentErrMsg.includes('price_tier_3') || currentErrMsg.includes('price_tier_4') || currentErrMsg.includes('price_tier_5') || currentErrMsg.includes('pricetier')) {
-                          delete (repairedItem as any).price_tier_1;
-                          delete (repairedItem as any).price_tier_2;
-                          delete (repairedItem as any).price_tier_3;
-                          delete (repairedItem as any).price_tier_4;
-                          delete (repairedItem as any).price_tier_5;
-                        } else if (currentErrMsg.includes('search_keywords') || currentErrMsg.includes('searchkeywords')) {
-                          delete (repairedItem as any).search_keywords;
-                        } else if (currentErrMsg.includes('keywords_generated_at') || currentErrMsg.includes('keywordsgeneratedat')) {
-                          delete (repairedItem as any).keywords_generated_at;
-                        } else if (currentErrMsg.includes('keyword_version') || currentErrMsg.includes('keywordversion')) {
-                          delete (repairedItem as any).keyword_version;
-                        } else {
-                          // Clean up all optional columns if we can't identify a specific one and are stuck
-                          delete (repairedItem as any).image_url;
-                          delete (repairedItem as any).unit_of_measure;
-                          delete (repairedItem as any).department_code;
-                          delete (repairedItem as any).price_tier_1;
-                          delete (repairedItem as any).price_tier_2;
-                          delete (repairedItem as any).price_tier_3;
-                          delete (repairedItem as any).price_tier_4;
-                          delete (repairedItem as any).price_tier_5;
-                          delete (repairedItem as any).search_keywords;
-                          delete (repairedItem as any).keywords_generated_at;
-                          delete (repairedItem as any).keyword_version;
-                        }
-                      }
-                      return repairedItem;
-                    });
-
-                    const { error: retryErr } = await supabase
-                      .from(table)
-                      .upsert(repairedChunk);
-
-                    if (!retryErr) {
-                      retrySuccess = true;
-                    } else {
-                      const retryErrMsgLower = String(retryErr.message || '').toLowerCase();
-                      const isRetryColError = retryErr.code === '42703' || 
-                                              retryErrMsgLower.includes('column') || 
-                                              retryErrMsgLower.includes('schema cache') || 
-                                              retryErrMsgLower.includes('not find') || 
-                                              retryErrMsgLower.includes('does not exist');
-
-                      if (isRetryColError) {
-                        currentErr = retryErr;
-                        attempt++;
-                      } else {
-                        // Non-column error, break and fail
-                        lastErrDetail = retryErr.message;
-                        break;
-                      }
+                  let repairedChunk = chunk.map(item => {
+                    const repairedItem = { ...item };
+                    // If any column error is hit, we proactively strip all optional/new features columns
+                    // to guarantee 100% successful core database insertion.
+                    if (table === 'inventory') {
+                      delete (repairedItem as any).image_url;
+                      delete (repairedItem as any).unit_of_measure;
+                      delete (repairedItem as any).department_code;
+                      delete (repairedItem as any).price_tier_1;
+                      delete (repairedItem as any).price_tier_2;
+                      delete (repairedItem as any).price_tier_3;
+                      delete (repairedItem as any).price_tier_4;
+                      delete (repairedItem as any).price_tier_5;
+                      delete (repairedItem as any).search_keywords;
+                      delete (repairedItem as any).keywords_generated_at;
+                      delete (repairedItem as any).keyword_version;
+                    } else if (table === 'profiles') {
+                      delete (repairedItem as any).needs_password_change;
+                      delete (repairedItem as any).temp_password;
+                      delete (repairedItem as any).temp_password_created_at;
+                      delete (repairedItem as any).avatar_url;
+                    } else if (table === 'bids') {
+                      delete (repairedItem as any).created_by;
                     }
-                  }
+                    return repairedItem;
+                  });
 
-                  if (retrySuccess) {
+                  // If there is still a specific column name in the error message, handle it as well
+                  const currentErrMsg = errMsg;
+                  const matches = [...currentErrMsg.matchAll(/'([a-zA-Z0-9_\-]+)'/g)].map(m => m[1].toLowerCase());
+                  repairedChunk = repairedChunk.map(repairedItem => {
+                    matches.forEach(col => {
+                      if (col !== 'inventory' && col !== 'profiles' && col !== 'bids' && col !== 'opportunities' && col !== 'contacts') {
+                        delete (repairedItem as any)[col];
+                      }
+                    });
+                    return repairedItem;
+                  });
+
+                  const { error: retryErr } = await supabase
+                    .from(table)
+                    .upsert(repairedChunk);
+
+                  if (!retryErr) {
                     insertCount += chunk.length;
                   } else {
-                    errorCount += chunk.length;
-                    if (!lastErrDetail) {
+                    console.warn(`[Direct Importer] First collective strip retry failed: "${retryErr.message}". Attempting aggressive incremental cleanup...`);
+                    
+                    // Fallback to incremental loop if collective strip still fails
+                    let incrementalChunk = repairedChunk.map(item => ({ ...item }));
+                    let retrySuccess = false;
+                    let currentErr: any = retryErr;
+                    let attempt = 0;
+
+                    while (attempt < 15 && !retrySuccess) {
+                      const regexMessage = String(currentErr?.message || '').toLowerCase();
+                      const quotedWords = [...regexMessage.matchAll(/'([a-zA-Z0-9_\-]+)'/g)].map(m => m[1].toLowerCase());
+                      const regexMatches = regexMessage.match(/column ["'](.*?)["']/i) || regexMessage.match(/column\s+([a-zA-Z0-9_\-]+)/i);
+                      const specificCol = (regexMatches && regexMatches[1] ? regexMatches[1].toLowerCase() : null) || (quotedWords.find(w => w !== table) || null);
+
+                      incrementalChunk = incrementalChunk.map(item => {
+                        const repairedItem = { ...item };
+                        if (specificCol) {
+                          delete (repairedItem as any)[specificCol];
+                        }
+                        return repairedItem;
+                      });
+
+                      const { error: finalErr } = await supabase
+                        .from(table)
+                        .upsert(incrementalChunk);
+
+                      if (!finalErr) {
+                        retrySuccess = true;
+                      } else {
+                        currentErr = finalErr;
+                        attempt++;
+                      }
+                    }
+
+                    if (retrySuccess) {
+                      insertCount += chunk.length;
+                    } else {
+                      errorCount += chunk.length;
                       lastErrDetail = currentErr?.message || "Failed retry sequence.";
                     }
                   }
