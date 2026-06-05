@@ -1876,6 +1876,38 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         return { success: false, error: "User is not logged in or organization ID is missing in profiles." };
       }
 
+      // 1.5. Auto-heal inventory schema and reload PostgREST cache right before running this task
+      try {
+        const schemaSql = `
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+              AND table_name = 'inventory' 
+              AND column_name = 'image_url'
+            ) THEN
+              ALTER TABLE public.inventory ADD COLUMN image_url text;
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+              AND table_name = 'inventory' 
+              AND column_name = 'unit_of_measure'
+            ) THEN
+              ALTER TABLE public.inventory ADD COLUMN unit_of_measure text DEFAULT 'ea';
+            END IF;
+
+            -- Reload PostgREST schema cache
+            NOTIFY pgrst, 'reload schema';
+          END $$;
+        `;
+        await supabase.rpc('exec_sql', { sql: schemaSql });
+      } catch (schemaErr) {
+        console.warn("Schema auto-heal bypassed or not supported in direct execution:", schemaErr);
+      }
+
       const mType = task.action.type; // 'import' or 'export'
       let mModule = task.action.module; // 'contacts' | 'inventory' | 'deals'
       let table = mModule === "deals" ? "opportunities" : mModule;

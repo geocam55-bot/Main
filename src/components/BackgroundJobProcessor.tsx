@@ -361,6 +361,41 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
   }, [user.organizationId, processImportJob]);
 
   useEffect(() => {
+    // Run schema auto-heel/cache-reload once on mount
+    const healSchema = async () => {
+      try {
+        const schemaSql = `
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+              AND table_name = 'inventory' 
+              AND column_name = 'image_url'
+            ) THEN
+              ALTER TABLE public.inventory ADD COLUMN image_url text;
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+              AND table_name = 'inventory' 
+              AND column_name = 'unit_of_measure'
+            ) THEN
+              ALTER TABLE public.inventory ADD COLUMN unit_of_measure text DEFAULT 'ea';
+            END IF;
+
+            -- Reload PostgREST schema cache
+            NOTIFY pgrst, 'reload schema';
+          END $$;
+        `;
+        await supabase.rpc('exec_sql', { sql: schemaSql });
+      } catch (err) {
+        console.warn('Auto-healing schema bypassed or not supported:', err);
+      }
+    };
+    healSchema();
+
     // Check immediately on mount
     checkAndProcessDueJobs();
 
