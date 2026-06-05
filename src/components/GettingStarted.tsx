@@ -124,14 +124,7 @@ export function GettingStarted({ userId, userRole, onNavigate }: GettingStartedP
 
   const handleNavigate = (item: ChecklistItem) => {
     setChecked((prev) => ({ ...prev, [item.id]: true }));
-    // Signal that the target module should auto-start its guided tour
-    sessionStorage.setItem('prospaces.pending-tour', item.navigateTo);
-    window.dispatchEvent(new CustomEvent('prospaces:tour-starting'));
     onNavigate(item.navigateTo);
-    // Fire after navigation so mounted module help can explicitly start from step 1.
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('prospaces:start-tour', { detail: { key: item.navigateTo } }));
-    }, 0);
   };
 
   const handleDismiss = () => {
@@ -234,7 +227,7 @@ export function GettingStarted({ userId, userRole, onNavigate }: GettingStartedP
 
           {/* Footer */}
           <div className="border-t border-border px-4 py-2 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Click any item to go there &amp; start a tour</span>
+            <span className="text-xs text-muted-foreground">Click any item to open that module</span>
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={handleDismiss}>
               Dismiss
             </Button>

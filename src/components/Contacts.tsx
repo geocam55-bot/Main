@@ -226,20 +226,7 @@ export function Contacts({ user, tourIntentKey, tourIntentNonce }: ContactsProps
     };
   }, [pendingTourConsumed, showContactDetail, contactsTour.start]);
 
-  const contactsGuidedTour = (
-    <GuidedTour
-      isOpen={contactsTour.isOpen}
-      steps={contactsTourSteps}
-      currentStep={contactsTour.currentStep}
-      isFirst={contactsTour.isFirst}
-      isLast={contactsTour.isLast}
-      progress={contactsTour.progress}
-      onNext={contactsTour.next}
-      onPrev={contactsTour.prev}
-      onClose={contactsTour.close}
-      onFinish={contactsTour.close}
-    />
-  );
+  const contactsGuidedTour = null;
 
   const loadContacts = async () => {
     try {
@@ -1714,16 +1701,7 @@ export function Contacts({ user, tourIntentKey, tourIntentNonce }: ContactsProps
                   }}
                   onOpenAddContact={() => setIsAddDialogOpen(true)}
                 />
-                {(user.role === 'admin' || user.role === 'super_admin') && (
-                  <Button
-                    variant="outline"
-                    className="h-10 border-blue-200 text-blue-700 hover:bg-blue-50"
-                    onClick={() => contactsTour.start(0)}
-                  >
-                    <PlayCircle className="mr-2 h-4 w-4" />
-                    Start Tour Now
-                  </Button>
-                )}
+
 
               </div>
             </div>

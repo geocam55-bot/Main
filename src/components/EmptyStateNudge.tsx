@@ -35,12 +35,6 @@ export function EmptyStateNudge({
       <p className="mb-6 max-w-xs text-sm text-muted-foreground leading-relaxed">{description}</p>
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <Button onClick={onAction}>{actionLabel}</Button>
-        {onTour && (
-          <Button variant="outline" onClick={onTour} className="flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50">
-            <PlayCircle className="h-4 w-4" />
-            Take a guided tour
-          </Button>
-        )}
       </div>
     </div>
   );

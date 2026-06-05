@@ -170,33 +170,7 @@ export function InteractiveModuleHelp({
           <span className="hidden sm:inline">{triggerLabel}</span>
           <span className="sm:hidden">Help</span>
         </Button>
-        {steps.some((s) => s.targetSelector) && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => { setIsOpen(false); tour.start(0); }}
-            title="Start guided tour"
-            className="flex items-center gap-1.5 px-2 sm:px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
-          >
-            <PlayCircle className="h-4 w-4" />
-            <span className="hidden sm:inline">Tour</span>
-          </Button>
-        )}
       </div>
-
-      {/* Overlay guided tour */}
-      <GuidedTour
-        isOpen={tour.isOpen}
-        steps={steps}
-        currentStep={tour.currentStep}
-        isFirst={tour.isFirst}
-        isLast={tour.isLast}
-        progress={tour.progress}
-        onNext={tour.next}
-        onPrev={tour.prev}
-        onClose={tour.close}
-        onFinish={tour.close}
-      />
 
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent

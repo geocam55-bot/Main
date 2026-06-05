@@ -382,41 +382,14 @@ export function AppContent() {
   }, []);
 
   const handleGettingStartedNavigate = useCallback((view: string) => {
-    setTourIntent({ key: view, nonce: Date.now() });
-    if (currentView === view) {
-      sessionStorage.setItem('prospaces.pending-tour', view);
-      window.dispatchEvent(new CustomEvent('prospaces:start-tour', { detail: { key: view } }));
-      return;
-    }
     setCurrentView(view);
-  }, [currentView]);
+  }, []);
 
   // Persist currentView to sessionStorage whenever it changes
   useEffect(() => {
     if (currentView && currentView !== 'landing' && currentView !== 'login' && currentView !== 'member-login') {
       sessionStorage.setItem('prospaces_current_view', currentView);
     }
-  }, [currentView]);
-
-  // When onboarding sets a pending tour, fire start events after the target view renders.
-  useEffect(() => {
-    const pendingTour = sessionStorage.getItem('prospaces.pending-tour');
-    if (!pendingTour || pendingTour !== currentView) return;
-
-    const fireStart = () => {
-      window.dispatchEvent(new CustomEvent('prospaces:start-tour', { detail: { key: pendingTour } }));
-    };
-
-    // Retry a few times to handle lazy module mount/layout timing.
-    const t1 = setTimeout(fireStart, 120);
-    const t2 = setTimeout(fireStart, 500);
-    const t3 = setTimeout(fireStart, 1100);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
   }, [currentView]);
 
   // Persist sidebar collapsed state
