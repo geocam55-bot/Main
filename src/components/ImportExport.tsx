@@ -76,6 +76,7 @@ interface ScheduledTask {
     stopIfRunningHours: number;
     retryCount: number;
     retryIntervalMinutes: number;
+    runWhetherComputerOff?: boolean;
   };
   lastRunTime?: string | null;
   lastRunResult?: "success" | "failed" | null;
@@ -750,6 +751,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [stopHours, setStopHours] = useState(1);
   const [retryCount, setRetryCount] = useState(3);
   const [retryMinutes, setRetryMinutes] = useState(5);
+  const [runWhetherComputerOff, setRunWhetherComputerOff] = useState(true);
 
   // Manual execution interactive states
   const [manualModule, setManualModule] = useState<"contacts" | "inventory" | "deals">("contacts");
@@ -3022,7 +3024,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       settings: {
         stopIfRunningHours: stopHours,
         retryCount: retryCount,
-        retryIntervalMinutes: retryMinutes
+        retryIntervalMinutes: retryMinutes,
+        runWhetherComputerOff: runWhetherComputerOff
       },
       creator: creatorName
     };
@@ -3119,6 +3122,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setStopHours(1);
     setRetryCount(3);
     setRetryMinutes(5);
+    setRunWhetherComputerOff(true);
     setShowTaskModal(true);
   };
 
@@ -3143,6 +3147,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setStopHours(task.settings.stopIfRunningHours);
     setRetryCount(task.settings.retryCount);
     setRetryMinutes(task.settings.retryIntervalMinutes);
+    setRunWhetherComputerOff(task.settings.runWhetherComputerOff !== false);
     setShowTaskModal(true);
   };
 
@@ -5385,6 +5390,29 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                       onChange={(e) => setRetryMinutes(parseInt(e.target.value) || 5)}
                       className="w-full border rounded-lg px-3 py-1.5 outline-none font-semibold text-slate-800"
                     />
+                  </div>
+                </div>
+
+                {/* Cloud & Power settings */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4 space-y-3">
+                  <span className="text-4xs uppercase tracking-wider text-slate-500 font-bold font-mono block">Unattended Node Settings</span>
+                  
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="opt-runWhetherComputerOff"
+                      checked={runWhetherComputerOff}
+                      onChange={(e) => setRunWhetherComputerOff(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                    />
+                    <div>
+                      <label htmlFor="opt-runWhetherComputerOff" className="block text-slate-700 font-semibold text-xs select-none">
+                        Run task whether user is logged on or not / Run whether computer is turned on or off
+                      </label>
+                      <p className="text-3xs text-slate-400 leading-normal font-normal mt-0.5">
+                        Normally, tasks with OneDrive target storage require synchronization to are handled server-side. Enabling this allows our background container to safely execute this OneDrive replication flow unattended even if your own computer is turned off.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

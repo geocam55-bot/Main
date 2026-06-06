@@ -559,19 +559,376 @@ async function executeScheduledTask(task: any) {
   return logEntry;
 }
 
+// Background execution for Supabase-mode scheduled tasks
+async function executeSupabaseScheduledTask(task: any) {
+  const logEntry: any = {
+    id: 'log-' + Math.random().toString(36).slice(2, 9),
+    taskId: task.id,
+    taskName: task.name,
+    timestamp: new Date().toISOString(),
+    actionType: task.action.type,
+    module: task.action.module,
+    fileStorage: task.action.fileStorage,
+    fileName: task.action.fileName,
+    status: 'success',
+    recordCount: 0,
+    message: ''
+  };
+
+  try {
+    const mType = task.action.type;
+    let mModule = task.action.module;
+    let table = mModule === "deals" ? "opportunities" : mModule;
+    const fileName = task.action.fileName;
+    const format = task.action.format;
+
+    // Resolve organization ID for querying and insertion
+    let organizationId = task.organisationId || task.organizationId;
+    if (!organizationId) {
+      const { data: profiles } = await supabase.from('profiles').select('organization_id, id, name, email');
+      if (profiles && profiles.length > 0) {
+        const creatorEmail = String(task.creator || '').toLowerCase().trim();
+        const matched = profiles.find((p: any) => 
+          (p.name && String(p.name).toLowerCase().trim() === creatorEmail) ||
+          (p.email && String(p.email).toLowerCase().trim() === creatorEmail)
+        );
+        organizationId = matched ? matched.organization_id : profiles[0].organization_id;
+      }
+    }
+
+    if (!organizationId) {
+      throw new Error("Could not resolve organization ID for Supabase background task execution.");
+    }
+
+    if (mType === 'export') {
+      const { data: dbRecords, error: dbErr } = await supabase
+        .from(table)
+        .select("*")
+        .eq('organization_id', organizationId);
+      
+      if (dbErr) throw dbErr;
+
+      let fileText = "";
+      const records = dbRecords || [];
+      logEntry.recordCount = records.length;
+
+      if (format === "json") {
+        fileText = JSON.stringify(records, null, 2);
+      } else if (format === "xml") {
+        fileText = `<?xml version="1.0" encoding="UTF-8"?>\n<crm_data module="${mModule}">\n` +
+          records.map((r: any) => `  <item>\n` + Object.entries(r).map(([k, v]) => `    <${k}>${v}</${k}>`).join('\n') + `\n  </item>`).join('\n') +
+          `\n</crm_data>`;
+      } else {
+        // csv format
+        if (records.length === 0) {
+          fileText = "";
+        } else {
+          const keysSet = new Set<string>();
+          records.forEach((r: any) => {
+            Object.keys(r).forEach(k => keysSet.add(k));
+          });
+          const keys = Array.from(keysSet);
+          const escapeCsvVal = (val: any) => {
+            if (val === null || val === undefined) return "";
+            const str = String(val);
+            if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          };
+          const headerRow = keys.map(escapeCsvVal).join(",");
+          const bodyRows = records.map((r: any) => keys.map(k => escapeCsvVal(r[k])).join(","));
+          fileText = [headerRow, ...bodyRows].join("\n");
+        }
+      }
+
+      // Convert to base64
+      const base64Str = Buffer.from(fileText, 'utf8').toString('base64');
+      await saveVirtualFileServer(fileName, base64Str);
+      logEntry.message = `Successfully exported ${records.length} records from ${mModule} to virtual file "${fileName}" in unattended Supabase background mode.`;
+    } else {
+      // import format
+      const fileObj = await loadVirtualFileServer(fileName);
+      if (!fileObj) {
+        throw new Error(`Virtual source file "${fileName}" could not be found or was empty in Supabase storage.`);
+      }
+
+      let parsedRecords: any[] = [];
+      const fileContent = fileObj.textContent || Buffer.from(fileObj.base64 || '', 'base64').toString('utf8');
+
+      if (format === "json") {
+        try {
+          const resJson = JSON.parse(fileContent);
+          parsedRecords = Array.isArray(resJson) ? resJson : [resJson];
+        } catch (jsonErr: any) {
+          throw new Error(`JSON parsing failed: ${jsonErr.message}`);
+        }
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || format === 'xlsx' || format === 'xls') {
+        try {
+          const b64 = fileObj.base64;
+          if (!b64) {
+            throw new Error("No database content found for active Excel import task file.");
+          }
+          const workbook = XLSX.read(b64, { type: 'base64' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          parsedRecords = XLSX.utils.sheet_to_json(worksheet);
+        } catch (xlsxErr: any) {
+          throw new Error(`Excel workbook parsing failed: ${xlsxErr.message}`);
+        }
+      } else {
+        // csv parser
+        try {
+          // Robust simpler CSV parser for background container
+          const rawText = fileContent.replace(/^\uFEFF/g, "");
+          const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          if (lines.length > 1) {
+            const parseCsvLine = (line: string) => {
+              const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+              return matches.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+            };
+            const headers = parseCsvLine(lines[0]);
+            parsedRecords = lines.slice(1).map(line => {
+              const values = parseCsvLine(line);
+              const row: any = {};
+              headers.forEach((h, idx) => {
+                row[h] = values[idx] || '';
+              });
+              return row;
+            });
+          }
+        } catch (csvErr: any) {
+          throw new Error(`CSV parsing failed: ${csvErr.message}`);
+        }
+      }
+
+      if (parsedRecords.length === 0) {
+        logEntry.message = `Import completed with 0 records processed from virtual file "${fileName}".`;
+      } else {
+        // ---> INTELLIGENT AUTO-HEALING MAPPING FOR TABLE MISMATCHES <---
+        let activeTable = table;
+        let activeModule = mModule;
+
+        const firstRec = parsedRecords[0];
+        const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, ""));
+        
+        const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku" || k === "itemsku" || k === "id");
+        const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name" || k === "product" || k === "item" || k === "material" || k === "title");
+        const hasCost = lowerHeaderKeys.some(k => k === "cost" || k === "costprice" || k === "unitcost");
+        const hasPriceTiers = lowerHeaderKeys.some(k => k.includes("pricetier") || k.includes("tier1") || k.includes("price_tier"));
+
+        const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project" || k === "project_name" || k === "deal_name");
+        const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername" || k === "client_name" || k === "customer_name");
+        const hasDealValue = lowerHeaderKeys.some(k => k === "dealvalue" || k === "deal_value" || k === "value");
+
+        const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress" || k === "email_address");
+        const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber" || k === "phone_number" || k === "telephone");
+        const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno" || k === "legacy_number");
+
+        if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
+          activeTable = "inventory";
+          activeModule = "inventory";
+        } else if (hasProjectName || hasClientName || hasDealValue) {
+          activeTable = "opportunities";
+          activeModule = "deals";
+        } else if (hasEmail || hasPhone || hasLegacyNumber) {
+          activeTable = "contacts";
+          activeModule = "contacts";
+        }
+
+        table = activeTable;
+        mModule = activeModule;
+
+        // Fetch schema columns
+        const { data: sampleColsData } = await supabase.from(table).select("*").limit(1);
+        const existingDbCols = new Set<string>();
+        if (sampleColsData && sampleColsData.length > 0) {
+          Object.keys(sampleColsData[0]).forEach(k => existingDbCols.add(k));
+        } else {
+          const fallbackCols: Record<string, string[]> = {
+            contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags"],
+            inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location"],
+            opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
+          };
+          (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
+        }
+
+        // Caching references
+        const profilesMap = new Map<string, string>();
+        const { data: pData } = await supabase.from("profiles").select("id, email");
+        pData?.forEach((p: any) => {
+          if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p.id);
+        });
+
+        const contactsLegacyMap = new Map<string, string>();
+        const contactsNameMap = new Map<string, string>();
+        const { data: cData } = await supabase.from("contacts").select("id, legacy_number, name").eq("organization_id", organizationId);
+        cData?.forEach((c: any) => {
+          if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
+          if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
+        });
+
+        const inventorySkuMap = new Map<string, string>();
+        const { data: iData } = await supabase.from("inventory").select("id, sku").eq("organization_id", organizationId);
+        iData?.forEach((inv: any) => {
+          if (inv.sku) inventorySkuMap.set(String(inv.sku).trim(), inv.id);
+        });
+
+        let insertCount = 0;
+        let errorCount = 0;
+        let lastErrDetail = "";
+
+        for (const rec of parsedRecords) {
+          const mappedRec: any = { organization_id: organizationId };
+
+          for (const [k, v] of Object.entries(rec)) {
+            if (v === undefined || v === null) continue;
+            const cleanVal = typeof v === "string" ? v.trim() : v;
+            const lowerKey = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
+
+            if (table === "contacts") {
+              if (lowerKey === "name") mappedRec.name = cleanVal;
+              else if (lowerKey === "email" || lowerKey === "emailaddress") mappedRec.email = cleanVal;
+              else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone") mappedRec.phone = cleanVal;
+              else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") mappedRec.company = cleanVal;
+              else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") mappedRec.trade = cleanVal;
+              else if (lowerKey === "status") mappedRec.status = cleanVal;
+              else if (lowerKey === "pricelevel" || lowerKey === "level") mappedRec.price_level = cleanVal;
+              else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno") mappedRec.legacy_number = cleanVal;
+              else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner") mappedRec.account_owner_number = cleanVal;
+              else if (lowerKey === "address" || lowerKey === "streetaddress") mappedRec.address = cleanVal;
+              else if (lowerKey === "city") mappedRec.city = cleanVal;
+              else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") mappedRec.province = cleanVal;
+              else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip") mappedRec.postal_code = cleanVal;
+              else if (lowerKey === "notes" || lowerKey === "comments") mappedRec.notes = cleanVal;
+              else if (lowerKey === "tags") mappedRec.tags = cleanVal;
+            } 
+            else if (table === "inventory") {
+              if (lowerKey === "itemname" || lowerKey === "name" || lowerKey === "productname" || lowerKey === "materialname" || lowerKey === "product" || lowerKey === "item" || lowerKey === "material" || lowerKey === "title") mappedRec.name = cleanVal;
+              else if (lowerKey === "description") mappedRec.description = cleanVal;
+              else if (lowerKey === "sku" || lowerKey === "skucode" || lowerKey === "partnumber" || lowerKey === "partno") mappedRec.sku = cleanVal;
+              else if (lowerKey === "category") mappedRec.category = cleanVal;
+              else if (lowerKey === "quantity" || lowerKey === "quantityonhand" || lowerKey === "instock" || lowerKey === "qty") mappedRec.quantity = parseInt(String(cleanVal)) || 0;
+              else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice" || lowerKey === "unit_price") mappedRec.unit_price = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "cost" || lowerKey === "costprice" || lowerKey === "unitcost") mappedRec.cost = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "image" || lowerKey === "imageurl" || lowerKey === "photo") mappedRec.image_url = cleanVal;
+              else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
+              else if (lowerKey === "unitofmeasure" || lowerKey === "uom") mappedRec.unit_of_measure = cleanVal;
+              else if (lowerKey === "pricetier1" || lowerKey === "tier1") mappedRec.price_tier_1 = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "pricetier2" || lowerKey === "tier2") mappedRec.price_tier_2 = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "pricetier3" || lowerKey === "tier3") mappedRec.price_tier_3 = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "pricetier4" || lowerKey === "tier4") mappedRec.price_tier_4 = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "pricetier5" || lowerKey === "tier5") mappedRec.price_tier_5 = parseFloat(String(cleanVal)) || 0;
+            } 
+            else if (table === "opportunities") {
+              if (lowerKey === "title" || lowerKey === "subject" || lowerKey === "dealname" || lowerKey === "deal" || lowerKey === "projectname" || lowerKey === "name") mappedRec.title = cleanVal;
+              else if (lowerKey === "description" || lowerKey === "notes") mappedRec.description = cleanVal;
+              else if (lowerKey === "value" || lowerKey === "amount" || lowerKey === "dealvalue" || lowerKey === "deal_value") mappedRec.value = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "expectedclosedate" || lowerKey === "closedate" || lowerKey === "close") mappedRec.expected_close_date = cleanVal;
+              else if (lowerKey === "status" || lowerKey === "state") mappedRec.status = cleanVal;
+              else if (lowerKey === "stage" || lowerKey === "step") mappedRec.stage = cleanVal;
+              else if (lowerKey === "customer" || lowerKey === "customerid" || lowerKey === "client" || lowerKey === "clientid") {
+                const searchName = String(cleanVal).trim();
+                const matchedId = contactsNameMap.get(searchName.toLowerCase()) || contactsLegacyMap.get(searchName);
+                if (matchedId) {
+                  mappedRec.customer_id = matchedId;
+                } else if (searchName.length > 5) {
+                  // Direct GUID / id check
+                  mappedRec.customer_id = searchName;
+                }
+              }
+            }
+          }
+
+          // Clean non-columns
+          for (const k of Object.keys(mappedRec)) {
+            if (!existingDbCols.has(k)) {
+              delete mappedRec[k];
+            }
+          }
+
+          // Resolve references
+          if (table === "contacts") {
+            const ownerSpec = rec.account_owner_number || rec.owner || rec.accountowner;
+            if (ownerSpec) {
+              const matchedId = profilesMap.get(String(ownerSpec).toLowerCase().trim());
+              if (matchedId) mappedRec.owner_id = matchedId;
+            }
+          } else if (table === "opportunities") {
+            const ownerSpec = rec.owner || rec.owner_id;
+            if (ownerSpec) {
+              const matchedId = profilesMap.get(String(ownerSpec).toLowerCase().trim());
+              if (matchedId) mappedRec.owner_id = matchedId;
+            }
+          }
+
+          // Ensure basic values exist
+          if (table === "contacts" && !mappedRec.name) {
+            continue; // Skip headless contact
+          }
+          if (table === "inventory" && !mappedRec.sku) {
+            continue; // Skip empty SKU
+          }
+          if (table === "opportunities" && !mappedRec.title) {
+            continue; // Skip untitled deal
+          }
+
+          // Exec upsert
+          try {
+            if (table === "contacts") {
+              // Deduplicate contact by legacy_number if present, otherwise email, else name
+              const existingId = (mappedRec.legacy_number && contactsLegacyMap.get(String(mappedRec.legacy_number))) ||
+                                 (mappedRec.email && contactsNameMap.get(String(mappedRec.name).toLowerCase()));
+              if (existingId) mappedRec.id = existingId;
+            } else if (table === "inventory") {
+              const existingId = mappedRec.sku && inventorySkuMap.get(String(mappedRec.sku));
+              if (existingId) mappedRec.id = existingId;
+            }
+
+            const { error: upsertErr } = await supabase.from(table).upsert(mappedRec);
+            if (upsertErr) throw upsertErr;
+            insertCount++;
+          } catch (upsertErrDetail: any) {
+            errorCount++;
+            lastErrDetail = upsertErrDetail?.message || JSON.stringify(upsertErrDetail);
+          }
+        }
+
+        logEntry.recordCount = insertCount;
+        if (errorCount === 0) {
+          logEntry.message = `Successfully synchronized & imported ${insertCount} records into table "${table}" unattended from virtual file: ${fileName}`;
+        } else {
+          logEntry.message = `Sync completed with warnings: upserted ${insertCount} rows successfully, failed on ${errorCount} rows. Last error: ${lastErrDetail}`;
+          if (insertCount === 0) {
+            throw new Error(`Sync completely failed on all rows. Last error: ${lastErrDetail}`);
+          }
+        }
+      }
+    }
+  } catch (error: any) {
+    logEntry.status = 'failed';
+    logEntry.message = error?.message || String(error);
+    console.error(`Supabase task execution error [${task.id}]:`, error);
+  }
+
+  return logEntry;
+}
+
 // Background Task Scheduler Heartbeat Loop
 async function runSchedulerTick() {
-  const tasks = loadJson(TASKS_FILE, []);
   const now = new Date();
-  let updated = false;
+  
+  // 1. Process container-local tasks
+  let localTasks = loadJson(TASKS_FILE, []);
+  let localUpdated = false;
 
-  for (const task of tasks) {
+  for (const task of localTasks) {
     if (task.status === 'active' && task.nextRunTime) {
       const nextRun = new Date(task.nextRunTime);
       if (now >= nextRun) {
-        console.log(`[Scheduler] Executing unattended task: "${task.name}" (${task.id})`);
+        console.log(`[Scheduler] Executing unattended local task: "${task.name}" (${task.id})`);
         task.status = 'running';
-        saveJson(TASKS_FILE, tasks); // Save immediately to prevent overlapping runs
+        saveJson(TASKS_FILE, localTasks); // Save immediately to prevent overlapping runs
 
         const result = await executeScheduledTask(task);
 
@@ -586,14 +943,87 @@ async function runSchedulerTick() {
 
         task.lastRunTime = now.toISOString();
         task.lastRunResult = result.status;
-        updated = true;
+        localUpdated = true;
       }
     }
   }
 
-  if (updated || tasks.some(t => t.status === 'running')) {
-    // If we updated tasks, persist them
-    saveJson(TASKS_FILE, tasks);
+  if (localUpdated || localTasks.some((t: any) => t.status === 'running')) {
+    saveJson(TASKS_FILE, localTasks);
+  }
+
+  // 2. Process Supabase cloud tasks to support "unattended running when computer is off"
+  try {
+    const { data: dbData, error: dbErr } = await supabase
+      .from('kv_store_8405be07')
+      .select('value')
+      .eq('key', 'import_export_tasks')
+      .maybeSingle();
+
+    if (!dbErr && dbData?.value && Array.isArray(dbData.value)) {
+      const supabaseTasks = dbData.value;
+      let supabaseUpdated = false;
+
+      for (const task of supabaseTasks) {
+        // Only run unattended if the status is active and the task triggers running whether computer is off
+        const runOff = task.settings?.runWhetherComputerOff !== false;
+        
+        if (task.status === 'active' && task.nextRunTime && runOff) {
+          const nextRun = new Date(task.nextRunTime);
+          if (now >= nextRun) {
+            console.log(`[Scheduler] Executing unattended Supabase task: "${task.name}" (${task.id})`);
+            task.status = 'running';
+            
+            // Save immediately to avoid dual triggers
+            await supabase.from('kv_store_8405be07').upsert({
+              key: 'import_export_tasks',
+              value: supabaseTasks
+            });
+
+            const result = await executeSupabaseScheduledTask(task);
+
+            if (task.recurrence === 'one-time') {
+              task.status = 'completed';
+              task.nextRunTime = null;
+            } else {
+              task.status = 'active';
+              const nextTime = calculateNextRunTime(task, new Date());
+              task.nextRunTime = nextTime ? nextTime.toISOString() : null;
+            }
+
+            task.lastRunTime = now.toISOString();
+            task.lastRunResult = result.status;
+            supabaseUpdated = true;
+
+            // Log result into Supabase execution history
+            try {
+              const { data: histData } = await supabase
+                .from('kv_store_8405be07')
+                .select('value')
+                .eq('key', 'import_export_history')
+                .maybeSingle();
+              const historyList = histData?.value || [];
+              historyList.unshift(result);
+              await supabase.from('kv_store_8405be07').upsert({
+                key: 'import_export_history',
+                value: historyList.slice(0, 500)
+              });
+            } catch (histErr) {
+              console.error('[Scheduler] Failed to write Supabase execution history:', histErr);
+            }
+          }
+        }
+      }
+
+      if (supabaseUpdated) {
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_tasks',
+          value: supabaseTasks
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[Scheduler] Error running unattended Supabase scheduler tick:', err);
   }
 }
 
