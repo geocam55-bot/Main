@@ -83,6 +83,8 @@ interface ScheduledTask {
   nextRunTime?: string | null;
   createdAt?: string;
   creator: string;
+  organizationId?: string | null;
+  organisationId?: string | null;
 }
 
 interface ExecutionLog {
@@ -1439,22 +1441,45 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             if (upsertErr) throw upsertErr;
           }
         } else {
-          // Reset any tasks stuck in "running" back to "active"
+          // Reset any tasks stuck in "running" back to "active" and self-heal missing organizationId properties
+          const supabaseClientObj = createClient();
+          const authCtx = await getAuthContext(supabaseClientObj);
+          const resolvedOrgId = authCtx.organizationId || user?.organizationId || user?.organization_id;
+
           let tasksChanged = false;
           const sanitizedTasks = serverTasks.map((t: any) => {
-            if (t.status === "running") {
-              tasksChanged = true;
-              return { ...t, status: "active" };
+            let updatedTask = { ...t };
+            let changed = false;
+
+            if (resolvedOrgId) {
+              if (!updatedTask.organizationId) {
+                updatedTask.organizationId = resolvedOrgId;
+                changed = true;
+              }
+              if (!updatedTask.organisationId) {
+                updatedTask.organisationId = resolvedOrgId;
+                changed = true;
+              }
             }
-            return t;
+
+            if (t.status === "running") {
+              updatedTask.status = "active";
+              changed = true;
+            }
+
+            if (changed) {
+              tasksChanged = true;
+            }
+            return updatedTask;
           });
+
           if (tasksChanged) {
             serverTasks = sanitizedTasks;
             await supabase.from('kv_store_8405be07').upsert({
               key: 'import_export_tasks',
               value: serverTasks
             });
-            console.log("[Scheduler] Auto-resolved stuck scheduler running tasks on page fetch.");
+            console.log("[Scheduler] Auto-resolved organization ID and stuck scheduler running tasks on page fetch.");
           }
         }
 
@@ -1896,7 +1921,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       const responseData = await res.json();
       if (!responseData.success) {
-        throw new Error(responseData.error || "Execution failed on the production server.");
+        throw new Error(responseData.error || responseData.log?.message || "Execution failed on the production server.");
       }
 
       return {
@@ -2409,6 +2434,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       },
       creator: creatorName
     };
+
+    const supabaseClientObj = createClient();
+    const authCtx = await getAuthContext(supabaseClientObj);
+    const resolvedOrgId = authCtx.organizationId || user?.organizationId || user?.organization_id;
+    if (resolvedOrgId) {
+      payload.organizationId = resolvedOrgId;
+      payload.organisationId = resolvedOrgId;
+    }
 
     if (modalMode === "edit" && editingTaskId) {
       payload.id = editingTaskId;
