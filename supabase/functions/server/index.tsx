@@ -1593,6 +1593,8 @@ async function syncOneDriveFileOnSupabaseServer(supabase: any, task: any, userId
   if (!creatorEmail) throw new Error("No task creator email found.");
 
   let activeUserId = userId;
+  let activeEmail = creatorEmail;
+
   if (!activeUserId) {
     const { data: profiles } = await supabase.from('profiles').select('id').eq('email', creatorEmail);
     if (profiles && profiles.length > 0) {
@@ -1602,14 +1604,22 @@ async function syncOneDriveFileOnSupabaseServer(supabase: any, task: any, userId
 
   if (!activeUserId) {
     const { data: kvKeys } = await supabase.from('kv_store_8405be07').select('key, value').like('key', 'email_account:%');
-    const match = kvKeys?.find((item: any) => {
+    let match = kvKeys?.find((item: any) => {
       const val = item.value || {};
       return val.provider === 'outlook' && String(val.email).toLowerCase().trim() === creatorEmail.toLowerCase().trim();
     });
+    if (!match) {
+      // Fallback: Use the first active outlook/onedrive connected account in the database (self-heal)
+      match = kvKeys?.find((item: any) => {
+        const val = item.value || {};
+        return val.provider === 'outlook';
+      });
+    }
     if (match) {
       const parts = match.key.split(':');
       if (parts.length >= 2) {
         activeUserId = parts[1];
+        activeEmail = match.value?.email || creatorEmail;
       }
     }
   }
@@ -1618,9 +1628,9 @@ async function syncOneDriveFileOnSupabaseServer(supabase: any, task: any, userId
     throw new Error(`Profile or OneDrive account not found for user: ${creatorEmail}`);
   }
 
-  const accessToken = await getMicrosoftTokenForEmail(activeUserId, creatorEmail);
+  const accessToken = await getMicrosoftTokenForEmail(activeUserId, activeEmail);
   if (!accessToken) {
-    throw new Error(`OneDrive account not connected or authorization expired for user: ${creatorEmail}`);
+    throw new Error(`OneDrive account not connected or authorization expired for user: ${activeEmail}`);
   }
 
   let fileId = null;
@@ -1693,6 +1703,8 @@ async function uploadOneDriveFileFromSupabaseServer(supabase: any, task: any, us
   if (!creatorEmail) return;
 
   let activeUserId = userId;
+  let activeEmail = creatorEmail;
+
   if (!activeUserId) {
     const { data: profiles } = await supabase.from('profiles').select('id').eq('email', creatorEmail);
     if (profiles && profiles.length > 0) activeUserId = profiles[0].id;
@@ -1700,19 +1712,28 @@ async function uploadOneDriveFileFromSupabaseServer(supabase: any, task: any, us
 
   if (!activeUserId) {
     const { data: kvKeys } = await supabase.from('kv_store_8405be07').select('key, value').like('key', 'email_account:%');
-    const match = kvKeys?.find((item: any) => {
+    let match = kvKeys?.find((item: any) => {
       const val = item.value || {};
       return val.provider === 'outlook' && String(val.email).toLowerCase().trim() === creatorEmail.toLowerCase().trim();
     });
+    if (!match) {
+      match = kvKeys?.find((item: any) => {
+        const val = item.value || {};
+        return val.provider === 'outlook';
+      });
+    }
     if (match) {
       const parts = match.key.split(':');
-      if (parts.length >= 2) activeUserId = parts[1];
+      if (parts.length >= 2) {
+        activeUserId = parts[1];
+        activeEmail = match.value?.email || creatorEmail;
+      }
     }
   }
 
   if (!activeUserId) return;
 
-  const accessToken = await getMicrosoftTokenForEmail(activeUserId, creatorEmail);
+  const accessToken = await getMicrosoftTokenForEmail(activeUserId, activeEmail);
   if (!accessToken) return;
 
   const binaryString = atob(base64Content);
