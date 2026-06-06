@@ -1584,6 +1584,829 @@ app.post(`${PREFIX}/onedrive-file-content`, async (c) => {
   } catch (err: any) { return c.json({ error: err.message }, 500); }
 });
 
+// ── TASK DIRECT EXECUTION FOR IMPORT/EXPORT (SERVER SIDE UNATTENDED) ────
+async function syncOneDriveFileOnSupabaseServer(supabase: any, task: any, userId: string | null) {
+  const fileName = task.action.fileName;
+  if (!fileName) throw new Error("No fileName specified in the action.");
+
+  const creatorEmail = String(task.creator || '').trim();
+  if (!creatorEmail) throw new Error("No task creator email found.");
+
+  let activeUserId = userId;
+  if (!activeUserId) {
+    const { data: profiles } = await supabase.from('profiles').select('id').eq('email', creatorEmail);
+    if (profiles && profiles.length > 0) {
+      activeUserId = profiles[0].id;
+    }
+  }
+
+  if (!activeUserId) {
+    const { data: kvKeys } = await supabase.from('kv_store_8405be07').select('key, value').like('key', 'email_account:%');
+    const match = kvKeys?.find((item: any) => {
+      const val = item.value || {};
+      return val.provider === 'outlook' && String(val.email).toLowerCase().trim() === creatorEmail.toLowerCase().trim();
+    });
+    if (match) {
+      const parts = match.key.split(':');
+      if (parts.length >= 2) {
+        activeUserId = parts[1];
+      }
+    }
+  }
+
+  if (!activeUserId) {
+    throw new Error(`Profile or OneDrive account not found for user: ${creatorEmail}`);
+  }
+
+  const accessToken = await getMicrosoftTokenForEmail(activeUserId, creatorEmail);
+  if (!accessToken) {
+    throw new Error(`OneDrive account not connected or authorization expired for user: ${creatorEmail}`);
+  }
+
+  let fileId = null;
+  try {
+    const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(fileName)}')?$select=id,name,file`;
+    const searchResp = await fetch(searchUrl, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    if (searchResp.ok) {
+      const searchResult = await searchResp.json();
+      const match = (searchResult.value || []).find((f: any) => f.name === fileName && f.file);
+      if (match) fileId = match.id;
+    }
+  } catch (searchErr) {
+    console.warn(`[OneDrive Sync] Search warning:`, searchErr);
+  }
+
+  if (!fileId) {
+    try {
+      const childrenUrl = `https://graph.microsoft.com/v1.0/me/drive/root/children?$select=id,name,file`;
+      const childrenResp = await fetch(childrenUrl, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      if (childrenResp.ok) {
+        const childrenResult = await childrenResp.json();
+        const match = (childrenResult.value || []).find((f: any) => f.name === fileName && f.file);
+        if (match) fileId = match.id;
+      }
+    } catch (childrenErr) {
+      console.warn(`[OneDrive Sync] Root scan warning:`, childrenErr);
+    }
+  }
+
+  if (!fileId) {
+    throw new Error(`Target file "${fileName}" could not be resolved or found on your OneDrive cloud space.`);
+  }
+
+  const downloadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`;
+  const downloadResp = await fetch(downloadUrl, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+
+  if (!downloadResp.ok) {
+    throw new Error(`OneDrive API fail pulling file content: HTTP ${downloadResp.status}`);
+  }
+
+  const arrayBuffer = await downloadResp.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  const base64Url = btoa(binary);
+  const textContent = new TextDecoder('utf-8').decode(bytes);
+
+  return {
+    base64Url,
+    textContent,
+    fileName
+  };
+}
+
+async function uploadOneDriveFileFromSupabaseServer(supabase: any, task: any, userId: string | null, base64Content: string) {
+  const fileName = task.action.fileName;
+  if (!fileName) return;
+
+  const creatorEmail = String(task.creator || '').trim();
+  if (!creatorEmail) return;
+
+  let activeUserId = userId;
+  if (!activeUserId) {
+    const { data: profiles } = await supabase.from('profiles').select('id').eq('email', creatorEmail);
+    if (profiles && profiles.length > 0) activeUserId = profiles[0].id;
+  }
+
+  if (!activeUserId) {
+    const { data: kvKeys } = await supabase.from('kv_store_8405be07').select('key, value').like('key', 'email_account:%');
+    const match = kvKeys?.find((item: any) => {
+      const val = item.value || {};
+      return val.provider === 'outlook' && String(val.email).toLowerCase().trim() === creatorEmail.toLowerCase().trim();
+    });
+    if (match) {
+      const parts = match.key.split(':');
+      if (parts.length >= 2) activeUserId = parts[1];
+    }
+  }
+
+  if (!activeUserId) return;
+
+  const accessToken = await getMicrosoftTokenForEmail(activeUserId, creatorEmail);
+  if (!accessToken) return;
+
+  const binaryString = atob(base64Content);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileName)}:/content`;
+  const uploadResp = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/octet-stream'
+    },
+    body: bytes
+  });
+
+  if (!uploadResp.ok) {
+    throw new Error(`Upload to OneDrive API failed with HTTP ${uploadResp.status}`);
+  }
+}
+
+function parseCsvMatrix(text: string): string[][] {
+  const lines: string[][] = [];
+  let row: string[] = [];
+  let inQuotes = false;
+  let entry = '';
+  const cleanText = text.replace(/^\uFEFF/g, "");
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const next = cleanText[i + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        entry += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      row.push(entry);
+      entry = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      row.push(entry);
+      entry = '';
+      if (row.length > 0 || char === '\n') {
+        lines.push(row);
+        row = [];
+      }
+      if (char === '\r' && next === '\n') i++;
+    } else {
+      entry += char;
+    }
+  }
+  if (entry || row.length > 0) {
+    row.push(entry);
+    lines.push(row);
+  }
+  return lines;
+}
+
+function calculateNextRunTime(task: any, baseDate = new Date()): Date {
+  try {
+    if (!task) return new Date(baseDate.getTime() + 86400000);
+    const recurrence = task.recurrence || 'daily';
+    const triggerDetail = task.triggerDetail || {};
+
+    if (recurrence === 'one-time') {
+      if (!triggerDetail.dateTime) {
+        return new Date(baseDate.getTime() + 3600000);
+      }
+      const triggerTime = new Date(triggerDetail.dateTime);
+      return isNaN(triggerTime.getTime()) ? new Date(baseDate.getTime() + 3600000) : triggerTime;
+    }
+
+    const timezoneOffset = typeof task.timezoneOffset === 'number' ? task.timezoneOffset : 0;
+    const localBaseDate = new Date(baseDate.getTime() - timezoneOffset * 60 * 1000);
+    let nextLocalDate = new Date(localBaseDate);
+
+    if (!triggerDetail.time) {
+      triggerDetail.time = '09:00';
+    }
+    const [hours, minutes] = String(triggerDetail.time).split(':').map(Number);
+    nextLocalDate.setUTCHours(isNaN(hours) ? 9 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
+
+    const addDays = (d: Date, days: number) => {
+      const res = new Date(d);
+      res.setUTCDate(res.getUTCDate() + days);
+      return res;
+    };
+
+    let resultLocalDate = nextLocalDate;
+
+    if (recurrence === 'daily') {
+      let interval = Number(triggerDetail.intervalDays) || 1;
+      if (isNaN(interval) || interval <= 0) interval = 1;
+      while (nextLocalDate <= localBaseDate) {
+        nextLocalDate = addDays(nextLocalDate, interval);
+      }
+      resultLocalDate = nextLocalDate;
+    } else if (recurrence === 'weekly') {
+      const daysOfWeek = Array.isArray(triggerDetail.daysOfWeek) ? triggerDetail.daysOfWeek : [1];
+      let candidate = new Date(nextLocalDate);
+      let found = false;
+      for (let i = 0; i < 15; i++) {
+        if (candidate > localBaseDate && daysOfWeek.includes(candidate.getUTCDay())) {
+          resultLocalDate = candidate;
+          found = true;
+          break;
+        }
+        candidate = addDays(candidate, 1);
+      }
+      if (!found) resultLocalDate = candidate;
+    } else if (recurrence === 'monthly') {
+      const daysOfMonth = Array.isArray(triggerDetail.daysOfMonth) ? triggerDetail.daysOfMonth : [1];
+      let candidate = new Date(nextLocalDate);
+      let found = false;
+      for (let i = 0; i < 366; i++) {
+        if (candidate > localBaseDate && daysOfMonth.includes(candidate.getUTCDate())) {
+          resultLocalDate = candidate;
+          found = true;
+          break;
+        }
+        candidate = addDays(candidate, 1);
+      }
+      if (!found) resultLocalDate = addDays(nextLocalDate, 1);
+    } else {
+      resultLocalDate = addDays(nextLocalDate, 1);
+    }
+
+    return new Date(resultLocalDate.getTime() + timezoneOffset * 60 * 1000);
+  } catch (err) {
+    console.error('Error in calculateNextRunTime:', err);
+    return new Date(baseDate.getTime() + 86400000);
+  }
+}
+
+async function saveVirtualFileServer(supabase: any, fileName: string, base64Content: string) {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const isBinary = ["xlsx", "xls", "zip", "pdf", "png", "jpg", "jpeg", "gif"].includes(ext);
+  let textContent = "";
+  if (!isBinary) {
+    try {
+      textContent = decodeURIComponent(escape(atob(base64Content)));
+    } catch {
+      try {
+        textContent = atob(base64Content);
+      } catch {
+        textContent = base64Content;
+      }
+    }
+  }
+
+  await supabase.from('kv_store_8405be07').upsert({
+    key: `import_export_file_content:${fileName}`,
+    value: {
+      name: fileName,
+      base64: base64Content,
+      content: textContent,
+      textContent: textContent,
+      isBinary,
+      size: textContent.length || base64Content.length,
+      lastModified: new Date().toISOString()
+    }
+  });
+}
+
+app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
+  try {
+    const auth = await authenticateUser(c);
+    if (auth.error) return c.json({ error: auth.error }, auth.status);
+
+    const body = await c.req.json().catch(() => ({}));
+    const { taskId } = body;
+    if (!taskId) return c.json({ error: 'Missing taskId' }, 400);
+
+    const supabase = auth.supabase || getSupabase();
+
+    const { data: dbData, error: dbErr } = await supabase
+      .from('kv_store_8405be07')
+      .select('value')
+      .eq('key', 'import_export_tasks')
+      .maybeSingle();
+
+    if (dbErr) return c.json({ error: `database error: ${dbErr.message}` }, 500);
+    const tasksList = dbData?.value || [];
+    const task = tasksList.find((t: any) => t.id === taskId);
+    if (!task) return c.json({ error: 'Task details not found.' }, 404);
+
+    const mType = task.action.type;
+    let mModule = task.action.module;
+    let table = mModule === "deals" ? "opportunities" : mModule;
+    const fileName = task.action.fileName;
+    const format = task.action.format;
+
+    let organizationId = task.organisationId || task.organizationId;
+    if (!organizationId) {
+      const { data: profiles } = await supabase.from('profiles').select('organization_id, id, email');
+      if (profiles && profiles.length > 0) {
+        const creatorEmail = String(task.creator || '').toLowerCase().trim();
+        const matched = profiles.find((p: any) => p.email && String(p.email).toLowerCase().trim() === creatorEmail);
+        organizationId = matched ? matched.organization_id : profiles[0].organization_id;
+      }
+    }
+
+    if (!organizationId) {
+      return c.json({ error: "Could not resolve organization ID for data access." }, 400);
+    }
+
+    let processedRecordCount = 0;
+    let logMsg = "";
+    let executionStatus: "success" | "failed" = "success";
+
+    if (mType === "export") {
+      const { data: dbRecords, error: qErr } = await supabase
+        .from(table)
+        .select("*")
+        .eq('organization_id', organizationId);
+
+      if (qErr) throw qErr;
+
+      let fileText = "";
+      const records = dbRecords || [];
+      processedRecordCount = records.length;
+
+      if (format === "json") {
+        fileText = JSON.stringify(records, null, 2);
+      } else if (format === "xml") {
+        fileText = `<?xml version="1.0" encoding="UTF-8"?>\n<crm_data module="${mModule}">\n` +
+          records.map((r: any) => `  <item>\n` + Object.entries(r).map(([k, v]) => `    <${k}>${v}</${k}>`).join('\n') + `\n  </item>`).join('\n') +
+          `\n</crm_data>`;
+      } else {
+        if (records.length === 0) {
+          fileText = "";
+        } else {
+          const keysSet = new Set<string>();
+          records.forEach((r: any) => {
+            Object.keys(r).forEach(k => keysSet.add(k));
+          });
+          const keys = Array.from(keysSet);
+          const escapeCsvVal = (val: any) => {
+            if (val === null || val === undefined) return "";
+            const str = String(val);
+            if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          };
+          const headerRow = keys.map(escapeCsvVal).join(",");
+          const bodyRows = records.map((r: any) => keys.map(k => escapeCsvVal(r[k])).join(","));
+          fileText = [headerRow, ...bodyRows].join("\n");
+        }
+      }
+
+      const base64Str = btoa(unescape(encodeURIComponent(fileText)));
+      await saveVirtualFileServer(supabase, fileName, base64Str);
+      logMsg = `Successfully exported ${records.length} records from ${mModule} to OneDrive/virtual storage.`;
+
+      if (task.action.fileStorage === 'onedrive') {
+        try {
+          await uploadOneDriveFileFromSupabaseServer(supabase, task, auth.user.id, base64Str);
+          logMsg += " File uploaded to OneDrive successfully.";
+        } catch (uploadErr: any) {
+          console.error('[OneDrive Export Server] Back-end upload failed:', uploadErr);
+          logMsg += ` (OneDrive transfer failed: ${uploadErr.message})`;
+          executionStatus = "failed";
+        }
+      }
+    } else {
+      let base64UrlContent = "";
+      let textContent = "";
+
+      if (task.action.fileStorage === 'onedrive') {
+        try {
+          const syncResult = await syncOneDriveFileOnSupabaseServer(supabase, task, auth.user.id);
+          if (syncResult && syncResult.base64Url) {
+            base64UrlContent = syncResult.base64Url;
+            textContent = syncResult.textContent || "";
+            await saveVirtualFileServer(supabase, fileName, base64UrlContent);
+          }
+        } catch (syncErr: any) {
+          console.error(`[OneDrive Sync Server] failure:`, syncErr);
+          executionStatus = "failed";
+          logMsg = `OneDrive file pull failed: ${syncErr.message || syncErr}`;
+        }
+      }
+
+      if (executionStatus === "success") {
+        const { data: fileData } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', `import_export_file_content:${fileName}`)
+          .maybeSingle();
+
+        const fileObj = fileData?.value;
+        if (!fileObj) {
+          executionStatus = "failed";
+          logMsg = `Virtual source file "${fileName}" could not be resolved or downloaded.`;
+        } else {
+          base64UrlContent = fileObj.base64 || "";
+          textContent = fileObj.content || fileObj.textContent || "";
+          if (!textContent && base64UrlContent) {
+            try {
+              textContent = decodeURIComponent(escape(atob(base64UrlContent)));
+            } catch {
+              textContent = atob(base64UrlContent);
+            }
+          }
+        }
+      }
+
+      if (executionStatus === "success" && textContent) {
+        let parsedRecords: any[] = [];
+        if (format === "json") {
+          try {
+            const resJson = JSON.parse(textContent);
+            parsedRecords = Array.isArray(resJson) ? resJson : [resJson];
+          } catch (jsonErr: any) {
+            throw new Error(`JSON parsing failed: ${jsonErr.message}`);
+          }
+        } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || format === 'xlsx' || format === 'xls') {
+          try {
+            if (!base64UrlContent) {
+              base64UrlContent = btoa(unescape(encodeURIComponent(textContent)));
+            }
+            let XLSXModule: any = null;
+            try {
+              XLSXModule = await import("npm:xlsx");
+            } catch (e) {
+              throw new Error("Deno Excel XLSX converter module not installed: " + e.message);
+            }
+            const workbook = XLSXModule.read(base64UrlContent, { type: 'base64' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            parsedRecords = XLSXModule.utils.sheet_to_json(worksheet);
+          } catch (xlsxErr: any) {
+            throw new Error(`Excel workbook parsing failed: ${xlsxErr.message}`);
+          }
+        } else {
+          try {
+            const parsedMatrix = parseCsvMatrix(textContent);
+            if (parsedMatrix.length >= 2) {
+              const headers = parsedMatrix[0].map(h => h.trim());
+              parsedRecords = parsedMatrix.slice(1).map(row => {
+                const item: any = {};
+                headers.forEach((h, idx) => {
+                  const rowVal = row[idx];
+                  if (rowVal !== undefined) {
+                    item[h] = rowVal.trim();
+                  }
+                });
+                return item;
+              });
+            }
+          } catch (csvErr: any) {
+            throw new Error(`CSV parsing failed: ${csvErr.message}`);
+          }
+        }
+
+        if (parsedRecords.length === 0) {
+          logMsg = `Import completed with 0 records processed from file "${fileName}".`;
+        } else {
+          let activeTable = table;
+          let activeModule = mModule;
+
+          const firstRec = parsedRecords[0];
+          const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, ""));
+          
+          const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku" || k === "itemsku" || k === "id");
+          const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name" || k === "product" || k === "item" || k === "material" || k === "title");
+          const hasCost = lowerHeaderKeys.some(k => k === "cost" || k === "costprice" || k === "unitcost");
+          const hasPriceTiers = lowerHeaderKeys.some(k => k.includes("pricetier") || k.includes("tier1") || k.includes("price_tier"));
+
+          const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project" || k === "project_name" || k === "deal_name");
+          const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername" || k === "client_name" || k === "customer_name");
+          const hasDealValue = lowerHeaderKeys.some(k => k === "dealvalue" || k === "deal_value" || k === "value");
+
+          const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress" || k === "email_address");
+          const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber" || k === "phone_number" || k === "telephone");
+          const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno" || k === "legacy_number");
+
+          if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
+            activeTable = "inventory";
+            activeModule = "inventory";
+          } else if (hasProjectName || hasClientName || hasDealValue) {
+            activeTable = "opportunities";
+            activeModule = "deals";
+          } else if (hasEmail || hasPhone || hasLegacyNumber) {
+            activeTable = "contacts";
+            activeModule = "contacts";
+          }
+
+          table = activeTable;
+          mModule = activeModule;
+
+          const { data: sampleColsData } = await supabase.from(table).select("*").limit(1);
+          const existingDbCols = new Set<string>();
+          if (sampleColsData && sampleColsData.length > 0) {
+            Object.keys(sampleColsData[0]).forEach(k => existingDbCols.add(k));
+          } else {
+            const fallbackCols: Record<string, string[]> = {
+              contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags"],
+              inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"],
+              opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
+            };
+            (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
+          }
+
+          if (table === "inventory") {
+            ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url"].forEach(k => existingDbCols.add(k));
+          }
+
+          const profilesMap = new Map<string, string>();
+          const { data: pData } = await supabase.from("profiles").select("id, email");
+          pData?.forEach((p: any) => {
+            if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p.id);
+          });
+
+          const contactsLegacyMap = new Map<string, string>();
+          const contactsNameMap = new Map<string, string>();
+          const { data: cData } = await supabase.from("contacts").select("id, legacy_number, name").eq("organization_id", organizationId);
+          cData?.forEach((c: any) => {
+            if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
+            if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
+          });
+
+          const inventorySkuMap = new Map<string, string>();
+          const { data: iData } = await supabase.from("inventory").select("id, sku").eq("organization_id", organizationId);
+          iData?.forEach((inv: any) => {
+            if (inv.sku) inventorySkuMap.set(String(inv.sku).trim(), inv.id);
+          });
+
+          const cleanedRecordsList: any[] = [];
+
+          for (const rec of parsedRecords) {
+            const mappedRec: any = {};
+            for (const [k, v] of Object.entries(rec)) {
+              if (v === undefined || v === null) continue;
+              const cleanVal = typeof v === "string" ? v.trim() : v;
+              const lowerKey = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
+
+              if (table === "contacts") {
+                if (lowerKey === "name") mappedRec.name = cleanVal;
+                else if (lowerKey === "email" || lowerKey === "emailaddress") mappedRec.email = cleanVal;
+                else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone") mappedRec.phone = cleanVal;
+                else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") mappedRec.company = cleanVal;
+                else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") mappedRec.trade = cleanVal;
+                else if (lowerKey === "status") mappedRec.status = cleanVal;
+                else if (lowerKey === "pricelevel" || lowerKey === "level") mappedRec.price_level = cleanVal;
+                else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno") mappedRec.legacy_number = cleanVal;
+                else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner") mappedRec.account_owner_number = cleanVal;
+                else if (lowerKey === "address" || lowerKey === "streetaddress") mappedRec.address = cleanVal;
+                else if (lowerKey === "city") mappedRec.city = cleanVal;
+                else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") mappedRec.province = cleanVal;
+                else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip") mappedRec.postal_code = cleanVal;
+                else if (lowerKey === "notes" || lowerKey === "comments") mappedRec.notes = cleanVal;
+                else if (lowerKey === "tags") mappedRec.tags = cleanVal;
+              } 
+              else if (table === "inventory") {
+                if (lowerKey === "itemname" || lowerKey === "name" || lowerKey === "productname" || lowerKey === "materialname" || lowerKey === "product" || lowerKey === "item" || lowerKey === "material" || lowerKey === "title") mappedRec.name = cleanVal;
+                else if (lowerKey === "description") mappedRec.description = cleanVal;
+                else if (lowerKey === "sku" || lowerKey === "skucode" || lowerKey === "partnumber" || lowerKey === "partno") mappedRec.sku = cleanVal;
+                else if (lowerKey === "category") mappedRec.category = cleanVal;
+                else if (lowerKey === "quantity" || lowerKey === "quantityonhand" || lowerKey === "instock" || lowerKey === "qty") {
+                  const qtyNum = parseFloat(String(cleanVal));
+                  mappedRec.quantity = isNaN(qtyNum) ? 0 : Math.round(qtyNum);
+                }
+                else if (lowerKey === "quantityonorder") {
+                  const qtyNum = parseFloat(String(cleanVal));
+                  mappedRec.quantity_on_order = isNaN(qtyNum) ? 0 : Math.round(qtyNum);
+                }
+                else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
+                else if (lowerKey === "status" || lowerKey === "availability") mappedRec.status = cleanVal;
+                else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice") {
+                  const pr = parseFloat(String(cleanVal));
+                  mappedRec.unit_price = isNaN(pr) ? 0 : Math.round(pr * 100);
+                }
+                else if (lowerKey === "cost") {
+                  const cs = parseFloat(String(cleanVal));
+                  mappedRec.cost = isNaN(cs) ? 0 : Math.round(cs * 100);
+                }
+                else if (lowerKey === "pricetier1" || lowerKey === "tier1") {
+                  const pr = parseFloat(String(cleanVal));
+                  mappedRec.price_tier_1 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                }
+                else if (lowerKey === "pricetier2" || lowerKey === "tier2") {
+                  const pr = parseFloat(String(cleanVal));
+                  mappedRec.price_tier_2 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                }
+                else if (lowerKey === "pricetier3" || lowerKey === "tier3") {
+                  const pr = parseFloat(String(cleanVal));
+                  mappedRec.price_tier_3 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                }
+                else if (lowerKey === "pricetier4" || lowerKey === "tier4") {
+                  const pr = parseFloat(String(cleanVal));
+                  mappedRec.price_tier_4 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                }
+                else if (lowerKey === "pricetier5" || lowerKey === "tier5") {
+                   const pr = parseFloat(String(cleanVal));
+                   mappedRec.price_tier_5 = isNaN(pr) ? 0 : Math.round(pr * 100);
+                }
+                else if (lowerKey === "unit" || lowerKey === "unitofmeasure" || lowerKey === "uom" || lowerKey === "unit_of_measure") {
+                  mappedRec.unit_of_measure = cleanVal;
+                }
+                else if (lowerKey === "imageurl" || lowerKey === "image") mappedRec.image_url = cleanVal;
+              }
+              else if (table === "opportunities") {
+                if (lowerKey === "projectname" || lowerKey === "title" || lowerKey === "dealname" || lowerKey === "deal" || lowerKey === "project") mappedRec.title = cleanVal;
+                else if (lowerKey === "description" || lowerKey === "notes" || lowerKey === "detail") mappedRec.description = cleanVal;
+                else if (lowerKey === "dealvalue" || lowerKey === "value" || lowerKey === "amount" || lowerKey === "price") {
+                  const vl = parseFloat(String(cleanVal));
+                  mappedRec.value = isNaN(vl) ? 0 : Math.round(vl);
+                }
+                else if (lowerKey === "closedate" || lowerKey === "expectedclosedate") mappedRec.expected_close_date = cleanVal;
+                else if (lowerKey === "stage" || lowerKey === "status" || lowerKey === "state") {
+                  mappedRec.status = cleanVal;
+                  mappedRec.stage = cleanVal;
+                }
+                else if (lowerKey === "clientname" || lowerKey === "customername" || lowerKey === "customerid" || lowerKey === "client") {
+                  mappedRec.customer_id = cleanVal;
+                }
+              }
+            }
+
+            if (table === "inventory") {
+              if (mappedRec.unit_price !== undefined && mappedRec.price_tier_1 === undefined) {
+                mappedRec.price_tier_1 = mappedRec.unit_price;
+              }
+              if (mappedRec.price_tier_1 !== undefined && mappedRec.unit_price === undefined) {
+                mappedRec.unit_price = mappedRec.price_tier_1;
+              }
+              const defaultPrice = mappedRec.unit_price || 0;
+              if (mappedRec.price_tier_1 === undefined) mappedRec.price_tier_1 = defaultPrice;
+              if (mappedRec.price_tier_2 === undefined) mappedRec.price_tier_2 = defaultPrice;
+              if (mappedRec.price_tier_3 === undefined) mappedRec.price_tier_3 = defaultPrice;
+              if (mappedRec.price_tier_4 === undefined) mappedRec.price_tier_4 = defaultPrice;
+              if (mappedRec.price_tier_5 === undefined) mappedRec.price_tier_5 = defaultPrice;
+              if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
+
+              const metadata: any = {};
+              if (mappedRec.image_url) metadata.imageUrl = mappedRec.image_url;
+              if (mappedRec.location) metadata.location = mappedRec.location;
+              if (mappedRec.status) metadata.status = mappedRec.status;
+              if (mappedRec.quantity) metadata.quantityOnHand = mappedRec.quantity;
+
+              if (Object.keys(metadata).length > 0) {
+                const baseDesc = mappedRec.description || '';
+                mappedRec.description = `${baseDesc}\n\n<!--metadata:${JSON.stringify(metadata)}-->`.trim();
+              }
+            }
+
+            let existingId: string | null = null;
+            if (table === "inventory" && mappedRec.sku) {
+              const skuKey = String(mappedRec.sku).trim();
+              if (inventorySkuMap.has(skuKey)) existingId = inventorySkuMap.get(skuKey);
+            } else if (table === "contacts" && mappedRec.legacy_number) {
+              const legacyKey = String(mappedRec.legacy_number).trim();
+              if (contactsLegacyMap.has(legacyKey)) existingId = contactsLegacyMap.get(legacyKey);
+            }
+            mappedRec.id = existingId || crypto.randomUUID();
+            mappedRec.organization_id = organizationId;
+
+            if (table === "contacts" && mappedRec.account_owner_number) {
+              const aoEmail = String(mappedRec.account_owner_number).trim().toLowerCase();
+              if (aoEmail && profilesMap.has(aoEmail)) mappedRec.owner_id = profilesMap.get(aoEmail);
+            }
+
+            if (table === "opportunities" && mappedRec.customer_id) {
+              const custIdOrName = String(mappedRec.customer_id).trim();
+              const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(custIdOrName);
+              if (!isUuid) {
+                const nameKey = custIdOrName.toLowerCase().trim();
+                if (contactsNameMap.has(nameKey)) {
+                  mappedRec.customer_id = contactsNameMap.get(nameKey);
+                } else {
+                  delete mappedRec.customer_id;
+                }
+              }
+            }
+
+            const cleanedRec: any = {};
+            for (const [k, v] of Object.entries(mappedRec)) {
+              if (existingDbCols.has(k)) cleanedRec[k] = v;
+            }
+            cleanedRecordsList.push(cleanedRec);
+          }
+
+          const chunkSize = 100;
+          let insertCount = 0;
+          let errorCount = 0;
+          let lastErrDetail = "";
+
+          for (let chunkIdx = 0; chunkIdx < cleanedRecordsList.length; chunkIdx += chunkSize) {
+            const chunk = cleanedRecordsList.slice(chunkIdx, chunkIdx + chunkSize);
+            let { error: upsertErr } = await supabase.from(table).upsert(chunk);
+            
+            if (upsertErr) {
+              const errMsg = String(upsertErr.message || '').toLowerCase();
+              const isColumnError = upsertErr.code === '42703' || errMsg.includes('column') || errMsg.includes('not find') || errMsg.includes('does not exist');
+
+              if (isColumnError) {
+                let repairedChunk = chunk.map(item => {
+                  const repairedItem = { ...item };
+                  if (table === 'inventory') {
+                    delete (repairedItem as any).image_url;
+                    delete (repairedItem as any).unit_of_measure;
+                    delete (repairedItem as any).price_tier_1;
+                    delete (repairedItem as any).price_tier_2;
+                    delete (repairedItem as any).price_tier_3;
+                    delete (repairedItem as any).price_tier_4;
+                    delete (repairedItem as any).price_tier_5;
+                  }
+                  return repairedItem;
+                });
+                let { error: retryErr } = await supabase.from(table).upsert(repairedChunk);
+                if (retryErr) {
+                  errorCount += chunk.length;
+                  lastErrDetail = retryErr.message;
+                } else {
+                  insertCount += chunk.length;
+                }
+              } else {
+                errorCount += chunk.length;
+                lastErrDetail = upsertErr.message;
+              }
+            } else {
+              insertCount += chunk.length;
+            }
+          }
+
+          processedRecordCount = insertCount;
+          if (errorCount > 0) {
+            executionStatus = "failed";
+            logMsg = `Import run processed count: ${insertCount}. Failed count: ${errorCount}. Err description: ${lastErrDetail}`;
+          } else {
+            logMsg = `Successfully imported ${insertCount} records to database table "${table}" (module: ${mModule}) server-side.`;
+          }
+        }
+      }
+    }
+
+    const logRecord = {
+      id: "log-" + Math.random().toString(36).slice(2, 11),
+      taskId: taskId,
+      taskName: task.name,
+      time: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
+      actionType: mType,
+      module: mModule,
+      fileStorage: task.action.fileStorage || "local",
+      fileName: fileName,
+      status: executionStatus,
+      recordCount: processedRecordCount,
+      message: logMsg
+    };
+
+    const { data: histData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_history').maybeSingle();
+    let currentHist = histData?.value || [];
+    if (!Array.isArray(currentHist)) currentHist = [];
+    currentHist.unshift(logRecord);
+
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'import_export_history',
+      value: currentHist.slice(0, 500)
+    });
+
+    task.lastRunTime = new Date().toISOString();
+    task.lastRunResult = executionStatus;
+    if (task.recurrence === "one-time") {
+      task.status = "completed";
+      task.nextRunTime = null;
+    } else {
+      task.status = "active";
+      const nextTime = calculateNextRunTime(task, new Date());
+      task.nextRunTime = nextTime ? nextTime.toISOString() : null;
+    }
+
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'import_export_tasks',
+      value: tasksList
+    });
+
+    return c.json({
+      success: executionStatus === "success",
+      log: logRecord,
+      task
+    });
+
+  } catch (err: any) {
+    console.error(`[import-export execution handler error]:`, err);
+    return c.json({ success: false, error: err.message || 'Task direct execution fail on Supabase server' }, 500);
+  }
+});
+
 // ── GOOGLE OAUTH ────────────────────────────────────────────────────────
 app.post(`${PREFIX}/google-oauth-init`, async (c) => {
   try {
