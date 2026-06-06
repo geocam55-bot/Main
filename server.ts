@@ -325,6 +325,238 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
   }
 }
 
+// Helper to automatically pull fresh file content from OneDrive during unattended task execution
+async function syncOneDriveFileOnBackend(task: any) {
+  const fileName = task.action.fileName;
+  if (!fileName) {
+    throw new Error("No fileName specified in the action.");
+  }
+
+  // 1. Fetch connected accounts from kv store
+  const { data: kvData, error: kvErr } = await supabase
+    .from('kv_store_8405be07')
+    .select('key, value')
+    .like('key', 'email_account:%');
+
+  if (kvErr || !kvData || kvData.length === 0) {
+    throw new Error("No connected OAuth accounts found on the server. Please connect under connected Microsoft OneDrive panel first.");
+  }
+
+  // 2. Filter for MS accounts
+  const accounts = kvData
+    .map((item: any) => ({ ...item.value, kvKey: item.key }))
+    .filter((a: any) => a.provider === 'outlook');
+
+  if (accounts.length === 0) {
+    throw new Error("No connected Microsoft OneDrive accounts found in database records.");
+  }
+
+  // 3. Match user account
+  const creatorStr = String(task.creator || '').toLowerCase().trim();
+  const selectedAccount = accounts.find((acc: any) => 
+    String(acc.email || '').toLowerCase().trim() === creatorStr
+  ) || accounts[0];
+
+  const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
+  const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
+
+  if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
+    throw new Error("Microsoft API credentials (AZURE_CLIENT_ID/AZURE_CLIENT_SECRET) are not configured as environment variables in this tournament.");
+  }
+
+  let accessToken = selectedAccount.access_token;
+  const expiresAt = selectedAccount.token_expires_at ? new Date(selectedAccount.token_expires_at) : null;
+  const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
+
+  if (needsRefresh && selectedAccount.refresh_token) {
+    console.log(`[OneDrive Background Sync] Fetching fresh OAuth access token for ${selectedAccount.email}`);
+    try {
+      const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: AZURE_CLIENT_ID,
+          client_secret: AZURE_CLIENT_SECRET,
+          refresh_token: selectedAccount.refresh_token,
+          grant_type: 'refresh_token'
+        })
+      });
+
+      if (!tokenResp.ok) {
+        throw new Error(`Token endpoint responded with status: ${tokenResp.status} - ${await tokenResp.text()}`);
+      }
+
+      const tokenJson: any = await tokenResp.json();
+      accessToken = tokenJson.access_token;
+      selectedAccount.access_token = tokenJson.access_token;
+      if (tokenJson.refresh_token) {
+        selectedAccount.refresh_token = tokenJson.refresh_token;
+      }
+      selectedAccount.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
+
+      await supabase.from('kv_store_8405be07').upsert({
+        key: selectedAccount.kvKey,
+        value: selectedAccount
+      });
+      console.log(`[OneDrive Background Sync] Re-authorized OneDrive access successfully.`);
+    } catch (refreshErr: any) {
+      console.error(`[OneDrive Background Sync] Token refresh warning for ${selectedAccount.email}:`, refreshErr?.message || refreshErr);
+    }
+  }
+
+  if (!accessToken) {
+    throw new Error(`Unauthorized OneDrive session for email: ${selectedAccount.email}`);
+  }
+
+  // 4. Resolve the OneDrive file id from Graph
+  console.log(`[OneDrive Background Sync] Dynamic file resolution starting. Searching for name: "${fileName}"`);
+  let fileId = null;
+
+  try {
+    const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(fileName)}')?$select=id,name,file`;
+    const searchResp = await fetch(searchUrl, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+
+    if (searchResp.ok) {
+      const searchResult: any = await searchResp.json();
+      const match = (searchResult.value || []).find((f: any) => f.name === fileName && f.file);
+      if (match) {
+        fileId = match.id;
+      }
+    }
+  } catch (searchErr) {
+    console.error(`[OneDrive Background Sync] Graph search warning:`, searchErr);
+  }
+
+  if (!fileId) {
+    try {
+      console.log(`[OneDrive Background Sync] Search failed/empty, scanning root children for "${fileName}"...`);
+      const childrenUrl = `https://graph.microsoft.com/v1.0/me/drive/root/children?$select=id,name,file`;
+      const childrenResp = await fetch(childrenUrl, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      if (childrenResp.ok) {
+        const childrenResult: any = await childrenResp.json();
+        const match = (childrenResult.value || []).find((f: any) => f.name === fileName && f.file);
+        if (match) {
+          fileId = match.id;
+        }
+      }
+    } catch (childrenErr) {
+      console.error(`[OneDrive Background Sync] Root children scan warning:`, childrenErr);
+    }
+  }
+
+  if (!fileId) {
+    throw new Error(`Target file "${fileName}" could not be resolved or found on your OneDrive Cloud space.`);
+  }
+
+  // 5. Download the file as array buffer
+  console.log(`[OneDrive Background Sync] Found OneDrive ID ${fileId}. Downloading payload...`);
+  const downloadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`;
+  const downloadResp = await fetch(downloadUrl, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+
+  if (!downloadResp.ok) {
+    throw new Error(`OneDrive API fail pulling file content: HTTP ${downloadResp.status}`);
+  }
+
+  const arrayBuffer = await downloadResp.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  return {
+    buffer,
+    base64Url: buffer.toString('base64'),
+    fileName
+  };
+}
+
+// Helper to automatically push fresh file content back to OneDrive during unattended export tasks
+async function uploadOneDriveFileFromBackend(task: any, base64Content: string) {
+  const fileName = task.action.fileName;
+  if (!fileName) return;
+
+  const { data: kvData, error: kvErr } = await supabase
+    .from('kv_store_8405be07')
+    .select('key, value')
+    .like('key', 'email_account:%');
+
+  if (kvErr || !kvData || kvData.length === 0) return;
+
+  const accounts = kvData
+    .map((item: any) => ({ ...item.value, kvKey: item.key }))
+    .filter((a: any) => a.provider === 'outlook');
+
+  if (accounts.length === 0) return;
+
+  const creatorStr = String(task.creator || '').toLowerCase().trim();
+  const selectedAccount = accounts.find((acc: any) => 
+    String(acc.email || '').toLowerCase().trim() === creatorStr
+  ) || accounts[0];
+
+  const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
+  const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
+
+  if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) return;
+
+  let accessToken = selectedAccount.access_token;
+  const expiresAt = selectedAccount.token_expires_at ? new Date(selectedAccount.token_expires_at) : null;
+  const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
+
+  if (needsRefresh && selectedAccount.refresh_token) {
+    try {
+      const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: AZURE_CLIENT_ID,
+          client_secret: AZURE_CLIENT_SECRET,
+          refresh_token: selectedAccount.refresh_token,
+          grant_type: 'refresh_token'
+        })
+      });
+      if (tokenResp.ok) {
+        const tokenJson: any = await tokenResp.json();
+        accessToken = tokenJson.access_token;
+        selectedAccount.access_token = tokenJson.access_token;
+        if (tokenJson.refresh_token) {
+          selectedAccount.refresh_token = tokenJson.refresh_token;
+        }
+        selectedAccount.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
+        await supabase.from('kv_store_8405be07').upsert({
+          key: selectedAccount.kvKey,
+          value: selectedAccount
+        });
+      }
+    } catch (refreshErr) {
+      console.error('[OneDrive Background Export] Refresh token warning:', refreshErr);
+    }
+  }
+
+  if (!accessToken) return;
+
+  const buffer = Buffer.from(base64Content, 'base64');
+  console.log(`[OneDrive Background Export] Uploading fresh spreadsheet ${fileName} back into OneDrive...`);
+
+  const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileName)}:/content`;
+  const uploadResp = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/octet-stream'
+    },
+    body: buffer
+  });
+
+  if (uploadResp.ok) {
+    console.log(`[OneDrive Background Export] Successfully uploaded exports to user's remote OneDrive in real-time.`);
+  } else {
+    console.error(`[OneDrive Background Export] Upload endpoint error: HTTP ${uploadResp.status}`);
+  }
+}
+
 // Background scheduler tick execution function
 async function executeScheduledTask(task: any) {
   const logEntry: any = {
@@ -375,7 +607,29 @@ async function executeScheduledTask(task: any) {
       fs.writeFileSync(filePath, fileContent, 'utf8');
       logEntry.recordCount = records.length;
       logEntry.message = `Successfully exported ${records.length} records from ${task.action.module} to unattended ${task.action.fileStorage} storage file: ${task.action.fileName}`;
+      
+      // Auto-upload exported data back into user OneDrive unattended
+      if (task.action.fileStorage === 'onedrive') {
+        const b64 = Buffer.from(fileContent, 'utf8').toString('base64');
+        await uploadOneDriveFileFromBackend(task, b64).catch(e => {
+          console.error('[OneDrive Export] Background upload failed:', e);
+        });
+      }
     } else if (task.action.type === 'import') {
+      // Dynamic OneDrive Fetch: For OneDrive files, ALWAYS try to pull down the fresh copy first!
+      if (task.action.fileStorage === 'onedrive') {
+        console.log(`[Scheduler] Unattended OneDrive Import: Fetching latest copy of "${task.action.fileName}" from OneDrive...`);
+        try {
+          const syncResult = await syncOneDriveFileOnBackend(task);
+          if (syncResult && syncResult.buffer) {
+            fs.writeFileSync(filePath, syncResult.buffer);
+            console.log(`[Scheduler] Unattended OneDrive Import: Successfully pulled a fresh copy of "${task.action.fileName}" to local workspace.`);
+          }
+        } catch (syncErr: any) {
+          console.error(`[Scheduler] Unattended OneDrive Import refresh failure:`, syncErr.message || syncErr);
+        }
+      }
+
       // Dynamic Recovery: Check if file missing locally and try to load/recover from database
       if (!fs.existsSync(filePath)) {
         console.log(`[Scheduler] File '${task.action.fileName}' not found in '${driveDir}'. Attempting to restore virtual copy from Supabase...`);
@@ -646,8 +900,28 @@ async function executeSupabaseScheduledTask(task: any) {
       const base64Str = Buffer.from(fileText, 'utf8').toString('base64');
       await saveVirtualFileServer(fileName, base64Str);
       logEntry.message = `Successfully exported ${records.length} records from ${mModule} to virtual file "${fileName}" in unattended Supabase background mode.`;
+      
+      // Auto-upload exported data back into user OneDrive unattended
+      if (task.action.fileStorage === 'onedrive') {
+        await uploadOneDriveFileFromBackend(task, base64Str).catch(e => {
+          console.error('[OneDrive Export Supabase] Background upload failed:', e);
+        });
+      }
     } else {
       // import format
+      if (task.action.fileStorage === 'onedrive') {
+        console.log(`[Scheduler Supabase] Unattended OneDrive Import: Fetching latest copy of "${fileName}" from OneDrive...`);
+        try {
+          const syncResult = await syncOneDriveFileOnBackend(task);
+          if (syncResult && syncResult.base64Url) {
+            await saveVirtualFileServer(fileName, syncResult.base64Url);
+            console.log(`[Scheduler Supabase] Unattended OneDrive Import: Successfully synchronized a fresh copy of "${fileName}" to Supabase virtual storage.`);
+          }
+        } catch (syncErr: any) {
+          console.error(`[Scheduler Supabase] Unattended OneDrive Import refresh failure:`, syncErr.message || syncErr);
+        }
+      }
+
       const fileObj = await loadVirtualFileServer(fileName);
       if (!fileObj) {
         throw new Error(`Virtual source file "${fileName}" could not be found or was empty in Supabase storage.`);
