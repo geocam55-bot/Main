@@ -13,7 +13,6 @@ import { DailyBriefingPopup } from './components/DailyBriefingPopup';
 import { Toaster } from './components/ui/sonner';
 import ErrorBoundary, { ErrorBoundaryFallback } from './components/ErrorBoundary';
 import { toast } from 'sonner@2.0.3';
-import { GettingStarted } from './components/GettingStarted';
 import { createClient } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import { getTheme } from './utils/themes';
@@ -378,10 +377,6 @@ export function AppContent() {
   // Stable callback references to prevent unnecessary child re-renders
   const handleToggleSidebar = useCallback(() => {
     setIsSidebarCollapsed(prev => !prev);
-  }, []);
-
-  const handleGettingStartedNavigate = useCallback((view: string) => {
-    setCurrentView(view);
   }, []);
 
   // Persist currentView to sessionStorage whenever it changes
@@ -907,15 +902,6 @@ export function AppContent() {
                 }
               }}
               userId={user.id}
-            />
-          )}
-
-          {/* Getting Started checklist — shown to new users */}
-          {user && (
-            <GettingStarted
-              userId={user.id}
-              userRole={user.role}
-              onNavigate={handleGettingStartedNavigate}
             />
           )}
 

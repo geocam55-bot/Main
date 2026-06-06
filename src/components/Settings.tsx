@@ -106,7 +106,6 @@ import { WorkflowSettingsDialog } from './settings/WorkflowSettingsDialog';
 import { useTheme, type ThemeMode } from './ThemeProvider';
 import { CustomFieldsDialog } from './settings/CustomFieldsDialog';
 import { SettingsModuleHelp } from './SettingsModuleHelp';
-import { resetGettingStarted } from './GettingStarted';
 
 function ThemeModeCard() {
   const { themeMode, setThemeMode, theme } = useTheme();
@@ -973,9 +972,6 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       }
 
       keysToRemove.forEach((key) => localStorage.removeItem(key));
-
-      // Also reset the Getting Started checklist
-      resetGettingStarted(user.id);
 
       if (keysToRemove.length > 0) {
         toast.success(`Reset ${keysToRemove.length} module help setting(s).`);
