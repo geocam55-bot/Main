@@ -28,7 +28,6 @@ export function InventoryModuleHelp({
     <InteractiveModuleHelp
       moduleKey="inventory-help"
       userId={userId}
-      pendingTourKey="inventory"
       title="Inventory Module Interactive Help"
       description="Manage stock faster with guided steps and one-click inventory actions."
       moduleIcon={Package}

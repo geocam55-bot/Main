@@ -28,8 +28,6 @@ import { TagSelector } from './TagSelector';
 import { CustomFieldsRenderer } from './CustomFieldsRenderer';
 import { toast } from 'sonner';
 import { CustomerModuleHelp } from './CustomerModuleHelp';
-import { GuidedTour } from './GuidedTour';
-import { useTour } from '../hooks/useTour';
 
 interface Contact {
   id: string;
@@ -72,39 +70,9 @@ interface ProjectManager {
 
 interface ContactsProps {
   user: User;
-  tourIntentKey?: string;
-  tourIntentNonce?: number;
 }
 
-export function Contacts({ user, tourIntentKey, tourIntentNonce }: ContactsProps) {
-  const contactsTourSteps = useMemo(
-    () => [
-      {
-        title: 'Search your contacts',
-        body: 'Type a name, email, company, or phone number in this search box to filter contacts instantly.',
-        targetSelector: '[data-tour="contacts-search"]',
-        placement: 'bottom' as const,
-      },
-      {
-        title: 'Review the contacts list',
-        body: 'Each row is a contact record. Click a row to open details, or use the actions menu to edit or delete.',
-        targetSelector: '[data-tour="contacts-list"]',
-        placement: 'top' as const,
-      },
-      {
-        title: 'Create a new contact',
-        body: 'Click Add Contact to open the form, fill in contact details, then save to add them to your CRM.',
-        targetSelector: '[data-tour="contacts-add"]',
-        placement: 'bottom' as const,
-      },
-    ],
-    []
-  );
-  const contactsTour = useTour({
-    moduleKey: 'contacts-inline-tour',
-    userId: user.id,
-    steps: contactsTourSteps,
-  });
+export function Contacts({ user }: ContactsProps) {
   const canCreateContacts = canAdd('contacts', user.role) || user.role === 'standard_user' || user.role === 'designer';
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300); // 🚀 Debounce search for better performance
@@ -116,7 +84,7 @@ export function Contacts({ user, tourIntentKey, tourIntentNonce }: ContactsProps
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showContactDetail, setShowContactDetail] = useState(false);
-    const [showImportExportWindow, setShowImportExportWindow] = useState(false);
+  const [showImportExportWindow, setShowImportExportWindow] = useState(false);
   
   // ⚡ Performance: Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -173,60 +141,10 @@ export function Contacts({ user, tourIntentKey, tourIntentNonce }: ContactsProps
     phone: '',
     mailingAddress: ''
   });
-  const [pendingTourConsumed, setPendingTourConsumed] = useState(false);
   
   useEffect(() => {
     loadContacts();
   }, []);
-
-  useEffect(() => {
-    const onStartTour = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string }>).detail;
-      if (detail?.key === 'contacts') {
-        contactsTour.start(0);
-      }
-    };
-
-    window.addEventListener('prospaces:start-tour', onStartTour as EventListener);
-    return () => window.removeEventListener('prospaces:start-tour', onStartTour as EventListener);
-  }, [contactsTour.start]);
-
-  useEffect(() => {
-    if (!tourIntentNonce) return;
-    if (tourIntentKey !== 'contacts') return;
-
-    const run = () => contactsTour.start(0);
-    const t1 = setTimeout(run, 120);
-    const t2 = setTimeout(run, 450);
-    const t3 = setTimeout(run, 900);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [tourIntentKey, tourIntentNonce, contactsTour.start]);
-
-  useEffect(() => {
-    if (pendingTourConsumed) return;
-    if (showContactDetail) return;
-    if (sessionStorage.getItem('prospaces.pending-tour') !== 'contacts') return;
-
-    sessionStorage.removeItem('prospaces.pending-tour');
-    setPendingTourConsumed(true);
-
-    const run = () => contactsTour.start(0);
-    const t1 = setTimeout(run, 150);
-    const t2 = setTimeout(run, 500);
-    const t3 = setTimeout(run, 1100);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [pendingTourConsumed, showContactDetail, contactsTour.start]);
-
-  const contactsGuidedTour = null;
 
   const loadContacts = async () => {
     try {
@@ -1593,7 +1511,6 @@ export function Contacts({ user, tourIntentKey, tourIntentNonce }: ContactsProps
             )}
           </div>
         </div>
-        {contactsGuidedTour}
       </PermissionGate>
     );
   }
@@ -2169,7 +2086,6 @@ export function Contacts({ user, tourIntentKey, tourIntentNonce }: ContactsProps
           </form>
         </DialogContent>
       </Dialog>
-      {contactsGuidedTour}
     </PermissionGate>
   );
 }

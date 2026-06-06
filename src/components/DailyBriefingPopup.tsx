@@ -127,17 +127,6 @@ export function DailyBriefingPopup({ user, onNavigate, organization, currentView
     }
   }, [isLoading, aiEnabled, user.id, currentView]);
 
-  // If onboarding launches a guided tour, dock this popup in the bottom-right.
-  useEffect(() => {
-    const handleTourStarting = () => {
-      setIsVisible(true);
-      setIsDocked(true);
-      setIsClosing(false);
-    };
-    window.addEventListener('prospaces:tour-starting', handleTourStarting as EventListener);
-    return () => window.removeEventListener('prospaces:tour-starting', handleTourStarting as EventListener);
-  }, []);
-
   // Load streak data and fetch dismissed
   const [remoteDismissedIds, setRemoteDismissedIds] = useState<string[] | null>(null);
   

@@ -5,8 +5,6 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
-import { GuidedTour } from './GuidedTour';
-import { useTour } from '../hooks/useTour';
 
 export interface HelpStep {
   title: string;
@@ -47,10 +45,6 @@ interface InteractiveModuleHelpProps {
   actions: HelpAction[];
   badges?: HelpBadge[];
   howToGuides?: HelpHowToGuide[];
-  /** If this matches the value of the `prospaces.pending-tour` sessionStorage key, auto-start the overlay tour on mount. */
-  pendingTourKey?: string;
-  /** When this value changes, force-start the overlay tour at step 1. */
-  forceStartToken?: number;
 }
 
 export function InteractiveModuleHelp({
@@ -64,22 +58,12 @@ export function InteractiveModuleHelp({
   actions,
   badges = [],
   howToGuides = [],
-  pendingTourKey,
-  forceStartToken,
 }: InteractiveModuleHelpProps) {
   const helpOnboardingVersion = 'v1';
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
-
-  // Overlay guided tour — opens immediately if Getting Started sent us here
-  const tour = useTour({
-    moduleKey: `${moduleKey}-overlay`,
-    userId,
-    steps,
-    pendingTourSessionKey: pendingTourKey,
-  });
 
   const shouldMaximizeOnOpen = () =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches;
@@ -115,32 +99,6 @@ export function InteractiveModuleHelp({
     action();
     setIsOpen(false);
   };
-
-  useEffect(() => {
-    if (!pendingTourKey || !steps.some((s) => s.targetSelector)) return;
-
-    const startIfMatch = (key?: string | null) => {
-      if (key !== pendingTourKey) return;
-      sessionStorage.removeItem('prospaces.pending-tour');
-      tour.start(0);
-    };
-
-    startIfMatch(sessionStorage.getItem('prospaces.pending-tour'));
-
-    const onStartTour = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string }>).detail;
-      startIfMatch(detail?.key);
-    };
-
-    window.addEventListener('prospaces:start-tour', onStartTour as EventListener);
-    return () => window.removeEventListener('prospaces:start-tour', onStartTour as EventListener);
-  }, [pendingTourKey, steps, tour.start]);
-
-  useEffect(() => {
-    if (!forceStartToken) return;
-    if (!steps.some((s) => s.targetSelector)) return;
-    tour.start(0);
-  }, [forceStartToken, steps, tour.start]);
 
   useEffect(() => {
     const savedStep = localStorage.getItem(stepStorageKey);

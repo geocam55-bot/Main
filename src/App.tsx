@@ -346,7 +346,6 @@ export function AppContent() {
     return saved === 'true';
   });
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [tourIntent, setTourIntent] = useState<{ key: string; nonce: number } | null>(null);
 
   // Landing + Enter ProSpaces should always use default light visual tokens,
   // independent of each user's selected theme.
@@ -859,8 +858,6 @@ export function AppContent() {
               {currentView === 'contacts' && (
                 <Contacts
                   user={user}
-                  tourIntentKey={tourIntent?.key}
-                  tourIntentNonce={tourIntent?.nonce}
                 />
               )}
               {currentView === 'tasks' && <Tasks user={user} />}

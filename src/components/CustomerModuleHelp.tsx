@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Filter, Plus, Search, Users, X } from 'lucide-react';
 import { InteractiveModuleHelp } from './InteractiveModuleHelp';
 
@@ -20,36 +19,11 @@ export function CustomerModuleHelp({
   onOpenAddContact,
 }: CustomerModuleHelpProps) {
   const processStages = 'Discovery -> Scope Lock -> Estimate -> Approval -> Handoff';
-  const [forceStartToken, setForceStartToken] = useState(0);
-
-  useEffect(() => {
-    const triggerStart = () => {
-      sessionStorage.removeItem('prospaces.pending-tour');
-      setForceStartToken(Date.now());
-    };
-
-    if (sessionStorage.getItem('prospaces.pending-tour') === 'contacts') {
-      const t = setTimeout(triggerStart, 200);
-      return () => clearTimeout(t);
-    }
-
-    const onStartTour = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string }>).detail;
-      if (detail?.key === 'contacts') {
-        triggerStart();
-      }
-    };
-
-    window.addEventListener('prospaces:start-tour', onStartTour as EventListener);
-    return () => window.removeEventListener('prospaces:start-tour', onStartTour as EventListener);
-  }, []);
 
   return (
     <InteractiveModuleHelp
       moduleKey="customer-help"
       userId={userId}
-      pendingTourKey="contacts"
-      forceStartToken={forceStartToken}
       title="Customer Module Interactive Help"
       description="Learn the workflow and run quick actions directly from this guide."
       moduleIcon={Users}

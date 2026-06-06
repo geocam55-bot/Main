@@ -311,6 +311,7 @@ function HomeView({
     icon: React.ComponentType<any>;
     gradient: string;
     shadow: string;
+    module?: string;
   }[] = [
     {
       id: 'catalog',
@@ -319,10 +320,34 @@ function HomeView({
       icon: Package,
       gradient: 'from-emerald-500 to-teal-600',
       shadow: 'shadow-emerald-500/20',
+      module: 'inventory',
+    },
+    {
+      id: 'messages',
+      label: 'Message Space',
+      description: 'Collaborate with teammates, ask about product availability, stock replenishment plans, or share layout requests in real-time.',
+      icon: MessageSquare,
+      gradient: 'from-violet-500 to-indigo-600',
+      shadow: 'shadow-violet-500/20',
+      module: 'messages',
+    },
+    {
+      id: 'profile',
+      label: 'User Settings',
+      description: 'Update and configure your personal profile settings, organization defaults, change password, and system preferences.',
+      icon: UserIcon,
+      gradient: 'from-slate-500 to-gray-600',
+      shadow: 'shadow-slate-500/20',
     },
   ];
 
   const { theme } = useTheme();
+
+  const visibleCards = cards.filter((card) => {
+    if (card.id === 'catalog') return canOpenCatalog;
+    if (card.module && !canView(card.module, user.role)) return false;
+    return true;
+  });
 
   return (
     <div className="p-8 lg:p-12 max-w-7xl mx-auto">
@@ -335,8 +360,8 @@ function HomeView({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {cards.filter((card) => card.id !== 'catalog' || canOpenCatalog).map((card) => {
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {visibleCards.map((card) => {
           const Icon = card.icon;
           return (
             <button

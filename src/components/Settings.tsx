@@ -974,24 +974,16 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
 
       keysToRemove.forEach((key) => localStorage.removeItem(key));
 
-      // Also reset the Getting Started checklist and guided tour progress
+      // Also reset the Getting Started checklist
       resetGettingStarted(user.id);
-      const tourKeysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('prospaces.') && key.includes('.tour.')) {
-          tourKeysToRemove.push(key);
-        }
-      }
-      tourKeysToRemove.forEach((key) => localStorage.removeItem(key));
 
-      if (keysToRemove.length > 0 || tourKeysToRemove.length > 0) {
-        toast.success(`Reset ${keysToRemove.length + tourKeysToRemove.length} module help/tour setting(s).`);
+      if (keysToRemove.length > 0) {
+        toast.success(`Reset ${keysToRemove.length} module help setting(s).`);
       } else {
-        toast.info('No module help tour settings were found for your account.');
+        toast.info('No module help settings were found for your account.');
       }
     } catch {
-      toast.error('Failed to reset module help tours.');
+      toast.error('Failed to reset module help settings.');
     } finally {
       setIsResettingHelpTours(false);
     }
@@ -2045,7 +2037,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                 <Button type="button" variant="outline" onClick={() => setShowLayoutDialog(true)}>Configure Layout</Button>
               </div>
               <div className="space-y-2">
-                <Label>Interactive Help Tours</Label>
+                <Label>Interactive Help Guides</Label>
                 <p className="text-sm text-muted-foreground">
                   Reset first-time help popups and step progress for all module guides on this account.
                 </p>
@@ -2056,7 +2048,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                   disabled={isResettingHelpTours}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  {isResettingHelpTours ? 'Resetting...' : 'Reset Help Tours'}
+                  {isResettingHelpTours ? 'Resetting...' : 'Reset Help Guides'}
                 </Button>
               </div>
               <Button 

@@ -61,7 +61,7 @@ export function SettingsModuleHelp({
         { label: 'Open Diagnostics', icon: LayoutGrid, variant: 'outline', onClick: onOpenDiagnosticsTab },
         { label: 'Open Workflow Settings', icon: Wrench, variant: 'outline', onClick: onOpenWorkflowDialog },
         { label: 'Open Custom Fields', icon: LayoutGrid, variant: 'outline', onClick: onOpenCustomFieldsDialog },
-        { label: 'Reset Help Tours', icon: Wrench, variant: 'outline', onClick: onResetHelpTours },
+        { label: 'Reset Help Guides', icon: Wrench, variant: 'outline', onClick: onResetHelpTours },
         { label: 'Save Appearance Settings', icon: Save, onClick: onSaveAppearanceSettings, fullWidth: true },
       ]}
     />

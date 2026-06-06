@@ -389,7 +389,7 @@ function HomeView({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {navItems.filter(n => n.id !== 'home' as any).map((item) => {
           const Icon = item.icon;
           const meta = cardMeta[item.id] || { description: '', gradient: 'from-slate-500 to-gray-600', shadow: 'shadow-slate-500/20' };

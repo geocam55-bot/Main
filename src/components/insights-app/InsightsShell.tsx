@@ -344,6 +344,23 @@ function HomeView({
       shadow: 'shadow-amber-500/20',
       module: 'reports',
     },
+    {
+      id: 'messages',
+      label: 'Message Space',
+      description: 'Exchange comments, upload files, and collaborate with team members on insights and metrics in real-time.',
+      icon: MessageSquare,
+      gradient: 'from-violet-500 to-fuchsia-600',
+      shadow: 'shadow-violet-500/10',
+      module: 'messages',
+    },
+    {
+      id: 'profile',
+      label: 'User Settings',
+      description: 'Manage personal preferences, update account information, change passwords, and configure custom notification settings.',
+      icon: UserIcon,
+      gradient: 'from-slate-500 to-gray-600',
+      shadow: 'shadow-slate-500/10',
+    }
   ];
 
   const { theme } = useTheme();
@@ -360,7 +377,7 @@ function HomeView({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {visibleCards.map((card) => {
           const Icon = card.icon;
           return (

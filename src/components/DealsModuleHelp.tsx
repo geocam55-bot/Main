@@ -28,7 +28,6 @@ export function DealsModuleHelp({
     <InteractiveModuleHelp
       moduleKey="deals-help"
       userId={userId}
-      pendingTourKey="bids"
       title="Deals Module Interactive Help"
       description="Learn how to move quotes from draft to close and run quick actions from this guide."
       moduleIcon={FileText}
