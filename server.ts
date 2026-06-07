@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite';
 import * as XLSX from 'xlsx';
 import os from 'os';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const projectId = "usorqldwroecyxucmtuw";
 const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
@@ -814,7 +815,8 @@ async function executeScheduledTask(task: any) {
 }
 
 // Background execution for Supabase-mode scheduled tasks
-export async function executeSupabaseScheduledTask(task: any) {
+export async function executeSupabaseScheduledTask(task: any, customSupabase?: any) {
+  const db = customSupabase || supabase;
   const logEntry: any = {
     id: 'log-' + Math.random().toString(36).slice(2, 9),
     taskId: task.id,
@@ -849,7 +851,7 @@ export async function executeSupabaseScheduledTask(task: any) {
     let organizationId = task.organisationId || task.organizationId;
     if (!organizationId) {
       console.log(`[Scheduler Supabase] Organization ID missing in task payload. Querying user profiles to resolve it...`);
-      const { data: profiles } = await supabase.from('profiles').select('organization_id, id, name, email');
+      const { data: profiles } = await db.from('profiles').select('organization_id, id, name, email');
       if (profiles && profiles.length > 0) {
         const creatorEmail = String(task.creator || '').toLowerCase().trim();
         const matched = profiles.find((p: any) => 
@@ -1054,7 +1056,7 @@ export async function executeSupabaseScheduledTask(task: any) {
         mModule = activeModule;
 
         // Fetch schema columns
-        const { data: sampleColsData } = await supabase.from(table).select("*").limit(1);
+        const { data: sampleColsData } = await db.from(table).select("*").limit(1);
         const existingDbCols = new Set<string>();
         if (sampleColsData && sampleColsData.length > 0) {
           Object.keys(sampleColsData[0]).forEach(k => existingDbCols.add(k));
@@ -1073,21 +1075,21 @@ export async function executeSupabaseScheduledTask(task: any) {
 
         // Caching references
         const profilesMap = new Map<string, string>();
-        const { data: pData } = await supabase.from("profiles").select("id, email");
+        const { data: pData } = await db.from("profiles").select("id, email");
         pData?.forEach((p: any) => {
           if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p.id);
         });
 
         const contactsLegacyMap = new Map<string, string>();
         const contactsNameMap = new Map<string, string>();
-        const { data: cData } = await supabase.from("contacts").select("id, legacy_number, name").eq("organization_id", organizationId);
+        const { data: cData } = await db.from("contacts").select("id, legacy_number, name").eq("organization_id", organizationId);
         cData?.forEach((c: any) => {
           if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
           if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
         });
 
         const inventorySkuMap = new Map<string, string>();
-        const { data: iData } = await supabase.from("inventory").select("id, sku").eq("organization_id", organizationId);
+        const { data: iData } = await db.from("inventory").select("id, sku").eq("organization_id", organizationId);
         iData?.forEach((inv: any) => {
           if (inv.sku) inventorySkuMap.set(String(inv.sku).trim(), inv.id);
         });
@@ -1253,12 +1255,12 @@ export async function executeSupabaseScheduledTask(task: any) {
           if (table === "contacts") {
             const existingId = (finalCleanedRec.legacy_number && contactsLegacyMap.get(String(finalCleanedRec.legacy_number))) ||
                                (finalCleanedRec.name && contactsNameMap.get(String(finalCleanedRec.name).toLowerCase()));
-            finalCleanedRec.id = existingId || ('cnt-' + Math.random().toString(36).slice(2, 11));
+            finalCleanedRec.id = existingId || crypto.randomUUID();
           } else if (table === "inventory") {
             const existingId = finalCleanedRec.sku && inventorySkuMap.get(String(finalCleanedRec.sku));
-            finalCleanedRec.id = existingId || ('inv-' + Math.random().toString(36).slice(2, 11));
+            finalCleanedRec.id = existingId || crypto.randomUUID();
           } else {
-            finalCleanedRec.id = 'opp-' + Math.random().toString(36).slice(2, 11);
+            finalCleanedRec.id = crypto.randomUUID();
           }
 
           cleanedRecordsList.push(finalCleanedRec);
@@ -1284,7 +1286,7 @@ export async function executeSupabaseScheduledTask(task: any) {
           while (!success && attempts < maxAttempts) {
             attempts++;
             console.log(`[Scheduler Supabase] [Upsert] Attempt ${attempts}/${maxAttempts} for ${records.length} records...`);
-            const { error: upsertErr } = await supabase.from(table).upsert(records);
+            const { error: upsertErr } = await db.from(table).upsert(records);
             if (!upsertErr) {
               success = true;
               console.log(`[Scheduler Supabase] [Upsert] Chunk of ${records.length} records successfully upserted on attempt ${attempts}.`);
@@ -1362,11 +1364,11 @@ export async function executeSupabaseScheduledTask(task: any) {
 
   // Save execution status log to Supabase kv key 'import_export_history'
   try {
-    const { data: histData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_history').maybeSingle();
+    const { data: histData } = await db.from('kv_store_8405be07').select('value').eq('key', 'import_export_history').maybeSingle();
     let currentHist = histData?.value || [];
     if (!Array.isArray(currentHist)) currentHist = [];
     currentHist.unshift(logEntry);
-    await supabase.from('kv_store_8405be07').upsert({
+    await db.from('kv_store_8405be07').upsert({
       key: 'import_export_history',
       value: currentHist.slice(0, 500)
     });
@@ -1810,7 +1812,25 @@ async function startServer() {
           value: supabaseTasks
         });
 
-        const logResult = await executeSupabaseScheduledTask(supabaseTask);
+        const authHeader = req.headers.authorization;
+        let customSupabase = undefined;
+        if (authHeader) {
+          console.log(`[Server API] Creating request-authenticated Supabase client with Authorization token.`);
+          customSupabase = createClient(supabaseUrl, supabaseKey, {
+            auth: {
+              persistSession: false,
+              autoRefreshToken: false,
+              detectSessionInUrl: false
+            },
+            global: {
+              headers: {
+                Authorization: authHeader
+              }
+            }
+          });
+        }
+
+        const logResult = await executeSupabaseScheduledTask(supabaseTask, customSupabase);
 
         // Reload fresh tasks list to preserve any concurrent modifications
         const { data: reloadData } = await supabase

@@ -1905,7 +1905,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       // 2. Call local Express endpoint on our container which has direct connection to the database
       const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
-        method: "POST"
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`
+        }
       }, 120000); // 120 seconds timeout for large dataset parse & OneDrive network synchronization
 
       if (!res.ok) {
@@ -2196,6 +2199,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     toast.info(connectionMode === "supabase" ? "Triggering direct Supabase job execution..." : "Triggering unattended background job on backend...", { id: "job-run" });
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       if (connectionMode === "supabase") {
         const result = await executeTaskSupabaseDirect(taskId);
         if (result.success) {
@@ -2211,7 +2215,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         }
       } else {
         const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
-          method: "POST"
+          method: "POST",
+          headers: session?.access_token ? {
+            "Authorization": `Bearer ${session.access_token}`
+          } : {}
         }, 120000);
         const data = await res.json();
         if (data.success) {
@@ -2593,6 +2600,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     };
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       // Register temporary task, run it, and delete it immediately
       const registerRes = await safeFetch("/api/import-export/tasks", {
         method: "POST",
@@ -2603,7 +2611,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       
       if (registerData.success) {
         const runRes = await safeFetch(`/api/import-export/tasks/${registerData.task.id}/run`, {
-          method: "POST"
+          method: "POST",
+          headers: session?.access_token ? {
+            "Authorization": `Bearer ${session.access_token}`
+          } : {}
         }, 120000);
         const runData = await runRes.json();
         
