@@ -2212,7 +2212,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       } else {
         const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
           method: "POST"
-        });
+        }, 120000);
         const data = await res.json();
         if (data.success) {
           toast.success(`Job run completed: status "${data.logResult.status}"`, { id: "job-run" });
@@ -2604,7 +2604,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       if (registerData.success) {
         const runRes = await safeFetch(`/api/import-export/tasks/${registerData.task.id}/run`, {
           method: "POST"
-        });
+        }, 120000);
         const runData = await runRes.json();
         
         // delete temporary helper
