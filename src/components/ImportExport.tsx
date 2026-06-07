@@ -2199,6 +2199,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     toast.info(connectionMode === "supabase" ? "Triggering direct Supabase job execution..." : "Triggering unattended background job on backend...", { id: "job-run" });
 
     try {
+      const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (connectionMode === "supabase") {
         const result = await executeTaskSupabaseDirect(taskId);
@@ -2600,6 +2601,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     };
 
     try {
+      const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       // Register temporary task, run it, and delete it immediately
       const registerRes = await safeFetch("/api/import-export/tasks", {

@@ -873,7 +873,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
 
     if (mType === 'export') {
       console.log(`[Scheduler Supabase] [Export Mode] Fetching database rows from Table "${table}" for Organization ID: "${organizationId}"...`);
-      const { data: dbRecords, error: dbErr } = await supabase
+      const { data: dbRecords, error: dbErr } = await db
         .from(table)
         .select("*")
         .eq('organization_id', organizationId);
