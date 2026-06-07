@@ -1903,15 +1903,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         value: updatedTasks
       });
 
-      // 2. Call the server edge function
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/import-export/execute-task`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-          "X-User-Token": session.access_token
-        },
-        body: JSON.stringify({ taskId })
+      // 2. Call local Express endpoint on our container which has direct connection to the database
+      const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
+        method: "POST"
       });
 
       if (!res.ok) {
@@ -1921,12 +1915,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
       const responseData = await res.json();
       if (!responseData.success) {
-        throw new Error(responseData.error || responseData.log?.message || "Execution failed on the production server.");
+        throw new Error(responseData.error || responseData.logResult?.message || "Execution failed on the production server.");
       }
 
       return {
         success: true,
-        logResult: responseData.log,
+        logResult: responseData.logResult,
         error: undefined
       };
     } catch (e: any) {

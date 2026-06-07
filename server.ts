@@ -830,35 +830,496 @@ export async function executeSupabaseScheduledTask(task: any) {
   };
 
   try {
-    const url = `${supabaseUrl}/functions/v1/make-server-8405be07/import-export/execute-task`;
-    console.log(`[Scheduler] Calling Supabase Edge Function to execute background task: ${task.id}`);
+    const mType = task.action.type;
+    let mModule = task.action.module;
+    let table = mModule === "deals" ? "opportunities" : mModule;
+    const fileName = task.action.fileName;
+    const format = task.action.format;
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Token': '8405be07a4f940b59b39ea30ad96afcc'
-      },
-      body: JSON.stringify({ taskId: task.id })
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "");
-      throw new Error(`Edge Function responded with status ${res.status}: ${errorText}`);
+    // Resolve organization ID
+    let organizationId = task.organisationId || task.organizationId;
+    if (!organizationId) {
+      const { data: profiles } = await supabase.from('profiles').select('organization_id, id, name, email');
+      if (profiles && profiles.length > 0) {
+        const creatorEmail = String(task.creator || '').toLowerCase().trim();
+        const matched = profiles.find((p: any) => 
+          (p.name && String(p.name).toLowerCase().trim() === creatorEmail) ||
+          (p.email && String(p.email).toLowerCase().trim() === creatorEmail)
+        );
+        organizationId = matched ? matched.organization_id : profiles[0].organization_id;
+      }
     }
 
-    const responseData = await res.json();
-    if (!responseData.success) {
-      throw new Error(responseData.error || responseData.log?.message || "Execution failed on the production server.");
+    if (!organizationId) {
+      throw new Error("Could not resolve organization ID for Supabase background task execution.");
     }
 
-    // Capture success metrics from the Edge Function execution
-    logEntry.recordCount = responseData.log?.recordCount || responseData.recordCount || 0;
-    logEntry.message = responseData.log?.message || "Successfully completed background sync task.";
+    if (mType === 'export') {
+      const { data: dbRecords, error: dbErr } = await supabase
+        .from(table)
+        .select("*")
+        .eq('organization_id', organizationId);
+      
+      if (dbErr) throw dbErr;
+
+      let fileText = "";
+      const records = dbRecords || [];
+      logEntry.recordCount = records.length;
+
+      if (format === "json") {
+        fileText = JSON.stringify(records, null, 2);
+      } else if (format === "xml") {
+        fileText = `<?xml version="1.0" encoding="UTF-8"?>\n<crm_data module="${mModule}">\n` +
+          records.map((r: any) => `  <item>\n` + Object.entries(r).map(([k, v]) => `    <${k}>${v}</${k}>`).join('\n') + `\n  </item>`).join('\n') +
+          `\n</crm_data>`;
+      } else {
+        // csv format
+        if (records.length === 0) {
+          fileText = "";
+        } else {
+          const keysSet = new Set<string>();
+          records.forEach((r: any) => {
+            Object.keys(r).forEach(k => keysSet.add(k));
+          });
+          const keys = Array.from(keysSet);
+          const escapeCsvVal = (val: any) => {
+            if (val === null || val === undefined) return "";
+            const str = String(val);
+            if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          };
+          const headerRow = keys.map(escapeCsvVal).join(",");
+          const bodyRows = records.map((r: any) => keys.map(k => escapeCsvVal(r[k])).join(","));
+          fileText = [headerRow, ...bodyRows].join("\n");
+        }
+      }
+
+      // Convert to base64
+      const base64Str = Buffer.from(fileText, 'utf8').toString('base64');
+      await saveVirtualFileServer(fileName, base64Str);
+      logEntry.message = `Successfully exported ${records.length} records from ${mModule} to virtual file "${fileName}" in unattended Supabase background mode.`;
+      
+      // Auto-upload exported data back into user OneDrive unattended
+      if (task.action.fileStorage === 'onedrive') {
+        await uploadOneDriveFileFromBackend(task, base64Str).catch(e => {
+          console.error('[OneDrive Export Supabase] Background upload failed:', e);
+        });
+      }
+    } else {
+      // import format
+      if (task.action.fileStorage === 'onedrive') {
+        console.log(`[Scheduler Supabase] Unattended OneDrive Import: Fetching latest copy of "${fileName}" from OneDrive...`);
+        try {
+          const syncResult = await syncOneDriveFileOnBackend(task);
+          if (syncResult && syncResult.base64Url) {
+            await saveVirtualFileServer(fileName, syncResult.base64Url);
+            console.log(`[Scheduler Supabase] Unattended OneDrive Import: Successfully synchronized a fresh copy of "${fileName}" to Supabase virtual storage.`);
+          }
+        } catch (syncErr: any) {
+          console.error(`[Scheduler Supabase] Unattended OneDrive Import refresh failure:`, syncErr.message || syncErr);
+        }
+      }
+
+      const fileObj = await loadVirtualFileServer(fileName);
+      if (!fileObj) {
+        throw new Error(`Virtual source file "${fileName}" could not be found or was empty in Supabase storage.`);
+      }
+
+      let parsedRecords: any[] = [];
+      const fileContent = fileObj.textContent || Buffer.from(fileObj.base64 || '', 'base64').toString('utf8');
+
+      if (format === "json") {
+        try {
+          const resJson = JSON.parse(fileContent);
+          parsedRecords = Array.isArray(resJson) ? resJson : [resJson];
+        } catch (jsonErr: any) {
+          throw new Error(`JSON parsing failed: ${jsonErr.message}`);
+        }
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || format === 'xlsx' || format === 'xls') {
+        try {
+          const b64 = fileObj.base64;
+          if (!b64) {
+            throw new Error("No database content found for active Excel import task file.");
+          }
+          const workbook = XLSX.read(b64, { type: 'base64' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          parsedRecords = XLSX.utils.sheet_to_json(worksheet);
+        } catch (xlsxErr: any) {
+          throw new Error(`Excel workbook parsing failed: ${xlsxErr.message}`);
+        }
+      } else {
+        // csv parser
+        try {
+          const rawText = fileContent.replace(/^\uFEFF/g, "");
+          const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          if (lines.length > 1) {
+            const parseCsvLine = (line: string) => {
+              const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+              return matches.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+            };
+            const headers = parseCsvLine(lines[0]);
+            parsedRecords = lines.slice(1).map(line => {
+              const values = parseCsvLine(line);
+              const row: any = {};
+              headers.forEach((h, idx) => {
+                row[h] = values[idx] || '';
+              });
+              return row;
+            });
+          }
+        } catch (csvErr: any) {
+          throw new Error(`CSV parsing failed: ${csvErr.message}`);
+        }
+      }
+
+      if (parsedRecords.length === 0) {
+        logEntry.message = `Import completed with 0 records processed from virtual file "${fileName}".`;
+      } else {
+        // ---> INTELLIGENT AUTO-HEALING MAPPING FOR TABLE MISMATCHES <---
+        let activeTable = table;
+        let activeModule = mModule;
+
+        const firstRec = parsedRecords[0];
+        const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, ""));
+        
+        const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku" || k === "itemsku" || k === "id");
+        const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name" || k === "product" || k === "item" || k === "material" || k === "title");
+        const hasCost = lowerHeaderKeys.some(k => k === "cost" || k === "costprice" || k === "unitcost");
+        const hasPriceTiers = lowerHeaderKeys.some(k => k.includes("pricetier") || k.includes("tier1") || k.includes("price_tier"));
+
+        const hasProjectName = lowerHeaderKeys.some(k => k === "projectname" || k === "dealname" || k === "project" || k === "project_name" || k === "deal_name");
+        const hasClientName = lowerHeaderKeys.some(k => k === "clientname" || k === "customername" || k === "client_name" || k === "customer_name");
+        const hasDealValue = lowerHeaderKeys.some(k => k === "dealvalue" || k === "deal_value" || k === "value");
+
+        const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress" || k === "email_address");
+        const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber" || k === "phone_number" || k === "telephone");
+        const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno" || k === "legacy_number");
+
+        if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
+          activeTable = "inventory";
+          activeModule = "inventory";
+        } else if (hasProjectName || hasClientName || hasDealValue) {
+          activeTable = "opportunities";
+          activeModule = "deals";
+        } else if (hasEmail || hasPhone || hasLegacyNumber) {
+          activeTable = "contacts";
+          activeModule = "contacts";
+        }
+
+        table = activeTable;
+        mModule = activeModule;
+
+        // Fetch schema columns
+        const { data: sampleColsData } = await supabase.from(table).select("*").limit(1);
+        const existingDbCols = new Set<string>();
+        if (sampleColsData && sampleColsData.length > 0) {
+          Object.keys(sampleColsData[0]).forEach(k => existingDbCols.add(k));
+        } else {
+          const fallbackCols: Record<string, string[]> = {
+            contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags"],
+            inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"],
+            opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
+          };
+          (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
+        }
+
+        if (table === "inventory") {
+          ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url"].forEach(k => existingDbCols.add(k));
+        }
+
+        // Caching references
+        const profilesMap = new Map<string, string>();
+        const { data: pData } = await supabase.from("profiles").select("id, email");
+        pData?.forEach((p: any) => {
+          if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p.id);
+        });
+
+        const contactsLegacyMap = new Map<string, string>();
+        const contactsNameMap = new Map<string, string>();
+        const { data: cData } = await supabase.from("contacts").select("id, legacy_number, name").eq("organization_id", organizationId);
+        cData?.forEach((c: any) => {
+          if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
+          if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
+        });
+
+        const inventorySkuMap = new Map<string, string>();
+        const { data: iData } = await supabase.from("inventory").select("id, sku").eq("organization_id", organizationId);
+        iData?.forEach((inv: any) => {
+          if (inv.sku) inventorySkuMap.set(String(inv.sku).trim(), inv.id);
+        });
+
+        const cleanedRecordsList: any[] = [];
+
+        for (const rec of parsedRecords) {
+          const mappedRec: any = { organization_id: organizationId };
+
+          for (const [k, v] of Object.entries(rec)) {
+            if (v === undefined || v === null) continue;
+            const cleanVal = typeof v === "string" ? v.trim() : v;
+            const lowerKey = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
+
+            if (table === "contacts") {
+              if (lowerKey === "name") mappedRec.name = cleanVal;
+              else if (lowerKey === "email" || lowerKey === "emailaddress") mappedRec.email = cleanVal;
+              else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone") mappedRec.phone = cleanVal;
+              else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") mappedRec.company = cleanVal;
+              else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") mappedRec.trade = cleanVal;
+              else if (lowerKey === "status") mappedRec.status = cleanVal;
+              else if (lowerKey === "pricelevel" || lowerKey === "level") mappedRec.price_level = cleanVal;
+              else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno") mappedRec.legacy_number = cleanVal;
+              else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner") mappedRec.account_owner_number = cleanVal;
+              else if (lowerKey === "address" || lowerKey === "streetaddress") mappedRec.address = cleanVal;
+              else if (lowerKey === "city") mappedRec.city = cleanVal;
+              else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") mappedRec.province = cleanVal;
+              else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip") mappedRec.postal_code = cleanVal;
+              else if (lowerKey === "notes" || lowerKey === "comments") mappedRec.notes = cleanVal;
+              else if (lowerKey === "tags") mappedRec.tags = cleanVal;
+            } 
+            else if (table === "inventory") {
+              if (lowerKey === "itemname" || lowerKey === "name" || lowerKey === "productname" || lowerKey === "materialname" || lowerKey === "product" || lowerKey === "item" || lowerKey === "material" || lowerKey === "title") mappedRec.name = cleanVal;
+              else if (lowerKey === "description") mappedRec.description = cleanVal;
+              else if (lowerKey === "sku" || lowerKey === "skucode" || lowerKey === "partnumber" || lowerKey === "partno") mappedRec.sku = cleanVal;
+              else if (lowerKey === "category") mappedRec.category = cleanVal;
+              else if (lowerKey === "quantity" || lowerKey === "quantityonhand" || lowerKey === "instock" || lowerKey === "qty") {
+                const parsedQty = parseFloat(String(cleanVal));
+                mappedRec.quantity = isNaN(parsedQty) ? 0 : Math.round(parsedQty);
+              }
+              else if (lowerKey === "quantityonorder") {
+                const parsedQty = parseFloat(String(cleanVal));
+                mappedRec.quantity_on_order = isNaN(parsedQty) ? 0 : Math.round(parsedQty);
+              }
+              else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice" || lowerKey === "unit_price") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.unit_price = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "cost" || lowerKey === "costprice" || lowerKey === "unitcost") {
+                const parsedCs = parseFloat(String(cleanVal));
+                mappedRec.cost = isNaN(parsedCs) ? 0 : Math.round(parsedCs * 100);
+              }
+              else if (lowerKey === "image" || lowerKey === "imageurl" || lowerKey === "photo") mappedRec.image_url = cleanVal;
+              else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
+              else if (lowerKey === "unit" || lowerKey === "unitofmeasure" || lowerKey === "uom" || lowerKey === "unit_of_measure") mappedRec.unit_of_measure = cleanVal;
+              else if (lowerKey === "pricetier1" || lowerKey === "tier1") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_1 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier2" || lowerKey === "tier2") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_2 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier3" || lowerKey === "tier3") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_3 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier4" || lowerKey === "tier4") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_4 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier5" || lowerKey === "tier5") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_5 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+            } 
+            else if (table === "opportunities") {
+              if (lowerKey === "title" || lowerKey === "subject" || lowerKey === "dealname" || lowerKey === "deal" || lowerKey === "projectname" || lowerKey === "name") mappedRec.title = cleanVal;
+              else if (lowerKey === "description" || lowerKey === "notes") mappedRec.description = cleanVal;
+              else if (lowerKey === "value" || lowerKey === "amount" || lowerKey === "dealvalue" || lowerKey === "deal_value") {
+                const parsedVal = parseFloat(String(cleanVal));
+                mappedRec.value = isNaN(parsedVal) ? 0 : Math.round(parsedVal);
+              }
+              else if (lowerKey === "expectedclosedate" || lowerKey === "closedate" || lowerKey === "close") mappedRec.expected_close_date = cleanVal;
+              else if (lowerKey === "status" || lowerKey === "state") mappedRec.status = cleanVal;
+              else if (lowerKey === "stage" || lowerKey === "step") mappedRec.stage = cleanVal;
+              else if (lowerKey === "clientname" || lowerKey === "customername" || lowerKey === "customerid" || lowerKey === "client") {
+                mappedRec.customer_id = cleanVal;
+              }
+            }
+          }
+
+          // Force standard rules/metadata for Inventory tier falls
+          if (table === "inventory") {
+            if (mappedRec.unit_price !== undefined && mappedRec.price_tier_1 === undefined) {
+              mappedRec.price_tier_1 = mappedRec.unit_price;
+            }
+            if (mappedRec.price_tier_1 !== undefined && mappedRec.unit_price === undefined) {
+              mappedRec.unit_price = mappedRec.price_tier_1;
+            }
+            const defaultPrice = mappedRec.unit_price || 0;
+            if (mappedRec.price_tier_1 === undefined) mappedRec.price_tier_1 = defaultPrice;
+            if (mappedRec.price_tier_2 === undefined) mappedRec.price_tier_2 = defaultPrice;
+            if (mappedRec.price_tier_3 === undefined) mappedRec.price_tier_3 = defaultPrice;
+            if (mappedRec.price_tier_4 === undefined) mappedRec.price_tier_4 = defaultPrice;
+            if (mappedRec.price_tier_5 === undefined) mappedRec.price_tier_5 = defaultPrice;
+            if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
+
+            const metadataObj: any = {};
+            if (mappedRec.image_url) metadataObj.imageUrl = mappedRec.image_url;
+            if (mappedRec.location) metadataObj.location = mappedRec.location;
+            if (mappedRec.status) metadataObj.status = mappedRec.status;
+            if (mappedRec.quantity) metadataObj.quantityOnHand = mappedRec.quantity;
+
+            if (Object.keys(metadataObj).length > 0) {
+              const baseDesc = mappedRec.description || '';
+              mappedRec.description = `${baseDesc}\n\n<!--metadata:${JSON.stringify(metadataObj)}-->`.trim();
+            }
+          }
+
+          // Clean non-columns based on fallback schema references
+          const finalCleanedRec: any = {};
+          for (const k of Object.keys(mappedRec)) {
+            if (existingDbCols.has(k)) {
+              finalCleanedRec[k] = mappedRec[k];
+            }
+          }
+
+          // Resolve references
+          if (table === "contacts") {
+            const ownerSpec = rec.account_owner_number || rec.owner || rec.accountowner;
+            if (ownerSpec) {
+              const matchedId = profilesMap.get(String(ownerSpec).toLowerCase().trim());
+              if (matchedId) finalCleanedRec.owner_id = matchedId;
+            }
+          } else if (table === "opportunities") {
+            const ownerSpec = rec.owner || rec.owner_id;
+            if (ownerSpec) {
+              const matchedId = profilesMap.get(String(ownerSpec).toLowerCase().trim());
+              if (matchedId) finalCleanedRec.owner_id = matchedId;
+            }
+
+            if (finalCleanedRec.customer_id) {
+              const custSpec = String(finalCleanedRec.customer_id).trim();
+              const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(custSpec);
+              if (!isUuid) {
+                const nameKey = custSpec.toLowerCase().trim();
+                if (contactsNameMap.has(nameKey)) {
+                  finalCleanedRec.customer_id = contactsNameMap.get(nameKey);
+                } else {
+                  delete finalCleanedRec.customer_id;
+                }
+              }
+            }
+          }
+
+          // Ensure basic values exist
+          if (table === "contacts" && !finalCleanedRec.name) continue;
+          if (table === "inventory" && !finalCleanedRec.sku) continue;
+          if (table === "opportunities" && !finalCleanedRec.title) continue;
+
+          // Map deduplicated ID references
+          if (table === "contacts") {
+            const existingId = (finalCleanedRec.legacy_number && contactsLegacyMap.get(String(finalCleanedRec.legacy_number))) ||
+                               (finalCleanedRec.name && contactsNameMap.get(String(finalCleanedRec.name).toLowerCase()));
+            finalCleanedRec.id = existingId || ('cnt-' + Math.random().toString(36).slice(2, 11));
+          } else if (table === "inventory") {
+            const existingId = finalCleanedRec.sku && inventorySkuMap.get(String(finalCleanedRec.sku));
+            finalCleanedRec.id = existingId || ('inv-' + Math.random().toString(36).slice(2, 11));
+          } else {
+            finalCleanedRec.id = 'opp-' + Math.random().toString(36).slice(2, 11);
+          }
+
+          cleanedRecordsList.push(finalCleanedRec);
+        }
+
+        // Exec chunked self-healing upserts
+        const chunkSize = 1000;
+        let insertCount = 0;
+        let errorCount = 0;
+        let lastErrDetail = "";
+
+        const executeChunkedUpsertWithHealing = async (chunk: any[]) => {
+          let records = chunk.map(r => ({ ...r }));
+          let success = false;
+          let attempts = 0;
+          const maxAttempts = 15;
+
+          while (!success && attempts < maxAttempts) {
+            attempts++;
+            const { error: upsertErr } = await supabase.from(table).upsert(records);
+            if (!upsertErr) {
+              success = true;
+              break;
+            }
+
+            const msg = upsertErr.message || "";
+            let colToExclude: string | null = null;
+
+            const match1 = msg.match(/Could not find the '([^']+)' column/i);
+            if (match1 && match1[1]) {
+              colToExclude = match1[1];
+            } else {
+              const match2 = msg.match(/column "([^"]+)" of relation .+/i);
+              if (match2 && match2[1]) {
+                colToExclude = match2[1];
+              } else {
+                const match3 = msg.match(/column "([^"]+)" does not exist/i);
+                if (match3 && match3[1]) {
+                  colToExclude = match3[1];
+                }
+              }
+            }
+
+            if (colToExclude) {
+              console.log(`[Self-Healing Upsert] Container background sync excluding missing column "${colToExclude}" in fallback path for table ${table}`);
+              records = records.map(r => {
+                const nr = { ...r };
+                delete nr[colToExclude!];
+                return nr;
+              });
+            } else {
+              throw upsertErr;
+            }
+          }
+
+          if (!success) {
+            throw new Error(`Self-healing upsert failed after max attempts.`);
+          }
+        };
+
+        for (let chunkIdx = 0; chunkIdx < cleanedRecordsList.length; chunkIdx += chunkSize) {
+          const chunk = cleanedRecordsList.slice(chunkIdx, chunkIdx + chunkSize);
+          try {
+            await executeChunkedUpsertWithHealing(chunk);
+            insertCount += chunk.length;
+          } catch (chunkErr: any) {
+            errorCount += chunk.length;
+            lastErrDetail = chunkErr?.message || String(chunkErr);
+            console.error(`[Scheduler Upsert Fail] Chunk [${chunkIdx}-${chunkIdx + chunk.length}] fail:`, lastErrDetail);
+          }
+        }
+
+        logEntry.recordCount = insertCount;
+        if (errorCount === 0) {
+          logEntry.message = `Successfully synchronized & imported ${insertCount} records into table "${table}" unattended from virtual file: ${fileName}`;
+        } else {
+          logEntry.status = 'failed';
+          logEntry.message = `Sync completed with warnings: upserted ${insertCount} rows successfully, failed on ${errorCount} rows. Last error: ${lastErrDetail}`;
+          if (insertCount === 0) {
+            throw new Error(`Sync completely failed on all rows. Last error: ${lastErrDetail}`);
+          }
+        }
+      }
+    }
   } catch (error: any) {
     logEntry.status = 'failed';
     logEntry.message = error?.message || String(error);
     console.error(`Supabase task execution error [${task.id}]:`, error);
+  }
+
+  // Save execution status log to Supabase kv key 'import_export_history'
+  try {
+    const { data: histData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_history').maybeSingle();
+    let currentHist = histData?.value || [];
+    if (!Array.isArray(currentHist)) currentHist = [];
+    currentHist.unshift(logEntry);
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'import_export_history',
+      value: currentHist.slice(0, 500)
+    });
+  } catch (logErr) {
+    console.error('[Scheduler Supabase Log Save Error]', logErr);
   }
 
   return logEntry;
@@ -1272,10 +1733,77 @@ async function startServer() {
   app.post('/api/import-export/tasks/:id/run', async (req, res) => {
     const { id } = req.params;
     const tasks = loadJson(TASKS_FILE, []);
-    const task = tasks.find(t => t.id === id);
+    let task = tasks.find(t => t.id === id);
 
     if (!task) {
-      res.status(404).json({ error: 'Task not found' });
+      // Find in Supabase database
+      try {
+        const { data: dbData } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks')
+          .maybeSingle();
+
+        const supabaseTasks = dbData?.value || [];
+        const tIdx = supabaseTasks.findIndex((t: any) => t.id === id);
+        if (tIdx === -1) {
+          res.status(404).json({ error: 'Task not found in local or Supabase databases' });
+          return;
+        }
+
+        const supabaseTask = supabaseTasks[tIdx];
+        supabaseTask.status = 'running';
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_tasks',
+          value: supabaseTasks
+        });
+
+        const logResult = await executeSupabaseScheduledTask(supabaseTask);
+
+        // Reload fresh tasks list to preserve any concurrent modifications
+        const { data: reloadData } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks')
+          .maybeSingle();
+        const currentTasks = reloadData?.value || [];
+        const matchIdx = currentTasks.findIndex((t: any) => t.id === id);
+        if (matchIdx !== -1) {
+          const tRef = currentTasks[matchIdx];
+          tRef.status = tRef.recurrence === 'one-time' ? 'completed' : 'active';
+          tRef.lastRunTime = new Date().toISOString();
+          tRef.lastRunResult = logResult.status;
+          const nextTime = calculateNextRunTime(tRef, new Date());
+          tRef.nextRunTime = nextTime ? nextTime.toISOString() : null;
+        }
+
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_tasks',
+          value: currentTasks
+        });
+
+        res.json({ success: logResult.status === 'success', logResult });
+      } catch (err: any) {
+        try {
+          const { data: reloadData } = await supabase
+            .from('kv_store_8405be07')
+            .select('value')
+            .eq('key', 'import_export_tasks')
+            .maybeSingle();
+          const currentTasks = reloadData?.value || [];
+          const matchIdx = currentTasks.findIndex((t: any) => t.id === id);
+          if (matchIdx !== -1) {
+            const tRef = currentTasks[matchIdx];
+            tRef.status = 'active';
+            tRef.lastRunResult = 'failed';
+          }
+          await supabase.from('kv_store_8405be07').upsert({
+            key: 'import_export_tasks',
+            value: currentTasks
+          });
+        } catch (_) {}
+        res.status(500).json({ success: false, error: err.message || "Manual run on production backend container failed" });
+      }
       return;
     }
 
