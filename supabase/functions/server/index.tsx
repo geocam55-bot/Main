@@ -50,6 +50,47 @@ function getSupabase() {
 async function authenticateUser(c: any) {
   const supabase = getSupabase();
   const token = extractUserToken(c);
+
+  const INTERNAL_SECRET = "8405be07a4f940b59b39ea30ad96afcc";
+  if (token === INTERNAL_SECRET) {
+    // Unattended Server-Cron bypass
+    // Attempt to match george.campbell@ronaatlantic.ca or first available profile for organization context
+    const { data: georgeProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', 'george.campbell@ronaatlantic.ca')
+      .maybeSingle();
+
+    let profile = georgeProfile;
+    if (!profile) {
+      const { data: firstProfile } = await supabase.from('profiles').select('*').limit(1);
+      if (firstProfile && firstProfile.length > 0) {
+        profile = firstProfile[0];
+      }
+    }
+
+    const mockUser = {
+      id: profile?.id || 'server-cron-scheduler',
+      email: profile?.email || 'george.campbell@ronaatlantic.ca',
+      user_metadata: {
+        role: profile?.role || 'admin',
+        organizationId: profile?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+      }
+    };
+
+    return {
+      error: null,
+      status: 200,
+      supabase,
+      user: mockUser as any,
+      profile: {
+        ...profile,
+        role: profile?.role || 'admin',
+        organization_id: profile?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+      }
+    };
+  }
+
   if (!token) {
     // Log headers for debugging (redacted)
     const hasXUT = !!c.req.header('X-User-Token');
