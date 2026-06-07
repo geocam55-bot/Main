@@ -836,9 +836,19 @@ export async function executeSupabaseScheduledTask(task: any) {
     const fileName = task.action.fileName;
     const format = task.action.format;
 
+    console.log(`[Scheduler Supabase] 🚀 Starting Unattended Job Execution:
+  • Task ID: ${task.id}
+  • Task Name: "${task.name}"
+  • Action: ${mType}
+  • Module/Table: ${mModule} (${table})
+  • Target File: "${fileName}"
+  • Format: ${format}
+  • Initiator: ${task.creator}`);
+
     // Resolve organization ID
     let organizationId = task.organisationId || task.organizationId;
     if (!organizationId) {
+      console.log(`[Scheduler Supabase] Organization ID missing in task payload. Querying user profiles to resolve it...`);
       const { data: profiles } = await supabase.from('profiles').select('organization_id, id, name, email');
       if (profiles && profiles.length > 0) {
         const creatorEmail = String(task.creator || '').toLowerCase().trim();
@@ -847,7 +857,12 @@ export async function executeSupabaseScheduledTask(task: any) {
           (p.email && String(p.email).toLowerCase().trim() === creatorEmail)
         );
         organizationId = matched ? matched.organization_id : profiles[0].organization_id;
+        console.log(`[Scheduler Supabase] Resolved organizationId: "${organizationId}" via creator filter matching for email/name "${creatorEmail}".`);
+      } else {
+        console.warn(`[Scheduler Supabase] No profiles found in DB to resolve organizationId.`);
       }
+    } else {
+      console.log(`[Scheduler Supabase] Using organizationID from task credentials: "${organizationId}"`);
     }
 
     if (!organizationId) {
@@ -855,15 +870,20 @@ export async function executeSupabaseScheduledTask(task: any) {
     }
 
     if (mType === 'export') {
+      console.log(`[Scheduler Supabase] [Export Mode] Fetching database rows from Table "${table}" for Organization ID: "${organizationId}"...`);
       const { data: dbRecords, error: dbErr } = await supabase
         .from(table)
         .select("*")
         .eq('organization_id', organizationId);
       
-      if (dbErr) throw dbErr;
+      if (dbErr) {
+        console.error(`[Scheduler Supabase] [Export Mode] ❌ Database query failed for Table "${table}":`, dbErr);
+        throw dbErr;
+      }
 
       let fileText = "";
       const records = dbRecords || [];
+      console.log(`[Scheduler Supabase] [Export Mode] Query complete. Retrieved ${records.length} records. Formatting into: ${format}`);
       logEntry.recordCount = records.length;
 
       if (format === "json") {
@@ -909,32 +929,40 @@ export async function executeSupabaseScheduledTask(task: any) {
       }
     } else {
       // import format
+      console.log(`[Scheduler Supabase] [Import Mode] Starting import processing from storage format...`);
       if (task.action.fileStorage === 'onedrive') {
         console.log(`[Scheduler Supabase] Unattended OneDrive Import: Fetching latest copy of "${fileName}" from OneDrive...`);
         try {
           const syncResult = await syncOneDriveFileOnBackend(task);
           if (syncResult && syncResult.base64Url) {
             await saveVirtualFileServer(fileName, syncResult.base64Url);
-            console.log(`[Scheduler Supabase] Unattended OneDrive Import: Successfully synchronized a fresh copy of "${fileName}" to Supabase virtual storage.`);
+            console.log(`[Scheduler Supabase] Unattended OneDrive Import: Successfully synchronized a fresh copy of "${fileName}" to Supabase virtual storage. Content size: ${syncResult.base64Url.length} chars.`);
+          } else {
+            console.warn(`[Scheduler Supabase] Unattended OneDrive Import sync fetched empty or invalid response.`);
           }
         } catch (syncErr: any) {
           console.error(`[Scheduler Supabase] Unattended OneDrive Import refresh failure:`, syncErr.message || syncErr);
         }
       }
 
+      console.log(`[Scheduler Supabase] [Import Mode] Loading virtual source file "${fileName}" from database...`);
       const fileObj = await loadVirtualFileServer(fileName);
       if (!fileObj) {
         throw new Error(`Virtual source file "${fileName}" could not be found or was empty in Supabase storage.`);
       }
 
+      console.log(`[Scheduler Supabase] [Import Mode] Virtual file found. Base64 length: ${fileObj.base64?.length || 0} chars, Content length: ${fileObj.textContent?.length || 0} chars.`);
       let parsedRecords: any[] = [];
       const fileContent = fileObj.textContent || Buffer.from(fileObj.base64 || '', 'base64').toString('utf8');
 
+      console.log(`[Scheduler Supabase] [Import Mode] Parsing file contents using format "${format}"...`);
       if (format === "json") {
         try {
           const resJson = JSON.parse(fileContent);
           parsedRecords = Array.isArray(resJson) ? resJson : [resJson];
+          console.log(`[Scheduler Supabase] [Import Mode] parsed JSON content successfully. Total parsed array elements: ${parsedRecords.length}`);
         } catch (jsonErr: any) {
+          console.error(`[Scheduler Supabase] [Import Mode] ❌ JSON parser failed:`, jsonErr);
           throw new Error(`JSON parsing failed: ${jsonErr.message}`);
         }
       } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || format === 'xlsx' || format === 'xls') {
@@ -943,24 +971,30 @@ export async function executeSupabaseScheduledTask(task: any) {
           if (!b64) {
             throw new Error("No database content found for active Excel import task file.");
           }
+          console.log(`[Scheduler Supabase] [Import Mode] Reading Excel file...`);
           const workbook = XLSX.read(b64, { type: 'base64' });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
           parsedRecords = XLSX.utils.sheet_to_json(worksheet);
+          console.log(`[Scheduler Supabase] [Import Mode] Parsed Excel sheet "${firstSheetName}" successfully. Records count: ${parsedRecords.length}`);
         } catch (xlsxErr: any) {
+          console.error(`[Scheduler Supabase] [Import Mode] ❌ Excel parser failed:`, xlsxErr);
           throw new Error(`Excel workbook parsing failed: ${xlsxErr.message}`);
         }
       } else {
         // csv parser
         try {
+          console.log(`[Scheduler Supabase] [Import Mode] Splitting CSV lines...`);
           const rawText = fileContent.replace(/^\uFEFF/g, "");
           const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          console.log(`[Scheduler Supabase] [Import Mode] Total CSV source text lines: ${lines.length}`);
           if (lines.length > 1) {
             const parseCsvLine = (line: string) => {
               const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
               return matches.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
             };
             const headers = parseCsvLine(lines[0]);
+            console.log(`[Scheduler Supabase] [Import Mode] Extracted headers: ${JSON.stringify(headers)}`);
             parsedRecords = lines.slice(1).map(line => {
               const values = parseCsvLine(line);
               const row: any = {};
@@ -969,14 +1003,19 @@ export async function executeSupabaseScheduledTask(task: any) {
               });
               return row;
             });
+            console.log(`[Scheduler Supabase] [Import Mode] Extracted CSV records array count: ${parsedRecords.length}`);
+          } else {
+            console.warn(`[Scheduler Supabase] [Import Mode] CSV file has insufficient lines (fewer than 2, including headers).`);
           }
         } catch (csvErr: any) {
+          console.error(`[Scheduler Supabase] [Import Mode] ❌ CSV parser failed:`, csvErr);
           throw new Error(`CSV parsing failed: ${csvErr.message}`);
         }
       }
 
       if (parsedRecords.length === 0) {
         logEntry.message = `Import completed with 0 records processed from virtual file "${fileName}".`;
+        console.log(`[Scheduler Supabase] [Import Mode] ⚠️ Complete. 0 records parsed from "${fileName}".`);
       } else {
         // ---> INTELLIGENT AUTO-HEALING MAPPING FOR TABLE MISMATCHES <---
         let activeTable = table;
@@ -984,6 +1023,7 @@ export async function executeSupabaseScheduledTask(task: any) {
 
         const firstRec = parsedRecords[0];
         const lowerHeaderKeys = Object.keys(firstRec || {}).map(k => k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, ""));
+        console.log(`[Scheduler Supabase] Auto-Healing mapping headers list for match: ${JSON.stringify(lowerHeaderKeys)}`);
         
         const hasSku = lowerHeaderKeys.some(k => k === "sku" || k === "skucode" || k === "partnumber" || k === "partno" || k === "materialsku" || k === "itemsku" || k === "id");
         const hasItemName = lowerHeaderKeys.some(k => k === "itemname" || k === "item_name" || k === "productname" || k === "materialname" || k === "name" || k === "product" || k === "item" || k === "material" || k === "title");
@@ -1009,6 +1049,7 @@ export async function executeSupabaseScheduledTask(task: any) {
           activeModule = "contacts";
         }
 
+        console.log(`[Scheduler Supabase] Intended target: ${mModule} (${table}). Differentiated destination: ${activeModule} (${activeTable})`);
         table = activeTable;
         mModule = activeModule;
 
@@ -1229,17 +1270,24 @@ export async function executeSupabaseScheduledTask(task: any) {
         let errorCount = 0;
         let lastErrDetail = "";
 
+        console.log(`[Scheduler Supabase] [Import Mode] Prepared ${cleanedRecordsList.length} normalized records for UPSERT query into table "${table}"`);
+        console.log(`[Scheduler Supabase] [Import Mode] Starting chunked self-healing upsert for ${cleanedRecordsList.length} rows (Chunk size: ${chunkSize})...`);
+
         const executeChunkedUpsertWithHealing = async (chunk: any[]) => {
           let records = chunk.map(r => ({ ...r }));
           let success = false;
           let attempts = 0;
           const maxAttempts = 15;
 
+          console.log(`[Scheduler Supabase] [Upsert] Beginning executeChunkedUpsertWithHealing for chunk of ${chunk.length} records...`);
+
           while (!success && attempts < maxAttempts) {
             attempts++;
+            console.log(`[Scheduler Supabase] [Upsert] Attempt ${attempts}/${maxAttempts} for ${records.length} records...`);
             const { error: upsertErr } = await supabase.from(table).upsert(records);
             if (!upsertErr) {
               success = true;
+              console.log(`[Scheduler Supabase] [Upsert] Chunk of ${records.length} records successfully upserted on attempt ${attempts}.`);
               break;
             }
 
@@ -1262,13 +1310,14 @@ export async function executeSupabaseScheduledTask(task: any) {
             }
 
             if (colToExclude) {
-              console.log(`[Self-Healing Upsert] Container background sync excluding missing column "${colToExclude}" in fallback path for table ${table}`);
+              console.log(`[Scheduler Supabase] [Upsert-Heal] Missing column "${colToExclude}" detected! Removing from record structure and retrying...`);
               records = records.map(r => {
                 const nr = { ...r };
                 delete nr[colToExclude!];
                 return nr;
               });
             } else {
+              console.error(`[Scheduler Supabase] [Upsert-Error] Unresolvable upsert error encountered: "${msg}"`);
               throw upsertErr;
             }
           }
@@ -1281,21 +1330,24 @@ export async function executeSupabaseScheduledTask(task: any) {
         for (let chunkIdx = 0; chunkIdx < cleanedRecordsList.length; chunkIdx += chunkSize) {
           const chunk = cleanedRecordsList.slice(chunkIdx, chunkIdx + chunkSize);
           try {
+            console.log(`[Scheduler Supabase] [Import Mode] Processing chunk [${chunkIdx} to ${Math.min(chunkIdx + chunkSize, cleanedRecordsList.length)}]...`);
             await executeChunkedUpsertWithHealing(chunk);
             insertCount += chunk.length;
           } catch (chunkErr: any) {
             errorCount += chunk.length;
             lastErrDetail = chunkErr?.message || String(chunkErr);
-            console.error(`[Scheduler Upsert Fail] Chunk [${chunkIdx}-${chunkIdx + chunk.length}] fail:`, lastErrDetail);
+            console.error(`[Scheduler Supabase] [Upsert Fail] Chunk [${chunkIdx} to ${chunkIdx + chunk.length}] failed completely:`, lastErrDetail);
           }
         }
 
         logEntry.recordCount = insertCount;
         if (errorCount === 0) {
           logEntry.message = `Successfully synchronized & imported ${insertCount} records into table "${table}" unattended from virtual file: ${fileName}`;
+          console.log(`[Scheduler Supabase] [Import Mode] 🎉 Success! Synchronized & imported ${insertCount} records into "${table}".`);
         } else {
           logEntry.status = 'failed';
           logEntry.message = `Sync completed with warnings: upserted ${insertCount} rows successfully, failed on ${errorCount} rows. Last error: ${lastErrDetail}`;
+          console.warn(`[Scheduler Supabase] [Import Mode] ⚠️ Completed with warnings: upserted ${insertCount}, failed on ${errorCount} rows. Last error: ${lastErrDetail}`);
           if (insertCount === 0) {
             throw new Error(`Sync completely failed on all rows. Last error: ${lastErrDetail}`);
           }
@@ -1305,7 +1357,7 @@ export async function executeSupabaseScheduledTask(task: any) {
   } catch (error: any) {
     logEntry.status = 'failed';
     logEntry.message = error?.message || String(error);
-    console.error(`Supabase task execution error [${task.id}]:`, error);
+    console.error(`[Scheduler Supabase] ❌ Task execution FAILED for "${task.name}" (${task.id}):`, error);
   }
 
   // Save execution status log to Supabase kv key 'import_export_history'

@@ -1906,7 +1906,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       // 2. Call local Express endpoint on our container which has direct connection to the database
       const res = await safeFetch(`/api/import-export/tasks/${taskId}/run`, {
         method: "POST"
-      });
+      }, 120000); // 120 seconds timeout for large dataset parse & OneDrive network synchronization
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
