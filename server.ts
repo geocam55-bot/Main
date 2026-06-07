@@ -814,7 +814,7 @@ async function executeScheduledTask(task: any) {
 }
 
 // Background execution for Supabase-mode scheduled tasks
-async function executeSupabaseScheduledTask(task: any) {
+export async function executeSupabaseScheduledTask(task: any) {
   const logEntry: any = {
     id: 'log-' + Math.random().toString(36).slice(2, 9),
     taskId: task.id,
@@ -1048,9 +1048,7 @@ async function executeSupabaseScheduledTask(task: any) {
           if (inv.sku) inventorySkuMap.set(String(inv.sku).trim(), inv.id);
         });
 
-        let insertCount = 0;
-        let errorCount = 0;
-        let lastErrDetail = "";
+        const cleanedRecordsList: any[] = [];
 
         for (const rec of parsedRecords) {
           const mappedRec: any = { organization_id: organizationId };
@@ -1082,22 +1080,53 @@ async function executeSupabaseScheduledTask(task: any) {
               else if (lowerKey === "description") mappedRec.description = cleanVal;
               else if (lowerKey === "sku" || lowerKey === "skucode" || lowerKey === "partnumber" || lowerKey === "partno") mappedRec.sku = cleanVal;
               else if (lowerKey === "category") mappedRec.category = cleanVal;
-              else if (lowerKey === "quantity" || lowerKey === "quantityonhand" || lowerKey === "instock" || lowerKey === "qty") mappedRec.quantity = parseInt(String(cleanVal)) || 0;
-              else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice" || lowerKey === "unit_price") mappedRec.unit_price = parseFloat(String(cleanVal)) || 0;
-              else if (lowerKey === "cost" || lowerKey === "costprice" || lowerKey === "unitcost") mappedRec.cost = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "quantity" || lowerKey === "quantityonhand" || lowerKey === "instock" || lowerKey === "qty") {
+                const parsedQty = parseFloat(String(cleanVal));
+                mappedRec.quantity = isNaN(parsedQty) ? 0 : Math.round(parsedQty);
+              }
+              else if (lowerKey === "quantityonorder") {
+                const parsedQty = parseFloat(String(cleanVal));
+                mappedRec.quantity_on_order = isNaN(parsedQty) ? 0 : Math.round(parsedQty);
+              }
+              else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice" || lowerKey === "unit_price") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.unit_price = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "cost" || lowerKey === "costprice" || lowerKey === "unitcost") {
+                const parsedCs = parseFloat(String(cleanVal));
+                mappedRec.cost = isNaN(parsedCs) ? 0 : Math.round(parsedCs * 100);
+              }
               else if (lowerKey === "image" || lowerKey === "imageurl" || lowerKey === "photo") mappedRec.image_url = cleanVal;
               else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
               else if (lowerKey === "unitofmeasure" || lowerKey === "uom") mappedRec.unit_of_measure = cleanVal;
-              else if (lowerKey === "pricetier1" || lowerKey === "tier1") mappedRec.price_tier_1 = parseFloat(String(cleanVal)) || 0;
-              else if (lowerKey === "pricetier2" || lowerKey === "tier2") mappedRec.price_tier_2 = parseFloat(String(cleanVal)) || 0;
-              else if (lowerKey === "pricetier3" || lowerKey === "tier3") mappedRec.price_tier_3 = parseFloat(String(cleanVal)) || 0;
-              else if (lowerKey === "pricetier4" || lowerKey === "tier4") mappedRec.price_tier_4 = parseFloat(String(cleanVal)) || 0;
-              else if (lowerKey === "pricetier5" || lowerKey === "tier5") mappedRec.price_tier_5 = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "pricetier1" || lowerKey === "tier1") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_1 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier2" || lowerKey === "tier2") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_2 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier3" || lowerKey === "tier3") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_3 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier4" || lowerKey === "tier4") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_4 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
+              else if (lowerKey === "pricetier5" || lowerKey === "tier5") {
+                const parsedPr = parseFloat(String(cleanVal));
+                mappedRec.price_tier_5 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+              }
             } 
             else if (table === "opportunities") {
               if (lowerKey === "title" || lowerKey === "subject" || lowerKey === "dealname" || lowerKey === "deal" || lowerKey === "projectname" || lowerKey === "name") mappedRec.title = cleanVal;
               else if (lowerKey === "description" || lowerKey === "notes") mappedRec.description = cleanVal;
-              else if (lowerKey === "value" || lowerKey === "amount" || lowerKey === "dealvalue" || lowerKey === "deal_value") mappedRec.value = parseFloat(String(cleanVal)) || 0;
+              else if (lowerKey === "value" || lowerKey === "amount" || lowerKey === "dealvalue" || lowerKey === "deal_value") {
+                const parsedVal = parseFloat(String(cleanVal));
+                mappedRec.value = isNaN(parsedVal) ? 0 : Math.round(parsedVal);
+              }
               else if (lowerKey === "expectedclosedate" || lowerKey === "closedate" || lowerKey === "close") mappedRec.expected_close_date = cleanVal;
               else if (lowerKey === "status" || lowerKey === "state") mappedRec.status = cleanVal;
               else if (lowerKey === "stage" || lowerKey === "step") mappedRec.stage = cleanVal;
@@ -1107,14 +1136,41 @@ async function executeSupabaseScheduledTask(task: any) {
                 if (matchedId) {
                   mappedRec.customer_id = matchedId;
                 } else if (searchName.length > 5) {
-                  // Direct GUID / id check
                   mappedRec.customer_id = searchName;
                 }
               }
             }
           }
 
-          // Clean non-columns
+          // Force standard rules/metadata for Inventory tier falls
+          if (table === "inventory") {
+            if (mappedRec.unit_price !== undefined && mappedRec.price_tier_1 === undefined) {
+              mappedRec.price_tier_1 = mappedRec.unit_price;
+            }
+            if (mappedRec.price_tier_1 !== undefined && mappedRec.unit_price === undefined) {
+              mappedRec.unit_price = mappedRec.price_tier_1;
+            }
+            const defaultPrice = mappedRec.unit_price || 0;
+            if (mappedRec.price_tier_1 === undefined) mappedRec.price_tier_1 = defaultPrice;
+            if (mappedRec.price_tier_2 === undefined) mappedRec.price_tier_2 = defaultPrice;
+            if (mappedRec.price_tier_3 === undefined) mappedRec.price_tier_3 = defaultPrice;
+            if (mappedRec.price_tier_4 === undefined) mappedRec.price_tier_4 = defaultPrice;
+            if (mappedRec.price_tier_5 === undefined) mappedRec.price_tier_5 = defaultPrice;
+            if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
+
+            const metadataObj: any = {};
+            if (mappedRec.image_url) metadataObj.imageUrl = mappedRec.image_url;
+            if (mappedRec.location) metadataObj.location = mappedRec.location;
+            if (mappedRec.status) metadataObj.status = mappedRec.status;
+            if (mappedRec.quantity) metadataObj.quantityOnHand = mappedRec.quantity;
+
+            if (Object.keys(metadataObj).length > 0) {
+              const baseDesc = mappedRec.description || '';
+              mappedRec.description = `${baseDesc}\n\n<!--metadata:${JSON.stringify(metadataObj)}-->`.trim();
+            }
+          }
+
+          // Clean non-columns based on fallback schema references
           for (const k of Object.keys(mappedRec)) {
             if (!existingDbCols.has(k)) {
               delete mappedRec[k];
@@ -1138,33 +1194,94 @@ async function executeSupabaseScheduledTask(task: any) {
 
           // Ensure basic values exist
           if (table === "contacts" && !mappedRec.name) {
-            continue; // Skip headless contact
+            continue;
           }
           if (table === "inventory" && !mappedRec.sku) {
-            continue; // Skip empty SKU
+            continue;
           }
           if (table === "opportunities" && !mappedRec.title) {
-            continue; // Skip untitled deal
+            continue;
           }
 
-          // Exec upsert
-          try {
-            if (table === "contacts") {
-              // Deduplicate contact by legacy_number if present, otherwise email, else name
-              const existingId = (mappedRec.legacy_number && contactsLegacyMap.get(String(mappedRec.legacy_number))) ||
-                                 (mappedRec.email && contactsNameMap.get(String(mappedRec.name).toLowerCase()));
-              if (existingId) mappedRec.id = existingId;
-            } else if (table === "inventory") {
-              const existingId = mappedRec.sku && inventorySkuMap.get(String(mappedRec.sku));
-              if (existingId) mappedRec.id = existingId;
+          // Map deduplicated ID references
+          if (table === "contacts") {
+            const existingId = (mappedRec.legacy_number && contactsLegacyMap.get(String(mappedRec.legacy_number))) ||
+                               (mappedRec.email && contactsNameMap.get(String(mappedRec.name).toLowerCase()));
+            mappedRec.id = existingId || crypto.randomUUID();
+          } else if (table === "inventory") {
+            const existingId = mappedRec.sku && inventorySkuMap.get(String(mappedRec.sku));
+            mappedRec.id = existingId || crypto.randomUUID();
+          } else {
+            mappedRec.id = crypto.randomUUID();
+          }
+
+          cleanedRecordsList.push(mappedRec);
+        }
+
+        // Exec chunked self-healing upserts
+        const chunkSize = 1000;
+        let insertCount = 0;
+        let errorCount = 0;
+        let lastErrDetail = "";
+
+        async function executeChunkedUpsertWithHealing(chunk: any[]) {
+          let records = chunk.map(r => ({ ...r }));
+          let success = false;
+          let attempts = 0;
+          const maxAttempts = 15;
+
+          while (!success && attempts < maxAttempts) {
+            attempts++;
+            const { error: upsertErr } = await supabase.from(table).upsert(records);
+            if (!upsertErr) {
+              success = true;
+              break;
             }
 
-            const { error: upsertErr } = await supabase.from(table).upsert(mappedRec);
-            if (upsertErr) throw upsertErr;
-            insertCount++;
-          } catch (upsertErrDetail: any) {
-            errorCount++;
-            lastErrDetail = upsertErrDetail?.message || JSON.stringify(upsertErrDetail);
+            const msg = upsertErr.message || "";
+            let colToExclude: string | null = null;
+
+            const match1 = msg.match(/Could not find the '([^']+)' column/i);
+            if (match1 && match1[1]) {
+              colToExclude = match1[1];
+            } else {
+              const match2 = msg.match(/column "([^"]+)" of relation .+/i);
+              if (match2 && match2[1]) {
+                colToExclude = match2[1];
+              } else {
+                const match3 = msg.match(/column "([^"]+)" does not exist/i);
+                if (match3 && match3[1]) {
+                  colToExclude = match3[1];
+                }
+              }
+            }
+
+            if (colToExclude) {
+              console.log(`[Self-Healing Upsert] Unattended background sync excluding missing column "${colToExclude}" in fallback path for table ${table}`);
+              records = records.map(r => {
+                const nr = { ...r };
+                delete nr[colToExclude!];
+                return nr;
+              });
+            } else {
+              throw upsertErr;
+            }
+          }
+
+          if (!success) {
+            throw new Error(`Self-healing upsert failed after max attempts.`);
+          }
+        }
+
+        for (let chunkIdx = 0; chunkIdx < cleanedRecordsList.length; chunkIdx += chunkSize) {
+          const chunk = cleanedRecordsList.slice(chunkIdx, chunkIdx + chunkSize);
+          try {
+            await executeChunkedUpsertWithHealing(chunk);
+            insertCount += chunk.length;
+          } catch (chunkErr: any) {
+            errorCount += chunk.length;
+            lastErrDetail = chunkErr?.message || String(chunkErr);
+            console.error(`[Scheduler Upsert Fail] Chunk [${chunkIdx}-${chunkIdx + chunk.length}] fail:`, lastErrDetail);
           }
         }
 

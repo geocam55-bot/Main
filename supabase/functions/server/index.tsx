@@ -2321,46 +2321,69 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
             cleanedRecordsList.push(cleanedRec);
           }
 
-          const chunkSize = 100;
+          const chunkSize = 1000;
           let insertCount = 0;
           let errorCount = 0;
           let lastErrDetail = "";
 
+          async function executeEdgeChunkedUpsertWithHealing(originalChunk: any[]) {
+            let records = originalChunk.map(r => ({ ...r }));
+            let success = false;
+            let attempts = 0;
+            const maxAttempts = 15;
+
+            while (!success && attempts < maxAttempts) {
+              attempts++;
+              const { error: upsertErr } = await supabase.from(table).upsert(records);
+              if (!upsertErr) {
+                success = true;
+                break;
+              }
+
+              const msg = upsertErr.message || "";
+              let colToExclude: string | null = null;
+
+              const match1 = msg.match(/Could not find the '([^']+)' column/i);
+              if (match1 && match1[1]) {
+                colToExclude = match1[1];
+              } else {
+                const match2 = msg.match(/column "([^"]+)" of relation .+/i);
+                if (match2 && match2[1]) {
+                  colToExclude = match2[1];
+                } else {
+                  const match3 = msg.match(/column "([^"]+)" does not exist/i);
+                  if (match3 && match3[1]) {
+                    colToExclude = match3[1];
+                  }
+                }
+              }
+
+              if (colToExclude) {
+                console.log(`[Edge Self-Healing] Excluding missing column "${colToExclude}" in fallback path for table ${table}`);
+                records = records.map((r: any) => {
+                  const nr = { ...r };
+                  delete nr[colToExclude!];
+                  return nr;
+                });
+              } else {
+                throw upsertErr;
+              }
+            }
+
+            if (!success) {
+              throw new Error(`Self-healing upsert failed after max attempts.`);
+            }
+          }
+
           for (let chunkIdx = 0; chunkIdx < cleanedRecordsList.length; chunkIdx += chunkSize) {
             const chunk = cleanedRecordsList.slice(chunkIdx, chunkIdx + chunkSize);
-            let { error: upsertErr } = await supabase.from(table).upsert(chunk);
-            
-            if (upsertErr) {
-              const errMsg = String(upsertErr.message || '').toLowerCase();
-              const isColumnError = upsertErr.code === '42703' || errMsg.includes('column') || errMsg.includes('not find') || errMsg.includes('does not exist');
-
-              if (isColumnError) {
-                let repairedChunk = chunk.map(item => {
-                  const repairedItem = { ...item };
-                  if (table === 'inventory') {
-                    delete (repairedItem as any).image_url;
-                    delete (repairedItem as any).unit_of_measure;
-                    delete (repairedItem as any).price_tier_1;
-                    delete (repairedItem as any).price_tier_2;
-                    delete (repairedItem as any).price_tier_3;
-                    delete (repairedItem as any).price_tier_4;
-                    delete (repairedItem as any).price_tier_5;
-                  }
-                  return repairedItem;
-                });
-                let { error: retryErr } = await supabase.from(table).upsert(repairedChunk);
-                if (retryErr) {
-                  errorCount += chunk.length;
-                  lastErrDetail = retryErr.message;
-                } else {
-                  insertCount += chunk.length;
-                }
-              } else {
-                errorCount += chunk.length;
-                lastErrDetail = upsertErr.message;
-              }
-            } else {
+            try {
+              await executeEdgeChunkedUpsertWithHealing(chunk);
               insertCount += chunk.length;
+            } catch (chunkErr: any) {
+              errorCount += chunk.length;
+              lastErrDetail = chunkErr?.message || String(chunkErr);
+              console.error(`[Edge Upsert Fail] Chunk [${chunkIdx}-${chunkIdx + chunk.length}] fail:`, lastErrDetail);
             }
           }
 
