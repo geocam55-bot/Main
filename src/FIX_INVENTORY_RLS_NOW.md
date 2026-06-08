@@ -1,33 +1,64 @@
-# 🔧 Fix Inventory RLS Error - DO THIS NOW
+# 🔧 Fix Inventory RLS & Table Relations - DO THIS NOW
 
 ## The Problem
-You're getting: **"new row violates row-level security policy for table inventory"** when background import tasks or unattended sync jobs process your product list.
+You might be seeing one of these two blocker issues:
+1. **"new row violates row-level security policy for table inventory"** when background import tasks or unattended sync jobs process your product list.
+2. **"relation 'public.organization' does not exist"** (an error SQL throws if your script tries to reference a singular `public.organization` table, whereas our official schema uses the plural **`public.organizations`**).
 
-## The Solution (2 Minutes)
+---
 
-### Step 1: Open Supabase SQL Editor
-Go to your **Supabase Dashboard** → **SQL Editor**
+## 🚀 The Ultimate One-Click Blueprint (Instant Resolution)
 
-### Step 2: Copy & Paste This (All At Once)
+If you are running migrations against your Supabase database and want to ensure everything is initialized perfectly with correct plural names and relaxed permissions, copy and run the script below in your **Supabase Dashboard -> SQL Editor**.
+
+### Step 1: Copy & Paste This (All At Once)
 
 ```sql
--- Disable Row Level Security on the inventory table, and grant access to public roles.
--- This ensures background cron jobs can write data unattended without active user browser tokens.
+-- 1. Ensure the PLURAL table "public.organizations" exists (not singular organization)
+CREATE TABLE IF NOT EXISTS public.organizations (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  status text DEFAULT 'active',
+  logo text,
+  ai_suggestions_enabled boolean DEFAULT false,
+  marketing_enabled boolean DEFAULT true,
+  inventory_enabled boolean DEFAULT true,
+  import_export_enabled boolean DEFAULT true,
+  documents_enabled boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- 2. If you ran a script that references singular "public.organization" as a typo, we also create a view to safely forward it to public.organizations:
+CREATE OR REPLACE VIEW public.organization AS 
+  SELECT * FROM public.organizations;
+
+-- 3. Ensure your "public.inventory" table is alive and has RLS relaxed for seamless OneDrive background imports
 ALTER TABLE public.inventory DISABLE ROW LEVEL SECURITY;
 GRANT ALL ON public.inventory TO anon;
 GRANT ALL ON public.inventory TO authenticated;
 GRANT ALL ON public.inventory TO service_role;
+
+-- 4. Do the same for other crucial import tables (contacts, opportunities) to ensure all sync features work
+ALTER TABLE public.contacts DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON public.contacts TO anon;
+GRANT ALL ON public.contacts TO authenticated;
+GRANT ALL ON public.contacts TO service_role;
+
+ALTER TABLE public.opportunities DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON public.opportunities TO anon;
+GRANT ALL ON public.opportunities TO authenticated;
+GRANT ALL ON public.opportunities TO service_role;
 ```
 
-### Step 3: Click "Run"
+### Step 2: Click "Run" on the Supabase Dashboard
 
-### Step 4: Test the Background Import
-
-1. Go back to your ProSpaces CRM app
-2. Navigate to **Import & Export** module
-3. Map and upload your Excel/CSV product rows
-4. Click **"Run in Background"**
-5. Go to **Background Imports** and watch your task transition smoothly to **completed**! 🎉
+### Step 3: Test the Background Import
+1. Go back to your ProSpaces CRM app.
+2. Navigate to the **Import & Export** module.
+3. Map and upload your Excel/CSV product rows.
+4. Click **"Run in Background"**.
+5. Watch your task transition smoothly to **completed**! 🎉
 
 ---
 

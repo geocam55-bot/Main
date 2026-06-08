@@ -1358,7 +1358,13 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
     }
   } catch (error: any) {
     logEntry.status = 'failed';
-    logEntry.message = error?.message || String(error);
+    let errorExplanation = error?.message || String(error);
+    if (errorExplanation.includes("row-level security") || errorExplanation.includes("RLS")) {
+      errorExplanation = `${errorExplanation}. Fix this by running our compound RLS healing script in your Supabase SQL Editor as guided in /src/FIX_INVENTORY_RLS_NOW.md.`;
+    } else if (errorExplanation.includes("Microsoft OAuth") || errorExplanation.includes("OneDrive") || errorExplanation.includes("token") || errorExplanation.includes("Unauthorized")) {
+      errorExplanation = `${errorExplanation}. Reconnect your Microsoft OneDrive integration under the Connected Accounts panel.`;
+    }
+    logEntry.message = errorExplanation;
     console.error(`[Scheduler Supabase] ❌ Task execution FAILED for "${task.name}" (${task.id}):`, error);
   }
 

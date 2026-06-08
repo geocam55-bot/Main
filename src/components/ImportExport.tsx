@@ -1952,20 +1952,37 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           });
         }
 
+        const matchedTask = Array.isArray(tasksList) ? tasksList.find((t: any) => t.id === taskId) : null;
+        const taskNameValue = matchedTask?.name || "Task Run Error";
+        const actionTypeVal = matchedTask?.action?.type || "import";
+        const moduleVal = matchedTask?.action?.module || "unknown";
+        const fileStorageVal = matchedTask?.action?.fileStorage || "local";
+        const fileNameVal = matchedTask?.action?.fileName || "error";
+
+        // Diagnose common fetch/execution failures to provide ultra-helpful guidance
+        let errorExplanation = e.message || String(e);
+        if (errorExplanation.toLowerCase().includes("failed to fetch") || errorExplanation.toLowerCase().includes("fetch failed")) {
+          errorExplanation = "Failed to fetch: Connection to the backend App Service was unreachable. This happens when the Express server container is cold, restarting, or offline on port 3000. Try refreshing your browser tab now or run again in 10 seconds.";
+        } else if (errorExplanation.toLowerCase().includes("row-level security") || errorExplanation.toLowerCase().includes("rls")) {
+          errorExplanation = "Row-Level Security violation: Database RLS policies are blocking this unattended sync. Fix this instantly by running the compound RLS healing script in your Supabase SQL Editor as outlined in `/src/FIX_INVENTORY_RLS_NOW.md`.";
+        } else if (errorExplanation.toLowerCase().includes("unauthorized") || errorExplanation.toLowerCase().includes("jwt")) {
+          errorExplanation = "Session Unauthorized: The user authorization token has expired. Please sign out of ProSpaces and sign back in to renew your keys.";
+        }
+
         // Log the failure to history so the logs are clear
         const errLog = {
           id: "log-" + Math.random().toString(36).slice(2, 11),
           taskId: taskId,
-          taskName: "Task Execution Error",
+          taskName: taskNameValue,
           time: new Date().toISOString(),
           timestamp: new Date().toISOString(),
-          actionType: "unknown",
-          module: "unknown",
-          fileStorage: "local",
-          fileName: "error",
+          actionType: actionTypeVal,
+          module: moduleVal,
+          fileStorage: fileStorageVal,
+          fileName: fileNameVal,
           status: "failed",
           recordCount: 0,
-          message: `Execution failed: ${e.message || 'Unknown error'}`
+          message: `Execution failed: ${errorExplanation}`
         };
         const { data: histData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_history').maybeSingle();
         let currentHist = histData?.value || [];

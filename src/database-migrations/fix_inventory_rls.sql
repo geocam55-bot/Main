@@ -2,15 +2,16 @@
 -- FIX IMPORT TABLES RLS POLICIES (COMPOUND FIX)
 -- ============================================
 -- If you are seeing the error "new row violates row-level security policy for table XXX"
--- during background imports or unattended sync processes, run this script in your
--- Supabase Dashboard -> SQL Editor.
+-- or "relation 'public.organization' does not exist" in your logs, run this script 
+-- in your Supabase Dashboard -> SQL Editor.
 --
 -- Why this happens:
--- Unattended background import tasks are processed server-side. Since they run
--- automatically (even when your computer is off), they execute without an active
--- browser session (JWT/auth token), which defaults to the 'anon' role (no active auth.uid()).
--- If the CRM tables ("inventory", "contacts", "opportunities") have RLS enabled with strict 
--- "authenticated" user checks, these background upserts are blocked.
+-- 1. Unattended background import tasks are processed server-side. Since they run
+--    automatically, they execute without active browser headers, which default to the
+--    'anon' role (no active user auth.uid()). If tables have strict RLS, these are blocked.
+-- 2. In our schema, the organizations table is plural (public.organizations). If a relation,
+--    foreign key, or custom query references the singular "public.organization", PostgreSQL 
+--    fails with error 42P01. Running this SQL creates a safe backward-compatible View mapping.
 --
 -- Choose ONE of the following approaches to instantly resolve this:
 
@@ -19,6 +20,24 @@
 -- Disable Row Level Security on the main import tables, and grant access to public roles.
 -- This guarantees background cron jobs and OneDrive syncs can write data.
 -- -------------------------------------------------------------
+
+-- 0. Ensure plural public.organizations table exists & create a backward-compatible singular "public.organization" view:
+CREATE TABLE IF NOT EXISTS public.organizations (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  status text DEFAULT 'active',
+  logo text,
+  ai_suggestions_enabled boolean DEFAULT false,
+  marketing_enabled boolean DEFAULT true,
+  inventory_enabled boolean DEFAULT true,
+  import_export_enabled boolean DEFAULT true,
+  documents_enabled boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE OR REPLACE VIEW public.organization AS 
+  SELECT * FROM public.organizations;
 
 -- 1. Fix Inventory Table
 ALTER TABLE public.inventory DISABLE ROW LEVEL SECURITY;
