@@ -1082,10 +1082,10 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 {/* Starter / Basic Plan */}
                 <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
                   <div>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Starter Desk</span>
-                    <h4 className="text-lg font-black text-slate-800 mt-1">Basic Plan</h4>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Basic Plan</span>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Basic</h4>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                      Essential CRM workflows for small builders and startup contractors.
+                      Essential CRM workflows for small builders
                     </p>
                     <div className="mt-4 flex items-baseline">
                       <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$29</span>
@@ -1112,10 +1112,10 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                     Most Popular
                   </span>
                   <div>
-                    <span className="text-xs font-bold text-[#1E6FD9] uppercase tracking-wider block">Pro Spaces</span>
-                    <h4 className="text-lg font-black text-slate-800 mt-1">Professional Plan</h4>
+                    <span className="text-xs font-bold text-[#1E6FD9] uppercase tracking-wider block">Professional Plan</span>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Professional</h4>
                     <p className="text-xs text-slate-600 mt-2 leading-relaxed font-semibold">
-                      Perfect for growing teams, full custom builders, and lumber merchants.
+                      Perfect for growing teams & custom builders
                     </p>
                     <div className="mt-4 flex items-baseline">
                       <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$79</span>
@@ -1141,10 +1141,10 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 {/* Enterprise Plan */}
                 <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
                   <div>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Enterprise Setup</span>
-                    <h4 className="text-lg font-black text-slate-800 mt-1">Enterprise Plan</h4>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Enterprise Plan</span>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Enterprise</h4>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                      For large organizations needing enterprise scale, advanced logging, and custom setups.
+                      For large organizations needing custom scaling
                     </p>
                     <div className="mt-4 flex items-baseline">
                       <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$199</span>
