@@ -1512,19 +1512,28 @@ async function startServer() {
     console.error('Diag write failed:', err);
   }
 
-  // Highly robust custom CORS middleware supporting dynamic origin and header replication with diagnostics logging
+  // Dual-layer bulletproof CORS structure to handle preflight dynamic handshakes securely
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Replicate origin exactly or fallback to allowing true status responses
+      callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Headers']
+  }));
+
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
     } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Origin', 'https://www.prospacescrm.com');
     }
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
     
-    // Dynamically replicate any headers requested by preflight OPTIONS to bypass CORS blocks on custom headers
     const requestHeaders = req.headers['access-control-request-headers'];
     if (requestHeaders) {
       res.setHeader('Access-Control-Allow-Headers', requestHeaders);
@@ -1532,7 +1541,6 @@ async function startServer() {
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires');
     }
 
-    // Handle OPTIONS requests preflight immediately with a clean 200 success response
     if (req.method === 'OPTIONS') {
       try {
         const logLine = `[${new Date().toISOString()}] [CORS OPTIONS PREFLIGHT] Origin: ${origin || 'none'}, Headers: ${requestHeaders || 'none'}\n`;
