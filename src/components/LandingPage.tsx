@@ -1079,22 +1079,23 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
             <div className="flex-1 overflow-y-auto p-6 sm:p-8">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                {/* Starter Plan */}
+                {/* Starter / Basic Plan */}
                 <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
                   <div>
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Starter Desk</span>
-                    <h4 className="text-lg font-black text-slate-800 mt-1">Single Store Office</h4>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Basic Plan</h4>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                      Elegantly handle all your sales quotes and local stocks in one yard.
+                      Essential CRM workflows for small builders and startup contractors.
                     </p>
                     <div className="mt-4 flex items-baseline">
-                      <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$79</span>
-                      <span className="text-xs text-slate-400 ml-1">/ month, billed annually</span>
+                      <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$29</span>
+                      <span className="text-xs text-slate-400 ml-1">/ month, billed monthly</span>
                     </div>
                     <ul className="mt-5 space-y-2.5 text-xs text-slate-600 border-t border-slate-200/50 pt-4">
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Up to 5 crew members</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Main Sales CRM suite</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Basic stock checks module</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Core CRM (Contacts, Deals, Tasks)</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Email integration</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Basic reports</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Community support</li>
                     </ul>
                   </div>
                   <button 
@@ -1112,19 +1113,21 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                   </span>
                   <div>
                     <span className="text-xs font-bold text-[#1E6FD9] uppercase tracking-wider block">Pro Spaces</span>
-                    <h4 className="text-lg font-black text-slate-800 mt-1">Lumber Merchant Group</h4>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Professional Plan</h4>
                     <p className="text-xs text-slate-600 mt-2 leading-relaxed font-semibold">
-                      Integrates professional 3D CAD design estimators, and locks in multi-location dispatch.
+                      Perfect for growing teams, full custom builders, and lumber merchants.
                     </p>
                     <div className="mt-4 flex items-baseline">
-                      <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$149</span>
-                      <span className="text-xs text-slate-600 ml-1 font-semibold">/ month, billed annually</span>
+                      <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$79</span>
+                      <span className="text-xs text-slate-600 ml-1 font-semibold">/ month, billed monthly</span>
                     </div>
-                    <ul className="mt-5 space-y-2.5 text-xs text-slate-600 border-t border-[#1E6FD9]/20 pt-4">
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Unlimited team members</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> 4 location instant stock sync</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> All 3D project planners</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> B2B Contractor portals</li>
+                    <ul className="mt-5 space-y-2.5 text-xs text-slate-600 border-t border-[#1E6FD9]/20 pt-4 font-medium">
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Everything in Basic</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Marketing automation</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Inventory management</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Document management</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Project Wizards (3D Planners)</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Customer portal</li>
                     </ul>
                   </div>
                   <button 
@@ -1139,24 +1142,28 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
                   <div>
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Enterprise Setup</span>
-                    <h4 className="text-lg font-black text-slate-800 mt-1">Sawmill & Logistics Setup</h4>
+                    <h4 className="text-lg font-black text-slate-800 mt-1">Enterprise Plan</h4>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                      Custom ERP-CRM endpoints for large lumber brands and advanced sawmills.
+                      For large organizations needing enterprise scale, advanced logging, and custom setups.
                     </p>
                     <div className="mt-4 flex items-baseline">
-                      <span className="text-2xl font-black text-slate-800 tracking-tight">Custom Quote</span>
+                      <span className="text-3xl font-extrabold text-slate-800 tracking-tight">$199</span>
+                      <span className="text-xs text-slate-400 ml-1">/ month, billed monthly</span>
                     </div>
                     <ul className="mt-5 space-y-2.5 text-xs text-slate-600 border-t border-slate-200/50 pt-4">
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Enterprise SSO & custom roles</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> API access to raw wood metrics</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Dedicated support team 24/7</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Everything in Professional</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> SSO SAML encryption</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Audit logging history</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Developer API access</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Custom integrations</li>
+                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> SLA performance guarantees</li>
                     </ul>
                   </div>
                   <button 
                     onClick={() => { setActiveNavTab(null); onGetStarted(); }}
                     className="w-full py-2 border border-slate-300 text-[#1E6FD9] hover:bg-slate-100 text-xs font-bold rounded-lg mt-6 transition-all"
                   >
-                    Contact Sales Desk
+                    Unlock Enterprise
                   </button>
                 </div>
 
