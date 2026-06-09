@@ -1438,33 +1438,34 @@ async function runSchedulerTick() {
       for (const task of supabaseTasks) {
         // Only run unattended if the status is active and the task triggers running whether computer is off
         const runOff = task.settings?.runWhetherComputerOff !== false;
+        const isForceRun = task.runImmediately === true || task.status === 'pending_run';
+        const isScheduledRun = task.status === 'active' && task.nextRunTime && runOff && now >= new Date(task.nextRunTime);
         
-        if (task.status === 'active' && task.nextRunTime && runOff) {
-          const nextRun = new Date(task.nextRunTime);
-          if (now >= nextRun) {
-            console.log(`[Scheduler] Executing unattended Supabase task: "${task.name}" (${task.id})`);
-            task.status = 'running';
-            
-            // Save immediately to avoid dual triggers
-            await supabase.from('kv_store_8405be07').upsert({
-              key: 'import_export_tasks',
-              value: supabaseTasks
-            });
+        if (isForceRun || isScheduledRun) {
+          console.log(`[Scheduler] Executing Supabase task: "${task.name}" (${task.id}). ForceRun: ${isForceRun}`);
+          task.status = 'running';
+          task.runImmediately = false; // Reset the immediate trigger flag
+          
+          // Save immediately to avoid dual triggers
+          await supabase.from('kv_store_8405be07').upsert({
+            key: 'import_export_tasks',
+            value: supabaseTasks
+          });
 
-            const result = await executeSupabaseScheduledTask(task);
+          const result = await executeSupabaseScheduledTask(task);
 
-            if (task.recurrence === 'one-time') {
-              task.status = 'completed';
-              task.nextRunTime = null;
-            } else {
-              task.status = 'active';
-              const nextTime = calculateNextRunTime(task, new Date());
-              task.nextRunTime = nextTime ? nextTime.toISOString() : null;
-            }
+          if (task.recurrence === 'one-time') {
+            task.status = 'completed';
+            task.nextRunTime = null;
+          } else {
+            task.status = 'active';
+            const nextTime = calculateNextRunTime(task, new Date());
+            task.nextRunTime = nextTime ? nextTime.toISOString() : null;
+          }
 
-            task.lastRunTime = now.toISOString();
-            task.lastRunResult = result.status;
-            supabaseUpdated = true;
+          task.lastRunTime = now.toISOString();
+          task.lastRunResult = result.status;
+          supabaseUpdated = true;
 
             // Log result into Supabase execution history
             try {
@@ -1484,16 +1485,15 @@ async function runSchedulerTick() {
             }
           }
         }
-      }
 
-      if (supabaseUpdated) {
-        await supabase.from('kv_store_8405be07').upsert({
-          key: 'import_export_tasks',
-          value: supabaseTasks
-        });
+        if (supabaseUpdated) {
+          await supabase.from('kv_store_8405be07').upsert({
+            key: 'import_export_tasks',
+            value: supabaseTasks
+          });
+        }
       }
-    }
-  } catch (err) {
+    } catch (err) {
     console.error('[Scheduler] Error running unattended Supabase scheduler tick:', err);
   }
 }
@@ -1512,31 +1512,35 @@ async function startServer() {
     console.error('Diag write failed:', err);
   }
 
-  // A single, completely bulletproof CORS middleware that handles preflight handshakes and credential requests dynamically
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Vary', 'Origin');
-    } else {
-      res.setHeader('Access-Control-Allow-Origin', 'https://www.prospacescrm.com');
-    }
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    
-    const requestHeaders = req.headers['access-control-request-headers'];
-    if (requestHeaders) {
-      res.setHeader('Access-Control-Allow-Headers', requestHeaders);
-    } else {
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires, Upgrade-Insecure-Requests');
-    }
+  // Standard, bulletproof CORS handling using official 'cors' library + manual OPTIONS preflight bypass
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Direct mirroring of the requesting origin or fallback to user custom production domain for cross-domain support
+      callback(null, origin || true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires', 'Upgrade-Insecure-Requests', 'X-User-Token']
+  }));
 
+  // Extra guard to ensure any direct OPTIONS request returns instantly
+  app.use((req, res, next) => {
     if (req.method === 'OPTIONS') {
-      try {
-        const logLine = `[${new Date().toISOString()}] [CORS SUCCESSFUL OPTIONS PREFLIGHT] Origin: ${origin || 'none'}, Headers: ${requestHeaders || 'none'}\n`;
-        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
-        console.log(`[CORS SUCCESSFUL OPTIONS PREFLIGHT] Origin: ${origin || 'none'}`);
-      } catch (err) {}
+      const origin = req.headers.origin;
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+      } else {
+        res.setHeader('Access-Control-Allow-Origin', 'https://www.prospacescrm.com');
+      }
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      const requestHeaders = req.headers['access-control-request-headers'];
+      if (requestHeaders) {
+        res.setHeader('Access-Control-Allow-Headers', requestHeaders);
+      } else {
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires, Upgrade-Insecure-Requests');
+      }
       res.status(200).end();
       return;
     }
