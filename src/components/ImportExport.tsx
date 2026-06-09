@@ -1596,11 +1596,25 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
+        const authCtx = await getAuthContext(supabase);
+        const resolvedOrgId = authCtx.organizationId || user?.organizationId || user?.organization_id;
+
+        let contactsQuery = supabase.from("contacts").select("id", { count: "exact", head: true });
+        let inventoryQuery = supabase.from("inventory").select("id", { count: "exact", head: true });
+        let opportunitiesQuery = supabase.from("opportunities").select("id", { count: "exact", head: true });
+
+        if (resolvedOrgId) {
+          contactsQuery = contactsQuery.eq("organization_id", resolvedOrgId);
+          inventoryQuery = inventoryQuery.eq("organization_id", resolvedOrgId);
+          opportunitiesQuery = opportunitiesQuery.eq("organization_id", resolvedOrgId);
+        }
+
         const [{ count: cCount }, { count: iCount }, { count: dCount }] = await Promise.all([
-          supabase.from("contacts").select("id", { count: "exact", head: true }),
-          supabase.from("inventory").select("id", { count: "exact", head: true }),
-          supabase.from("opportunities").select("id", { count: "exact", head: true })
+          contactsQuery,
+          inventoryQuery,
+          opportunitiesQuery
         ]);
+
         setCrmStats({
           contacts: cCount || 0,
           inventory: iCount || 0,
@@ -1833,8 +1847,16 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
+        const authCtx = await getAuthContext(supabase);
+        const resolvedOrgId = authCtx.organizationId || user?.organizationId || user?.organization_id;
         const table = mod === "deals" ? "opportunities" : mod;
-        const { data, error } = await supabase.from(table).select("*");
+
+        let query = supabase.from(table).select("*");
+        if (resolvedOrgId) {
+          query = query.eq("organization_id", resolvedOrgId);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
         setCrmRecords(data || []);
       } else {
