@@ -401,7 +401,14 @@ async function syncOneDriveFileOnBackend(task: any) {
       });
       console.log(`[OneDrive Background Sync] Re-authorized OneDrive access successfully.`);
     } catch (refreshErr: any) {
-      console.error(`[OneDrive Background Sync] Token refresh warning for ${selectedAccount.email}:`, refreshErr?.message || refreshErr);
+      const errMsg = refreshErr?.message || String(refreshErr);
+      console.error(`[OneDrive Background Sync] Token refresh warning for ${selectedAccount.email}:`, errMsg);
+      
+      let friendlyError = errMsg;
+      if (errMsg.includes("invalid_client") || errMsg.includes("AADSTS7000215")) {
+        friendlyError = `[Azure/OneDrive Auth Error] AADSTS7000215: Invalid Azure Client Secret. It looks like you've provided the "Secret ID" (a GUID) from the Azure Certificates & secrets page instead of the "Value" column. Please generate a new client secret in Azure, copy its actual "Value" column (which is a text string of symbols and letters), and configure it as the AZURE_CLIENT_SECRET environment variable in Google AI Studio Settings.`;
+      }
+      throw new Error(`OneDrive login/refresh failed: ${friendlyError}`);
     }
   }
 

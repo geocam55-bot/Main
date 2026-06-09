@@ -325,11 +325,11 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
     >
       {/* ── HEADER ── */}
       <header className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-md border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 h-18 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 py-4 sm:py-5 flex items-center justify-between">
           {/* Logo brand with navigation triggers */}
           <div className="flex items-center gap-4 sm:gap-10">
             <div className="flex items-center cursor-pointer" onClick={() => { setSelectedSpaceInfo(null); setActiveNavTab(null); }}>
-              <Logo size="sm" className="h-12 md:h-[58px] w-auto transition-all duration-200" />
+              <Logo size="md" className="h-16 md:h-20 lg:h-[84px] w-auto transition-all duration-200" />
             </div>
 
             {/* Desktop Center Navigation Links */}

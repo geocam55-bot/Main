@@ -364,31 +364,11 @@ const SCHEMA_GUIDES = {
 export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (view: string) => void }) {
   // Determine smart fallback backend url depending on runtime host type (Static SPA vs Sandbox Node Container)
   const getSmartDefaultUrl = () => {
-    const origin = window.location.origin;
-    // If we are currently running on the dev server inside AI Studio, we should prioritize
-    // pointing to the production (shared preview) backend container.
-    if (origin.includes("ais-dev-")) {
-      return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
-    }
-
-    const isBackendCapable = 
-      origin.includes("run.app") || 
-      origin.includes("localhost") || 
-      origin.includes("127.0.0.1") || 
-      origin.includes("3000") ||
-      origin.includes("google-aistudio-apps.com") ||
-      origin.includes("aistudio") ||
-      origin.includes("web-platform") ||
-      origin.includes("sandbox");
-
-    if (!isBackendCapable) {
-      return "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
-    }
-    return origin;
+    return window.location.origin;
   };
 
   const getRecommendedBridgeUrl = () => {
-    return getSmartDefaultUrl();
+    return window.location.origin;
   };
 
   // Load custom Express API base URL
@@ -396,15 +376,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     const origin = window.location.origin;
     const stored = localStorage.getItem("import_export_server_url");
     
-    // If the active frontend is the dev site, or if the stored URL is a dev site,
-    // force pointing to the production backend container for scheduling administration.
-    if (origin.includes("ais-dev-") || (stored && stored.includes("ais-dev-"))) {
-      const prodUrl = "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
-      localStorage.setItem("import_export_server_url", prodUrl);
-      return prodUrl;
+    // Always prioritize same-origin for reliable local execution
+    if (!stored || stored.includes("ais-dev-") || stored.includes("ais-pre-")) {
+      localStorage.setItem("import_export_server_url", origin);
+      return origin;
     }
     
-    return stored || getSmartDefaultUrl();
+    return stored || origin;
   });
   const [healthStatus, setHealthStatus] = useState<"unknown" | "connected" | "failed">("unknown");
   const [checkingHealth, setCheckingHealth] = useState(false);
@@ -985,30 +963,28 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       const origin = window.location.origin;
       
       // Perform relative healthcheck with up to 3 self-healing retries & backoff to handle container reboots transparently
-      // Disable relative self-heal checks if on the dev server (ais-dev-) to prioritize the production server
+      // Always prioritize relative (same-origin) healthcheck first to prevent any CORS blockages
       let relativeSuccess = false;
-      if (!origin.includes("ais-dev-")) {
-        const maxRetries = 3;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            const res = await fetch(`/api/health?_t=${Date.now()}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data.status === "ok") {
-                setHealthStatus("connected");
-                setBackendUrl(origin);
-                localStorage.setItem("import_export_server_url", origin);
-                relativeSuccess = true;
-                break;
-              }
+      const maxRetries = 3;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const res = await fetch(`/api/health?_t=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === "ok") {
+              setHealthStatus("connected");
+              setBackendUrl(origin);
+              localStorage.setItem("import_export_server_url", origin);
+              relativeSuccess = true;
+              break;
             }
-          } catch (err) {
-            console.warn(`[Self-Healing] Relative sandbox healthcheck attempt ${attempt}/${maxRetries} failed:`, err);
           }
-          if (attempt < maxRetries) {
-            // Wait 2 seconds before retrying
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
+        } catch (err) {
+          console.warn(`[Self-Healing] Relative sandbox healthcheck attempt ${attempt}/${maxRetries} failed:`, err);
+        }
+        if (attempt < maxRetries) {
+          // Wait 2 seconds before retrying
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
@@ -1019,9 +995,6 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       // Fallback: test absolute stored backendUrl or the smart default backend URL
       try {
         let currentStored = localStorage.getItem("import_export_server_url") || getSmartDefaultUrl();
-        if (currentStored && currentStored.includes("ais-dev-")) {
-          currentStored = "https://ais-pre-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
-        }
         if (currentStored && currentStored !== origin) {
           const fetchOptions: RequestInit = {
             method: "GET",
