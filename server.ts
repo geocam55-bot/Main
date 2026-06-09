@@ -1512,17 +1512,7 @@ async function startServer() {
     console.error('Diag write failed:', err);
   }
 
-  // Dual-layer bulletproof CORS structure to handle preflight dynamic handshakes securely
-  app.use(cors({
-    origin: (origin, callback) => {
-      // Replicate origin exactly or fallback to allowing true status responses
-      callback(null, true);
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Headers']
-  }));
-
+  // A single, completely bulletproof CORS middleware that handles preflight handshakes and credential requests dynamically
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
@@ -1538,13 +1528,14 @@ async function startServer() {
     if (requestHeaders) {
       res.setHeader('Access-Control-Allow-Headers', requestHeaders);
     } else {
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires, Upgrade-Insecure-Requests');
     }
 
     if (req.method === 'OPTIONS') {
       try {
-        const logLine = `[${new Date().toISOString()}] [CORS OPTIONS PREFLIGHT] Origin: ${origin || 'none'}, Headers: ${requestHeaders || 'none'}\n`;
+        const logLine = `[${new Date().toISOString()}] [CORS SUCCESSFUL OPTIONS PREFLIGHT] Origin: ${origin || 'none'}, Headers: ${requestHeaders || 'none'}\n`;
         fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
+        console.log(`[CORS SUCCESSFUL OPTIONS PREFLIGHT] Origin: ${origin || 'none'}`);
       } catch (err) {}
       res.status(200).end();
       return;
