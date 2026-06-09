@@ -407,6 +407,13 @@ async function syncOneDriveFileOnBackend(task: any) {
       let friendlyError = errMsg;
       if (errMsg.includes("invalid_client") || errMsg.includes("AADSTS7000215")) {
         friendlyError = `[Azure/OneDrive Auth Error] AADSTS7000215: Invalid Azure Client Secret. It looks like you've provided the "Secret ID" (a GUID) from the Azure Certificates & secrets page instead of the "Value" column. Please generate a new client secret in Azure, copy its actual "Value" column (which is a text string of symbols and letters), and configure it as the AZURE_CLIENT_SECRET environment variable in Google AI Studio Settings.`;
+      } else if (errMsg.includes("unauthorized_client") || errMsg.includes("AADSTS700016")) {
+        const isSwapped = AZURE_CLIENT_ID.includes('~') || !(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(AZURE_CLIENT_ID.trim()));
+        if (isSwapped) {
+          friendlyError = `[Azure/OneDrive Auth Error] AADSTS700016: Application not found. It looks like you have SWAPPED the Application (Client) ID and the Client Secret! Your AZURE_CLIENT_ID currently contains a secret value with a '~' character. Please swap them back in your Google AI Studio Settings: set AZURE_CLIENT_ID to the UUID/Guid Application ID (the one like "${AZURE_CLIENT_SECRET}") and set AZURE_CLIENT_SECRET to the secret Value (the one like "${AZURE_CLIENT_ID}").`;
+        } else {
+          friendlyError = `[Azure/OneDrive Auth Error] AADSTS700016: Application with identifier '${AZURE_CLIENT_ID}' was not found. Please ensure that in the Azure App Registration of your app, under "Supported account types", you selected "Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)". If it is selected as single tenant, personal accounts won't be able to log in.`;
+        }
       }
       throw new Error(`OneDrive login/refresh failed: ${friendlyError}`);
     }
