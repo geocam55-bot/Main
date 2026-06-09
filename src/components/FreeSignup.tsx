@@ -189,7 +189,7 @@ export function FreeSignup({ onSignupSuccess, onBack }: FreeSignupProps) {
                 <ArrowLeft className="w-5 h-5 text-slate-600" />
               </button>
             )}
-            <Logo size="sm" className="h-5 w-5" />
+            <Logo size="sm" className="h-5 w-auto" />
           </div>
           <CardTitle className="text-2xl">Create free trial account</CardTitle>
           <CardDescription>Get 15 days of free access to ProSpaces</CardDescription>

@@ -228,7 +228,7 @@ export function Navigation({
             <ArrowLeft className="h-5 w-5" />
           </button>
 
-          <Logo size="sm" className="h-9 w-9 shrink-0" />
+          <Logo size="sm" className="h-9 w-auto shrink-0" />
           <div className="overflow-hidden">
             <span className="text-sm md:text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
               Sales Space
@@ -535,7 +535,7 @@ export function Navigation({
           >
             {/* Drawer header */}
             <div className="flex h-16 items-center gap-3 px-5 border-b shrink-0" style={{ borderColor: theme.colors.border }}>
-              <Logo size="sm" className="h-9 w-9 shrink-0" />
+              <Logo size="sm" className="h-9 w-auto shrink-0" />
               <div className="overflow-hidden flex-1 min-w-0">
                 <span className="text-base font-bold text-slate-900 tracking-tight block truncate" style={{ color: theme.colors.text }}>
                   Sales Space

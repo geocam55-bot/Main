@@ -477,7 +477,7 @@ const LoginScreen = () => (
         <div className="p-16 flex flex-col items-center border-b border-border bg-slate-900 text-white relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20"></div>
           <div className="mb-8 relative z-10">
-            <Logo size="xl" className="h-20 w-20" />
+            <Logo size="xl" className="h-20 w-auto" />
           </div>
           <h2 className="text-5xl font-bold mb-4 relative z-10">ProSpaces Identity</h2>
           <p className="text-2xl text-blue-200 relative z-10">Enterprise Secure Access</p>
@@ -537,7 +537,7 @@ const CalendarScreen = () => {
         <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
           <div className="p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Logo size="sm" className="w-8 h-8" />
+              <Logo size="sm" className="h-8 w-auto" />
               ProSpaces
             </h2>
           </div>
@@ -761,7 +761,7 @@ const FeaturesScreen = () => {
         <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0 border-r border-slate-800">
           <div className="p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Logo size="sm" className="w-8 h-8" />
+              <Logo size="sm" className="h-8 w-auto" />
               ProSpaces
             </h2>
           </div>
@@ -838,7 +838,7 @@ const TeamDashboardScreen = () => {
         <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
           <div className="p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Logo size="sm" className="w-8 h-8" />
+              <Logo size="sm" className="h-8 w-auto" />
               ProSpaces
             </h2>
           </div>
@@ -1004,7 +1004,7 @@ const DashboardScreen = () => (
       <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-800">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Logo size="sm" className="w-8 h-8" />
+            <Logo size="sm" className="h-8 w-auto" />
             ProSpaces
           </h2>
         </div>
@@ -1203,7 +1203,7 @@ const ContactPortalScreen = () => (
       <div className="w-64 bg-slate-900 text-white flex flex-col">
         <div className="p-6 border-b border-slate-800">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Logo size="sm" className="w-8 h-8" />
+            <Logo size="sm" className="h-8 w-auto" />
             ProSpaces
           </h2>
         </div>
