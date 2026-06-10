@@ -24,6 +24,21 @@ import { customerPortalAPI } from './customer-portal-api.ts';
 
 const PREFIX = '/make-server-8405be07';
 
+function sanitizeRedirectUri(uri: string): string {
+  if (!uri) return '';
+  let clean = uri.trim();
+  if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+    clean = 'https://' + clean;
+  }
+  if (clean.includes('prospacescrm.com') && !clean.includes('www.prospacescrm.com')) {
+    clean = clean.replace('prospacescrm.com', 'www.prospacescrm.com');
+  }
+  if (!clean.includes('/oauth-callback') && !clean.includes('localhost') && !clean.includes('127.0.0.1')) {
+    clean = clean.replace(/\/+$/, '') + '/oauth-callback';
+  }
+  return clean;
+}
+
 async function resolveAzureSecrets() {
   let clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
   let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
@@ -41,6 +56,9 @@ async function resolveAzureSecrets() {
     } catch (e: any) {
       console.error('[Fallback Engine] Error loading Azure fallback in index.tsx:', e?.message || e);
     }
+  }
+  if (redirectUri) {
+    redirectUri = sanitizeRedirectUri(redirectUri);
   }
   return { clientId, clientSecret, redirectUri };
 }
@@ -62,6 +80,9 @@ async function resolveGoogleSecrets() {
     } catch (e: any) {
       console.error('[Fallback Engine] Error loading Google fallback in index.tsx:', e?.message || e);
     }
+  }
+  if (redirectUri) {
+    redirectUri = sanitizeRedirectUri(redirectUri);
   }
   return { clientId, clientSecret, redirectUri };
 }
@@ -1399,6 +1420,8 @@ app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
         : (azureSecrets.redirectUri || '');
     }
 
+    redirectUri = sanitizeRedirectUri(redirectUri);
+
     if (!redirectUri) return c.json({ error: 'No redirect URI available (send frontendOrigin/redirectUri or set AZURE_REDIRECT_URI)' }, 500);
     // Azure OAuth redirect_uri set
 
@@ -2565,6 +2588,8 @@ app.post(`${PREFIX}/google-oauth-init`, async (c) => {
         ? (frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
         : (googleSecrets.redirectUri || '');
     }
+
+    redirectUri = sanitizeRedirectUri(redirectUri);
 
     if (!redirectUri) return c.json({ error: 'No redirect URI available (send frontendOrigin/redirectUri or set GOOGLE_REDIRECT_URI)' }, 500);
     // Google OAuth redirect_uri set
