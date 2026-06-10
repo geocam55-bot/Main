@@ -1,6 +1,24 @@
 import { Hono } from 'npm:hono';
 import * as kv from './kv_store.tsx';
 
+async function resolveAzureCredentials() {
+  let clientId = Deno.env.get('AZURE_CLIENT_ID');
+  let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET');
+  let redirectUri = Deno.env.get('AZURE_REDIRECT_URI');
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    try {
+      const config = await kv.get('secrets:microsoft');
+      if (config) {
+        clientId = clientId || config.clientId || '';
+        clientSecret = clientSecret || config.clientSecret || '';
+        redirectUri = redirectUri || config.redirectUri || '';
+      }
+    } catch (e) {}
+  }
+  return { clientId, clientSecret, redirectUri };
+}
+
 export const azureOAuthCallback = (app: Hono) => {
   // Handle Microsoft/Outlook OAuth callback
   app.get('/make-server-8405be07/azure-oauth-callback', async (c) => {
@@ -29,9 +47,7 @@ export const azureOAuthCallback = (app: Hono) => {
       // Delete state to prevent reuse (keep state string for poll key)
       await kv.del(`oauth_state:${state}`);
 
-      const AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
-      const AZURE_CLIENT_SECRET = Deno.env.get('AZURE_CLIENT_SECRET');
-      const AZURE_REDIRECT_URI = Deno.env.get('AZURE_REDIRECT_URI');
+      const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET, redirectUri: AZURE_REDIRECT_URI } = await resolveAzureCredentials();
 
       console.log('[Azure OAuth] Callback config check:', {
         hasClientId: !!AZURE_CLIENT_ID,
@@ -163,8 +179,7 @@ export const azureOAuthCallback = (app: Hono) => {
         return c.json({ error: 'No refresh token available. Please reconnect the account.' }, 400);
       }
 
-      const AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
-      const AZURE_CLIENT_SECRET = Deno.env.get('AZURE_CLIENT_SECRET');
+      const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET } = await resolveAzureCredentials();
 
       if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
         return c.json({ error: 'Azure OAuth not configured on server' }, 500);
@@ -235,8 +250,7 @@ export const azureOAuthCallback = (app: Hono) => {
       if (new Date(accountData.token_expires_at) <= new Date()) {
         console.log('[Azure OAuth] Token expired, refreshing...');
         // Inline refresh
-        const AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
-        const AZURE_CLIENT_SECRET = Deno.env.get('AZURE_CLIENT_SECRET');
+        const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET } = await resolveAzureCredentials();
         
         if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET || !accountData.refresh_token) {
           return c.json({ error: 'Cannot refresh token. Please reconnect the account.' }, 400);
@@ -341,8 +355,7 @@ export const azureOAuthCallback = (app: Hono) => {
       // Check if token needs refresh
       let accessToken = accountData.access_token;
       if (new Date(accountData.token_expires_at) <= new Date()) {
-        const AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
-        const AZURE_CLIENT_SECRET = Deno.env.get('AZURE_CLIENT_SECRET');
+        const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET } = await resolveAzureCredentials();
         
         if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET || !accountData.refresh_token) {
           return c.json({ error: 'Cannot refresh token. Please reconnect.' }, 400);

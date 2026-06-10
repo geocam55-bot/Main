@@ -20,7 +20,7 @@ export function Logo({ size = 'md', className = '' }: LogoProps) {
 
   return (
     <img
-      src={logoAsset}
+      src={`${logoAsset}?v=2`}
       alt="ProSpaces CRM Logo"
       referrerPolicy="no-referrer"
       className={`${sizeToApply} ${className} object-contain z-50`}

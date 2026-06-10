@@ -1934,6 +1934,66 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
+  // --- AUTOMATIC CREDENTIAL SYNCING TO SUPABASE FOR PRODUCTION ---
+  async function syncLocalEnvironmentToSupabase() {
+    try {
+      const azureClientId = process.env.AZURE_CLIENT_ID;
+      const azureClientSecret = process.env.AZURE_CLIENT_SECRET;
+      const azureRedirectUri = process.env.AZURE_REDIRECT_URI || 'https://www.prospacescrm.com/oauth-callback';
+
+      const googleClientId = process.env.GOOGLE_CLIENT_ID;
+      const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://www.prospacescrm.com/oauth-callback';
+
+      if (azureClientId && azureClientSecret) {
+        console.log('[Server Config Sync] Syncing Microsoft credentials to Supabase DB...', {
+          clientId: azureClientId,
+          redirectUri: azureRedirectUri
+        });
+        const { error } = await supabase.from('kv_store_8405be07').upsert({
+          key: 'secrets:microsoft',
+          value: {
+            clientId: azureClientId,
+            clientSecret: azureClientSecret,
+            redirectUri: azureRedirectUri,
+            updatedAt: new Date().toISOString()
+          }
+        });
+        if (error) {
+          console.error('[Server Config Sync] Failed to sync Microsoft credentials to Supabase:', error.message);
+        } else {
+          console.log('[Server Config Sync] Synchronized Microsoft credentials to Supabase perfectly.');
+        }
+      }
+
+      if (googleClientId && googleClientSecret) {
+        console.log('[Server Config Sync] Syncing Google credentials to Supabase DB...', {
+          clientId: googleClientId,
+          redirectUri: googleRedirectUri
+        });
+        const { error } = await supabase.from('kv_store_8405be07').upsert({
+          key: 'secrets:google',
+          value: {
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+            redirectUri: googleRedirectUri,
+            updatedAt: new Date().toISOString()
+          }
+        });
+        if (error) {
+          console.error('[Server Config Sync] Failed to sync Google credentials to Supabase:', error.message);
+        } else {
+          console.log('[Server Config Sync] Synchronized Google credentials to Supabase perfectly.');
+        }
+      }
+    } catch (err: any) {
+      console.error('[Server Config Sync] Exception in syncLocalEnvironmentToSupabase:', err.message || err);
+    }
+  }
+
+  // Trigger sync on server startup
+  syncLocalEnvironmentToSupabase();
+
   // --- SELF-UNINSTALLING SERVICE WORKER ENDPOINTS ---
   app.get(['/service-worker.js', '/sw.js'], (req, res) => {
     res.set({

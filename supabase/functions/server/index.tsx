@@ -2570,8 +2570,17 @@ async function getAccountTokensFromKV(userId: string, accountId: string) {
 }
 
 async function refreshAzureTokenFn(refreshToken: string) {
-  const CID = Deno.env.get('AZURE_CLIENT_ID') ?? '';
-  const CS = Deno.env.get('AZURE_CLIENT_SECRET') ?? '';
+  let CID = Deno.env.get('AZURE_CLIENT_ID') ?? '';
+  let CS = Deno.env.get('AZURE_CLIENT_SECRET') ?? '';
+  if (!CID || !CS) {
+    try {
+      const config = await kv.get('secrets:microsoft');
+      if (config) {
+        CID = CID || config.clientId || '';
+        CS = CS || config.clientSecret || '';
+      }
+    } catch (e) {}
+  }
   if (!CID || !CS) throw new Error('Azure credentials not configured');
   const r = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2582,8 +2591,17 @@ async function refreshAzureTokenFn(refreshToken: string) {
 }
 
 async function refreshGoogleTokenFn(refreshToken: string) {
-  const CID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
-  const CS = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+  let CID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
+  let CS = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+  if (!CID || !CS) {
+    try {
+      const config = await kv.get('secrets:google');
+      if (config) {
+        CID = CID || config.clientId || '';
+        CS = CS || config.clientSecret || '';
+      }
+    } catch (e) {}
+  }
   if (!CID || !CS) throw new Error('Google credentials not configured');
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -27,8 +27,22 @@ export const azureOAuthInit = (app: Hono) => {
         }, 401);
       }
 
-      const AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
-      const AZURE_REDIRECT_URI = Deno.env.get('AZURE_REDIRECT_URI');
+      let AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
+      let AZURE_REDIRECT_URI = Deno.env.get('AZURE_REDIRECT_URI');
+
+      // Fallback: load synchronized credentials from DB KV store
+      if (!AZURE_CLIENT_ID || !AZURE_REDIRECT_URI) {
+        try {
+          const config = await kv.get('secrets:microsoft');
+          if (config) {
+            AZURE_CLIENT_ID = AZURE_CLIENT_ID || config.clientId;
+            AZURE_REDIRECT_URI = AZURE_REDIRECT_URI || config.redirectUri;
+            console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully:', { AZURE_CLIENT_ID, AZURE_REDIRECT_URI });
+          }
+        } catch (e: any) {
+          console.error('[Fallback Engine] Error loading Azure fallback:', e?.message || e);
+        }
+      }
 
       if (!AZURE_CLIENT_ID || !AZURE_REDIRECT_URI) {
         return c.json({ 
@@ -80,16 +94,30 @@ export const azureOAuthInit = (app: Hono) => {
   });
 
   // Health check for Azure OAuth
-  app.get('/make-server-8405be07/azure-health', (c) => {
-    const clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
-    const clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
-    const redirectUri = Deno.env.get('AZURE_REDIRECT_URI') || '';
+  app.get('/make-server-8405be07/azure-health', async (c) => {
+    let clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
+    let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    let redirectUri = Deno.env.get('AZURE_REDIRECT_URI') || '';
+    let isFallbackUsed = false;
+    
+    if (!clientId || !clientSecret || !redirectUri) {
+      try {
+        const config = await kv.get('secrets:microsoft');
+        if (config) {
+          clientId = clientId || config.clientId || '';
+          clientSecret = clientSecret || config.clientSecret || '';
+          redirectUri = redirectUri || config.redirectUri || '';
+          isFallbackUsed = true;
+        }
+      } catch (e) {}
+    }
     
     const configured = !!(clientId && clientSecret && redirectUri);
     
     return c.json({
       status: 'ok',
       configured,
+      isFallbackUsed,
       diagnostics: {
         hasClientId: !!clientId,
         hasClientSecret: !!clientSecret,
