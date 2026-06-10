@@ -6,6 +6,7 @@
   "dependencies": {
     "@babel/parser": "*",
     "@capacitor/cli": "*",
+    "@google/genai": "^2.8.0",
     "@jsr/supabase__supabase-js": "^2.49.8",
     "@radix-ui/react-accordion": "*",
     "@radix-ui/react-alert-dialog": "*",

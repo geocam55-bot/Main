@@ -233,9 +233,6 @@ export function Navigation({
             <span className="text-sm md:text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
               Sales Space
             </span>
-            <span className="text-[9px] md:text-[10px] font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
-              CRM Workspace
-            </span>
           </div>
         </div>
 
@@ -539,9 +536,6 @@ export function Navigation({
               <div className="overflow-hidden flex-1 min-w-0">
                 <span className="text-base font-bold text-slate-900 tracking-tight block truncate" style={{ color: theme.colors.text }}>
                   Sales Space
-                </span>
-                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
-                  CRM Workspace
                 </span>
               </div>
               <button
