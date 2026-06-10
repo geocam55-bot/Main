@@ -40,23 +40,35 @@ function sanitizeRedirectUri(uri: string): string {
 }
 
 async function resolveAzureSecrets() {
-  let clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
-  let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
-  let redirectUri = Deno.env.get('AZURE_REDIRECT_URI') || '';
+  let clientId = '';
+  let clientSecret = '';
+  let redirectUri = '';
 
-  if (!clientId || !clientSecret || !redirectUri) {
-    try {
-      const config = await kv.get('secrets:microsoft');
-      if (config) {
-        clientId = clientId || config.clientId || '';
-        clientSecret = clientSecret || config.clientSecret || '';
-        redirectUri = redirectUri || config.redirectUri || '';
-        console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
+  // 1. Try reading from DB KV store first (user custom credentials)
+  try {
+    const config = await kv.get('secrets:microsoft');
+    if (config) {
+      clientId = config.clientId || '';
+      clientSecret = config.clientSecret || '';
+      redirectUri = config.redirectUri || '';
+      if (clientId && clientSecret) {
+        console.log('[Fallback Engine] Loaded custom Azure credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
       }
-    } catch (e: any) {
-      console.error('[Fallback Engine] Error loading Azure fallback in index.tsx:', e?.message || e);
+    }
+  } catch (e: any) {
+    console.error('[Fallback Engine] Error loading Azure fallback in index.tsx:', e?.message || e);
+  }
+
+  // 2. Fall back to environment variables if not present in DB
+  if (!clientId || !clientSecret) {
+    clientId = clientId || Deno.env.get('AZURE_CLIENT_ID') || '';
+    clientSecret = clientSecret || Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+    if (clientId) {
+      console.log('[Fallback Engine] Loaded fallback Azure credentials from Deno.env in index.tsx:', { clientId, redirectUri });
     }
   }
+
   if (redirectUri) {
     redirectUri = sanitizeRedirectUri(redirectUri);
   }
@@ -64,23 +76,35 @@ async function resolveAzureSecrets() {
 }
 
 async function resolveGoogleSecrets() {
-  let clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
-  let clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-  let redirectUri = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+  let clientId = '';
+  let clientSecret = '';
+  let redirectUri = '';
 
-  if (!clientId || !clientSecret || !redirectUri) {
-    try {
-      const config = await kv.get('secrets:google');
-      if (config) {
-        clientId = clientId || config.clientId || '';
-        clientSecret = clientSecret || config.clientSecret || '';
-        redirectUri = redirectUri || config.redirectUri || '';
-        console.log('[Fallback Engine] Loaded Google credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
+  // 1. Try reading from DB KV store first (user custom credentials)
+  try {
+    const config = await kv.get('secrets:google');
+    if (config) {
+      clientId = config.clientId || '';
+      clientSecret = config.clientSecret || '';
+      redirectUri = config.redirectUri || '';
+      if (clientId && clientSecret) {
+        console.log('[Fallback Engine] Loaded custom Google credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
       }
-    } catch (e: any) {
-      console.error('[Fallback Engine] Error loading Google fallback in index.tsx:', e?.message || e);
+    }
+  } catch (e: any) {
+    console.error('[Fallback Engine] Error loading Google fallback in index.tsx:', e?.message || e);
+  }
+
+  // 2. Fall back to environment variables if not present in DB
+  if (!clientId || !clientSecret) {
+    clientId = clientId || Deno.env.get('GOOGLE_CLIENT_ID') || '';
+    clientSecret = clientSecret || Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+    if (clientId) {
+      console.log('[Fallback Engine] Loaded fallback Google credentials from Deno.env in index.tsx:', { clientId, redirectUri });
     }
   }
+
   if (redirectUri) {
     redirectUri = sanitizeRedirectUri(redirectUri);
   }

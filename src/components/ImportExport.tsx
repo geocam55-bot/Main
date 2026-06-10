@@ -528,6 +528,59 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setOauthMicrosoftPromptState(val);
   };
 
+  const [dbMsClientId, setDbMsClientId] = useState('');
+  const [dbMsClientSecret, setDbMsClientSecret] = useState('');
+  const [dbMsRedirectUri, setDbMsRedirectUri] = useState('');
+  const [loadingDbMsKeys, setLoadingDbMsKeys] = useState(false);
+  const [savingDbMsKeys, setSavingDbMsKeys] = useState(false);
+
+  useEffect(() => {
+    if (showMsDiagnosticGuide) {
+      const loadDbMsKeys = async () => {
+        setLoadingDbMsKeys(true);
+        try {
+          const supabase = createClient();
+          const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:microsoft').maybeSingle() as any;
+          if (data?.value) {
+            setDbMsClientId(data.value.clientId || '');
+            setDbMsClientSecret(data.value.clientSecret || '');
+            setDbMsRedirectUri(data.value.redirectUri || '');
+          }
+        } catch (e) {
+          console.error("Failed to load MS keys from DB:", e);
+        } finally {
+          setLoadingDbMsKeys(false);
+        }
+      };
+      loadDbMsKeys();
+    }
+  }, [showMsDiagnosticGuide]);
+
+  const handleSaveDbMsKeys = async () => {
+    setSavingDbMsKeys(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('kv_store_8405be07').upsert({
+        key: 'secrets:microsoft',
+        value: {
+          clientId: dbMsClientId.trim(),
+          clientSecret: dbMsClientSecret.trim(),
+          redirectUri: dbMsRedirectUri.trim() || 'https://www.prospacescrm.com/oauth-callback',
+          updatedAt: new Date().toISOString()
+        }
+      });
+      if (error) {
+        toast.error("Failed to save custom credentials: " + error.message);
+      } else {
+        toast.success("Custom Microsoft App credentials saved and activated perfectly!");
+      }
+    } catch (e: any) {
+      toast.error("Error saving credentials: " + e.message);
+    } finally {
+      setSavingDbMsKeys(false);
+    }
+  };
+
   const fetchMsAccounts = async () => {
     setFetchingMsAccounts(true);
     try {
@@ -3641,6 +3694,96 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                   <span className="leading-relaxed">Click <strong>Save</strong> at the top-left, wait 10 seconds, then try signing in again!</span>
                                 </li>
                               </ol>
+                            </div>
+
+                            {/* Custom Microsoft Azure Credentials Overrides */}
+                            <div className="mt-4 pt-4 border-t border-slate-200/60 font-sans space-y-3">
+                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">🔒 Self-Hosted / Custom Azure Client Credentials</p>
+                              <p className="text-3xs text-slate-500 leading-normal mb-1">
+                                Want to use your own Microsoft App Registration? Input your custom client credentials below. These are stored locally in your database and securely override the system properties.
+                              </p>
+                              
+                              {loadingDbMsKeys ? (
+                                <div className="flex items-center gap-2 text-xs text-slate-400 py-1 font-sans">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Fetching current database credentials...</span>
+                                </div>
+                              ) : (
+                                <div className="space-y-2.5">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-slate-600 block">Application (client) ID</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. 392b79e9-3377-4a8e-aeb3-782aa4b373a3"
+                                      value={dbMsClientId}
+                                      onChange={(e) => setDbMsClientId(e.target.value)}
+                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                  
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-slate-600 block">Client Secret Value</label>
+                                    <input
+                                      type="password"
+                                      placeholder={dbMsClientSecret ? "••••••••••••••••" : "Enter your client secret value"}
+                                      value={dbMsClientSecret}
+                                      onChange={(e) => setDbMsClientSecret(e.target.value)}
+                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-slate-600 block">Custom Redirect URI (Optional)</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. https://www.prospacescrm.com/oauth-callback"
+                                      value={dbMsRedirectUri}
+                                      onChange={(e) => setDbMsRedirectUri(e.target.value)}
+                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                    <p className="text-[9px] text-slate-400 mt-0.5">Defaults to https://www.prospacescrm.com/oauth-callback if empty.</p>
+                                  </div>
+
+                                  <div className="flex gap-2 pt-1">
+                                    <button
+                                      onClick={handleSaveDbMsKeys}
+                                      disabled={savingDbMsKeys}
+                                      className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white p-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm outline-none transition-all cursor-pointer"
+                                    >
+                                      {savingDbMsKeys ? (
+                                        <>
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                                          <span>Saving and Syncing...</span>
+                                        </>
+                                      ) : (
+                                        <span>Save & Activate App Credentials</span>
+                                      )}
+                                    </button>
+
+                                    {(dbMsClientId || dbMsClientSecret) && (
+                                      <button
+                                        onClick={async () => {
+                                          if (confirm("Are you sure you want to clear your custom overrides and revert to system standard credentials?")) {
+                                            try {
+                                              const supabase = createClient();
+                                              await supabase.from('kv_store_8405be07').delete().eq('key', 'secrets:microsoft');
+                                              setDbMsClientId('');
+                                              setDbMsClientSecret('');
+                                              setDbMsRedirectUri('');
+                                              toast.success("Custom overrides cleared. Default credentials restored.");
+                                            } catch (err: any) {
+                                              toast.error("Error clearing settings: " + err.message);
+                                            }
+                                          }
+                                        }}
+                                        className="p-2 border border-slate-250 text-slate-500 hover:bg-slate-50 hover:text-slate-700 rounded-lg text-xs outline-none transition-all cursor-pointer font-medium"
+                                      >
+                                        Clear Override
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}

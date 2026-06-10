@@ -2,20 +2,27 @@ import { Hono } from 'npm:hono';
 import * as kv from './kv_store.tsx';
 
 async function resolveAzureCredentials() {
-  let clientId = Deno.env.get('AZURE_CLIENT_ID');
-  let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET');
-  let redirectUri = Deno.env.get('AZURE_REDIRECT_URI');
+  let clientId = '';
+  let clientSecret = '';
+  let redirectUri = '';
 
-  if (!clientId || !clientSecret || !redirectUri) {
-    try {
-      const config = await kv.get('secrets:microsoft');
-      if (config) {
-        clientId = clientId || config.clientId || '';
-        clientSecret = clientSecret || config.clientSecret || '';
-        redirectUri = redirectUri || config.redirectUri || '';
-      }
-    } catch (e) {}
+  // 1. Try reading from DB KV store first (user custom credentials)
+  try {
+    const config = await kv.get('secrets:microsoft');
+    if (config) {
+      clientId = config.clientId || '';
+      clientSecret = config.clientSecret || '';
+      redirectUri = config.redirectUri || '';
+    }
+  } catch (e) {}
+
+  // 2. Fall back to environment variables if not present in DB
+  if (!clientId || !clientSecret) {
+    clientId = clientId || Deno.env.get('AZURE_CLIENT_ID') || '';
+    clientSecret = clientSecret || Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
   }
+
   return { clientId, clientSecret, redirectUri };
 }
 

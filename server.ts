@@ -1946,44 +1946,58 @@ async function startServer() {
       const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://www.prospacescrm.com/oauth-callback';
 
       if (azureClientId && azureClientSecret) {
-        console.log('[Server Config Sync] Syncing Microsoft credentials to Supabase DB...', {
-          clientId: azureClientId,
-          redirectUri: azureRedirectUri
-        });
-        const { error } = await supabase.from('kv_store_8405be07').upsert({
-          key: 'secrets:microsoft',
-          value: {
-            clientId: azureClientId,
-            clientSecret: azureClientSecret,
-            redirectUri: azureRedirectUri,
-            updatedAt: new Date().toISOString()
-          }
-        });
-        if (error) {
-          console.error('[Server Config Sync] Failed to sync Microsoft credentials to Supabase:', error.message);
+        // Check if there are already existing Microsoft credentials stored
+        const { data: existingMicrosoft } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:microsoft').maybeSingle() as any;
+        
+        if (existingMicrosoft?.value?.clientId) {
+          console.log('[Server Config Sync] Microsoft credentials already exist in DB (clientId: ' + existingMicrosoft.value.clientId + '). Skipping auto-sync to preserve custom credentials.');
         } else {
-          console.log('[Server Config Sync] Synchronized Microsoft credentials to Supabase perfectly.');
+          console.log('[Server Config Sync] Syncing Microsoft credentials to Supabase DB as no existing credentials were found...', {
+            clientId: azureClientId,
+            redirectUri: azureRedirectUri
+          });
+          const { error } = await supabase.from('kv_store_8405be07').upsert({
+            key: 'secrets:microsoft',
+            value: {
+              clientId: azureClientId,
+              clientSecret: azureClientSecret,
+              redirectUri: azureRedirectUri,
+              updatedAt: new Date().toISOString()
+            }
+          });
+          if (error) {
+            console.error('[Server Config Sync] Failed to sync Microsoft credentials to Supabase:', error.message);
+          } else {
+            console.log('[Server Config Sync] Synchronized Microsoft credentials to Supabase perfectly.');
+          }
         }
       }
 
       if (googleClientId && googleClientSecret) {
-        console.log('[Server Config Sync] Syncing Google credentials to Supabase DB...', {
-          clientId: googleClientId,
-          redirectUri: googleRedirectUri
-        });
-        const { error } = await supabase.from('kv_store_8405be07').upsert({
-          key: 'secrets:google',
-          value: {
-            clientId: googleClientId,
-            clientSecret: googleClientSecret,
-            redirectUri: googleRedirectUri,
-            updatedAt: new Date().toISOString()
-          }
-        });
-        if (error) {
-          console.error('[Server Config Sync] Failed to sync Google credentials to Supabase:', error.message);
+        // Check if there are already existing Google credentials stored
+        const { data: existingGoogle } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:google').maybeSingle() as any;
+
+        if (existingGoogle?.value?.clientId) {
+          console.log('[Server Config Sync] Google credentials already exist in DB (clientId: ' + existingGoogle.value.clientId + '). Skipping auto-sync to preserve custom credentials.');
         } else {
-          console.log('[Server Config Sync] Synchronized Google credentials to Supabase perfectly.');
+          console.log('[Server Config Sync] Syncing Google credentials to Supabase DB as no existing credentials were found...', {
+            clientId: googleClientId,
+            redirectUri: googleRedirectUri
+          });
+          const { error } = await supabase.from('kv_store_8405be07').upsert({
+            key: 'secrets:google',
+            value: {
+              clientId: googleClientId,
+              clientSecret: googleClientSecret,
+              redirectUri: googleRedirectUri,
+              updatedAt: new Date().toISOString()
+            }
+          });
+          if (error) {
+            console.error('[Server Config Sync] Failed to sync Google credentials to Supabase:', error.message);
+          } else {
+            console.log('[Server Config Sync] Synchronized Google credentials to Supabase perfectly.');
+          }
         }
       }
     } catch (err: any) {

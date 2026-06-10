@@ -28,9 +28,29 @@ export const azureOAuthInit = (app: Hono) => {
       }
 
       const body = await c.req.json().catch(() => ({}));
-      let AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
+      let AZURE_CLIENT_ID = '';
       let AZURE_REDIRECT_URI = body.redirectUri;
 
+      // 1. Try to load custom credentials from DB KV store first
+      try {
+        const config = await kv.get('secrets:microsoft');
+        if (config) {
+          AZURE_CLIENT_ID = config.clientId || '';
+          if (!AZURE_REDIRECT_URI) {
+            AZURE_REDIRECT_URI = config.redirectUri || '';
+          }
+          if (AZURE_CLIENT_ID) {
+            console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully in oauth-init:', { AZURE_CLIENT_ID, AZURE_REDIRECT_URI });
+          }
+        }
+      } catch (e: any) {
+        console.error('[Fallback Engine] Error loading Azure fallback in oauth-init:', e?.message || e);
+      }
+
+      // 2. Fall back to environment variables
+      if (!AZURE_CLIENT_ID) {
+        AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID') || '';
+      }
       if (!AZURE_REDIRECT_URI) {
         let frontendOrigin = body.frontendOrigin;
         if (frontendOrigin && frontendOrigin.includes('prospacescrm.com') && !frontendOrigin.includes('www.')) {
@@ -41,17 +61,13 @@ export const azureOAuthInit = (app: Hono) => {
           : (Deno.env.get('AZURE_REDIRECT_URI') || '');
       }
 
-      // Fallback: load synchronized credentials from DB KV store
-      if (!AZURE_CLIENT_ID || !AZURE_REDIRECT_URI) {
-        try {
-          const config = await kv.get('secrets:microsoft');
-          if (config) {
-            AZURE_CLIENT_ID = AZURE_CLIENT_ID || config.clientId;
-            AZURE_REDIRECT_URI = AZURE_REDIRECT_URI || config.redirectUri;
-            console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully:', { AZURE_CLIENT_ID, AZURE_REDIRECT_URI });
-          }
-        } catch (e: any) {
-          console.error('[Fallback Engine] Error loading Azure fallback:', e?.message || e);
+      if (AZURE_REDIRECT_URI) {
+        // Sanitize
+        if (AZURE_REDIRECT_URI.includes('prospacescrm.com') && !AZURE_REDIRECT_URI.includes('www.prospacescrm.com')) {
+          AZURE_REDIRECT_URI = AZURE_REDIRECT_URI.replace('prospacescrm.com', 'www.prospacescrm.com');
+        }
+        if (!AZURE_REDIRECT_URI.includes('/oauth-callback') && !AZURE_REDIRECT_URI.includes('localhost') && !AZURE_REDIRECT_URI.includes('127.0.0.1')) {
+          AZURE_REDIRECT_URI = AZURE_REDIRECT_URI.replace(/\/+$/, '') + '/oauth-callback';
         }
       }
 
