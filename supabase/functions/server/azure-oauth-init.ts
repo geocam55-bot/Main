@@ -27,8 +27,19 @@ export const azureOAuthInit = (app: Hono) => {
         }, 401);
       }
 
+      const body = await c.req.json().catch(() => ({}));
       let AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
-      let AZURE_REDIRECT_URI = Deno.env.get('AZURE_REDIRECT_URI');
+      let AZURE_REDIRECT_URI = body.redirectUri;
+
+      if (!AZURE_REDIRECT_URI) {
+        let frontendOrigin = body.frontendOrigin;
+        if (frontendOrigin && frontendOrigin.includes('prospacescrm.com') && !frontendOrigin.includes('www.')) {
+          frontendOrigin = frontendOrigin.replace('prospacescrm.com', 'www.prospacescrm.com');
+        }
+        AZURE_REDIRECT_URI = frontendOrigin
+          ? (frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
+          : (Deno.env.get('AZURE_REDIRECT_URI') || '');
+      }
 
       // Fallback: load synchronized credentials from DB KV store
       if (!AZURE_CLIENT_ID || !AZURE_REDIRECT_URI) {

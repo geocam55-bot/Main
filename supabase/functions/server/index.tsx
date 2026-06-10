@@ -24,6 +24,48 @@ import { customerPortalAPI } from './customer-portal-api.ts';
 
 const PREFIX = '/make-server-8405be07';
 
+async function resolveAzureSecrets() {
+  let clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
+  let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
+  let redirectUri = Deno.env.get('AZURE_REDIRECT_URI') || '';
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    try {
+      const config = await kv.get('secrets:microsoft');
+      if (config) {
+        clientId = clientId || config.clientId || '';
+        clientSecret = clientSecret || config.clientSecret || '';
+        redirectUri = redirectUri || config.redirectUri || '';
+        console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
+      }
+    } catch (e: any) {
+      console.error('[Fallback Engine] Error loading Azure fallback in index.tsx:', e?.message || e);
+    }
+  }
+  return { clientId, clientSecret, redirectUri };
+}
+
+async function resolveGoogleSecrets() {
+  let clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
+  let clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+  let redirectUri = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    try {
+      const config = await kv.get('secrets:google');
+      if (config) {
+        clientId = clientId || config.clientId || '';
+        clientSecret = clientSecret || config.clientSecret || '';
+        redirectUri = redirectUri || config.redirectUri || '';
+        console.log('[Fallback Engine] Loaded Google credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
+      }
+    } catch (e: any) {
+      console.error('[Fallback Engine] Error loading Google fallback in index.tsx:', e?.message || e);
+    }
+  }
+  return { clientId, clientSecret, redirectUri };
+}
+
 function extractUserToken(c: any): string | null {
   // Primary: X-User-Token header (dual-header auth pattern)
   const userToken = c.req.header('X-User-Token');
@@ -1336,11 +1378,12 @@ app.delete(`${P}/revoke/:contactId`, async (c) => {
 app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
   try {
     const token = extractUserToken(c);
-    if (!token) return c.json({ error: '[v5] Auth required', version: 'v5' }, 401);
+    if (!token) return c.json({ error: '[v4] Auth required', version: 'v4' }, 401);
     const supabase = getSupabase();
     const { data: { user }, error: ue } = await supabase.auth.getUser(token);
-    if (ue || !user) return c.json({ error: '[v5] Auth failed: ' + (ue?.message || 'No user'), version: 'v5' }, 401);
-    const CID = Deno.env.get('AZURE_CLIENT_ID');
+    if (ue || !user) return c.json({ error: '[v4] Auth failed: ' + (ue?.message || 'No user'), version: 'v4' }, 401);
+    const azureSecrets = await resolveAzureSecrets();
+    const CID = azureSecrets.clientId;
     if (!CID) return c.json({ error: 'Azure not configured (missing AZURE_CLIENT_ID)' }, 500);
 
     // Accept frontendOrigin or direct redirectUri from request body so redirect goes to frontend
@@ -1353,7 +1396,7 @@ app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
       }
       redirectUri = frontendOrigin
         ? (frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
-        : (Deno.env.get('AZURE_REDIRECT_URI') ?? '');
+        : (azureSecrets.redirectUri || '');
     }
 
     if (!redirectUri) return c.json({ error: 'No redirect URI available (send frontendOrigin/redirectUri or set AZURE_REDIRECT_URI)' }, 500);
@@ -1394,10 +1437,11 @@ app.post(`${PREFIX}/oauth-exchange`, async (c) => {
     // OAuth exchange initiated
 
     if (provider === 'microsoft' || provider === 'outlook') {
-      const redirectUri = sd.redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+      const azureSecrets = await resolveAzureSecrets();
+      const redirectUri = sd.redirectUri || azureSecrets.redirectUri || '';
       const tr = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ client_id: Deno.env.get('AZURE_CLIENT_ID') ?? '', client_secret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
+        body: new URLSearchParams({ client_id: azureSecrets.clientId ?? '', client_secret: azureSecrets.clientSecret ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
       });
       const td = await tr.json();
       if (td.error) {
@@ -1424,10 +1468,11 @@ app.post(`${PREFIX}/oauth-exchange`, async (c) => {
       return c.json(result);
 
     } else if (provider === 'google' || provider === 'gmail') {
-      const redirectUri = sd.redirectUri || Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+      const googleSecrets = await resolveGoogleSecrets();
+      const redirectUri = sd.redirectUri || googleSecrets.redirectUri || '';
       const tr = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ client_id: Deno.env.get('GOOGLE_CLIENT_ID') ?? '', client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
+        body: new URLSearchParams({ client_id: googleSecrets.clientId ?? '', client_secret: googleSecrets.clientSecret ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
       });
       const td = await tr.json();
       if (td.error) {
@@ -1466,10 +1511,11 @@ app.post(`${PREFIX}/microsoft-oauth-exchange`, async (c) => {
     const sd = await kv.get(`oauth_state:${state}`);
     if (!sd) return c.json({ error: 'Invalid or expired OAuth state' }, 400);
     await kv.del(`oauth_state:${state}`);
-    const redirectUri = sd.redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+    const azureSecrets = await resolveAzureSecrets();
+    const redirectUri = sd.redirectUri || azureSecrets.redirectUri || '';
     const tr = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: Deno.env.get('AZURE_CLIENT_ID') ?? '', client_secret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
+      body: new URLSearchParams({ client_id: azureSecrets.clientId ?? '', client_secret: azureSecrets.clientSecret ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
     });
     const td = await tr.json();
     if (td.error) {
@@ -1502,9 +1548,10 @@ app.get(`${PREFIX}/azure-oauth-callback`, async (c) => {
     const sd = await kv.get(`oauth_state:${state}`);
     if (!sd) return c.html(`<html><body><h2>Invalid state</h2><script>window.close()</script></body></html>`);
     await kv.del(`oauth_state:${state}`);
+    const azureSecrets = await resolveAzureSecrets();
     const tr = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: Deno.env.get('AZURE_CLIENT_ID') ?? '', client_secret: Deno.env.get('AZURE_CLIENT_SECRET') ?? '', code, redirect_uri: sd.redirectUri, grant_type: 'authorization_code' }),
+      body: new URLSearchParams({ client_id: azureSecrets.clientId ?? '', client_secret: azureSecrets.clientSecret ?? '', code, redirect_uri: sd.redirectUri, grant_type: 'authorization_code' }),
     });
     const td = await tr.json();
     if (td.error) {
@@ -1534,7 +1581,10 @@ app.get(`${PREFIX}/oauth-poll/:pollId`, async (c) => {
   } catch (err: any) { return c.json({ error: err.message }, 500); }
 });
 
-app.get(`${PREFIX}/azure-health`, (c) => c.json({ status: 'ok', configured: !!(Deno.env.get('AZURE_CLIENT_ID') && Deno.env.get('AZURE_CLIENT_SECRET')) }));
+app.get(`${PREFIX}/azure-health`, async (c) => {
+  const azureSecrets = await resolveAzureSecrets();
+  return c.json({ status: 'ok', configured: !!(azureSecrets.clientId && azureSecrets.clientSecret) });
+});
 
 // ── ONEDRIVE FILE BROWSER ────────────────────────────────────────────────
 async function getMicrosoftTokenForEmail(userId: string, email: string): Promise<string | null> {
@@ -2500,7 +2550,8 @@ app.post(`${PREFIX}/google-oauth-init`, async (c) => {
     const supabase = getSupabase();
     const { data: { user }, error: ue } = await supabase.auth.getUser(token);
     if (ue || !user) return c.json({ error: 'Auth failed' }, 401);
-    const cid = Deno.env.get('GOOGLE_CLIENT_ID');
+    const googleSecrets = await resolveGoogleSecrets();
+    const cid = googleSecrets.clientId;
     if (!cid) return c.json({ error: 'Google not configured (missing GOOGLE_CLIENT_ID)' }, 500);
 
     const body = await c.req.json().catch(() => ({}));
@@ -2512,7 +2563,7 @@ app.post(`${PREFIX}/google-oauth-init`, async (c) => {
       }
       redirectUri = frontendOrigin
         ? (frontendOrigin.replace(/\/+$/, '') + '/oauth-callback')
-        : (Deno.env.get('GOOGLE_REDIRECT_URI') ?? '');
+        : (googleSecrets.redirectUri || '');
     }
 
     if (!redirectUri) return c.json({ error: 'No redirect URI available (send frontendOrigin/redirectUri or set GOOGLE_REDIRECT_URI)' }, 500);
@@ -2541,9 +2592,10 @@ app.get(`${PREFIX}/google-oauth-callback`, async (c) => {
     const sd = await kv.get(`oauth_state:${state}`);
     if (!sd) return c.html('<html><body><h2>Invalid state</h2><script>window.close()</script></body></html>');
     await kv.del(`oauth_state:${state}`);
+    const googleSecrets = await resolveGoogleSecrets();
     const tr = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: Deno.env.get('GOOGLE_CLIENT_ID') ?? '', client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '', code, redirect_uri: Deno.env.get('GOOGLE_REDIRECT_URI') ?? '', grant_type: 'authorization_code' }),
+      body: new URLSearchParams({ client_id: googleSecrets.clientId ?? '', client_secret: googleSecrets.clientSecret ?? '', code, redirect_uri: sd.redirectUri || googleSecrets.redirectUri || '', grant_type: 'authorization_code' }),
     });
     const td = await tr.json();
     if (td.error) { await kv.set(`oauth_result:${state}`, { success: false, error: td.error }); return c.html(`<html><body><h2>Error</h2><script>window.close()</script></body></html>`); }
