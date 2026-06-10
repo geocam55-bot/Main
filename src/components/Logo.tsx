@@ -18,11 +18,19 @@ export function Logo({ size = 'md', className = '' }: LogoProps) {
   const hasHeight = className.includes('h-') || className.includes('h[');
   const sizeToApply = hasHeight ? '' : sizeClasses[size];
 
+  // Robust fallback: try loading the root-level /logo.png first, and fall back to bundled asset if needed
+  const [currentSrc, setCurrentSrc] = React.useState<string>('/logo.png');
+
   return (
     <img
-      src={logoAsset}
+      src={currentSrc}
       alt="ProSpaces CRM Logo"
       referrerPolicy="no-referrer"
+      onError={() => {
+        if (currentSrc !== logoAsset) {
+          setCurrentSrc(logoAsset);
+        }
+      }}
       className={`${sizeToApply} ${className} object-contain z-50`}
     />
   );
