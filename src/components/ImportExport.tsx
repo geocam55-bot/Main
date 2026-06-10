@@ -3717,8 +3717,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                       placeholder="e.g. 392b79e9-3377-4a8e-aeb3-782aa4b373a3"
                                       value={dbMsClientId}
                                       onChange={(e) => setDbMsClientId(e.target.value)}
-                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                      className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500' : 'border-slate-250'}`}
                                     />
+                                    {dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && (
+                                      <p className="text-[10px] text-amber-700 font-medium mt-1">
+                                        ⚠️ Warning: You are using the example placeholder Client ID! Please replace this with your actual Azure Application (client) ID.
+                                      </p>
+                                    )}
                                   </div>
                                   
                                   <div className="space-y-1">
