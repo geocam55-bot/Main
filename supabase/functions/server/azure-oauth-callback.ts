@@ -5,6 +5,7 @@ async function resolveAzureCredentials() {
   let clientId = '';
   let clientSecret = '';
   let redirectUri = '';
+  let tenantId = 'common';
 
   // 1. Try reading from DB KV store first (user custom credentials)
   try {
@@ -13,6 +14,7 @@ async function resolveAzureCredentials() {
       clientId = config.clientId || '';
       clientSecret = config.clientSecret || '';
       redirectUri = config.redirectUri || '';
+      tenantId = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
     }
   } catch (e) {}
 
@@ -21,9 +23,10 @@ async function resolveAzureCredentials() {
     clientId = clientId || Deno.env.get('AZURE_CLIENT_ID') || '';
     clientSecret = clientSecret || Deno.env.get('AZURE_CLIENT_SECRET') || '';
     redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
   }
 
-  return { clientId, clientSecret, redirectUri };
+  return { clientId, clientSecret, redirectUri, tenantId };
 }
 
 export const azureOAuthCallback = (app: Hono) => {
@@ -54,12 +57,13 @@ export const azureOAuthCallback = (app: Hono) => {
       // Delete state to prevent reuse (keep state string for poll key)
       await kv.del(`oauth_state:${state}`);
 
-      const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET, redirectUri: AZURE_REDIRECT_URI } = await resolveAzureCredentials();
+      const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET, redirectUri: AZURE_REDIRECT_URI, tenantId: AZURE_TENANT_ID } = await resolveAzureCredentials();
 
       console.log('[Azure OAuth] Callback config check:', {
         hasClientId: !!AZURE_CLIENT_ID,
         hasClientSecret: !!AZURE_CLIENT_SECRET,
         hasRedirectUri: !!AZURE_REDIRECT_URI,
+        tenantId: AZURE_TENANT_ID,
       });
 
       if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET || !AZURE_REDIRECT_URI) {
@@ -77,7 +81,7 @@ export const azureOAuthCallback = (app: Hono) => {
       tokenParams.append('redirect_uri', AZURE_REDIRECT_URI);
       tokenParams.append('grant_type', 'authorization_code');
 
-      const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      const tokenResponse = await fetch(`https://login.microsoftonline.com/${AZURE_TENANT_ID || 'common'}/oauth2/v2.0/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -186,7 +190,7 @@ export const azureOAuthCallback = (app: Hono) => {
         return c.json({ error: 'No refresh token available. Please reconnect the account.' }, 400);
       }
 
-      const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET } = await resolveAzureCredentials();
+      const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET, tenantId: AZURE_TENANT_ID } = await resolveAzureCredentials();
 
       if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
         return c.json({ error: 'Azure OAuth not configured on server' }, 500);
@@ -200,7 +204,7 @@ export const azureOAuthCallback = (app: Hono) => {
       tokenParams.append('refresh_token', accountData.refresh_token);
       tokenParams.append('grant_type', 'refresh_token');
 
-      const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      const tokenResponse = await fetch(`https://login.microsoftonline.com/${AZURE_TENANT_ID || 'common'}/oauth2/v2.0/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: tokenParams.toString(),
@@ -257,7 +261,7 @@ export const azureOAuthCallback = (app: Hono) => {
       if (new Date(accountData.token_expires_at) <= new Date()) {
         console.log('[Azure OAuth] Token expired, refreshing...');
         // Inline refresh
-        const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET } = await resolveAzureCredentials();
+        const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET, tenantId: AZURE_TENANT_ID } = await resolveAzureCredentials();
         
         if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET || !accountData.refresh_token) {
           return c.json({ error: 'Cannot refresh token. Please reconnect the account.' }, 400);
@@ -270,7 +274,7 @@ export const azureOAuthCallback = (app: Hono) => {
         tokenParams.append('refresh_token', accountData.refresh_token);
         tokenParams.append('grant_type', 'refresh_token');
 
-        const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        const tokenResponse = await fetch(`https://login.microsoftonline.com/${AZURE_TENANT_ID || 'common'}/oauth2/v2.0/token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: tokenParams.toString(),
@@ -362,7 +366,7 @@ export const azureOAuthCallback = (app: Hono) => {
       // Check if token needs refresh
       let accessToken = accountData.access_token;
       if (new Date(accountData.token_expires_at) <= new Date()) {
-        const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET } = await resolveAzureCredentials();
+        const { clientId: AZURE_CLIENT_ID, clientSecret: AZURE_CLIENT_SECRET, tenantId: AZURE_TENANT_ID } = await resolveAzureCredentials();
         
         if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET || !accountData.refresh_token) {
           return c.json({ error: 'Cannot refresh token. Please reconnect.' }, 400);
@@ -375,7 +379,7 @@ export const azureOAuthCallback = (app: Hono) => {
         tokenParams.append('refresh_token', accountData.refresh_token);
         tokenParams.append('grant_type', 'refresh_token');
 
-        const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        const tokenResponse = await fetch(`https://login.microsoftonline.com/${AZURE_TENANT_ID || 'common'}/oauth2/v2.0/token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: tokenParams.toString(),

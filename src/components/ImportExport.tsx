@@ -531,6 +531,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [dbMsClientId, setDbMsClientId] = useState('');
   const [dbMsClientSecret, setDbMsClientSecret] = useState('');
   const [dbMsRedirectUri, setDbMsRedirectUri] = useState('');
+  const [dbMsTenantId, setDbMsTenantId] = useState('');
   const [loadingDbMsKeys, setLoadingDbMsKeys] = useState(false);
   const [savingDbMsKeys, setSavingDbMsKeys] = useState(false);
 
@@ -545,6 +546,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             setDbMsClientId(data.value.clientId || '');
             setDbMsClientSecret(data.value.clientSecret || '');
             setDbMsRedirectUri(data.value.redirectUri || '');
+            setDbMsTenantId(data.value.tenantId || '');
           }
         } catch (e) {
           console.error("Failed to load MS keys from DB:", e);
@@ -576,6 +578,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           clientId: trimmedId,
           clientSecret: dbMsClientSecret.trim(),
           redirectUri: dbMsRedirectUri.trim() || 'https://www.prospacescrm.com/oauth-callback',
+          tenantId: dbMsTenantId.trim(),
           updatedAt: new Date().toISOString()
         }
       });
@@ -3731,7 +3734,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                     />
                                     {dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && (
                                       <p className="text-[10px] text-blue-800 font-semibold mt-1 bg-blue-50 p-2 rounded border border-blue-200">
-                                        ℹ️ System-wide App Identification: This is the primary registered Client ID for ProSpaces CRM. Keep this value and enter the matching Client Secret Value below.
+                                        ℹ️ Theme Default Client ID: This is a templates default ID. If you have generated a custom client secret in your Azure portal, make sure you also enter your custom Application (client) ID from your app registration above.
                                       </p>
                                     )}
                                     {dbMsClientId.trim() && dbMsClientId.trim() !== '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientId.trim()) && (
@@ -3755,6 +3758,18 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                         ⚠️ WARNING: You have entered a Secret ID Guidance UUID (e.g., f8096a8a...) rather than the actual Client Secret **VALUE** (which typically has a format containing letters, numbers, and symbols like '~' or '-'). The Secret ID will be rejected by Azure. Please copy the text string from the **Value** column right after creating the secret in Azure ID.
                                       </p>
                                     )}
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-slate-600 block">Azure AD Tenant ID (Optional)</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. common, organizations, or your 36-char Tenant ID GUID"
+                                      value={dbMsTenantId}
+                                      onChange={(e) => setDbMsTenantId(e.target.value)}
+                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                    <p className="text-[9px] text-slate-400 mt-0.5">Defaults to <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-705 font-semibold">common</code> if left blank. Specify your Tenant ID GUID if your Azure App is Single-Tenant only.</p>
                                   </div>
 
                                   <div className="space-y-1">
@@ -3795,6 +3810,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                               setDbMsClientId('');
                                               setDbMsClientSecret('');
                                               setDbMsRedirectUri('');
+                                              setDbMsTenantId('');
                                               toast.success("Custom overrides cleared. Default credentials restored.");
                                             } catch (err: any) {
                                               toast.error("Error clearing settings: " + err.message);

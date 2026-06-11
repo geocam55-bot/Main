@@ -43,6 +43,7 @@ async function resolveAzureSecrets() {
   let clientId = '';
   let clientSecret = '';
   let redirectUri = '';
+  let tenantId = 'common';
 
   // 1. Try reading from DB KV store first (user custom credentials)
   try {
@@ -51,8 +52,9 @@ async function resolveAzureSecrets() {
       clientId = config.clientId || '';
       clientSecret = config.clientSecret || '';
       redirectUri = config.redirectUri || '';
+      tenantId = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
       if (clientId && clientSecret) {
-        console.log('[Fallback Engine] Loaded custom Azure credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
+        console.log('[Fallback Engine] Loaded custom Azure credentials from DB KV successfully in index.tsx:', { clientId, redirectUri, tenantId });
       }
     }
   } catch (e: any) {
@@ -64,15 +66,16 @@ async function resolveAzureSecrets() {
     clientId = clientId || Deno.env.get('AZURE_CLIENT_ID') || '';
     clientSecret = clientSecret || Deno.env.get('AZURE_CLIENT_SECRET') || '';
     redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
     if (clientId) {
-      console.log('[Fallback Engine] Loaded fallback Azure credentials from Deno.env in index.tsx:', { clientId, redirectUri });
+      console.log('[Fallback Engine] Loaded fallback Azure credentials from Deno.env in index.tsx:', { clientId, redirectUri, tenantId });
     }
   }
 
   if (redirectUri) {
     redirectUri = sanitizeRedirectUri(redirectUri);
   }
-  return { clientId, clientSecret, redirectUri };
+  return { clientId, clientSecret, redirectUri, tenantId };
 }
 
 async function resolveGoogleSecrets() {
@@ -1453,7 +1456,8 @@ app.post(`${PREFIX}/microsoft-oauth-init`, async (c) => {
     const purpose = body.purpose || 'email'; // 'email' | 'calendar' | 'both'
     const includeFiles = !!body.includeFiles;
     await kv.set(`oauth_state:${state}`, { userId: user.id, provider: 'microsoft', redirectUri, purpose, includeFiles, ts: new Date().toISOString() });
-    const url = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+    const tenantIdStr = azureSecrets.tenantId || 'common';
+    const url = new URL(`https://login.microsoftonline.com/${tenantIdStr}/oauth2/v2.0/authorize`);
     url.searchParams.set('client_id', CID);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('redirect_uri', redirectUri);
@@ -1486,7 +1490,8 @@ app.post(`${PREFIX}/oauth-exchange`, async (c) => {
     if (provider === 'microsoft' || provider === 'outlook') {
       const azureSecrets = await resolveAzureSecrets();
       const redirectUri = sd.redirectUri || azureSecrets.redirectUri || '';
-      const tr = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      const tenantIdStr = azureSecrets.tenantId || 'common';
+      const tr = await fetch(`https://login.microsoftonline.com/${tenantIdStr}/oauth2/v2.0/token`, {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ client_id: azureSecrets.clientId ?? '', client_secret: azureSecrets.clientSecret ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
       });
@@ -1560,7 +1565,8 @@ app.post(`${PREFIX}/microsoft-oauth-exchange`, async (c) => {
     await kv.del(`oauth_state:${state}`);
     const azureSecrets = await resolveAzureSecrets();
     const redirectUri = sd.redirectUri || azureSecrets.redirectUri || '';
-    const tr = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+    const tenantIdStr = azureSecrets.tenantId || 'common';
+    const tr = await fetch(`https://login.microsoftonline.com/${tenantIdStr}/oauth2/v2.0/token`, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: azureSecrets.clientId ?? '', client_secret: azureSecrets.clientSecret ?? '', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
     });
@@ -1596,7 +1602,8 @@ app.get(`${PREFIX}/azure-oauth-callback`, async (c) => {
     if (!sd) return c.html(`<html><body><h2>Invalid state</h2><script>window.close()</script></body></html>`);
     await kv.del(`oauth_state:${state}`);
     const azureSecrets = await resolveAzureSecrets();
-    const tr = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+    const tenantIdStr = azureSecrets.tenantId || 'common';
+    const tr = await fetch(`https://login.microsoftonline.com/${tenantIdStr}/oauth2/v2.0/token`, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: azureSecrets.clientId ?? '', client_secret: azureSecrets.clientSecret ?? '', code, redirect_uri: sd.redirectUri, grant_type: 'authorization_code' }),
     });
@@ -2673,17 +2680,22 @@ async function getAccountTokensFromKV(userId: string, accountId: string) {
 async function refreshAzureTokenFn(refreshToken: string) {
   let CID = Deno.env.get('AZURE_CLIENT_ID') ?? '';
   let CS = Deno.env.get('AZURE_CLIENT_SECRET') ?? '';
+  let tenantId = 'common';
+  try {
+    const config = await kv.get('secrets:microsoft');
+    if (config) {
+      CID = CID || config.clientId || '';
+      CS = CS || config.clientSecret || '';
+      tenantId = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+    }
+  } catch (e) {}
   if (!CID || !CS) {
-    try {
-      const config = await kv.get('secrets:microsoft');
-      if (config) {
-        CID = CID || config.clientId || '';
-        CS = CS || config.clientSecret || '';
-      }
-    } catch (e) {}
+    CID = CID || Deno.env.get('AZURE_CLIENT_ID') || '';
+    CS = CS || Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
   }
   if (!CID || !CS) throw new Error('Azure credentials not configured');
-  const r = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+  const r = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: CID, client_secret: CS, refresh_token: refreshToken, grant_type: 'refresh_token' }),
   });

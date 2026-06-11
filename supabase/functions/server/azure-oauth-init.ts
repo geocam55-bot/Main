@@ -30,17 +30,19 @@ export const azureOAuthInit = (app: Hono) => {
       const body = await c.req.json().catch(() => ({}));
       let AZURE_CLIENT_ID = '';
       let AZURE_REDIRECT_URI = body.redirectUri;
+      let AZURE_TENANT_ID = 'common';
 
       // 1. Try to load custom credentials from DB KV store first
       try {
         const config = await kv.get('secrets:microsoft');
         if (config) {
           AZURE_CLIENT_ID = config.clientId || '';
+          AZURE_TENANT_ID = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
           if (!AZURE_REDIRECT_URI) {
             AZURE_REDIRECT_URI = config.redirectUri || '';
           }
           if (AZURE_CLIENT_ID) {
-            console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully in oauth-init:', { AZURE_CLIENT_ID, AZURE_REDIRECT_URI });
+            console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully in oauth-init:', { AZURE_CLIENT_ID, AZURE_REDIRECT_URI, AZURE_TENANT_ID });
           }
         }
       } catch (e: any) {
@@ -50,6 +52,7 @@ export const azureOAuthInit = (app: Hono) => {
       // 2. Fall back to environment variables
       if (!AZURE_CLIENT_ID) {
         AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID') || '';
+        AZURE_TENANT_ID = AZURE_TENANT_ID || Deno.env.get('AZURE_TENANT_ID') || 'common';
       }
       if (!AZURE_REDIRECT_URI) {
         let frontendOrigin = body.frontendOrigin;
@@ -97,7 +100,7 @@ export const azureOAuthInit = (app: Hono) => {
         'Calendars.ReadWrite',
       ].join(' ');
 
-      const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+      const authUrl = new URL(`https://login.microsoftonline.com/${AZURE_TENANT_ID || 'common'}/oauth2/v2.0/authorize`);
       authUrl.searchParams.set('client_id', AZURE_CLIENT_ID);
       authUrl.searchParams.set('response_type', 'code');
       authUrl.searchParams.set('redirect_uri', AZURE_REDIRECT_URI);
