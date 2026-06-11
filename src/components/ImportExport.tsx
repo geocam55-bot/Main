@@ -557,13 +557,23 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   }, [showMsDiagnosticGuide]);
 
   const handleSaveDbMsKeys = async () => {
+    const trimmedId = dbMsClientId.trim();
+    if (trimmedId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmedId)) {
+      toast.error("Format Error: The Application (client) ID must be a 36-character Guid (e.g. f40e01d2-d570-4a4c-8159-3574d75211e2). Please double check your input.");
+      return;
+    }
+    if (dbMsClientSecret.trim() && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientSecret.trim())) {
+      toast.error("Format Error: You entered a Guid for the Client Secret! Under Microsoft Azure AD, you must use the Client Secret 'Value' (e.g., text containing symbols like '~' or '-'), NOT the 'Secret ID' Guid column.");
+      return;
+    }
+
     setSavingDbMsKeys(true);
     try {
       const supabase = createClient();
       const { error } = await supabase.from('kv_store_8405be07').upsert({
         key: 'secrets:microsoft',
         value: {
-          clientId: dbMsClientId.trim(),
+          clientId: trimmedId,
           clientSecret: dbMsClientSecret.trim(),
           redirectUri: dbMsRedirectUri.trim() || 'https://www.prospacescrm.com/oauth-callback',
           updatedAt: new Date().toISOString()
@@ -3678,20 +3688,20 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                 <li className="flex items-start gap-1.5">
                                   <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">1</span>
                                   <span className="leading-relaxed">
-                                    Open the <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold inline-flex items-center gap-0.5 hover:underline">Microsoft Azure Apps Portal <ExternalLink className="w-2.5 h-2.5" /></a> and select registration <strong>ID: 392b79e9-...-373a3</strong>
+                                    Open the <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold inline-flex items-center gap-0.5 hover:underline">Microsoft Azure Apps Portal <ExternalLink className="w-2.5 h-2.5" /></a> and click on your **Custom App Registration**.
                                   </span>
                                 </li>
                                 <li className="flex items-start gap-1.5">
                                   <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">2</span>
-                                  <span className="leading-relaxed">Go to <strong>Authentication</strong> (under "Manage" in left menu sidebar)</span>
+                                  <span className="leading-relaxed">In the **Overview** page, copy your 36-character **Application (client) ID** (do not use the example placeholder ID in our app!).</span>
                                 </li>
                                 <li className="flex items-start gap-1.5">
                                   <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">3</span>
-                                  <span className="leading-relaxed">Under <strong>Web Redirect URIs</strong>, click <strong>"Add URI"</strong> and paste the copied address shown above</span>
+                                  <span className="leading-relaxed">Go to **Authentication** (left sidebar menu). Under **Web Redirect URIs**, click **"Add URI"** and paste the active redirect URI shown above, then click **Save**.</span>
                                 </li>
                                 <li className="flex items-start gap-1.5">
                                   <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">4</span>
-                                  <span className="leading-relaxed">Click <strong>Save</strong> at the top-left, wait 10 seconds, then try signing in again!</span>
+                                  <span className="leading-relaxed">Go to **Certificates & secrets** (left sidebar). Add a new client secret, copy the actual **Value** column (not the Secret ID UUID!), and paste both credentials below!</span>
                                 </li>
                               </ol>
                             </div>
@@ -3700,7 +3710,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                             <div className="mt-4 pt-4 border-t border-slate-200/60 font-sans space-y-3">
                               <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">🔒 Self-Hosted / Custom Azure Client Credentials</p>
                               <p className="text-3xs text-slate-500 leading-normal mb-1">
-                                Want to use your own Microsoft App Registration? Input your custom client credentials below. These are stored locally in your database and securely override the system properties.
+                                Every Microsoft App Registration has its own unique, randomly generated Application ID. You **MUST** enter your custom Application ID and matching Client Secret Value below.
                               </p>
                               
                               {loadingDbMsKeys ? (
@@ -3714,14 +3724,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                     <label className="text-[10px] font-semibold text-slate-600 block">Application (client) ID</label>
                                     <input
                                       type="text"
-                                      placeholder="e.g. 392b79e9-3377-4a8e-aeb3-782aa4b373a3"
+                                      placeholder="e.g. Your unique 36-character Azure Client ID GUID"
                                       value={dbMsClientId}
                                       onChange={(e) => setDbMsClientId(e.target.value)}
-                                      className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500' : 'border-slate-250'}`}
+                                      className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' ? 'border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-blue-50/10' : 'border-slate-250'}`}
                                     />
                                     {dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && (
-                                      <p className="text-[10px] text-amber-700 font-medium mt-1">
-                                        ⚠️ Warning: You are using the example placeholder Client ID! Please replace this with your actual Azure Application (client) ID.
+                                      <p className="text-[10px] text-blue-800 font-semibold mt-1 bg-blue-50 p-2 rounded border border-blue-200">
+                                        ℹ️ System-wide App Identification: This is the primary registered Client ID for ProSpaces CRM. Keep this value and enter the matching Client Secret Value below.
+                                      </p>
+                                    )}
+                                    {dbMsClientId.trim() && dbMsClientId.trim() !== '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientId.trim()) && (
+                                      <p className="text-[10px] text-rose-700 font-medium mt-1">
+                                        ⚠️ Client ID format is invalid! It must be a 36-character hyphenated UUID. Example: f40e01d2-d570-4a4c-8159-3574d75211e2.
                                       </p>
                                     )}
                                   </div>
@@ -3730,11 +3745,16 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                     <label className="text-[10px] font-semibold text-slate-600 block">Client Secret Value</label>
                                     <input
                                       type="password"
-                                      placeholder={dbMsClientSecret ? "••••••••••••••••" : "Enter your client secret value"}
+                                      placeholder={dbMsClientSecret ? "••••••••••••••••" : "Enter your Client Secret VALUE (e.g. text containing letters/symbols, NOT a Guid)"}
                                       value={dbMsClientSecret}
                                       onChange={(e) => setDbMsClientSecret(e.target.value)}
-                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                      className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientSecret.trim()) ? 'border-amber-500 focus:border-amber-600 focus:ring-amber-600 bg-amber-50' : 'border-slate-250'}`}
                                     />
+                                    {/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientSecret.trim()) && (
+                                      <p className="text-[10px] text-amber-800 font-semibold mt-1 bg-amber-100/60 p-2 rounded border border-amber-200">
+                                        ⚠️ WARNING: You have entered a Secret ID Guidance UUID (e.g., f8096a8a...) rather than the actual Client Secret **VALUE** (which typically has a format containing letters, numbers, and symbols like '~' or '-'). The Secret ID will be rejected by Azure. Please copy the text string from the **Value** column right after creating the secret in Azure ID.
+                                      </p>
+                                    )}
                                   </div>
 
                                   <div className="space-y-1">
