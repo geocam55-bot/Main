@@ -536,27 +536,25 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [savingDbMsKeys, setSavingDbMsKeys] = useState(false);
 
   useEffect(() => {
-    if (showMsDiagnosticGuide) {
-      const loadDbMsKeys = async () => {
-        setLoadingDbMsKeys(true);
-        try {
-          const supabase = createClient();
-          const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:microsoft').maybeSingle() as any;
-          if (data?.value) {
-            setDbMsClientId(data.value.clientId || '');
-            setDbMsClientSecret(data.value.clientSecret || '');
-            setDbMsRedirectUri(data.value.redirectUri || '');
-            setDbMsTenantId(data.value.tenantId || '');
-          }
-        } catch (e) {
-          console.error("Failed to load MS keys from DB:", e);
-        } finally {
-          setLoadingDbMsKeys(false);
+    const loadDbMsKeys = async () => {
+      setLoadingDbMsKeys(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:microsoft').maybeSingle() as any;
+        if (data?.value) {
+          setDbMsClientId(data.value.clientId || '');
+          setDbMsClientSecret(data.value.clientSecret || '');
+          setDbMsRedirectUri(data.value.redirectUri || '');
+          setDbMsTenantId(data.value.tenantId || '');
         }
-      };
-      loadDbMsKeys();
-    }
-  }, [showMsDiagnosticGuide]);
+      } catch (e) {
+        console.error("Failed to load MS keys from DB:", e);
+      } finally {
+        setLoadingDbMsKeys(false);
+      }
+    };
+    loadDbMsKeys();
+  }, []);
 
   const handleSaveDbMsKeys = async () => {
     const trimmedId = dbMsClientId.trim();
@@ -3185,6 +3183,58 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         );
       })()}
 
+      {/* High-Visibility Microsoft Azure Integration & Credentials Setup Guide Banner */}
+      <div className="bg-radial from-slate-50 to-blue-50/50 border border-slate-200 rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs font-sans">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1 px-1.5 bg-blue-600 text-white rounded text-[9px] font-extrabold uppercase tracking-wider leading-none">
+              Microsoft Azure AD Links
+            </span>
+            {dbMsClientId && dbMsClientSecret ? (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Custom Azure App Credentials Active
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                Default Sandbox Mode Active
+              </span>
+            )}
+          </div>
+          <h2 className="text-sm font-bold text-slate-800 mt-1">
+            Microsoft App registrations, Secret Credentials & Troubleshooting Controls
+          </h2>
+          <p className="text-xs text-slate-500 leading-relaxed max-w-4xl">
+            Having trouble linking custom Microsoft Accounts, running unattended sync schedules, or seeing a <code className="text-red-600 font-mono font-bold bg-red-50 px-1 py-0.5 rounded text-4xs">Connection failed: AADSTS7000215: Invalid client secret provided</code> error? Ensure you are using your portal's <strong>Client Secret Value</strong>, not the Secret ID GUID. Open our central connector console to set up overrides.
+          </p>
+          {dbMsClientId && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-[10px] text-slate-500 font-medium">Currently loaded client App ID:</span>
+              <code className="text-[10px] text-blue-700 font-mono bg-blue-100/50 px-1.5 py-0.5 border border-blue-200/40 rounded">
+                {dbMsClientId}
+              </code>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => {
+            setActiveTab("storage");
+            setDriveTab("onedrive");
+            setShowMsDiagnosticGuide(true);
+            toast.info("Opened Microsoft OneDrive credentials & diagnostics panel!");
+            setTimeout(() => {
+              document.getElementById("onedrive-cloud-drive-section")?.scrollIntoView({ behavior: "smooth" });
+            }, 100);
+          }}
+          className="px-4.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 hover:shadow-md outline-none cursor-pointer group"
+          id="btn-goto-microsoft-credentials"
+        >
+          <Settings className="w-4 h-4 text-blue-200 group-hover:rotate-45 transition-transform duration-300" />
+          <span>Configure Custom Database & API Credentials</span>
+        </button>
+      </div>
+
       {/* Tabs Menu Navigation */}
       <div className="flex gap-2 border-b border-zinc-200">
         <button
@@ -3448,7 +3498,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
         {/* ==================== TAB 2: USER DRIVES & ONEDRIVE ==================== */}
         {activeTab === "storage" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div id="onedrive-cloud-drive-section" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Left Nav Pane for storage categories */}
             <div className="space-y-4">
