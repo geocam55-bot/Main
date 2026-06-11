@@ -568,7 +568,6 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       toast.error("Format Error: You entered a Guid for the Client Secret! Under Microsoft Azure AD, you must use the Client Secret 'Value' (e.g., text containing symbols like '~' or '-'), NOT the 'Secret ID' Guid column.");
       return;
     }
-
     setSavingDbMsKeys(true);
     try {
       const supabase = createClient();
@@ -3734,7 +3733,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                     />
                                     {dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && (
                                       <p className="text-[10px] text-blue-800 font-semibold mt-1 bg-blue-50 p-2 rounded border border-blue-200">
-                                        ℹ️ Theme Default Client ID: This is a templates default ID. If you have generated a custom client secret in your Azure portal, make sure you also enter your custom Application (client) ID from your app registration above.
+                                        ℹ️ Default Theme Application ID: This matches your Microsoft Azure App Registration. Make sure the Client Secret Value you saved corresponds to this application ID.
                                       </p>
                                     )}
                                     {dbMsClientId.trim() && dbMsClientId.trim() !== '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientId.trim()) && (
