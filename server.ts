@@ -862,12 +862,13 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
   • Initiator: ${task.creator}`);
 
     // Resolve organization ID
-    let organizationId = task.organisationId || task.organizationId;
-    if (!organizationId || organizationId === 'default-org') {
-      console.log(`[Scheduler Supabase] Organization ID missing or is default-org in task payload. Querying user profiles to resolve it...`);
-      const creatorEmail = String(task.creator || '').toLowerCase().trim();
-      
-      // Try resolving from kv_store first (where users are actually stored)
+    let organizationId = '';
+    const creatorEmail = String(task.creator || '').toLowerCase().trim();
+
+    // Always attempt to query user details from kv_store using the task creator's email first.
+    // This ensures that the custom tenant organization configured for that user is used as the source of truth,
+    // overriding any stale or generic values (like 'default-org' or incorrect ID payloads) stored on the task.
+    if (creatorEmail) {
       try {
         const { data: emailData } = await db.from('kv_store_8405be07').select('value').eq('key', 'user:email:' + creatorEmail).maybeSingle();
         if (emailData && emailData.value) {
@@ -875,15 +876,26 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           const { data: userData } = await db.from('kv_store_8405be07').select('value').eq('key', 'user:' + userId).maybeSingle();
           if (userData?.value?.organizationId) {
             organizationId = userData.value.organizationId;
-            console.log(`[Scheduler Supabase] Resolved custom organizationId: "${organizationId}" from kv_store for creator: "${creatorEmail}"`);
+            console.log(`[Scheduler Supabase] Resolved active customer organizationId: "${organizationId}" from kv_store for creator: "${creatorEmail}"`);
           }
         }
       } catch (err) {
         console.error(`[Scheduler Supabase] Error querying kv_store for user organizationId:`, err);
       }
+    }
 
-      // Fallback to profiles table if kv_store lookup didn't yield a custom org_id
-      if (!organizationId || organizationId === 'default-org') {
+    // Fallback to task payload if not resolved from KV store
+    if (!organizationId || organizationId === 'default-org') {
+      organizationId = task.organisationId || task.organizationId;
+      if (organizationId) {
+        console.log(`[Scheduler Supabase] Resolved organizationId from task credentials fallback: "${organizationId}"`);
+      }
+    }
+
+    // Secondary fallback: query profiles table if still not resolved
+    if (!organizationId || organizationId === 'default-org') {
+      console.log(`[Scheduler Supabase] Organization ID missing or default in task payload. Querying profiles table...`);
+      try {
         const { data: profiles } = await db.from('profiles').select('organization_id, id, name, email');
         if (profiles && profiles.length > 0) {
           const matched = profiles.find((p: any) => 
@@ -893,9 +905,9 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           organizationId = matched ? matched.organization_id : profiles[0].organization_id;
           console.log(`[Scheduler Supabase] Resolved organizationId: "${organizationId}" via profiles table matching for "${creatorEmail}".`);
         }
+      } catch (err) {
+        console.error(`[Scheduler Supabase] Error querying profiles table fallback:`, err);
       }
-    } else {
-      console.log(`[Scheduler Supabase] Using organizationID from task credentials: "${organizationId}"`);
     }
 
     if (!organizationId) {

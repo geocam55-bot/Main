@@ -546,14 +546,39 @@ export function AppContent() {
         if (error || !data) throw error || new Error('No profile data');
         profile = data;
       } catch (err) {
-        console.warn('Profile fetch failed in App.tsx, using fallback:', err);
+        console.warn('Profile fetch failed in App.tsx, attempting KV store lookup for:', supabaseUser.email);
+        let kvUser: any = null;
+        try {
+          if (supabaseUser.email) {
+            const { data: emailData } = await supabase
+              .from('kv_store_8405be07')
+              .select('value')
+              .eq('key', 'user:email:' + supabaseUser.email.toLowerCase().trim())
+              .maybeSingle();
+            if (emailData && emailData.value) {
+              const userId = emailData.value;
+              const { data: userData } = await supabase
+                .from('kv_store_8405be07')
+                .select('value')
+                .eq('key', 'user:' + userId)
+                .maybeSingle();
+              if (userData && userData.value) {
+                kvUser = userData.value;
+                console.log('Successfully found user details in KV store for App.tsx:', kvUser);
+              }
+            }
+          }
+        } catch (kvErr) {
+          console.error('Failed to resolve user from KV store in App.tsx fallback:', kvErr);
+        }
+
         profile = {
           id: supabaseUser.id,
           email: supabaseUser.email,
-          role: supabaseUser.user_metadata?.role || user?.role || 'admin',
-          name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || user?.full_name || supabaseUser.email?.split('@')[0],
-          avatar_url: supabaseUser.user_metadata?.avatar_url || user?.avatar_url,
-          organization_id: supabaseUser.user_metadata?.organization_id || user?.organization_id || 'org_001',
+          role: kvUser?.role || supabaseUser.user_metadata?.role || user?.role || 'admin',
+          name: kvUser?.name || supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || user?.full_name || supabaseUser.email?.split('@')[0],
+          avatar_url: kvUser?.avatar_url || supabaseUser.user_metadata?.avatar_url || user?.avatar_url,
+          organization_id: kvUser?.organizationId || supabaseUser.user_metadata?.organization_id || user?.organization_id || 'org_001',
           manager_id: null,
           needs_password_change: false,
         };

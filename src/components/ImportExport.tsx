@@ -1910,13 +1910,40 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     if (!sbUser) return { userId: null, organizationId: null };
     const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', sbUser.id).maybeSingle();
     
-    const orgId = profile?.organization_id || 
-                  sbUser.user_metadata?.organization_id || 
-                  sbUser.user_metadata?.organizationId || 
-                  user?.organization_id || 
-                  user?.organizationId || 
-                  localStorage.getItem('currentOrgId') || 
-                  'org_001';
+    let orgId = profile?.organization_id;
+    
+    if (!orgId && sbUser.email) {
+      try {
+        const { data: emailData } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'user:email:' + sbUser.email.toLowerCase().trim())
+          .maybeSingle();
+        if (emailData && emailData.value) {
+          const userId = emailData.value;
+          const { data: userData } = await supabase
+            .from('kv_store_8405be07')
+            .select('value')
+            .eq('key', 'user:' + userId)
+            .maybeSingle();
+          if (userData && userData.value?.organizationId) {
+            orgId = userData.value.organizationId;
+            console.log('Successfully found organizationId in KV store for ImportExport getAuthContext:', orgId);
+          }
+        }
+      } catch (kvErr) {
+        console.error('Failed to resolve organizationId from KV store in ImportExport fallback:', kvErr);
+      }
+    }
+
+    if (!orgId) {
+      orgId = sbUser.user_metadata?.organization_id || 
+              sbUser.user_metadata?.organizationId || 
+              user?.organization_id || 
+              user?.organizationId || 
+              localStorage.getItem('currentOrgId') || 
+              'org_001';
+    }
 
     return {
       userId: sbUser.id,
