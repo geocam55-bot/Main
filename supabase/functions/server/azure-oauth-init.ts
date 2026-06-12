@@ -107,7 +107,7 @@ export const azureOAuthInit = (app: Hono) => {
       authUrl.searchParams.set('response_mode', 'query');
       authUrl.searchParams.set('scope', scopes);
       authUrl.searchParams.set('state', state);
-      authUrl.searchParams.set('prompt', 'consent');
+      authUrl.searchParams.set('prompt', body.prompt || 'select_account');
 
       return c.json({
         success: true,

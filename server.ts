@@ -910,6 +910,51 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
       throw new Error("Could not resolve organization ID for Supabase background task execution.");
     }
 
+    // Ensure the resolved organization actually exists in public.organizations table
+    try {
+      console.log(`[Scheduler Supabase] Verifying if organization "${organizationId}" exists in organizations table...`);
+      const { data: orgData, error: orgCheckError } = await db
+        .from('organizations')
+        .select('id')
+        .eq('id', organizationId)
+        .maybeSingle();
+
+      if (orgCheckError) {
+        console.error(`[Scheduler Supabase] Error checking organization "${organizationId}" in database:`, orgCheckError.message);
+      } else if (!orgData) {
+        console.log(`[Scheduler Supabase] Organization "${organizationId}" is missing from "organizations" table. Inserting auto-healed organization record...`);
+        let name = "Auto-Healed Organization";
+        if (organizationId === 'org-1762782701221') {
+          name = "Default Member Organization";
+        } else if (organizationId === '34638283-7b3d-47e2-bec8-a9e600e28c4a') {
+          name = "RONA Atlantic Organization";
+        } else if (organizationId === 'default-org') {
+          name = "ProSpaces CRM";
+        }
+        
+        const { error: orgInsertError } = await db
+          .from('organizations')
+          .insert({
+            id: organizationId,
+            name: name,
+            status: 'active',
+            plan: 'enterprise',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (orgInsertError) {
+          console.error(`[Scheduler Supabase] Failed to auto-insert missing organization "${organizationId}":`, orgInsertError.message);
+        } else {
+          console.log(`[Scheduler Supabase] Successfully auto-inserted missing organization "${organizationId}" ("${name}") into database.`);
+        }
+      } else {
+        console.log(`[Scheduler Supabase] Organization "${organizationId}" already exists in the "organizations" table.`);
+      }
+    } catch (orgEx: any) {
+      console.error(`[Scheduler Supabase] Exception ensuring organization exists:`, orgEx.message || orgEx);
+    }
+
     if (mType === 'export') {
       console.log(`[Scheduler Supabase] [Export Mode] Fetching database rows from Table "${table}" for Organization ID: "${organizationId}"...`);
       const { data: dbRecords, error: dbErr } = await db

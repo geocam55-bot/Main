@@ -27,6 +27,7 @@ export const azureOAuthInit = (app: Hono) => {
         }, 401);
       }
 
+      const body = await c.req.json().catch(() => ({}));
       const AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
       const AZURE_REDIRECT_URI = Deno.env.get('AZURE_REDIRECT_URI');
 
@@ -63,7 +64,7 @@ export const azureOAuthInit = (app: Hono) => {
       authUrl.searchParams.set('response_mode', 'query');
       authUrl.searchParams.set('scope', scopes);
       authUrl.searchParams.set('state', state);
-      authUrl.searchParams.set('prompt', 'consent');
+      authUrl.searchParams.set('prompt', body.prompt || 'select_account');
 
       return c.json({
         success: true,
