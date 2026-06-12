@@ -863,23 +863,48 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
 
     // Resolve organization ID
     let organizationId = task.organisationId || task.organizationId;
-    if (!organizationId) {
-      console.log(`[Scheduler Supabase] Organization ID missing in task payload. Querying user profiles to resolve it...`);
-      const { data: profiles } = await db.from('profiles').select('organization_id, id, name, email');
-      if (profiles && profiles.length > 0) {
-        const creatorEmail = String(task.creator || '').toLowerCase().trim();
-        const matched = profiles.find((p: any) => 
-          (p.name && String(p.name).toLowerCase().trim() === creatorEmail) ||
-          (p.email && String(p.email).toLowerCase().trim() === creatorEmail)
-        );
-        organizationId = matched ? matched.organization_id : profiles[0].organization_id;
-        console.log(`[Scheduler Supabase] Resolved organizationId: "${organizationId}" via creator filter matching for email/name "${creatorEmail}".`);
-      } else {
-        console.warn(`[Scheduler Supabase] No profiles found in DB to resolve organizationId.`);
+    if (!organizationId || organizationId === 'default-org') {
+      console.log(`[Scheduler Supabase] Organization ID missing or is default-org in task payload. Querying user profiles to resolve it...`);
+      const creatorEmail = String(task.creator || '').toLowerCase().trim();
+      
+      // Try resolving from kv_store first (where users are actually stored)
+      try {
+        const { data: emailData } = await db.from('kv_store_8405be07').select('value').eq('key', 'user:email:' + creatorEmail).maybeSingle();
+        if (emailData && emailData.value) {
+          const userId = emailData.value;
+          const { data: userData } = await db.from('kv_store_8405be07').select('value').eq('key', 'user:' + userId).maybeSingle();
+          if (userData?.value?.organizationId) {
+            organizationId = userData.value.organizationId;
+            console.log(`[Scheduler Supabase] Resolved custom organizationId: "${organizationId}" from kv_store for creator: "${creatorEmail}"`);
+          }
+        }
+      } catch (err) {
+        console.error(`[Scheduler Supabase] Error querying kv_store for user organizationId:`, err);
+      }
+
+      // Fallback to profiles table if kv_store lookup didn't yield a custom org_id
+      if (!organizationId || organizationId === 'default-org') {
+        const { data: profiles } = await db.from('profiles').select('organization_id, id, name, email');
+        if (profiles && profiles.length > 0) {
+          const matched = profiles.find((p: any) => 
+            (p.name && String(p.name).toLowerCase().trim() === creatorEmail) ||
+            (p.email && String(p.email).toLowerCase().trim() === creatorEmail)
+          );
+          organizationId = matched ? matched.organization_id : profiles[0].organization_id;
+          console.log(`[Scheduler Supabase] Resolved organizationId: "${organizationId}" via profiles table matching for "${creatorEmail}".`);
+        }
       }
     } else {
       console.log(`[Scheduler Supabase] Using organizationID from task credentials: "${organizationId}"`);
     }
+
+    if (!organizationId) {
+      organizationId = 'default-org';
+    }
+
+    // Propagate resolved organization ID to task references back
+    task.organizationId = organizationId;
+    task.organisationId = organizationId;
 
     if (!organizationId) {
       throw new Error("Could not resolve organization ID for Supabase background task execution.");
@@ -1076,7 +1101,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           Object.keys(sampleColsData[0]).forEach(k => existingDbCols.add(k));
         } else {
           const fallbackCols: Record<string, string[]> = {
-            contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags"],
+            contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags", "ptd_sales", "ptd_gp_percent", "ytd_sales", "ytd_gp_percent", "lyr_sales", "lyr_gp_percent"],
             inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"],
             opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
           };
@@ -1119,21 +1144,49 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
             const lowerKey = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
 
             if (table === "contacts") {
-              if (lowerKey === "name") mappedRec.name = cleanVal;
-              else if (lowerKey === "email" || lowerKey === "emailaddress") mappedRec.email = cleanVal;
-              else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone") mappedRec.phone = cleanVal;
-              else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") mappedRec.company = cleanVal;
-              else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") mappedRec.trade = cleanVal;
-              else if (lowerKey === "status") mappedRec.status = cleanVal;
-              else if (lowerKey === "pricelevel" || lowerKey === "level") mappedRec.price_level = cleanVal;
-              else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno") mappedRec.legacy_number = cleanVal;
-              else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner") mappedRec.account_owner_number = cleanVal;
-              else if (lowerKey === "address" || lowerKey === "streetaddress") mappedRec.address = cleanVal;
-              else if (lowerKey === "city") mappedRec.city = cleanVal;
-              else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") mappedRec.province = cleanVal;
-              else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip") mappedRec.postal_code = cleanVal;
-              else if (lowerKey === "notes" || lowerKey === "comments") mappedRec.notes = cleanVal;
-              else if (lowerKey === "tags") mappedRec.tags = cleanVal;
+              if (lowerKey === "name" || lowerKey === "contact" || lowerKey === "contactname" || lowerKey === "customer" || lowerKey === "customername" || lowerKey === "fullname") {
+                mappedRec.name = cleanVal;
+              } else if (lowerKey === "email" || lowerKey === "emailaddress" || lowerKey === "customeremailaddress" || lowerKey === "customeremail" || lowerKey === "email_address" || lowerKey === "contactemail") {
+                mappedRec.email = cleanVal;
+              } else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone" || lowerKey === "phone_number") {
+                mappedRec.phone = cleanVal;
+              } else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") {
+                mappedRec.company = cleanVal;
+              } else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") {
+                mappedRec.trade = cleanVal;
+              } else if (lowerKey === "status") {
+                mappedRec.status = cleanVal;
+              } else if (lowerKey === "pricelevel" || lowerKey === "level" || lowerKey === "price_level") {
+                mappedRec.price_level = cleanVal;
+              } else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno" || lowerKey === "legacy_number" || lowerKey === "accountcode1" || lowerKey === "accountcode" || lowerKey === "customer_number" || lowerKey === "customercode") {
+                mappedRec.legacy_number = cleanVal;
+              } else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner" || lowerKey === "owner_id") {
+                mappedRec.account_owner_number = cleanVal;
+              } else if (lowerKey === "address" || lowerKey === "streetaddress") {
+                mappedRec.address = cleanVal;
+              } else if (lowerKey === "city") {
+                mappedRec.city = cleanVal;
+              } else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") {
+                mappedRec.province = cleanVal;
+              } else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip" || lowerKey === "postalzip" || lowerKey === "postal") {
+                mappedRec.postal_code = cleanVal;
+              } else if (lowerKey === "notes" || lowerKey === "comments") {
+                mappedRec.notes = cleanVal;
+              } else if (lowerKey === "tags") {
+                mappedRec.tags = cleanVal;
+              } else if (lowerKey === "ytdnetsales" || lowerKey === "ytdsales" || lowerKey === "ytd_sales") {
+                const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                mappedRec.ytd_sales = isNaN(parsedPr) ? 0 : parsedPr;
+              } else if (lowerKey === "ytdgrossmargin%" || lowerKey === "ytdgppercent" || lowerKey === "ytdgpm" || lowerKey === "ytd_gp_percent") {
+                const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                mappedRec.ytd_gp_percent = Math.max(-999.99, Math.min(999.99, isNaN(parsedPr) ? 0 : parsedPr));
+              } else if (lowerKey === "lydnetsales" || lowerKey === "lyrsales" || lowerKey === "lyr_sales") {
+                const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                mappedRec.lyr_sales = isNaN(parsedPr) ? 0 : parsedPr;
+              } else if (lowerKey === "lydgrossmargin%" || lowerKey === "lyrgppercent" || lowerKey === "lyrgpm" || lowerKey === "lyr_gp_percent") {
+                const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                mappedRec.lyr_gp_percent = Math.max(-999.99, Math.min(999.99, isNaN(parsedPr) ? 0 : parsedPr));
+              }
             } 
             else if (table === "inventory") {
               if (lowerKey === "itemname" || lowerKey === "name" || lowerKey === "productname" || lowerKey === "materialname" || lowerKey === "product" || lowerKey === "item" || lowerKey === "material" || lowerKey === "title") mappedRec.name = cleanVal;

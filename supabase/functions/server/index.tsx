@@ -1637,7 +1637,15 @@ app.get(`${PREFIX}/oauth-poll/:pollId`, async (c) => {
 
 app.get(`${PREFIX}/azure-health`, async (c) => {
   const azureSecrets = await resolveAzureSecrets();
-  return c.json({ status: 'ok', configured: !!(azureSecrets.clientId && azureSecrets.clientSecret) });
+  return c.json({
+    status: 'ok',
+    configured: !!(azureSecrets.clientId && azureSecrets.clientSecret),
+    clientId: azureSecrets.clientId,
+    tenantId: azureSecrets.tenantId,
+    redirectUri: azureSecrets.redirectUri,
+    secretLength: azureSecrets.clientSecret ? azureSecrets.clientSecret.length : 0,
+    secretPrefix: azureSecrets.clientSecret ? azureSecrets.clientSecret.substring(0, 3) : ''
+  });
 });
 
 // ── ONEDRIVE FILE BROWSER ────────────────────────────────────────────────
