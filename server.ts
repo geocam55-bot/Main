@@ -2059,12 +2059,14 @@ async function startServer() {
         // Check if there are already existing Microsoft credentials stored
         const { data: existingMicrosoft } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:microsoft').maybeSingle() as any;
         
-        if (existingMicrosoft?.value?.clientId) {
-          console.log('[Server Config Sync] Microsoft credentials already exist in DB (clientId: ' + existingMicrosoft.value.clientId + '). Skipping auto-sync to preserve custom credentials.');
+        const isStale = existingMicrosoft?.value && (existingMicrosoft.value.clientId !== azureClientId || existingMicrosoft.value.clientSecret !== azureClientSecret);
+        if (existingMicrosoft?.value?.clientId && !isStale) {
+          console.log('[Server Config Sync] Microsoft credentials already exist in DB (clientId: ' + existingMicrosoft.value.clientId + ') and are up-to-date. Skipping auto-sync.');
         } else {
-          console.log('[Server Config Sync] Syncing Microsoft credentials to Supabase DB as no existing credentials were found...', {
+          console.log('[Server Config Sync] Syncing Microsoft credentials to Supabase DB...', {
             clientId: azureClientId,
-            redirectUri: azureRedirectUri
+            redirectUri: azureRedirectUri,
+            reason: isStale ? 'credentials updated in environment' : 'first-time setup'
           });
           const { error } = await supabase.from('kv_store_8405be07').upsert({
             key: 'secrets:microsoft',
@@ -2072,6 +2074,7 @@ async function startServer() {
               clientId: azureClientId,
               clientSecret: azureClientSecret,
               redirectUri: azureRedirectUri,
+              tenantId: existingMicrosoft?.value?.tenantId || 'common',
               updatedAt: new Date().toISOString()
             }
           });
@@ -2087,12 +2090,14 @@ async function startServer() {
         // Check if there are already existing Google credentials stored
         const { data: existingGoogle } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:google').maybeSingle() as any;
 
-        if (existingGoogle?.value?.clientId) {
-          console.log('[Server Config Sync] Google credentials already exist in DB (clientId: ' + existingGoogle.value.clientId + '). Skipping auto-sync to preserve custom credentials.');
+        const isStale = existingGoogle?.value && (existingGoogle.value.clientId !== googleClientId || existingGoogle.value.clientSecret !== googleClientSecret);
+        if (existingGoogle?.value?.clientId && !isStale) {
+          console.log('[Server Config Sync] Google credentials already exist in DB (clientId: ' + existingGoogle.value.clientId + ') and are up-to-date. Skipping auto-sync.');
         } else {
-          console.log('[Server Config Sync] Syncing Google credentials to Supabase DB as no existing credentials were found...', {
+          console.log('[Server Config Sync] Syncing Google credentials to Supabase DB...', {
             clientId: googleClientId,
-            redirectUri: googleRedirectUri
+            redirectUri: googleRedirectUri,
+            reason: isStale ? 'credentials updated in environment' : 'first-time setup'
           });
           const { error } = await supabase.from('kv_store_8405be07').upsert({
             key: 'secrets:google',
