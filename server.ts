@@ -1401,6 +1401,17 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
 
         const executeChunkedUpsertWithHealing = async (chunk: any[]) => {
           let records = chunk.map(r => ({ ...r }));
+          
+          // Deduplicate the chunk records by 'id' to prevent the Postgres error:
+          // "ON CONFLICT DO UPDATE command cannot affect row a second time"
+          const uniqueRecordsMap = new Map();
+          for (const r of records) {
+            if (r.id) {
+              uniqueRecordsMap.set(r.id, r);
+            }
+          }
+          records = Array.from(uniqueRecordsMap.values());
+
           let success = false;
           let attempts = 0;
           const maxAttempts = 15;
