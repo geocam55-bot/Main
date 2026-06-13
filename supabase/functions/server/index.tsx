@@ -40,36 +40,33 @@ function sanitizeRedirectUri(uri: string): string {
 }
 
 async function resolveAzureSecrets() {
-  let clientId = '';
-  let clientSecret = '';
-  let redirectUri = '';
-  let tenantId = 'common';
+  let clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
+  let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
+  let redirectUri = Deno.env.get('AZURE_REDIRECT_URI') || '';
+  let tenantId = Deno.env.get('AZURE_TENANT_ID') || 'common';
 
-  // 1. Try reading from DB KV store first (user custom credentials)
+  if (clientId && clientSecret) {
+    console.log('[Fallback Engine] Loaded system Azure credentials from Deno.env:', { clientId, redirectUri, tenantId });
+    if (redirectUri) {
+      redirectUri = sanitizeRedirectUri(redirectUri);
+    }
+    return { clientId, clientSecret, redirectUri, tenantId };
+  }
+
+  // Fallback: DB KV store if Deno.env is NOT fully populated
   try {
     const config = await kv.get('secrets:microsoft');
     if (config) {
-      clientId = config.clientId || '';
-      clientSecret = config.clientSecret || '';
-      redirectUri = config.redirectUri || '';
-      tenantId = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+      clientId = clientId || config.clientId || '';
+      clientSecret = clientSecret || config.clientSecret || '';
+      redirectUri = redirectUri || config.redirectUri || '';
+      tenantId = tenantId || config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
       if (clientId && clientSecret) {
-        console.log('[Fallback Engine] Loaded custom Azure credentials from DB KV successfully in index.tsx:', { clientId, redirectUri, tenantId });
+        console.log('[Fallback Engine] Loaded fallback Azure credentials from DB KV in index.tsx:', { clientId, redirectUri, tenantId });
       }
     }
   } catch (e: any) {
     console.error('[Fallback Engine] Error loading Azure fallback in index.tsx:', e?.message || e);
-  }
-
-  // 2. Fall back to environment variables if not present in DB
-  if (!clientId || !clientSecret) {
-    clientId = clientId || Deno.env.get('AZURE_CLIENT_ID') || '';
-    clientSecret = clientSecret || Deno.env.get('AZURE_CLIENT_SECRET') || '';
-    redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
-    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
-    if (clientId) {
-      console.log('[Fallback Engine] Loaded fallback Azure credentials from Deno.env in index.tsx:', { clientId, redirectUri, tenantId });
-    }
   }
 
   if (redirectUri) {
@@ -79,33 +76,31 @@ async function resolveAzureSecrets() {
 }
 
 async function resolveGoogleSecrets() {
-  let clientId = '';
-  let clientSecret = '';
-  let redirectUri = '';
+  let clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
+  let clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+  let redirectUri = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
 
-  // 1. Try reading from DB KV store first (user custom credentials)
+  if (clientId && clientSecret) {
+    console.log('[Fallback Engine] Loaded system Google credentials from Deno.env:', { clientId, redirectUri });
+    if (redirectUri) {
+      redirectUri = sanitizeRedirectUri(redirectUri);
+    }
+    return { clientId, clientSecret, redirectUri };
+  }
+
+  // Fallback: DB KV store if Deno.env is NOT fully populated
   try {
     const config = await kv.get('secrets:google');
     if (config) {
-      clientId = config.clientId || '';
-      clientSecret = config.clientSecret || '';
-      redirectUri = config.redirectUri || '';
+      clientId = clientId || config.clientId || '';
+      clientSecret = clientSecret || config.clientSecret || '';
+      redirectUri = redirectUri || config.redirectUri || '';
       if (clientId && clientSecret) {
-        console.log('[Fallback Engine] Loaded custom Google credentials from DB KV successfully in index.tsx:', { clientId, redirectUri });
+        console.log('[Fallback Engine] Loaded fallback Google credentials from DB KV in index.tsx:', { clientId, redirectUri });
       }
     }
   } catch (e: any) {
     console.error('[Fallback Engine] Error loading Google fallback in index.tsx:', e?.message || e);
-  }
-
-  // 2. Fall back to environment variables if not present in DB
-  if (!clientId || !clientSecret) {
-    clientId = clientId || Deno.env.get('GOOGLE_CLIENT_ID') || '';
-    clientSecret = clientSecret || Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-    redirectUri = redirectUri || Deno.env.get('GOOGLE_REDIRECT_URI') || '';
-    if (clientId) {
-      console.log('[Fallback Engine] Loaded fallback Google credentials from Deno.env in index.tsx:', { clientId, redirectUri });
-    }
   }
 
   if (redirectUri) {
