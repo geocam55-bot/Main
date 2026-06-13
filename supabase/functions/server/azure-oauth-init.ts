@@ -28,31 +28,27 @@ export const azureOAuthInit = (app: Hono) => {
       }
 
       const body = await c.req.json().catch(() => ({}));
-      let AZURE_CLIENT_ID = '';
-      let AZURE_REDIRECT_URI = body.redirectUri;
-      let AZURE_TENANT_ID = 'common';
+      let AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID') || '';
+      let AZURE_REDIRECT_URI = body.redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+      let AZURE_TENANT_ID = Deno.env.get('AZURE_TENANT_ID') || 'common';
 
-      // 1. Try to load custom credentials from DB KV store first
-      try {
-        const config = await kv.get('secrets:microsoft');
-        if (config) {
-          AZURE_CLIENT_ID = config.clientId || '';
-          AZURE_TENANT_ID = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
-          if (!AZURE_REDIRECT_URI) {
-            AZURE_REDIRECT_URI = config.redirectUri || '';
-          }
-          if (AZURE_CLIENT_ID) {
-            console.log('[Fallback Engine] Loaded Azure credentials from DB KV successfully in oauth-init:', { AZURE_CLIENT_ID, AZURE_REDIRECT_URI, AZURE_TENANT_ID });
-          }
-        }
-      } catch (e: any) {
-        console.error('[Fallback Engine] Error loading Azure fallback in oauth-init:', e?.message || e);
-      }
-
-      // 2. Fall back to environment variables
       if (!AZURE_CLIENT_ID) {
-        AZURE_CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID') || '';
-        AZURE_TENANT_ID = AZURE_TENANT_ID || Deno.env.get('AZURE_TENANT_ID') || 'common';
+        // 1. Try to load custom credentials from DB KV store fallback
+        try {
+          const config = await kv.get('secrets:microsoft');
+          if (config) {
+            AZURE_CLIENT_ID = config.clientId || '';
+            AZURE_TENANT_ID = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+            if (!AZURE_REDIRECT_URI) {
+              AZURE_REDIRECT_URI = config.redirectUri || '';
+            }
+            if (AZURE_CLIENT_ID) {
+              console.log('[Fallback Engine] Loaded Azure fallback credentials from DB KV successfully in oauth-init:', { AZURE_CLIENT_ID, AZURE_REDIRECT_URI, AZURE_TENANT_ID });
+            }
+          }
+        } catch (e: any) {
+          console.error('[Fallback Engine] Error loading Azure fallback in oauth-init:', e?.message || e);
+        }
       }
       if (!AZURE_REDIRECT_URI) {
         let frontendOrigin = body.frontendOrigin;
