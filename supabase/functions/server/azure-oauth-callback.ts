@@ -2,33 +2,29 @@ import { Hono } from 'npm:hono';
 import * as kv from './kv_store.tsx';
 
 async function resolveAzureCredentials() {
-  let clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
-  let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
-  let redirectUri = Deno.env.get('AZURE_REDIRECT_URI') || '';
-  let tenantId = Deno.env.get('AZURE_TENANT_ID') || 'common';
+  let clientId = '';
+  let clientSecret = '';
+  let redirectUri = '';
+  let tenantId = 'common';
 
-  if (clientId && clientSecret) {
-    if (redirectUri) {
-      if (redirectUri.includes('prospacescrm.com') && !redirectUri.includes('www.prospacescrm.com')) {
-        redirectUri = redirectUri.replace('prospacescrm.com', 'www.prospacescrm.com');
-      }
-      if (!redirectUri.includes('/oauth-callback') && !redirectUri.includes('localhost') && !redirectUri.includes('127.0.0.1')) {
-        redirectUri = redirectUri.replace(/\/+$/, '') + '/oauth-callback';
-      }
-    }
-    return { clientId, clientSecret, redirectUri, tenantId };
-  }
-
-  // Fallback to DB KV store if system environment variables are not fully set
+  // 1. Prioritize DB KV store (the user's live active settings)
   try {
     const config = await kv.get('secrets:microsoft');
-    if (config) {
-      clientId = clientId || config.clientId || '';
-      clientSecret = clientSecret || config.clientSecret || '';
-      redirectUri = redirectUri || config.redirectUri || '';
-      tenantId = tenantId || config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+    if (config && config.clientId && config.clientSecret) {
+      clientId = config.clientId;
+      clientSecret = config.clientSecret;
+      redirectUri = config.redirectUri || '';
+      tenantId = config.tenantId || 'common';
     }
   } catch (e) {}
+
+  // 2. Fall back to system Deno.env ONLY if we have nothing from database KV store
+  if (!clientId || !clientSecret) {
+    clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
+    clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+  }
 
   if (redirectUri) {
     if (redirectUri.includes('prospacescrm.com') && !redirectUri.includes('www.prospacescrm.com')) {

@@ -40,33 +40,34 @@ function sanitizeRedirectUri(uri: string): string {
 }
 
 async function resolveAzureSecrets() {
-  let clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
-  let clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
-  let redirectUri = Deno.env.get('AZURE_REDIRECT_URI') || '';
-  let tenantId = Deno.env.get('AZURE_TENANT_ID') || 'common';
+  let clientId = '';
+  let clientSecret = '';
+  let redirectUri = '';
+  let tenantId = 'common';
 
-  if (clientId && clientSecret) {
-    console.log('[Fallback Engine] Loaded system Azure credentials from Deno.env:', { clientId, redirectUri, tenantId });
-    if (redirectUri) {
-      redirectUri = sanitizeRedirectUri(redirectUri);
-    }
-    return { clientId, clientSecret, redirectUri, tenantId };
-  }
-
-  // Fallback: DB KV store if Deno.env is NOT fully populated
+  // 1. Prioritize DB KV store (the user's live active settings)
   try {
     const config = await kv.get('secrets:microsoft');
-    if (config) {
-      clientId = clientId || config.clientId || '';
-      clientSecret = clientSecret || config.clientSecret || '';
-      redirectUri = redirectUri || config.redirectUri || '';
-      tenantId = tenantId || config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
-      if (clientId && clientSecret) {
-        console.log('[Fallback Engine] Loaded fallback Azure credentials from DB KV in index.tsx:', { clientId, redirectUri, tenantId });
-      }
+    if (config && config.clientId && config.clientSecret) {
+      clientId = config.clientId;
+      clientSecret = config.clientSecret;
+      redirectUri = config.redirectUri || '';
+      tenantId = config.tenantId || 'common';
+      console.log('[Fallback Engine] Loaded DB KV Azure user credentials:', { clientId, redirectUri, tenantId });
     }
   } catch (e: any) {
-    console.error('[Fallback Engine] Error loading Azure fallback in index.tsx:', e?.message || e);
+    console.error('[Fallback Engine] Error loading Azure from DB KV:', e?.message || e);
+  }
+
+  // 2. Fall back to system Deno.env ONLY if we have nothing from database KV store
+  if (!clientId || !clientSecret) {
+    clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
+    clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+    if (clientId && clientSecret) {
+      console.log('[Fallback Engine] Loaded fallback system Azure credentials from Deno.env:', { clientId, redirectUri, tenantId });
+    }
   }
 
   if (redirectUri) {
@@ -76,31 +77,31 @@ async function resolveAzureSecrets() {
 }
 
 async function resolveGoogleSecrets() {
-  let clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
-  let clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-  let redirectUri = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+  let clientId = '';
+  let clientSecret = '';
+  let redirectUri = '';
 
-  if (clientId && clientSecret) {
-    console.log('[Fallback Engine] Loaded system Google credentials from Deno.env:', { clientId, redirectUri });
-    if (redirectUri) {
-      redirectUri = sanitizeRedirectUri(redirectUri);
-    }
-    return { clientId, clientSecret, redirectUri };
-  }
-
-  // Fallback: DB KV store if Deno.env is NOT fully populated
+  // 1. Prioritize DB KV store (the user's live active settings)
   try {
     const config = await kv.get('secrets:google');
-    if (config) {
-      clientId = clientId || config.clientId || '';
-      clientSecret = clientSecret || config.clientSecret || '';
-      redirectUri = redirectUri || config.redirectUri || '';
-      if (clientId && clientSecret) {
-        console.log('[Fallback Engine] Loaded fallback Google credentials from DB KV in index.tsx:', { clientId, redirectUri });
-      }
+    if (config && config.clientId && config.clientSecret) {
+      clientId = config.clientId;
+      clientSecret = config.clientSecret;
+      redirectUri = config.redirectUri || '';
+      console.log('[Fallback Engine] Loaded DB KV Google user credentials:', { clientId, redirectUri });
     }
   } catch (e: any) {
-    console.error('[Fallback Engine] Error loading Google fallback in index.tsx:', e?.message || e);
+    console.error('[Fallback Engine] Error loading Google from DB KV:', e?.message || e);
+  }
+
+  // 2. Fall back to system Deno.env ONLY if we have nothing from database KV store
+  if (!clientId || !clientSecret) {
+    clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
+    clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+    if (clientId && clientSecret) {
+      console.log('[Fallback Engine] Loaded fallback system Google credentials from Deno.env:', { clientId, redirectUri });
+    }
   }
 
   if (redirectUri) {
@@ -2681,20 +2682,21 @@ async function getAccountTokensFromKV(userId: string, accountId: string) {
 }
 
 async function refreshAzureTokenFn(refreshToken: string) {
-  let CID = Deno.env.get('AZURE_CLIENT_ID') ?? '';
-  let CS = Deno.env.get('AZURE_CLIENT_SECRET') ?? '';
+  let CID = '';
+  let CS = '';
   let tenantId = 'common';
   try {
     const config = await kv.get('secrets:microsoft');
-    if (config) {
-      CID = CID || config.clientId || '';
-      CS = CS || config.clientSecret || '';
-      tenantId = config.tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+    if (config && config.clientId && config.clientSecret) {
+      CID = config.clientId;
+      CS = config.clientSecret;
+      tenantId = config.tenantId || 'common';
     }
   } catch (e) {}
+
   if (!CID || !CS) {
-    CID = CID || Deno.env.get('AZURE_CLIENT_ID') || '';
-    CS = CS || Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    CID = Deno.env.get('AZURE_CLIENT_ID') ?? '';
+    CS = Deno.env.get('AZURE_CLIENT_SECRET') ?? '';
     tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
   }
   if (!CID || !CS) throw new Error('Azure credentials not configured');
@@ -2707,16 +2709,19 @@ async function refreshAzureTokenFn(refreshToken: string) {
 }
 
 async function refreshGoogleTokenFn(refreshToken: string) {
-  let CID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
-  let CS = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+  let CID = '';
+  let CS = '';
+  try {
+    const config = await kv.get('secrets:google');
+    if (config && config.clientId && config.clientSecret) {
+      CID = config.clientId;
+      CS = config.clientSecret;
+    }
+  } catch (e) {}
+
   if (!CID || !CS) {
-    try {
-      const config = await kv.get('secrets:google');
-      if (config) {
-        CID = CID || config.clientId || '';
-        CS = CS || config.clientSecret || '';
-      }
-    } catch (e) {}
+    CID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
+    CS = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
   }
   if (!CID || !CS) throw new Error('Google credentials not configured');
   const r = await fetch('https://oauth2.googleapis.com/token', {
