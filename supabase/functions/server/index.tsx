@@ -17,6 +17,8 @@ import { debugSubscriptions } from './debug-subscriptions.ts';
 import { backgroundJobs } from './background-jobs.ts';
 import { modelsAPI } from './models-api.ts';
 import { customerPortalAPI } from './customer-portal-api.ts';
+import { fixContactOwnership } from './fix-contact-ownership.ts';
+import { fixProfileMismatch } from './fix-profile-mismatch.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ProSpaces CRM — Consolidated Edge Function (v5 — 2025-02-21)
@@ -292,6 +294,10 @@ app.get(`${PREFIX}/permissions/audit-logs`, async (c) => {
 
 // ── CONTACTS (delegated to contacts-api.ts — column detection + KV fallback for price_level) ──
 contactsAPI(app);
+
+// ── FIX CONTACT OWNERSHIP AND PROFILE MISMATCH ──
+fixContactOwnership(app);
+fixProfileMismatch(app);
 
 // ── TENANTS (server-side CRUD bypassing RLS for super_admin) ──
 tenantsAPIRoutes(app);

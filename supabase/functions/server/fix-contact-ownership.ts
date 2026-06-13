@@ -30,6 +30,79 @@ async function hasAccountOwnerColumn(supabase: any): Promise<boolean> {
   return _hasAccountOwnerCol;
 }
 
+async function getOrCreateClientProfile(supabase: any, user: any): Promise<any> {
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (existingProfile) {
+    return existingProfile;
+  }
+
+  // If no profile, let's create a new one using the exact fallback flow
+  let orgId = user.user_metadata?.organizationId || user.user_metadata?.organization_id || null;
+  if (orgId) {
+    const { data: orgCheck } = await supabase.from('organizations').select('id').eq('id', orgId).maybeSingle();
+    if (!orgCheck) {
+      orgId = null;
+    }
+  }
+  if (!orgId) {
+    const { data: anyOrg } = await supabase.from('organizations').select('id').limit(1).maybeSingle();
+    if (anyOrg) {
+      orgId = anyOrg.id;
+    } else {
+      // Find or create default organization "ProSpaces CRM"
+      const defaultOrgId = 'default-org';
+      const { data: defaultOrgCheck } = await supabase.from('organizations').select('id').eq('id', defaultOrgId).maybeSingle();
+      if (defaultOrgCheck) {
+        orgId = defaultOrgCheck.id;
+      } else {
+        const { data: createdOrg } = await supabase.from('organizations').insert({
+          id: defaultOrgId,
+          name: 'ProSpaces CRM',
+          status: 'active',
+          created_at: new Date().toISOString()
+        }).select().single();
+        orgId = createdOrg?.id || defaultOrgId;
+      }
+    }
+  }
+
+  const { data: newProfile, error: createError } = await supabase
+    .from('profiles')
+    .insert([{
+      id: user.id,
+      email: user.email || 'unknown@example.com',
+      name: user.user_metadata?.name || (user.email ? user.email.split('@')[0] : 'User'),
+      role: user.user_metadata?.role || 'standard_user',
+      organization_id: orgId,
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }])
+    .select()
+    .single();
+
+  if (createError) {
+    console.error('Failed to auto-create missing profile:', createError);
+    // In case of race condition / already exists
+    const { data: retryProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (retryProfile) return retryProfile;
+
+    throw new Error('Could not retrieve or create profile: ' + createError.message);
+  }
+
+  console.log('Successfully auto-created missing user profile during contact diagnosis:', newProfile);
+  return newProfile;
+}
+
 export function fixContactOwnership(app: Hono) {
   // GET: Diagnose contact ownership issues (bypasses RLS)
   app.get('/make-server-8405be07/contacts/diagnose-ownership', async (c) => {
@@ -50,15 +123,12 @@ export function fixContactOwnership(app: Hono) {
         return c.json({ error: 'Unauthorized: ' + (authError?.message || 'No user') }, 401);
       }
 
-      // Get the user's profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile) {
-        return c.json({ error: 'Profile not found for user ' + user.id }, 404);
+      // Get the user's profile with auto-creation fallback
+      let profile;
+      try {
+        profile = await getOrCreateClientProfile(supabase, user);
+      } catch (err: any) {
+        return c.json({ error: 'Caller profile could not be verified or dynamically created: ' + err.message }, 404);
       }
 
       const userEmail = profile.email || user.email || '';
@@ -177,15 +247,12 @@ export function fixContactOwnership(app: Hono) {
         return c.json({ error: 'Unauthorized: ' + (authError?.message || 'No user') }, 401);
       }
 
-      // Get the caller's profile
-      const { data: callerProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (!callerProfile) {
-        return c.json({ error: 'Caller profile not found' }, 404);
+      // Get the caller's profile with auto-creation fallback
+      let callerProfile;
+      try {
+        callerProfile = await getOrCreateClientProfile(supabase, user);
+      } catch (err: any) {
+        return c.json({ error: 'Caller profile could not be verified or dynamically created: ' + err.message }, 404);
       }
 
       const { targetEmail, organizationId } = await c.req.json();
