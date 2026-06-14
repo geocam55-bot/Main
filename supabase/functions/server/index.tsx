@@ -2290,7 +2290,7 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
             Object.keys(sampleColsData[0]).forEach(k => existingDbCols.add(k));
           } else {
             const fallbackCols: Record<string, string[]> = {
-              contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags"],
+              contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags", "ptd_sales", "ptd_gp_percent", "ytd_sales", "ytd_gp_percent", "lyr_sales", "lyr_gp_percent"],
               inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"],
               opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
             };
@@ -2331,21 +2331,55 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
               const lowerKey = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
 
               if (table === "contacts") {
-                if (lowerKey === "name") mappedRec.name = cleanVal;
-                else if (lowerKey === "email" || lowerKey === "emailaddress") mappedRec.email = cleanVal;
-                else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone") mappedRec.phone = cleanVal;
-                else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") mappedRec.company = cleanVal;
-                else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") mappedRec.trade = cleanVal;
-                else if (lowerKey === "status") mappedRec.status = cleanVal;
-                else if (lowerKey === "pricelevel" || lowerKey === "level") mappedRec.price_level = cleanVal;
-                else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno") mappedRec.legacy_number = cleanVal;
-                else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner") mappedRec.account_owner_number = cleanVal;
-                else if (lowerKey === "address" || lowerKey === "streetaddress") mappedRec.address = cleanVal;
-                else if (lowerKey === "city") mappedRec.city = cleanVal;
-                else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") mappedRec.province = cleanVal;
-                else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip") mappedRec.postal_code = cleanVal;
-                else if (lowerKey === "notes" || lowerKey === "comments") mappedRec.notes = cleanVal;
-                else if (lowerKey === "tags") mappedRec.tags = cleanVal;
+                if (lowerKey === "name" || lowerKey === "contact" || lowerKey === "contactname" || lowerKey === "customer" || lowerKey === "customername" || lowerKey === "fullname") {
+                  mappedRec.name = cleanVal;
+                } else if (lowerKey === "email" || lowerKey === "emailaddress" || lowerKey === "customeremailaddress" || lowerKey === "customeremail" || lowerKey === "email_address" || lowerKey === "contactemail") {
+                  mappedRec.email = cleanVal;
+                } else if (lowerKey === "phone" || lowerKey === "phonenumber" || lowerKey === "telephone" || lowerKey === "phone_number") {
+                  mappedRec.phone = cleanVal;
+                } else if (lowerKey === "company" || lowerKey === "companyname" || lowerKey === "organization") {
+                  mappedRec.company = cleanVal;
+                } else if (lowerKey === "trade" || lowerKey === "industry" || lowerKey === "job") {
+                  mappedRec.trade = cleanVal;
+                } else if (lowerKey === "status") {
+                  mappedRec.status = cleanVal;
+                } else if (lowerKey === "pricelevel" || lowerKey === "level" || lowerKey === "price_level") {
+                  mappedRec.price_level = cleanVal;
+                } else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno" || lowerKey === "legacy_number" || lowerKey === "accountcode1" || lowerKey === "accountcode" || lowerKey === "customer_number" || lowerKey === "customercode") {
+                  mappedRec.legacy_number = cleanVal;
+                } else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner" || lowerKey === "owner_id" || lowerKey === "customersalespersonemail" || lowerKey === "customersalesperson" || lowerKey === "salesperson" || lowerKey === "salespersonemail") {
+                  mappedRec.account_owner_number = cleanVal;
+                } else if (lowerKey === "address" || lowerKey === "streetaddress") {
+                  mappedRec.address = cleanVal;
+                } else if (lowerKey === "city") {
+                  mappedRec.city = cleanVal;
+                } else if (lowerKey === "provincestate" || lowerKey === "province" || lowerKey === "state") {
+                  mappedRec.province = cleanVal;
+                } else if (lowerKey === "postalzipcode" || lowerKey === "postalcode" || lowerKey === "zipcode" || lowerKey === "zip" || lowerKey === "postalzip" || lowerKey === "postal") {
+                  mappedRec.postal_code = cleanVal;
+                } else if (lowerKey === "notes" || lowerKey === "comments") {
+                  mappedRec.notes = cleanVal;
+                } else if (lowerKey === "tags") {
+                  mappedRec.tags = cleanVal;
+                } else if (lowerKey === "ptdnetsales" || lowerKey === "ptdsales" || lowerKey === "ptd_sales") {
+                  const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                  mappedRec.ptd_sales = isNaN(parsedPr) ? 0 : parsedPr;
+                } else if (lowerKey === "ptdgrossmargin%" || lowerKey === "ptdgppercent" || lowerKey === "ptdgpm" || lowerKey === "ptd_gp_percent") {
+                  const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                  mappedRec.ptd_gp_percent = Math.max(-999.99, Math.min(999.99, isNaN(parsedPr) ? 0 : parsedPr));
+                } else if (lowerKey === "ytdnetsales" || lowerKey === "ytdsales" || lowerKey === "ytd_sales") {
+                  const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                  mappedRec.ytd_sales = isNaN(parsedPr) ? 0 : parsedPr;
+                } else if (lowerKey === "ytdgrossmargin%" || lowerKey === "ytdgppercent" || lowerKey === "ytdgpm" || lowerKey === "ytd_gp_percent") {
+                  const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                  mappedRec.ytd_gp_percent = Math.max(-999.99, Math.min(999.99, isNaN(parsedPr) ? 0 : parsedPr));
+                } else if (lowerKey === "lydnetsales" || lowerKey === "lyrsales" || lowerKey === "lyr_sales") {
+                  const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                  mappedRec.lyr_sales = isNaN(parsedPr) ? 0 : parsedPr;
+                } else if (lowerKey === "lydgrossmargin%" || lowerKey === "lyrgppercent" || lowerKey === "lyrgpm" || lowerKey === "lyr_gp_percent") {
+                  const parsedPr = parseFloat(String(cleanVal).replace(/[^0-9.-]/g, ""));
+                  mappedRec.lyr_gp_percent = Math.max(-999.99, Math.min(999.99, isNaN(parsedPr) ? 0 : parsedPr));
+                }
               } 
               else if (table === "inventory") {
                 if (lowerKey === "itemname" || lowerKey === "name" || lowerKey === "productname" || lowerKey === "materialname" || lowerKey === "product" || lowerKey === "item" || lowerKey === "material" || lowerKey === "title") mappedRec.name = cleanVal;

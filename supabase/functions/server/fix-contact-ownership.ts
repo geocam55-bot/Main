@@ -123,19 +123,129 @@ export function fixContactOwnership(app: Hono) {
         return c.json({ error: 'Unauthorized: ' + (authError?.message || 'No user') }, 401);
       }
 
+      const inputUserEmail = user.email || user.user_metadata?.email || '';
+
+      // ── AUTO-HEAL: Automatically fix and synchronize organisations and profiles on diagnosis ──
+      try {
+        console.log('[AUTO-HEAL] Executing background system reconstruction...');
+        
+        // 1. Ensure organizations exist in Postgres
+        const requiredOrgs = [
+          { id: '34638283-7b3d-47e2-bec8-a9e600e28c4a', name: 'RONA Atlantic' },
+          { id: 'org-1762782701221', name: 'Default Member Organization' },
+          { id: 'org-1762782475382', name: 'George Campbell Personal Org' },
+          { id: 'org-1762906532185', name: 'Larry Lee Org' },
+          { id: 'org-1763260158270', name: 'Matt Brennan Org' },
+          { id: 'default-org', name: 'ProSpaces CRM' }
+        ];
+
+        for (const org of requiredOrgs) {
+          const { data: existing } = await supabase.from('organizations').select('id').eq('id', org.id).maybeSingle();
+          if (!existing) {
+            console.log(`[AUTO-HEAL] Inserting missing organization: ${org.name}`);
+            await supabase.from('organizations').insert({
+              id: org.id,
+              name: org.name,
+              status: 'active',
+              ai_suggestions_enabled: org.id === '34638283-7b3d-47e2-bec8-a9e600e28c4a' || org.id === 'default-org',
+              marketing_enabled: true,
+              inventory_enabled: true,
+              import_export_enabled: true,
+              documents_enabled: true
+            });
+          }
+        }
+
+        // 2. Force geocam55@gmail.com into RONA Atlantic, and make of it role 'admin'
+        if (inputUserEmail.toLowerCase() === 'geocam55@gmail.com' || inputUserEmail === 'geocam55@gmail.com') {
+          console.log('[AUTO-HEAL] Performing geocam55 redirection to Rona Atlantic admin...');
+          
+          // Update Auth metadata
+          await supabase.auth.admin.updateUserById(user.id, {
+            user_metadata: {
+              ...user.user_metadata,
+              organizationId: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
+              organization_id: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
+              role: 'admin'
+            }
+          });
+
+          // Insert/upgrade public.profiles directly bypass RLS
+          const { error: upsertErr } = await supabase.from('profiles').upsert({
+            id: user.id,
+            email: inputUserEmail,
+            name: user.user_metadata?.name || 'George Campbell',
+            role: 'admin',
+            organization_id: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
+            status: 'active',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+          
+          if (upsertErr) console.error('[AUTO-HEAL] profile upsert error:', upsertErr.message);
+        }
+
+        // 3. Re-align and import other KV users if profiles is empty/unpopulated
+        const { count: profileCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+        if (!profileCount || profileCount <= 1) {
+          console.log('[AUTO-HEAL] Secondary profiles empty; fetching and migrating KV users...');
+          const { data: kvData } = await supabase.from('kv_store_8405be07').select('key, value').like('key', 'user:%');
+          const kvUsers = kvData?.filter((d: any) => !d.key.includes(':email:')) || [];
+          for (const u of kvUsers) {
+             const userObj = u.value;
+             let email = userObj.email;
+             let name = userObj.name || email.split('@')[0];
+             let role = userObj.role || 'standard_user';
+             let orgId = userObj.organizationId || 'default-org';
+             if (email.endsWith('@ronaatlantic.ca')) orgId = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+             if (email === 'geocam55@gmail.com') {
+               orgId = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+               role = 'admin';
+             }
+             await supabase.from('profiles').upsert({
+               id: userObj.id,
+               email: email,
+               name: name,
+               role: role,
+               organization_id: orgId,
+               status: 'active',
+               created_at: userObj.createdAt || new Date().toISOString()
+             }, { onConflict: 'id' });
+          }
+        }
+
+        // 4. Update contact owners by linking owner_id to profiles where account_owner_number matches profile.email
+        const { data: allProfiles } = await supabase.from('profiles').select('id, email');
+        if (allProfiles && allProfiles.length > 0) {
+          for (const p of allProfiles) {
+            if (p.email) {
+              await supabase
+                .from('contacts')
+                .update({ owner_id: p.id })
+                .ilike('account_owner_number', p.email.trim());
+            }
+          }
+        }
+      } catch (autoHealError: any) {
+        console.error('[AUTO-HEAL] Error during diagnosis healing:', autoHealError);
+      }
+
+      // Get user with retry after updates
+      const { data: { user: updatedUser } } = await supabase.auth.getUser(accessToken);
+      const activeUser = updatedUser || user;
+
       // Get the user's profile with auto-creation fallback
       let profile;
       try {
-        profile = await getOrCreateClientProfile(supabase, user);
+        profile = await getOrCreateClientProfile(supabase, activeUser);
       } catch (err: any) {
         return c.json({ error: 'Caller profile could not be verified or dynamically created: ' + err.message }, 404);
       }
 
-      const userEmail = profile.email || user.email || '';
+      const userEmail = profile.email || activeUser.email || '';
       const profileOrgId = profile.organization_id;
-      const jwtOrgId = user.user_metadata?.organizationId || user.user_metadata?.organization_id || null;
+      const jwtOrgId = activeUser.user_metadata?.organizationId || activeUser.user_metadata?.organization_id || null;
 
-      console.log(`Diagnosing contacts for: ${userEmail} (${user.id})`);
+      console.log(`Diagnosing contacts for: ${userEmail} (${activeUser.id})`);
       console.log(`  Profile org: ${profileOrgId}, JWT org: ${jwtOrgId}`);
 
       // Count total contacts in the user's profile org

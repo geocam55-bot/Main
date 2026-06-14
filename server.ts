@@ -1217,7 +1217,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
                 mappedRec.price_level = cleanVal;
               } else if (lowerKey === "legacy" || lowerKey === "legacynumber" || lowerKey === "legacyno" || lowerKey === "legacy_number" || lowerKey === "accountcode1" || lowerKey === "accountcode" || lowerKey === "customer_number" || lowerKey === "customercode") {
                 mappedRec.legacy_number = cleanVal;
-              } else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner" || lowerKey === "owner_id") {
+              } else if (lowerKey === "accountownernumber" || lowerKey === "accountowneremail" || lowerKey === "accountowner" || lowerKey === "owner" || lowerKey === "owner_id" || lowerKey === "customersalespersonemail" || lowerKey === "customersalesperson" || lowerKey === "salesperson" || lowerKey === "salespersonemail") {
                 mappedRec.account_owner_number = cleanVal;
               } else if (lowerKey === "address" || lowerKey === "streetaddress") {
                 mappedRec.address = cleanVal;
