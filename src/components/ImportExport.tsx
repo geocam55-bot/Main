@@ -3211,58 +3211,6 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         );
       })()}
 
-      {/* High-Visibility Microsoft Azure Integration & Credentials Setup Guide Banner */}
-      <div className="bg-radial from-slate-50 to-blue-50/50 border border-slate-200 rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs font-sans">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="p-1 px-1.5 bg-blue-600 text-white rounded text-[9px] font-extrabold uppercase tracking-wider leading-none">
-              Microsoft Azure AD Links
-            </span>
-            {dbMsClientId && dbMsClientSecret ? (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Custom Azure App Credentials Active
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                Default Sandbox Mode Active
-              </span>
-            )}
-          </div>
-          <h2 className="text-sm font-bold text-slate-800 mt-1">
-            Microsoft App registrations, Secret Credentials & Troubleshooting Controls
-          </h2>
-          <p className="text-xs text-slate-500 leading-relaxed max-w-4xl">
-            Having trouble linking custom Microsoft Accounts, running unattended sync schedules, or seeing a <code className="text-red-600 font-mono font-bold bg-red-50 px-1 py-0.5 rounded text-4xs">Connection failed: AADSTS7000215: Invalid client secret provided</code> error? Ensure you are using your portal's <strong>Client Secret Value</strong>, not the Secret ID GUID. Open our central connector console to set up overrides.
-          </p>
-          {dbMsClientId && (
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[10px] text-slate-500 font-medium">Currently loaded client App ID:</span>
-              <code className="text-[10px] text-blue-700 font-mono bg-blue-100/50 px-1.5 py-0.5 border border-blue-200/40 rounded">
-                {dbMsClientId}
-              </code>
-            </div>
-          )}
-        </div>
-        <button
-          onClick={() => {
-            setActiveTab("storage");
-            setDriveTab("onedrive");
-            setShowMsDiagnosticGuide(true);
-            toast.info("Opened Microsoft OneDrive credentials & diagnostics panel!");
-            setTimeout(() => {
-              document.getElementById("onedrive-cloud-drive-section")?.scrollIntoView({ behavior: "smooth" });
-            }, 100);
-          }}
-          className="px-4.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 hover:shadow-md outline-none cursor-pointer group"
-          id="btn-goto-microsoft-credentials"
-        >
-          <Settings className="w-4 h-4 text-blue-200 group-hover:rotate-45 transition-transform duration-300" />
-          <span>Configure Custom Database & API Credentials</span>
-        </button>
-      </div>
-
       {/* Tabs Menu Navigation */}
       <div className="flex gap-2 border-b border-zinc-200">
         <button
@@ -3662,249 +3610,256 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
                     return (
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                        <button 
-                          onClick={() => setShowMsDiagnosticGuide(!showMsDiagnosticGuide)}
-                          className="w-full flex items-center justify-between text-left font-sans outline-none group"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="p-1 px-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-xs leading-none">⚙️</div>
-                            <div>
-                              <p className="text-xs font-bold text-slate-800">Advanced Redirect URI Origin Selector</p>
-                              <p className="text-[10px] text-slate-500 mt-0.5">Configure custom domains or resolve dynamic sandbox login errors</p>
-                            </div>
-                          </div>
-                          {showMsDiagnosticGuide ? (
-                            <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                          )}
-                        </button>
-
-                        {showMsDiagnosticGuide && (
-                          <div className="pt-2 border-t border-slate-200/60 space-y-3">
-                            <p className="text-xs text-slate-650 leading-relaxed font-sans">
-                              Because this is a sandboxed preview environment, the URL changes dynamically. Microsoft rejects logging in unless the active preview address is added as an authorized Redirect URI in your Microsoft Azure App Registration.
-                            </p>
-
-                            <div className="space-y-2 font-sans bg-amber-500/[0.04] border border-amber-500/10 rounded-lg p-3">
-                              <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Active OAuth Redirect Origin</label>
-                              <p className="text-3xs text-slate-500 leading-normal mb-2">
-                                Working from the AI Studio sandbox? Select a registered production domain (e.g. Vercel or Custom CRM). The authorization window will open under that domain and securely hand the token back to this browser window instantly!
-                              </p>
-                              <select
-                                value={oauthRedirectOrigin || 'auto'}
-                                onChange={(e) => setOauthRedirectOrigin(e.target.value)}
-                                className="w-full bg-white border border-slate-250 py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-800 outline-none shadow-xs mb-2 cursor-pointer transition-all focus:border-blue-500"
-                              >
-                                <option value="auto">🔌 Auto-Detect Current (Default: {window.location.origin})</option>
-                                <option value="prospaces_crm">🌐 Production CRM (https://www.prospacescrm.com)</option>
-                                <option value="prospaces_vercel">🚀 Vercel Host (https://prospaces.vercel.app)</option>
-                                <option value="custom">✍️ Custom Registered Origin...</option>
-                              </select>
-
-                              {oauthRedirectOrigin === 'custom' && (
-                                <div className="mt-2 space-y-1">
-                                  <input
-                                    type="text"
-                                    placeholder="https://your-custom-domain.com"
-                                    value={customOauthOriginUrl}
-                                    onChange={(e) => setCustomOauthOriginUrl(e.target.value)}
-                                    className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                  />
-                                  <p className="text-4xs text-slate-400">Must start with http:// or https:// (e.g. registered domain in Azure portal)</p>
-                                </div>
-                              )}
-
-                              <div className="mt-3 pt-3 border-t border-slate-200/40 space-y-1">
-                                <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Microsoft Login Prompt Behavior</label>
-                                <p className="text-3xs text-slate-500 leading-normal mb-1.5">
-                                  Having trouble switching accounts? Choose "Force Login Screen" to bypass Microsoft active user caching completely!
-                                </p>
-                                <select
-                                  value={oauthMicrosoftPrompt}
-                                  onChange={(e) => setOauthMicrosoftPrompt(e.target.value)}
-                                  className="w-full bg-white border border-slate-250 py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-800 outline-none shadow-xs cursor-pointer transition-all focus:border-blue-500"
-                                >
-                                  <option value="select_account">👥 Account Chooser (Bypasses SSO if multiple active, can auto-select if single)</option>
-                                  <option value="login">🔐 Force Login Screen (Forces entering credentials — Choose this to switch accounts!)</option>
-                                  <option value="consent">📝 Consent Prompt (Forces consent grant overlay)</option>
-                                </select>
-                              </div>
-
-                              <div className="space-y-1 mt-2.5">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Active Redirect URI passed to Microsoft / Google</label>
-                                <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg p-1.5 pl-2.5">
-                                  <code className="text-xs font-mono text-slate-800 break-all select-all flex-1">
-                                    {activeRedirectUriValue}
-                                  </code>
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(activeRedirectUriValue);
-                                      setCopiedUri(true);
-                                      toast.success("Active Redirect URI copied to clipboard!");
-                                      setTimeout(() => setCopiedUri(false), 2500);
-                                    }}
-                                    className="p-1.5 bg-white border border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-600 hover:text-slate-900 rounded-md transition-all shrink-0 outline-none flex items-center justify-center gap-1.5 text-xs font-semibold"
-                                  >
-                                    {copiedUri ? (
-                                      <>
-                                        <Check className="w-3 h-3 text-emerald-600" shrink-0="true" />
-                                        <span className="text-emerald-700">Copied!</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="w-3 h-3 text-slate-400" />
-                                        <span>Copy</span>
-                                      </>
-                                    )}
-                                  </button>
+                        {/* 1. Advanced Redirect URI Origin Selector (SuperAdmin ONLY) */}
+                        {user?.role === 'super_admin' && (
+                          <div className="space-y-3 pb-3 border-b border-slate-200/60">
+                            <button 
+                              onClick={() => setShowMsDiagnosticGuide(!showMsDiagnosticGuide)}
+                              className="w-full flex items-center justify-between text-left font-sans outline-none group animate-fadeIn"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="p-1 px-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-xs leading-none">⚙️</div>
+                                <div>
+                                  <p className="text-xs font-bold text-slate-800">Advanced Redirect URI Origin Selector</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">Configure custom domains or resolve dynamic sandbox login errors</p>
                                 </div>
                               </div>
-                            </div>
-
-                            <div className="space-y-2 pt-1 font-sans">
-                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Microsoft Azure Setup</p>
-                              <ol className="text-xs text-slate-650 space-y-1.5 list-none pl-0">
-                                <li className="flex items-start gap-1.5">
-                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">1</span>
-                                  <span className="leading-relaxed">
-                                    Open the <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold inline-flex items-center gap-0.5 hover:underline">Microsoft Azure Apps Portal <ExternalLink className="w-2.5 h-2.5" /></a> and click on your **Custom App Registration**.
-                                  </span>
-                                </li>
-                                <li className="flex items-start gap-1.5">
-                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">2</span>
-                                  <span className="leading-relaxed">In the **Overview** page, copy your 36-character **Application (client) ID** (do not use the example placeholder ID in our app!).</span>
-                                </li>
-                                <li className="flex items-start gap-1.5">
-                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">3</span>
-                                  <span className="leading-relaxed">Go to **Authentication** (left sidebar menu). Under **Web Redirect URIs**, click **"Add URI"** and paste the active redirect URI shown above, then click **Save**.</span>
-                                </li>
-                                <li className="flex items-start gap-1.5">
-                                  <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">4</span>
-                                  <span className="leading-relaxed">Go to **Certificates & secrets** (left sidebar). Add a new client secret, copy the actual **Value** column (not the Secret ID UUID!), and paste both credentials below!</span>
-                                </li>
-                              </ol>
-                            </div>
-
-                            {/* Custom Microsoft Azure Credentials Overrides */}
-                            <div className="mt-4 pt-4 border-t border-slate-200/60 font-sans space-y-3">
-                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">🔒 Self-Hosted / Custom Azure Client Credentials</p>
-                              <p className="text-3xs text-slate-500 leading-normal mb-1">
-                                Every Microsoft App Registration has its own unique, randomly generated Application ID. You **MUST** enter your custom Application ID and matching Client Secret Value below.
-                              </p>
-                              
-                              {loadingDbMsKeys ? (
-                                <div className="flex items-center gap-2 text-xs text-slate-400 py-1 font-sans">
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  <span>Fetching current database credentials...</span>
-                                </div>
+                              {showMsDiagnosticGuide ? (
+                                <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
                               ) : (
-                                <div className="space-y-2.5">
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-semibold text-slate-600 block">Application (client) ID</label>
-                                    <input
-                                      type="text"
-                                      placeholder="e.g. Your unique 36-character Azure Client ID GUID"
-                                      value={dbMsClientId}
-                                      onChange={(e) => setDbMsClientId(e.target.value)}
-                                      className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' ? 'border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-blue-50/10' : 'border-slate-250'}`}
-                                    />
-                                    {dbMsClientId.trim() === '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && (
-                                      <p className="text-[10px] text-blue-800 font-semibold mt-1 bg-blue-50 p-2 rounded border border-blue-200">
-                                        ℹ️ Default Theme Application ID: This matches your Microsoft Azure App Registration. Make sure the Client Secret Value you saved corresponds to this application ID.
-                                      </p>
-                                    )}
-                                    {dbMsClientId.trim() && dbMsClientId.trim() !== '392b79e9-3377-4a8e-aeb3-782aa4b373a3' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientId.trim()) && (
-                                      <p className="text-[10px] text-rose-700 font-medium mt-1">
-                                        ⚠️ Client ID format is invalid! It must be a 36-character hyphenated UUID. Example: f40e01d2-d570-4a4c-8159-3574d75211e2.
-                                      </p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-semibold text-slate-600 block">Client Secret Value</label>
-                                    <input
-                                      type="password"
-                                      placeholder={dbMsClientSecret ? "••••••••••••••••" : "Enter your Client Secret VALUE (e.g. text containing letters/symbols, NOT a Guid)"}
-                                      value={dbMsClientSecret}
-                                      onChange={(e) => setDbMsClientSecret(e.target.value)}
-                                      className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientSecret.trim()) ? 'border-amber-500 focus:border-amber-600 focus:ring-amber-600 bg-amber-50' : 'border-slate-250'}`}
-                                    />
-                                    {/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientSecret.trim()) && (
-                                      <p className="text-[10px] text-amber-800 font-semibold mt-1 bg-amber-100/60 p-2 rounded border border-amber-200">
-                                        ⚠️ WARNING: You have entered a Secret ID Guidance UUID (e.g., f8096a8a...) rather than the actual Client Secret **VALUE** (which typically has a format containing letters, numbers, and symbols like '~' or '-'). The Secret ID will be rejected by Azure. Please copy the text string from the **Value** column right after creating the secret in Azure ID.
-                                      </p>
-                                    )}
-                                  </div>
+                                <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                              )}
+                            </button>
 
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-semibold text-slate-600 block">Azure AD Tenant ID (Optional)</label>
-                                    <input
-                                      type="text"
-                                      placeholder="e.g. common, organizations, or your 36-char Tenant ID GUID"
-                                      value={dbMsTenantId}
-                                      onChange={(e) => setDbMsTenantId(e.target.value)}
-                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    />
-                                    <p className="text-[9px] text-slate-400 mt-0.5">Defaults to <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-705 font-semibold">common</code> if left blank. Specify your Tenant ID GUID if your Azure App is Single-Tenant only.</p>
-                                  </div>
+                            {showMsDiagnosticGuide && (
+                              <div className="pt-2 space-y-3">
+                                <p className="text-xs text-slate-650 leading-relaxed font-sans">
+                                  Because this is a sandboxed preview environment, the URL changes dynamically. Microsoft rejects logging in unless the active preview address is added as an authorized Redirect URI in your Microsoft Azure App Registration.
+                                </p>
 
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-semibold text-slate-600 block">Custom Redirect URI (Optional)</label>
-                                    <input
-                                      type="text"
-                                      placeholder="e.g. https://www.prospacescrm.com/oauth-callback"
-                                      value={dbMsRedirectUri}
-                                      onChange={(e) => setDbMsRedirectUri(e.target.value)}
-                                      className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    />
-                                    <p className="text-[9px] text-slate-400 mt-0.5">Defaults to https://www.prospacescrm.com/oauth-callback if empty.</p>
-                                  </div>
+                                <div className="space-y-2 font-sans bg-amber-500/[0.04] border border-amber-500/10 rounded-lg p-3 animate-fadeIn">
+                                  <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Active OAuth Redirect Origin</label>
+                                  <p className="text-3xs text-slate-500 leading-normal mb-2">
+                                    Working from the AI Studio sandbox? Select a registered production domain (e.g. Vercel or Custom CRM). The authorization window will open under that domain and securely hand the token back to this browser window instantly!
+                                  </p>
+                                  <select
+                                    value={oauthRedirectOrigin || 'auto'}
+                                    onChange={(e) => setOauthRedirectOrigin(e.target.value)}
+                                    className="w-full bg-white border border-slate-250 py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-800 outline-none shadow-xs mb-2 cursor-pointer transition-all focus:border-blue-500"
+                                  >
+                                    <option value="auto">🔌 Auto-Detect Current (Default: {window.location.origin})</option>
+                                    <option value="prospaces_crm">🌐 Production CRM (https://www.prospacescrm.com)</option>
+                                    <option value="prospaces_vercel">🚀 Vercel Host (https://prospaces.vercel.app)</option>
+                                    <option value="custom">✍️ Custom Registered Origin...</option>
+                                  </select>
 
-                                  <div className="flex gap-2 pt-1">
-                                    <button
-                                      onClick={handleSaveDbMsKeys}
-                                      disabled={savingDbMsKeys}
-                                      className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white p-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm outline-none transition-all cursor-pointer"
+                                  {oauthRedirectOrigin === 'custom' && (
+                                    <div className="mt-2 space-y-1 animate-fadeIn">
+                                      <input
+                                        type="text"
+                                        placeholder="https://your-custom-domain.com"
+                                        value={customOauthOriginUrl}
+                                        onChange={(e) => setCustomOauthOriginUrl(e.target.value)}
+                                        className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                      />
+                                      <p className="text-4xs text-slate-400">Must start with http:// or https:// (e.g. registered domain in Azure portal)</p>
+                                    </div>
+                                  )}
+
+                                  <div className="mt-3 pt-3 border-t border-slate-200/40 space-y-1">
+                                    <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Microsoft Login Prompt Behavior</label>
+                                    <p className="text-3xs text-slate-500 leading-normal mb-1.5">
+                                      Having trouble switching accounts? Choose "Force Login Screen" to bypass Microsoft active user caching completely!
+                                    </p>
+                                    <select
+                                      value={oauthMicrosoftPrompt}
+                                      onChange={(e) => setOauthMicrosoftPrompt(e.target.value)}
+                                      className="w-full bg-white border border-slate-250 py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-800 outline-none shadow-xs cursor-pointer transition-all focus:border-blue-500"
                                     >
-                                      {savingDbMsKeys ? (
-                                        <>
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin"/>
-                                          <span>Saving and Syncing...</span>
-                                        </>
-                                      ) : (
-                                        <span>Save & Activate App Credentials</span>
-                                      )}
-                                    </button>
-
-                                    {(dbMsClientId || dbMsClientSecret) && (
-                                      <button
-                                        onClick={async () => {
-                                          if (confirm("Are you sure you want to clear your custom overrides and revert to system standard credentials?")) {
-                                            try {
-                                              const supabase = createClient();
-                                              await supabase.from('kv_store_8405be07').delete().eq('key', 'secrets:microsoft');
-                                              setDbMsClientId('');
-                                              setDbMsClientSecret('');
-                                              setDbMsRedirectUri('');
-                                              setDbMsTenantId('');
-                                              toast.success("Custom overrides cleared. Default credentials restored.");
-                                            } catch (err: any) {
-                                              toast.error("Error clearing settings: " + err.message);
-                                            }
-                                          }
-                                        }}
-                                        className="p-2 border border-slate-250 text-slate-500 hover:bg-slate-50 hover:text-slate-700 rounded-lg text-xs outline-none transition-all cursor-pointer font-medium"
-                                      >
-                                        Clear Override
-                                      </button>
-                                    )}
+                                      <option value="select_account">👥 Account Chooser (Bypasses SSO if multiple active, can auto-select if single)</option>
+                                      <option value="login">🔐 Force Login Screen (Forces entering credentials — Choose this to switch accounts!)</option>
+                                      <option value="consent">📝 Consent Prompt (Forces consent grant overlay)</option>
+                                    </select>
                                   </div>
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            )}
                           </div>
                         )}
+
+                        {/* 2. Active Redirect URI Copy Assist Box (Always visible to Admins) */}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Active Redirect URI passed to Microsoft / Google</label>
+                          <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg p-1.5 pl-2.5">
+                            <code className="text-xs font-mono text-slate-800 break-all select-all flex-1">
+                              {activeRedirectUriValue}
+                            </code>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(activeRedirectUriValue);
+                                setCopiedUri(true);
+                                toast.success("Active Redirect URI copied to clipboard!");
+                                setTimeout(() => setCopiedUri(false), 2500);
+                              }}
+                              className="p-1.5 bg-white border border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-660 hover:text-slate-900 rounded-md transition-all shrink-0 outline-none flex items-center justify-center gap-1.5 text-xs font-semibold"
+                            >
+                              {copiedUri ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  <span className="text-emerald-700">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3 text-slate-400" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 3. Setup guide instructions (Always visible to Admins) */}
+                        <div className="space-y-2 pt-1 font-sans">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Microsoft Azure Setup</p>
+                          <ol className="text-xs text-slate-650 space-y-1.5 list-none pl-0">
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">1</span>
+                              <span className="leading-relaxed">
+                                Open the <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold inline-flex items-center gap-0.5 hover:underline">Microsoft Azure Apps Portal <ExternalLink className="w-2.5 h-2.5" /></a> and click on your **Custom App Registration**.
+                              </span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">2</span>
+                              <span className="leading-relaxed">In the **Overview** page, copy your 36-character **Application (client) ID** (do not use the example placeholder ID in our app!).</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">3</span>
+                              <span className="leading-relaxed">Go to **Authentication** (left sidebar menu). Under **Web Redirect URIs**, click **"Add URI"** and paste the active redirect URI shown above, then click **Save**.</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-3xs flex items-center justify-center shrink-0 font-bold mt-0.5">4</span>
+                              <span className="leading-relaxed">Go to **Certificates & secrets** (left sidebar). Add a new client secret, copy the actual **Value** column (not the Secret ID UUID!), and paste both credentials below!</span>
+                            </li>
+                          </ol>
+                        </div>
+
+                        {/* 4. Custom Microsoft Azure Credentials Overrides (Always visible to Admins) */}
+                        <div className="mt-4 pt-4 border-t border-slate-200/60 font-sans space-y-3">
+                          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">🔒 Self-Hosted / Custom Azure Client Credentials</p>
+                          <p className="text-3xs text-slate-500 leading-normal mb-1">
+                            Every Microsoft App Registration has its own unique, randomly generated Application ID. You **MUST** enter your custom Application ID and matching Client Secret Value below.
+                          </p>
+                          
+                          {loadingDbMsKeys ? (
+                            <div className="flex items-center gap-2 text-xs text-slate-400 py-1 font-sans">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Fetching current database credentials...</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-2.5">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-slate-600 block">Application (client) ID</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Your unique 36-character Azure Client ID GUID"
+                                  value={dbMsClientId}
+                                  onChange={(e) => setDbMsClientId(e.target.value)}
+                                  className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${dbMsClientId.trim() === '392b79e9-3377-448e-aeb3-782aa4b373a3' ? 'border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-blue-50/10' : 'border-slate-250'}`}
+                                />
+                                {dbMsClientId.trim() === '392b79e9-3377-448e-aeb3-782aa4b373a3' && (
+                                  <p className="text-[10px] text-blue-800 font-semibold mt-1 bg-blue-50 p-2 rounded border border-blue-200">
+                                    ℹ️ Default Theme Application ID: This matches your Microsoft Azure App Registration. Make sure the Client Secret Value you saved corresponds to this application ID.
+                                  </p>
+                                )}
+                                {dbMsClientId.trim() && dbMsClientId.trim() !== '392b79e9-3377-448e-aeb3-782aa4b373a3' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientId.trim()) && (
+                                  <p className="text-[10px] text-rose-700 font-medium mt-1">
+                                    ⚠️ Client ID format is invalid! It must be a 36-character hyphenated UUID. Example: f40e01d2-d570-4a4c-8159-3574d75211e2.
+                                  </p>
+                                )}
+                              </div>
+                              
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-slate-600 block">Client Secret Value</label>
+                                <input
+                                  type="password"
+                                  placeholder={dbMsClientSecret ? "••••••••••••••••" : "Enter your Client Secret VALUE (e.g. text containing letters/symbols, NOT a Guid)"}
+                                  value={dbMsClientSecret}
+                                  onChange={(e) => setDbMsClientSecret(e.target.value)}
+                                  className={`w-full bg-white border p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientSecret.trim()) ? 'border-amber-500 focus:border-amber-600 focus:ring-amber-600 bg-amber-50' : 'border-slate-250'}`}
+                                />
+                                {/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbMsClientSecret.trim()) && (
+                                  <p className="text-[10px] text-amber-800 font-semibold mt-1 bg-amber-100/60 p-2 rounded border border-amber-200">
+                                    ⚠️ WARNING: You have entered a Secret ID Guidance UUID (e.g., f8096a8a...) rather than the actual Client Secret **VALUE** (which typically has a format containing letters, numbers, and symbols like '~' or '-'). The Secret ID will be rejected by Azure. Please copy the text string from the **Value** column right after creating the secret in Azure ID.
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-slate-600 block">Azure AD Tenant ID (Optional)</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. common, organizations, or your 36-char Tenant ID GUID"
+                                  value={dbMsTenantId}
+                                  onChange={(e) => setDbMsTenantId(e.target.value)}
+                                  className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                                <p className="text-9px text-slate-400 mt-0.5">Defaults to <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-705 font-semibold">common</code> if left blank. Specify your Tenant ID GUID if your Azure App is Single-Tenant only.</p>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-slate-600 block">Custom Redirect URI (Optional)</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. https://www.prospacescrm.com/oauth-callback"
+                                  value={dbMsRedirectUri}
+                                  onChange={(e) => setDbMsRedirectUri(e.target.value)}
+                                  className="w-full bg-white border border-slate-250 p-2 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                                <p className="text-[9px] text-slate-400 mt-0.5">Defaults to https://www.prospacescrm.com/oauth-callback if empty.</p>
+                              </div>
+
+                              <div className="flex gap-2 pt-1">
+                                <button
+                                  onClick={handleSaveDbMsKeys}
+                                  disabled={savingDbMsKeys}
+                                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white p-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm outline-none transition-all cursor-pointer"
+                                >
+                                  {savingDbMsKeys ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                                      <span>Saving and Syncing...</span>
+                                    </>
+                                  ) : (
+                                    <span>Save & Activate App Credentials</span>
+                                  )}
+                                </button>
+
+                                {(dbMsClientId || dbMsClientSecret) && (
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm("Are you sure you want to clear your custom overrides and revert to system standard credentials?")) {
+                                        try {
+                                          const supabase = createClient();
+                                          await supabase.from('kv_store_8405be07').delete().eq('key', 'secrets:microsoft');
+                                          setDbMsClientId('');
+                                          setDbMsClientSecret('');
+                                          setDbMsRedirectUri('');
+                                          setDbMsTenantId('');
+                                          toast.success("Custom overrides cleared. Default credentials restored.");
+                                        } catch (err: any) {
+                                          toast.error("Error clearing settings: " + err.message);
+                                        }
+                                      }
+                                    }}
+                                    className="p-2 border border-slate-250 text-slate-500 hover:bg-slate-50 hover:text-slate-700 rounded-lg text-xs outline-none transition-all cursor-pointer font-medium"
+                                  >
+                                    Clear Override
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })()}
