@@ -16,6 +16,7 @@ import {
 import { contactsAPI, projectManagersAPI, bidsAPI, quotesAPI } from '../utils/api';
 import { projectId } from '../utils/supabase/info';
 import { createClient } from '../utils/supabase/client';
+import { getServerHeaders } from '../utils/server-headers';
 import type { User } from '../App';
 import { PermissionGate, PermissionButton } from './PermissionGate';
 import { canAdd, canChange, canDelete } from '../utils/permissions';
@@ -97,6 +98,11 @@ export function Contacts({ user }: ContactsProps) {
   const [isFixingOwnership, setIsFixingOwnership] = useState(false);
   const [ownershipDiagnosis, setOwnershipDiagnosis] = useState<any>(null);
   const [ownershipFixResult, setOwnershipFixResult] = useState<string | null>(null);
+
+  // Scope state – default to 'team' if user is elevated, else 'personal'
+  const [currentScope, setCurrentScope] = useState<'personal' | 'team'>(
+    ['admin', 'manager', 'director', 'marketing', 'super_admin'].includes(user.role) ? 'team' : 'personal'
+  );
   
   // Tags state
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('all');
@@ -146,13 +152,14 @@ export function Contacts({ user }: ContactsProps) {
     loadContacts();
   }, []);
 
-  const loadContacts = async () => {
+  const loadContacts = async (scopeToUse?: 'personal' | 'team') => {
     try {
       setIsLoading(true);
+      const activeScope = scopeToUse || currentScope;
       const [{ contacts: loadedContacts }, bidsResult, quotesResult] = await Promise.all([
-        contactsAPI.getAll(),
-        bidsAPI.getAll(),
-        quotesAPI.getAll(),
+        contactsAPI.getAll(activeScope),
+        bidsAPI.getAll(activeScope),
+        quotesAPI.getAll(activeScope),
       ]);
 
       const validContacts = (loadedContacts || []).filter(Boolean);
@@ -205,6 +212,11 @@ export function Contacts({ user }: ContactsProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleScopeChange = async (newScope: 'personal' | 'team') => {
+    setCurrentScope(newScope);
+    await loadContacts(newScope);
   };
 
   // Calculate metrics
@@ -304,21 +316,14 @@ export function Contacts({ user }: ContactsProps) {
     setOwnershipFixResult(null);
     
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      
-      if (!token) {
-        setOwnershipFixResult('Not authenticated. Please sign in again.');
-        return;
-      }
+      const headers = await getServerHeaders();
       
       // Step 1: Diagnose
       const diagRes = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/contacts/diagnose-ownership`,
         {
           method: 'GET',
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers,
         }
       );
       
@@ -337,10 +342,7 @@ export function Contacts({ user }: ContactsProps) {
           `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/contacts/fix-ownership`,
           {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
               targetEmail: diagnosis.user?.email,
               organizationId: diagnosis.user?.organization_id,
@@ -374,10 +376,7 @@ export function Contacts({ user }: ContactsProps) {
           `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/contacts/fix-ownership`,
           {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
               targetEmail: diagnosis.user?.email,
               organizationId: diagnosis.user?.organization_id,
@@ -1385,6 +1384,38 @@ export function Contacts({ user }: ContactsProps) {
     return (
       <PermissionGate user={user} module="contacts" action="view">
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+          {/* Scope Selector in empty state */}
+          <div className="flex justify-center border-b border-slate-100 pb-4">
+            <div className="inline-flex bg-slate-100 p-1 rounded-xl items-center gap-1 border border-slate-200">
+              <Button
+                variant={currentScope === 'personal' ? 'default' : 'ghost'}
+                size="sm"
+                className={`h-9 px-3 rounded-lg text-xs gap-1.5 transition-all ${
+                  currentScope === 'personal' 
+                    ? 'bg-white text-slate-800 shadow-sm hover:bg-white border border-slate-200' 
+                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
+                }`}
+                onClick={() => handleScopeChange('personal')}
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+                My Contacts (Personal)
+              </Button>
+              <Button
+                variant={currentScope === 'team' ? 'default' : 'ghost'}
+                size="sm"
+                className={`h-9 px-3 rounded-lg text-xs gap-1.5 transition-all ${
+                  currentScope === 'team' 
+                    ? 'bg-white text-slate-800 shadow-sm hover:bg-white border border-slate-200' 
+                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
+                }`}
+                onClick={() => handleScopeChange('team')}
+              >
+                <Users className="h-3.5 w-3.5" />
+                Team Contacts (Organization)
+              </Button>
+            </div>
+          </div>
+
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <AlertTriangle className="h-12 w-12 text-amber-500" />
             <h2 className="text-xl font-semibold text-foreground">No Contacts Found</h2>
@@ -1637,6 +1668,36 @@ export function Contacts({ user }: ContactsProps) {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="h-11 border-slate-200 bg-white pl-10"
                   />
+                </div>
+
+                {/* Scope selector */}
+                <div className="flex bg-slate-100 p-1 rounded-xl h-11 items-center gap-1 border border-slate-200">
+                  <Button
+                    variant={currentScope === 'personal' ? 'default' : 'ghost'}
+                    size="sm"
+                    className={`h-9 px-3 rounded-lg text-xs gap-1.5 transition-all ${
+                      currentScope === 'personal' 
+                        ? 'bg-white text-slate-800 shadow-sm hover:bg-white border border-slate-200' 
+                        : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
+                    }`}
+                    onClick={() => handleScopeChange('personal')}
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    My Contacts
+                  </Button>
+                  <Button
+                    variant={currentScope === 'team' ? 'default' : 'ghost'}
+                    size="sm"
+                    className={`h-9 px-3 rounded-lg text-xs gap-1.5 transition-all ${
+                      currentScope === 'team' 
+                        ? 'bg-white text-slate-800 shadow-sm hover:bg-white border border-slate-200' 
+                        : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
+                    }`}
+                    onClick={() => handleScopeChange('team')}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    Team Contacts
+                  </Button>
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
