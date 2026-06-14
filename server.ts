@@ -2070,8 +2070,11 @@ async function startServer() {
         // Check if there are already existing Microsoft credentials stored
         const { data: existingMicrosoft } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'secrets:microsoft').maybeSingle() as any;
         
-        const isStale = existingMicrosoft?.value && (existingMicrosoft.value.clientId !== azureClientId || existingMicrosoft.value.clientSecret !== azureClientSecret);
-        if (existingMicrosoft?.value?.clientId && !isStale) {
+        const isCustom = existingMicrosoft?.value?.isCustom === true;
+        const isStale = existingMicrosoft?.value && !isCustom && (existingMicrosoft.value.clientId !== azureClientId || existingMicrosoft.value.clientSecret !== azureClientSecret);
+        if (isCustom) {
+          console.log('[Server Config Sync] Special client-side custom Microsoft Azure settings are configured. Skipping auto-override.');
+        } else if (existingMicrosoft?.value?.clientId && !isStale) {
           console.log('[Server Config Sync] Microsoft credentials already exist in DB (clientId: ' + existingMicrosoft.value.clientId + ') and are up-to-date. Skipping auto-sync.');
         } else {
           console.log('[Server Config Sync] Syncing Microsoft credentials to Supabase DB...', {

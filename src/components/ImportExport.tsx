@@ -576,6 +576,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           clientSecret: dbMsClientSecret.trim(),
           redirectUri: dbMsRedirectUri.trim() || 'https://www.prospacescrm.com/oauth-callback',
           tenantId: dbMsTenantId.trim(),
+          isCustom: true,
           updatedAt: new Date().toISOString()
         }
       });
