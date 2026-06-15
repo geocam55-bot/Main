@@ -2220,10 +2220,11 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
             } catch (e) {
               throw new Error("Deno Excel XLSX converter module not installed: " + e.message);
             }
-            const workbook = XLSXModule.read(base64UrlContent, { type: 'base64' });
+            const XLSXInstance = XLSXModule.default || XLSXModule;
+            const workbook = XLSXInstance.read(base64UrlContent, { type: 'base64' });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
-            parsedRecords = XLSXModule.utils.sheet_to_json(worksheet);
+            parsedRecords = XLSXInstance.utils.sheet_to_json(worksheet);
           } catch (xlsxErr: any) {
             throw new Error(`Excel workbook parsing failed: ${xlsxErr.message}`);
           }

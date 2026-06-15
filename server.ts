@@ -4,7 +4,9 @@ import cors from 'cors';
 import multer from 'multer';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import * as XLSX from 'xlsx';
+import * as XLSXModule from 'xlsx';
+// @ts-ignore
+const XLSX: any = XLSXModule.default || XLSXModule;
 import os from 'os';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
