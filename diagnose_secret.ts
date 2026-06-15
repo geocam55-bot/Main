@@ -18,10 +18,18 @@ async function main() {
   }
 
   console.log('\n--- DATABASE SECRET ANALYTICS ---');
-  if (!data || !data.value || !data.value.clientSecret) {
-    console.log('No clientSecret found in database (secrets:microsoft)');
+  if (!data || !data.value) {
+    console.log('No secrets:microsoft configuration object found in database');
   } else {
-    analyzeString('dbSecret', data.value.clientSecret);
+    console.log('Stored DB Configuration:');
+    console.log(`- Stored ClientID: "${data.value.clientId}"`);
+    console.log(`- Stored TenantID: "${data.value.tenantId || 'common'}"`);
+    console.log(`- Stored RedirectURI: "${data.value.redirectUri || ''}"`);
+    if (data.value.clientSecret) {
+      analyzeString('dbSecret', data.value.clientSecret);
+    } else {
+      console.log('- No clientSecret found inside db config');
+    }
   }
 }
 

@@ -3597,7 +3597,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                   </div>
 
                   {/* Microsoft Azure Portal Integration Tutorial & Redirect URI Copy Assist */}
-                  {(() => {
+                  {user?.role === 'super_admin' && (() => {
                     const activeOriginValue = oauthRedirectOrigin === 'prospaces_vercel'
                       ? 'https://prospaces.vercel.app'
                       : oauthRedirectOrigin === 'prospaces_crm'
