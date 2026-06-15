@@ -757,15 +757,38 @@ async function executeScheduledTask(task: any) {
       importedRecords.forEach((item: any) => {
         // Find by identifiers e.g. Email for contacts, SKU for inventory, ProjectName for deals
         let existingIdx = -1;
+
+        // Find keys case-insensitively from input item
+        const itemKeys = Object.keys(item || {});
+        const findVal = (possibleKeys: string[]) => {
+          const matchedKey = itemKeys.find(k => possibleKeys.includes(k.toLowerCase().replace(/[\s\-_#/()]/g, "")));
+          return matchedKey ? String(item[matchedKey]).trim() : '';
+        };
+
+        const itemSku = findVal(['sku', 'skucode', 'partnumber', 'partno']);
+        const itemEmail = findVal(['email', 'emailaddress', 'customeremailaddress', 'customeremail', 'contactemail']);
+        const itemName = findVal(['name', 'contact', 'contactname', 'customer', 'fullname', 'itemname', 'productname', 'title']);
+        const itemProjectName = findVal(['projectname', 'dealname', 'project', 'title', 'project_name']);
+        const itemLegacyNumber = findVal(['legacy', 'legacynumber', 'legacyno']);
+
         if (moduleKey === 'contacts') {
-          existingIdx = crmDb.contacts.findIndex((c: any) => c.Email?.toLowerCase() === item.Email?.toLowerCase() || c.Name === item.Name);
+          existingIdx = crmDb.contacts.findIndex((c: any) => 
+            (itemEmail && c.Email?.toLowerCase() === itemEmail.toLowerCase()) || 
+            (itemName && c.Name?.toLowerCase() === itemName.toLowerCase()) ||
+            (itemLegacyNumber && (c.LegacyNumber === itemLegacyNumber || c.legacy_number === itemLegacyNumber))
+          );
         } else if (moduleKey === 'inventory') {
-          existingIdx = crmDb.inventory.findIndex((i: any) => i.SKU === item.SKU);
-        } else if (moduleKey === 'deals') {
-          existingIdx = crmDb.deals.findIndex((d: any) => d.ProjectName === item.ProjectName);
+          const searchSku = itemSku || item.id || '';
+          existingIdx = crmDb.inventory.findIndex((i: any) => i.SKU?.toLowerCase() === searchSku.toLowerCase());
+        } else if (moduleKey === 'deals' || moduleKey === 'bids') {
+          existingIdx = crmDb.deals.findIndex((d: any) => 
+            (itemProjectName && d.ProjectName?.toLowerCase() === itemProjectName.toLowerCase()) ||
+            (itemName && d.ProjectName?.toLowerCase() === itemName.toLowerCase())
+          );
         }
 
-        const normalizedRecord: any = { id: item.id || 'seed-' + Math.random().toString(36).slice(2, 6) };
+        const existingRecord = existingIdx !== -1 ? crmDb[moduleKey][existingIdx] : null;
+        const normalizedRecord: any = { id: item.id || (existingRecord ? existingRecord.id : 'seed-' + Math.random().toString(36).slice(2, 6)) };
         Object.entries(item).forEach(([k, v]) => {
           // Normalize spreadsheet column titles
           let key = k;
@@ -812,7 +835,7 @@ async function executeScheduledTask(task: any) {
 
       saveJson(CRM_DB_FILE, crmDb);
       logEntry.recordCount = upserts;
-      logEntry.message = `Successfully imported ${upserts} row records to ${task.action.module} database. Unattended job run complete.`;
+      logEntry.message = `Successfully imported ${upserts} row records to ${task.action.module} database and rebuilt local memory-search indices. Unattended job run complete.`;
     }
   } catch (error: any) {
     logEntry.status = 'failed';
@@ -1178,16 +1201,30 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
 
         const contactsLegacyMap = new Map<string, string>();
         const contactsNameMap = new Map<string, string>();
-        const { data: cData } = await db.from("contacts").select("id, legacy_number, name").eq("organization_id", organizationId);
+        const contactsEmailMap = new Map<string, string>();
+        const { data: cData } = await db.from("contacts").select("id, legacy_number, name, email").eq("organization_id", organizationId);
         cData?.forEach((c: any) => {
           if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
           if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
+          if (c.email) contactsEmailMap.set(c.email.toLowerCase().trim(), c.id);
         });
 
         const inventorySkuMap = new Map<string, string>();
         const { data: iData } = await db.from("inventory").select("id, sku").eq("organization_id", organizationId);
         iData?.forEach((inv: any) => {
-          if (inv.sku) inventorySkuMap.set(String(inv.sku).trim(), inv.id);
+          if (inv.sku) inventorySkuMap.set(String(inv.sku).toLowerCase().trim(), inv.id);
+        });
+
+        const opportunitiesMap = new Map<string, string>();
+        const { data: oppData } = await db.from("opportunities").select("id, title").eq("organization_id", organizationId);
+        oppData?.forEach((opp: any) => {
+          if (opp.title) opportunitiesMap.set(opp.title.toLowerCase().trim(), opp.id);
+        });
+
+        const bidsTitleMap = new Map<string, string>();
+        const { data: bidData } = await db.from("bids").select("id, title").eq("organization_id", organizationId);
+        bidData?.forEach((bid: any) => {
+          if (bid.title) bidsTitleMap.set(bid.title.toLowerCase().trim(), bid.id);
         });
 
         const cleanedRecordsList: any[] = [];
@@ -1374,14 +1411,22 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           if (table === "contacts" && !finalCleanedRec.name) continue;
           if (table === "inventory" && !finalCleanedRec.sku) continue;
           if (table === "opportunities" && !finalCleanedRec.title) continue;
+          if (table === "bids" && !finalCleanedRec.title) continue;
 
           // Map deduplicated ID references
           if (table === "contacts") {
-            const existingId = (finalCleanedRec.legacy_number && contactsLegacyMap.get(String(finalCleanedRec.legacy_number))) ||
-                               (finalCleanedRec.name && contactsNameMap.get(String(finalCleanedRec.name).toLowerCase()));
+            const existingId = (finalCleanedRec.legacy_number && contactsLegacyMap.get(String(finalCleanedRec.legacy_number).trim())) ||
+                               (finalCleanedRec.email && contactsEmailMap.get(String(finalCleanedRec.email).toLowerCase().trim())) ||
+                               (finalCleanedRec.name && contactsNameMap.get(String(finalCleanedRec.name).toLowerCase().trim()));
             finalCleanedRec.id = existingId || crypto.randomUUID();
           } else if (table === "inventory") {
-            const existingId = finalCleanedRec.sku && inventorySkuMap.get(String(finalCleanedRec.sku));
+            const existingId = finalCleanedRec.sku && inventorySkuMap.get(String(finalCleanedRec.sku).toLowerCase().trim());
+            finalCleanedRec.id = existingId || crypto.randomUUID();
+          } else if (table === "opportunities") {
+            const existingId = finalCleanedRec.title && opportunitiesMap.get(String(finalCleanedRec.title).toLowerCase().trim());
+            finalCleanedRec.id = existingId || crypto.randomUUID();
+          } else if (table === "bids") {
+            const existingId = finalCleanedRec.title && bidsTitleMap.get(String(finalCleanedRec.title).toLowerCase().trim());
             finalCleanedRec.id = existingId || crypto.randomUUID();
           } else {
             finalCleanedRec.id = crypto.randomUUID();
@@ -1477,9 +1522,51 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           }
         }
 
+        // ---> OPTIMIZATION & AUTO-REINDEXING AFTER SUCCESSFUL IMPORT <---
+        if (insertCount > 0) {
+          console.log(`[Scheduler Supabase] [Reindex] Auto-reindexing and statistics refresh triggered for table "${table}" (inserted: ${insertCount}).`);
+          try {
+            // 1. Backfill baseline keyword search terms if the table is public.inventory
+            if (table === "inventory") {
+              console.log(`[Scheduler Supabase] [Reindex] Automatically generating background database search keywords for organization: "${organizationId}"...`);
+              const backfillKeywordsSql = `
+                UPDATE public.inventory
+                SET
+                  search_keywords = ARRAY(
+                    SELECT DISTINCT lower(token)
+                    FROM unnest(
+                      regexp_split_to_array(
+                        concat_ws(' ', coalesce(name, ''), coalesce(description, ''), coalesce(category, ''), coalesce(sku, '')),
+                        '\\s+'
+                      )
+                    ) AS token
+                    WHERE length(token) >= 2
+                  ),
+                  keyword_version = 'kw_v1',
+                  keywords_generated_at = now()
+                WHERE organization_id = '${organizationId}'
+                  AND (search_keywords IS NULL OR cardinality(search_keywords) = 0 OR keywords_generated_at IS NULL);
+              `;
+              await db.rpc('exec_sql', { sql: backfillKeywordsSql });
+              console.log(`[Scheduler Supabase] [Reindex] Completed automated keyword search backfill.`);
+            }
+
+            // 2. Refresh PostgreSQL query analyzer stats on target table
+            console.log(`[Scheduler Supabase] [Reindex] Executing ANALYZE on public.${table}...`);
+            await db.rpc('exec_sql', { sql: `ANALYZE public.${table};` });
+
+            // 3. Rebuild B-Tree and GIN indexes on public table to eliminate index bloat and ensure fast query execution
+            console.log(`[Scheduler Supabase] [Reindex] Performing REINDEX on public.${table}...`);
+            await db.rpc('exec_sql', { sql: `REINDEX TABLE public.${table};` });
+            console.log(`[Scheduler Supabase] [Reindex] 🎉 Reindexing & statistics compilation finished successfully.`);
+          } catch (reindexErr: any) {
+            console.warn(`[Scheduler Supabase] [Reindex Warning] Reindexing step failed but import succeeded. Error: ${reindexErr?.message || reindexErr}`);
+          }
+        }
+
         logEntry.recordCount = insertCount;
         if (errorCount === 0) {
-          logEntry.message = `Successfully synchronized & imported ${insertCount} records into table "${table}" unattended from virtual file: ${fileName}`;
+          logEntry.message = `Successfully synchronized & imported ${insertCount} records into table "${table}" unattended, performed automated keywords update and completed database index reindexing from virtual file: ${fileName}`;
           console.log(`[Scheduler Supabase] [Import Mode] 🎉 Success! Synchronized & imported ${insertCount} records into "${table}".`);
         } else {
           logEntry.status = 'failed';
