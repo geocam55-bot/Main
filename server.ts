@@ -328,8 +328,36 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
   }
 }
 
+// Helper to search folders recursively for a file name
+async function scanFolderRecursiveServer(accessToken: string, folderId: string, targetName: string, depth = 0): Promise<any> {
+  if (depth > 4) return null; // safety depth limit
+  try {
+    const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$select=id,name,folder,file,size`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!resp.ok) return null;
+
+    const json: any = await resp.json();
+    const items = json.value || [];
+
+    // First do direct case-insensitive check
+    const match = items.find((f: any) => f.name.toLowerCase() === targetName.toLowerCase() && f.file);
+    if (match) return match;
+
+    // Scan directories recursively
+    for (const item of items) {
+      if (item.folder) {
+        const found = await scanFolderRecursiveServer(accessToken, item.id, targetName, depth + 1);
+        if (found) return found;
+      }
+    }
+  } catch (err) {
+    console.error(`[OneDrive Recursive Server Search] Error searching folder ID "${folderId}":`, err);
+  }
+  return null;
+}
+
 // Helper to automatically pull fresh file content from OneDrive during unattended task execution
-async function syncOneDriveFileOnBackend(task: any) {
+export async function syncOneDriveFileOnBackend(task: any) {
   const fileName = task.action.fileName;
   if (!fileName) {
     throw new Error("No fileName specified in the action.");
@@ -440,6 +468,7 @@ async function syncOneDriveFileOnBackend(task: any) {
       const match = (searchResult.value || []).find((f: any) => f.name === fileName && f.file);
       if (match) {
         fileId = match.id;
+        console.log(`[OneDrive Background Sync] Successfully resolved file "${fileName}" via Search API: ${fileId}`);
       }
     }
   } catch (searchErr) {
@@ -447,26 +476,20 @@ async function syncOneDriveFileOnBackend(task: any) {
   }
 
   if (!fileId) {
+    console.log(`[OneDrive Background Sync] Search API yielded no results. Scanning nested OneDrive folders recursively for "${fileName}"...`);
     try {
-      console.log(`[OneDrive Background Sync] Search failed/empty, scanning root children for "${fileName}"...`);
-      const childrenUrl = `https://graph.microsoft.com/v1.0/me/drive/root/children?$select=id,name,file`;
-      const childrenResp = await fetch(childrenUrl, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (childrenResp.ok) {
-        const childrenResult: any = await childrenResp.json();
-        const match = (childrenResult.value || []).find((f: any) => f.name === fileName && f.file);
-        if (match) {
-          fileId = match.id;
-        }
+      const match = await scanFolderRecursiveServer(accessToken, 'root', fileName);
+      if (match) {
+        fileId = match.id;
+        console.log(`[OneDrive Background Sync] Correctly resolved nested file "${fileName}" via recursive scanning helper: ${fileId}`);
       }
-    } catch (childrenErr) {
-      console.error(`[OneDrive Background Sync] Root children scan warning:`, childrenErr);
+    } catch (scanErr: any) {
+      console.error(`[OneDrive Background Sync] Recursive scan warning:`, scanErr);
     }
   }
 
   if (!fileId) {
-    throw new Error(`Target file "${fileName}" could not be resolved or found on your OneDrive Cloud space.`);
+    throw new Error(`Target file "${fileName}" could not be resolved or found on your OneDrive Cloud space (either in root or in any subdirectories).`);
   }
 
   // 5. Download the file as array buffer
@@ -557,7 +580,20 @@ async function uploadOneDriveFileFromBackend(task: any, base64Content: string) {
   const buffer = Buffer.from(base64Content, 'base64');
   console.log(`[OneDrive Background Export] Uploading fresh spreadsheet ${fileName} back into OneDrive...`);
 
-  const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileName)}:/content`;
+  // Try to locate the existing file ID to perform a targeted in-place update (prevents duplicate files at Root level)
+  let uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileName)}:/content`;
+  try {
+    const match = await scanFolderRecursiveServer(accessToken, 'root', fileName);
+    if (match && match.id) {
+      uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${match.id}/content`;
+      console.log(`[OneDrive Background Export] File found recursively at id "${match.id}". Performing selective in-place upload target...`);
+    } else {
+      console.log(`[OneDrive Background Export] Nested file not found, defaulting upload location to Root dir...`);
+    }
+  } catch (err) {
+    console.error(`[OneDrive Background Export] Lookup target error, defaulting to OneDrive root upload:`, err);
+  }
+
   const uploadResp = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
@@ -1053,13 +1089,21 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
     } else {
       // import format
       console.log(`[Scheduler Supabase] [Import Mode] Starting import processing from storage format...`);
+      let activeBase64: string | null = null;
+      let activeBuffer: Buffer | null = null;
+
       if (task.action.fileStorage === 'onedrive') {
         console.log(`[Scheduler Supabase] Unattended OneDrive Import: Fetching latest copy of "${fileName}" from OneDrive...`);
         try {
           const syncResult = await syncOneDriveFileOnBackend(task);
-          if (syncResult && syncResult.base64Url) {
-            await saveVirtualFileServer(fileName, syncResult.base64Url);
-            console.log(`[Scheduler Supabase] Unattended OneDrive Import: Successfully synchronized a fresh copy of "${fileName}" to Supabase virtual storage. Content size: ${syncResult.base64Url.length} chars.`);
+          if (syncResult && (syncResult.base64Url || syncResult.buffer)) {
+            activeBase64 = syncResult.base64Url;
+            activeBuffer = syncResult.buffer;
+            console.log(`[Scheduler Supabase] Unattended OneDrive Import: Successfully retrieved online copy of "${fileName}" in-memory.`);
+            // Save cache back in background (non-blocking, ignore statement timeouts)
+            saveVirtualFileServer(fileName, syncResult.base64Url).catch(e => {
+              console.warn(`[Scheduler Supabase] Background database file cache writing notice:`, e.message || e);
+            });
           } else {
             console.warn(`[Scheduler Supabase] Unattended OneDrive Import sync fetched empty or invalid response.`);
           }
@@ -1068,15 +1112,21 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         }
       }
 
-      console.log(`[Scheduler Supabase] [Import Mode] Loading virtual source file "${fileName}" from database...`);
-      const fileObj = await loadVirtualFileServer(fileName);
-      if (!fileObj) {
-        throw new Error(`Virtual source file "${fileName}" could not be found or was empty in Supabase storage.`);
+      let fileObj: any = null;
+      if (!activeBase64 && !activeBuffer) {
+        console.log(`[Scheduler Supabase] [Import Mode] No in-memory live file. Loading virtual source file "${fileName}" from database cache...`);
+        fileObj = await loadVirtualFileServer(fileName);
+        if (!fileObj) {
+          throw new Error(`Virtual source file "${fileName}" could not be found or was empty in Supabase storage.`);
+        }
+        activeBase64 = fileObj.base64;
+        console.log(`[Scheduler Supabase] [Import Mode] Virtual file cache found. Base64 length: ${activeBase64?.length || 0} chars.`);
       }
 
-      console.log(`[Scheduler Supabase] [Import Mode] Virtual file found. Base64 length: ${fileObj.base64?.length || 0} chars, Content length: ${fileObj.textContent?.length || 0} chars.`);
       let parsedRecords: any[] = [];
-      const fileContent = fileObj.textContent || Buffer.from(fileObj.base64 || '', 'base64').toString('utf8');
+      const fileContent = activeBuffer 
+        ? activeBuffer.toString('utf8')
+        : (fileObj?.textContent || Buffer.from(activeBase64 || '', 'base64').toString('utf8'));
 
       console.log(`[Scheduler Supabase] [Import Mode] Parsing file contents using format "${format}"...`);
       if (format === "json") {
@@ -1090,12 +1140,14 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         }
       } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || format === 'xlsx' || format === 'xls') {
         try {
-          const b64 = fileObj.base64;
-          if (!b64) {
-            throw new Error("No database content found for active Excel import task file.");
+          if (!activeBuffer && !activeBase64) {
+            throw new Error("No in-memory or database content found for active Excel import task file.");
           }
-          console.log(`[Scheduler Supabase] [Import Mode] Reading Excel file...`);
-          const workbook = XLSX.read(b64, { type: 'base64' });
+          console.log(`[Scheduler Supabase] [Import Mode] Reading Excel workbook...`);
+          const workbook = activeBuffer 
+            ? XLSX.read(activeBuffer, { type: 'buffer' })
+            : XLSX.read(activeBase64, { type: 'base64' });
+
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
           parsedRecords = XLSX.utils.sheet_to_json(worksheet);
