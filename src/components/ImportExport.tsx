@@ -2792,6 +2792,10 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setManualIsProcessing(true);
     toast.info(`Executing instant ${manualType} of ${manualModule}...`, { id: "manual-job" });
 
+    const supabaseClientObj = createClient();
+    const authCtx = await getAuthContext(supabaseClientObj);
+    const resolvedOrgId = authCtx.organizationId || user?.organizationId || user?.organization_id;
+
     // Executing the process instantly by triggering a temporary internal unattended task
     const tempTask: ScheduledTask = {
       id: "temp-manual-" + Math.random().toString(36).slice(2, 6),
@@ -2808,7 +2812,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         format: manualFormat
       },
       settings: { stopIfRunningHours: 1, retryCount: 0, retryIntervalMinutes: 0 },
-      creator: creatorName
+      creator: creatorName,
+      organizationId: resolvedOrgId || undefined,
+      organisationId: resolvedOrgId || undefined
     };
 
     try {

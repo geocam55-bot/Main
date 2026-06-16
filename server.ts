@@ -1194,40 +1194,107 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url"].forEach(k => existingDbCols.add(k));
         }
 
-        // Caching references
+        // Caching references with unlimited paginated scans to bypass Supabase default 1,000 row limits
         const profilesMap = new Map<string, string>();
-        const { data: pData } = await db.from("profiles").select("id, email");
-        pData?.forEach((p: any) => {
-          if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p.id);
-        });
+        let hasMore = true;
+        let offset = 0;
+        const pageLimit = 1000;
+
+        while (hasMore) {
+          const { data: pData, error: pErr } = await db
+            .from("profiles")
+            .select("id, email")
+            .range(offset, offset + pageLimit - 1);
+          if (pErr || !pData || pData.length === 0) {
+            hasMore = false;
+          } else {
+            pData.forEach((p: any) => {
+              if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p.id);
+            });
+            offset += pageLimit;
+          }
+        }
 
         const contactsLegacyMap = new Map<string, string>();
         const contactsNameMap = new Map<string, string>();
         const contactsEmailMap = new Map<string, string>();
-        const { data: cData } = await db.from("contacts").select("id, legacy_number, name, email").eq("organization_id", organizationId);
-        cData?.forEach((c: any) => {
-          if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
-          if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
-          if (c.email) contactsEmailMap.set(c.email.toLowerCase().trim(), c.id);
-        });
+        hasMore = true;
+        offset = 0;
+        while (hasMore) {
+          const { data: cData, error: cErr } = await db
+            .from("contacts")
+            .select("id, legacy_number, name, email")
+            .eq("organization_id", organizationId)
+            .range(offset, offset + pageLimit - 1);
+          if (cErr || !cData || cData.length === 0) {
+            hasMore = false;
+          } else {
+            cData.forEach((c: any) => {
+              if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
+              if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
+              if (c.email) contactsEmailMap.set(c.email.toLowerCase().trim(), c.id);
+            });
+            offset += pageLimit;
+          }
+        }
 
         const inventorySkuMap = new Map<string, string>();
-        const { data: iData } = await db.from("inventory").select("id, sku").eq("organization_id", organizationId);
-        iData?.forEach((inv: any) => {
-          if (inv.sku) inventorySkuMap.set(String(inv.sku).toLowerCase().trim(), inv.id);
-        });
+        hasMore = true;
+        offset = 0;
+        while (hasMore) {
+          const { data: iData, error: iErr } = await db
+            .from("inventory")
+            .select("id, sku")
+            .eq("organization_id", organizationId)
+            .range(offset, offset + pageLimit - 1);
+          if (iErr || !iData || iData.length === 0) {
+            hasMore = false;
+          } else {
+            iData.forEach((inv: any) => {
+              if (inv.sku) inventorySkuMap.set(String(inv.sku).toLowerCase().trim(), inv.id);
+            });
+            offset += pageLimit;
+          }
+        }
+        console.log(`[Scheduler Supabase] Loaded ${inventorySkuMap.size} existing unique SKUs for organization "${organizationId}" mapping.`);
 
         const opportunitiesMap = new Map<string, string>();
-        const { data: oppData } = await db.from("opportunities").select("id, title").eq("organization_id", organizationId);
-        oppData?.forEach((opp: any) => {
-          if (opp.title) opportunitiesMap.set(opp.title.toLowerCase().trim(), opp.id);
-        });
+        hasMore = true;
+        offset = 0;
+        while (hasMore) {
+          const { data: oppData, error: oppErr } = await db
+            .from("opportunities")
+            .select("id, title")
+            .eq("organization_id", organizationId)
+            .range(offset, offset + pageLimit - 1);
+          if (oppErr || !oppData || oppData.length === 0) {
+            hasMore = false;
+          } else {
+            oppData.forEach((opp: any) => {
+              if (opp.title) opportunitiesMap.set(opp.title.toLowerCase().trim(), opp.id);
+            });
+            offset += pageLimit;
+          }
+        }
 
         const bidsTitleMap = new Map<string, string>();
-        const { data: bidData } = await db.from("bids").select("id, title").eq("organization_id", organizationId);
-        bidData?.forEach((bid: any) => {
-          if (bid.title) bidsTitleMap.set(bid.title.toLowerCase().trim(), bid.id);
-        });
+        hasMore = true;
+        offset = 0;
+        while (hasMore) {
+          const { data: bidData, error: bidErr } = await db
+            .from("bids")
+            .select("id, title")
+            .eq("organization_id", organizationId)
+            .range(offset, offset + pageLimit - 1);
+          if (bidErr || !bidData || bidData.length === 0) {
+            hasMore = false;
+          } else {
+            bidData.forEach((bid: any) => {
+              if (bid.title) bidsTitleMap.set(bid.title.toLowerCase().trim(), bid.id);
+            });
+            offset += pageLimit;
+          }
+        }
 
         const cleanedRecordsList: any[] = [];
 
