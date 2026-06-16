@@ -390,7 +390,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Load custom connection mode: 'supabase' (highly robust CRM database direct) vs 'express' (unattended API container)
   const [connectionMode, setConnectionMode] = useState<"supabase" | "express">(() => {
-    return (localStorage.getItem("import_export_connection_mode") as any) || "express";
+    return (localStorage.getItem("import_export_connection_mode") as any) || "supabase";
   });
 
   // Helper function to decode base64 robustly
@@ -1774,7 +1774,16 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     } catch (e: any) {
       console.error(`Failed to load drive files for [${drive}]:`, e);
       if (drive === "onedrive" && msAccounts.length > 0) {
-        toast.error(`Unable to access Microsoft OneDrive cloud files: ${e.message}`);
+        const isAuthError = e.message?.includes("IDX14100") || e.message?.toLowerCase().includes("jwt") || e.message?.toLowerCase().includes("dots") || e.message?.toLowerCase().includes("unauthorized") || e.message?.toLowerCase().includes("token") || e.message?.toLowerCase().includes("expired");
+        if (isAuthError) {
+          toast.error(`Your Microsoft OneDrive login session has expired or is invalid.`, {
+            id: "onedrive-auth-expired",
+            description: "Please expand 'Azure & Google Developer Portals API Setup', then click 'Reconnect Microsoft Account' to refresh authorization.",
+            duration: 15000,
+          });
+        } else {
+          toast.error(`Unable to access Microsoft OneDrive cloud files: ${e.message}`);
+        }
       } else {
         toast.error(`Unable to read ${drive === "local" ? "Local Drive" : "OneDrive"} server directory.`);
       }

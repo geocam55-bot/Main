@@ -49,6 +49,7 @@
     "fs": "*",
     "hono": "*",
     "input-otp": "*",
+    "jimp": "^1.6.1",
     "jszip": "*",
     "lucide-react": "*",
     "motion": "*",
