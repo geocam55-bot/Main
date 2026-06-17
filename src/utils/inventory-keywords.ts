@@ -23,9 +23,8 @@ const STOP_WORDS = new Set([
 ]);
 
 const SYNONYM_MAP: Record<string, string[]> = {
-  pt: ['treated', 'pressure-treated', 'pressure treated', 'brown'],
-  treated: ['pt', 'pressure-treated', 'pressure treated', 'brown'],
-  brown: ['pt', 'treated', 'pressure-treated', 'pressure treated'],
+  pt: ['treated', 'pressure-treated', 'pressure treated'],
+  treated: ['pt', 'pressure-treated', 'pressure treated'],
   spf: ['spruce', 'spruce pine fir', 'pine', 'fir', 'lumber'],
   spruce: ['spf', 'lumber', 'wood'],
   decking: ['deck', 'board'],
