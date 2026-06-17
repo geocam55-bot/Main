@@ -985,7 +985,7 @@ const router = createBrowserRouter([
   },
 ]);
 
-import logoAsset from "figma:asset/09aa6b9a364cd19b8e73e23401db6a6a0b182a0e.png";
+import logoAsset from './assets/logo.png';
 
 import { registerServiceWorker, unregisterServiceWorker } from './utils/pwa';
 
