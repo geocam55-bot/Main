@@ -105,10 +105,22 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
       
       // Apply text search if there are search terms
       if (searchTerms) {
-        const expandedTerms = expandInventorySearchTerms(searchTerms);
-        const orClause = buildInventoryOrSearchClause(expandedTerms);
-        if (orClause) {
-          query = query.or(orClause);
+        const tokens = searchTerms.split(/\s+/).filter(token => token.length >= 2);
+        if (tokens.length === 0 && searchTerms.length > 0) {
+          // Fallback for short search query
+          const expandedTerms = expandInventorySearchTerms(searchTerms);
+          const orClause = buildInventoryOrSearchClause(expandedTerms);
+          if (orClause) {
+            query = query.or(orClause);
+          }
+        } else {
+          for (const token of tokens) {
+            const expandedTerms = expandInventorySearchTerms(token);
+            const orClause = buildInventoryOrSearchClause(expandedTerms);
+            if (orClause) {
+              query = query.or(orClause);
+            }
+          }
         }
       }
       
@@ -170,10 +182,21 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
         if (searchQuery && searchQuery.trim()) {
           const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
           if (searchTerms) {
-            const expandedTerms = expandInventorySearchTerms(searchTerms);
-            const orClause = buildInventoryOrSearchClause(expandedTerms);
-            if (orClause) {
-              aggQuery = aggQuery.or(orClause);
+            const tokens = searchTerms.split(/\s+/).filter(token => token.length >= 2);
+            if (tokens.length === 0 && searchTerms.length > 0) {
+              const expandedTerms = expandInventorySearchTerms(searchTerms);
+              const orClause = buildInventoryOrSearchClause(expandedTerms);
+              if (orClause) {
+                aggQuery = aggQuery.or(orClause);
+              }
+            } else {
+              for (const token of tokens) {
+                const expandedTerms = expandInventorySearchTerms(token);
+                const orClause = buildInventoryOrSearchClause(expandedTerms);
+                if (orClause) {
+                  aggQuery = aggQuery.or(orClause);
+                }
+              }
             }
           }
           if (priceFilter) {
@@ -245,10 +268,21 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
     if (searchQuery && searchQuery.trim()) {
       const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
       if (searchTerms) {
-        const expandedTerms = expandInventorySearchTerms(searchTerms);
-        const orClause = buildInventoryOrSearchClause(expandedTerms);
-        if (orClause) {
-          lowStockQuery = lowStockQuery.or(orClause);
+        const tokens = searchTerms.split(/\s+/).filter(token => token.length >= 2);
+        if (tokens.length === 0 && searchTerms.length > 0) {
+          const expandedTerms = expandInventorySearchTerms(searchTerms);
+          const orClause = buildInventoryOrSearchClause(expandedTerms);
+          if (orClause) {
+            lowStockQuery = lowStockQuery.or(orClause);
+          }
+        } else {
+          for (const token of tokens) {
+            const expandedTerms = expandInventorySearchTerms(token);
+            const orClause = buildInventoryOrSearchClause(expandedTerms);
+            if (orClause) {
+              lowStockQuery = lowStockQuery.or(orClause);
+            }
+          }
         }
       }
       if (priceFilter) {

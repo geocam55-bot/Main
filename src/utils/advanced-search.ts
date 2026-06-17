@@ -44,6 +44,45 @@ function stem(word: string): string {
   return word;
 }
 
+const RONA_SYNONYMS: Record<string, string[]> = {
+  'treated': ['pt', 'pressure-treated', 'pressure treated', 'brown'],
+  'pt': ['treated', 'pressure-treated', 'pressure treated', 'brown'],
+  'spf': ['spruce', 'spruce pine fir', 'pine', 'fir', 'lumber'],
+  'spruce': ['spf', 'lumber', 'wood'],
+  'decking': ['deck', 'board'],
+  'deck': ['decking', 'board'],
+  'screws': ['screw', 'fastener', 'fasteners'],
+  'screw': ['screws', 'fastener', 'fasteners'],
+  'posts': ['post'],
+  'post': ['posts'],
+  'joist': ['joists', 'rim'],
+  'joists': ['joist', 'rim'],
+  'beam': ['beams', 'ledger'],
+  'beams': ['beam', 'ledger'],
+  'railing': ['picket', 'pickets', 'baluster', 'balusters', 'rail', 'rails'],
+  'picket': ['pickets', 'railing', 'baluster'],
+  'pickets': ['picket', 'railing', 'balusters'],
+  'baluster': ['balusters', 'picket', 'pickets'],
+  'balusters': ['baluster', 'picket', 'pickets']
+};
+
+function termMatches(allFieldsText: string, term: string): boolean {
+  const stemmedTerm = stem(term);
+  if (allFieldsText.includes(term) || allFieldsText.includes(stemmedTerm)) {
+    return true;
+  }
+  
+  // Check synonyms
+  const synonyms = RONA_SYNONYMS[term] || RONA_SYNONYMS[stemmedTerm] || [];
+  for (const syn of synonyms) {
+    if (allFieldsText.includes(syn) || allFieldsText.includes(stem(syn))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
 function parseQueryIntent(query: string): QueryIntent[] {
   const intents: QueryIntent[] = [];
   const queryLower = query.toLowerCase();
@@ -396,10 +435,9 @@ export function advancedSearch<T extends SearchableItem>(
         .toLowerCase();
       
       // Check if all search terms are present (order doesn't matter)
-      // IMPORTANT: Check both original terms AND stemmed versions
+      // IMPORTANT: Check both original terms AND stemmed versions, as well as RONA synonyms
       const allTermsPresent = searchTerms.every(term => {
-        const stemmedTerm = stem(term);
-        return allFieldsText.includes(term) || allFieldsText.includes(stemmedTerm);
+        return termMatches(allFieldsText, term);
       });
       
       // If not all terms are present, skip this item entirely
@@ -579,8 +617,17 @@ export function advancedSearch<T extends SearchableItem>(
       
       // Enhanced individual search term matching with fuzzy support
       for (const { original, stemmed } of stemmedSearchTerms) {
+        const synonyms = RONA_SYNONYMS[original] || RONA_SYNONYMS[stemmed] || [];
+        const hasSynonymMatch = synonyms.some(syn => fieldValue.includes(syn) || fieldValue.includes(stem(syn)));
+
         if (fieldValue.includes(original)) {
           totalScore += weight * 3;
+          matchCount++;
+          if (!matchedFields.includes(field)) {
+            matchedFields.push(field);
+          }
+        } else if (hasSynonymMatch) {
+          totalScore += weight * 2.5; // Synonyms are very good matches!
           matchCount++;
           if (!matchedFields.includes(field)) {
             matchedFields.push(field);

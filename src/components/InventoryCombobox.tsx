@@ -8,6 +8,20 @@ import { Badge } from './ui/badge';
 import { useDebounce } from '../utils/useDebounce';
 import { advancedSearch } from '../utils/advanced-search';
 
+function cleanDescription(desc: string | undefined): string {
+  if (!desc) return '';
+  const markerStart = "<!--metadata:";
+  const markerEnd = "-->";
+  const startIndex = desc.lastIndexOf(markerStart);
+  if (startIndex !== -1) {
+    const endIndex = desc.indexOf(markerEnd, startIndex + markerStart.length);
+    if (endIndex !== -1) {
+      return desc.substring(0, startIndex).trim();
+    }
+  }
+  return desc.trim();
+}
+
 interface InventoryItem {
   id: string;
   name: string;
@@ -145,11 +159,11 @@ export function InventoryCombobox({
               <span className="truncate text-foreground">None</span>
             ) : selectedItem ? (
               <>
-                <span className="truncate w-full font-medium text-foreground">{selectedItem.name}</span>
+                <span className="truncate w-full font-semibold text-foreground">SKU: {selectedItem.sku}</span>
                 {selectedItem.description && (
-                  <span className="text-xs text-muted-foreground truncate w-full">{selectedItem.description}</span>
+                  <span className="text-xs text-muted-foreground truncate w-full">{cleanDescription(selectedItem.description)}</span>
                 )}
-                <span className="text-xs text-muted-foreground">SKU: {selectedItem.sku}</span>
+                <span className="text-xs text-muted-foreground">MFG #: {selectedItem.name}</span>
               </>
             ) : value ? (
               <>
@@ -268,16 +282,16 @@ export function InventoryCombobox({
                         }`}
                       />
                       <div className="flex flex-col items-start text-left flex-1">
-                        <span className="text-foreground">{item.name}</span>
+                        <span className="font-semibold text-foreground">SKU: {item.sku}</span>
                         {item.description && (
-                          <span className="text-xs text-muted-foreground line-clamp-1">{item.description}</span>
+                          <span className="text-xs text-muted-foreground line-clamp-2">{cleanDescription(item.description)}</span>
                         )}
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>SKU: {item.sku}</span>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                          <span>MFG #: {item.name}</span>
                           {price !== undefined && price !== null && (
                             <>
                               <span>•</span>
-                              <span className="font-medium text-green-600">
+                              <span className="font-semibold text-green-600">
                                 ${typeof price === 'number' ? price.toFixed(2) : price}
                               </span>
                             </>
