@@ -985,7 +985,8 @@ const router = createBrowserRouter([
   },
 ]);
 
-import logoAsset from './assets/logo.png';
+import { LOGO_BASE64 } from './components/LogoBase64';
+const logoAsset = LOGO_BASE64;
 
 import { registerServiceWorker, unregisterServiceWorker } from './utils/pwa';
 

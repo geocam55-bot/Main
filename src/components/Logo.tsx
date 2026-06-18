@@ -1,5 +1,7 @@
 import React from 'react';
-import logoAsset from '../assets/logo.png';
+import { LOGO_BASE64 } from './LogoBase64';
+
+const logoAsset = LOGO_BASE64;
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
