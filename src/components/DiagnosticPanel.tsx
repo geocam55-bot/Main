@@ -32,7 +32,7 @@ export function DiagnosticPanel({ organizationId, plannerType, materialType }: D
       if (inventoryIds.length > 0) {
         const { data: inventoryData } = await supabase
           .from('inventory')
-          .select('id, item_name, sku, unit_price, cost')
+          .select('id, name, sku, unit_price, cost')
           .in('id', inventoryIds)
           .eq('organization_id', organizationId);
         
@@ -51,7 +51,7 @@ export function DiagnosticPanel({ organizationId, plannerType, materialType }: D
 
   const relevantDefaults = defaults.filter(d => 
     d.planner_type === plannerType &&
-    (!materialType || !d.material_type || d.material_type.toLowerCase() === materialType.toLowerCase())
+    (plannerType === 'deck' || !materialType || !d.material_type || d.material_type.toLowerCase() === materialType.toLowerCase())
   );
 
   return (
@@ -101,7 +101,7 @@ export function DiagnosticPanel({ organizationId, plannerType, materialType }: D
                         )}
                         {inventoryItem && (
                           <div className="text-xs text-muted-foreground mt-1">
-                            <div>Item: {inventoryItem.item_name}</div>
+                            <div>Item: {inventoryItem.name}</div>
                             <div>SKU: {inventoryItem.sku || 'N/A'}</div>
                             <div className={hasT1Price ? 'text-green-600' : 'text-red-600'}>
                               T1 Price: ${((inventoryItem.unit_price || 0) / 100).toFixed(2)}

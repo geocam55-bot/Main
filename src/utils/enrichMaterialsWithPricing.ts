@@ -122,6 +122,85 @@ function fallbackMatchInventoryByDescription(
   return best?.item;
 }
 
+
+const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: string): string => {
+  const desc = material.description.toLowerCase();
+  const cat = material.category.toLowerCase();
+
+  // 1. Is it an aluminum railing item?
+  if (
+    desc.includes('aluminum') ||
+    desc.includes('picket package') ||
+    desc.includes('tempered glass') ||
+    desc.includes('clear glass pickets') ||
+    desc.includes('angled stair glass') ||
+    desc.includes('vinyl insert for glass') ||
+    desc.includes('rubber blocks for glass') ||
+    desc.includes('rail support legs') ||
+    desc.includes('self drilling screw') ||
+    desc.includes('post base plate cover') ||
+    desc.includes('decorative post cap') ||
+    desc.includes('universal angle bracket')
+  ) {
+    let color = 'white';
+    if (desc.includes('black')) {
+      color = 'black';
+    } else if (desc.includes('white')) {
+      color = 'white';
+    } else if (defaultPassType && defaultPassType.includes('black')) {
+      color = 'black';
+    } else if (defaultPassType && defaultPassType.includes('white')) {
+      color = 'white';
+    }
+    return `aluminum-${color}`;
+  }
+
+  // 2. Is it a Railing item (non-aluminum)?
+  if (cat === 'railing' || desc.includes('railing') || desc.includes('baluster') || desc.includes('spindle')) {
+    if (desc.includes('composite')) return 'composite';
+    if (desc.includes('cedar')) return 'cedar';
+    if (desc.includes('spruce')) return 'spruce';
+    if (desc.includes('treated')) return 'treated';
+    
+    if (defaultPassType && ['composite', 'cedar', 'spruce', 'treated'].includes(defaultPassType)) {
+      return defaultPassType;
+    }
+    return 'treated';
+  }
+
+  // 3. Is it a Decking item?
+  if (cat === 'decking' || desc.includes('deck board') || desc.includes('decking') || desc.includes('tread')) {
+    if (desc.includes('composite')) return 'composite';
+    if (desc.includes('cedar')) return 'cedar';
+    if (desc.includes('spruce')) return 'spruce';
+    if (desc.includes('treated')) return 'treated';
+
+    if (defaultPassType && ['composite', 'cedar', 'spruce', 'treated'].includes(defaultPassType)) {
+      return defaultPassType;
+    }
+    return 'treated';
+  }
+
+  // 4. Is it a Framing item?
+  if (cat === 'framing' || desc.includes('ledger') || desc.includes('joist') || desc.includes('beam') || desc.includes('post') || desc.includes('stringer')) {
+    if (desc.includes('cedar')) return 'cedar';
+    if (desc.includes('spruce')) return 'spruce';
+    if (desc.includes('treated') || desc.includes('pressure treated')) return 'treated';
+    
+    return 'treated';
+  }
+
+  // 5. Default/Hardware
+  if (defaultPassType && ['treated', 'composite', 'cedar', 'spruce'].includes(defaultPassType)) {
+    return defaultPassType;
+  }
+  if (defaultPassType && defaultPassType.startsWith('aluminum-')) {
+    return 'treated';
+  }
+
+  return defaultPassType || 'default';
+};
+
 /**
  * Enrich materials with T1 pricing from inventory based on project wizard defaults
  */
@@ -151,53 +230,25 @@ export async function enrichMaterialsWithT1Pricing(
     ]);
 
 
-    // Build a lookup map: material_category -> inventory_item_id
-    const defaultsMap = new Map<string, string>();
-    const anyTypeDefaultsMap = new Map<string, string>();
+    // Build logical multi-key map: material_type::material_category -> inventory_item_id
+    const defaultsByMaterialAndCategory = new Map<string, string>();
+    const fallbackDefaultsByCategory = new Map<string, string>();
+
     defaults.forEach(def => {
       if (def.planner_type === plannerType && def.inventory_item_id) {
+        const materialTypeKey = (def.material_type || 'default').toLowerCase();
         const categoryKey = def.material_category.toLowerCase();
-        const defMaterialType = def.material_type?.toLowerCase();
-
+        
+        defaultsByMaterialAndCategory.set(`${materialTypeKey}::${categoryKey}`, def.inventory_item_id);
+        
         // Keep a planner-wide fallback map regardless of material type.
-        if (!anyTypeDefaultsMap.has(categoryKey)) {
-          anyTypeDefaultsMap.set(categoryKey, def.inventory_item_id);
-        }
-
-        // Match on material_type if both are provided
-        if (normalizedMaterialType) {
-          // Exact type match (highest priority)
-          if (defMaterialType === normalizedMaterialType) {
-            defaultsMap.set(categoryKey, def.inventory_item_id);
-          }
-          // Fallback for generic aluminum entries when using aluminum-white / aluminum-black
-          else if (normalizedMaterialType.startsWith('aluminum-') && defMaterialType === 'aluminum') {
-            if (!defaultsMap.has(categoryKey)) {
-              defaultsMap.set(categoryKey, def.inventory_item_id);
-            }
-          }
-          // Fallback for generic/default entries (only if exact not already set)
-          else if (!defMaterialType || defMaterialType === 'default') {
-            if (!defaultsMap.has(categoryKey)) {
-              defaultsMap.set(categoryKey, def.inventory_item_id);
-            }
-          }
-        } else {
-          // No material type requested: use generic/default entries
-          if (!defMaterialType || defMaterialType === 'default') {
-            defaultsMap.set(categoryKey, def.inventory_item_id);
-          }
+        if (!fallbackDefaultsByCategory.has(categoryKey)) {
+          fallbackDefaultsByCategory.set(categoryKey, def.inventory_item_id);
         }
       }
     });
 
-    // If no defaults matched the current material type, fall back to any planner defaults.
-    if (defaultsMap.size === 0 && anyTypeDefaultsMap.size > 0) {
-      anyTypeDefaultsMap.forEach((itemId, categoryKey) => {
-        defaultsMap.set(categoryKey, itemId);
-      });
-    }
-
+    // Merge userDefaults into defaultsByMaterialAndCategory
     Object.entries(userDefaults).forEach(([key, itemId]) => {
       if (!itemId || key.endsWith('-cf')) {
         return;
@@ -212,28 +263,15 @@ export async function enrichMaterialsWithT1Pricing(
         return;
       }
 
-      const storedType = storedMaterialType.toLowerCase();
-      const effectiveMaterialType = normalizedMaterialType || 'default';
-      const isGenericAluminumFallback = effectiveMaterialType.startsWith('aluminum-') && storedType === 'aluminum';
-      if (storedType !== effectiveMaterialType && storedType !== 'default' && !isGenericAluminumFallback) {
-        return;
-      }
+      const materialTypeKey = storedMaterialType.toLowerCase();
+      const categoryKey = categoryParts.join('-').toLowerCase();
 
-      const userCategoryKey = categoryParts.join('-').toLowerCase();
-      // Exact material-type user overrides win over generic/default user overrides.
-      if (storedType === effectiveMaterialType) {
-        defaultsMap.set(userCategoryKey, itemId);
-      } else if (isGenericAluminumFallback) {
-        if (!defaultsMap.has(userCategoryKey)) {
-          defaultsMap.set(userCategoryKey, itemId);
-        }
-      } else if (!defaultsMap.has(userCategoryKey)) {
-        defaultsMap.set(userCategoryKey, itemId);
-      }
+      // Set user defaults so it overrides everything
+      defaultsByMaterialAndCategory.set(`${materialTypeKey}::${categoryKey}`, itemId);
     });
 
     // Get unique valid inventory item IDs.
-    const inventoryItemIds = Array.from(new Set(defaultsMap.values())).filter(isUuid);
+    const inventoryItemIds = Array.from(new Set(defaultsByMaterialAndCategory.values())).filter(isUuid);
     
     let inventoryItems: Array<{ id: string; name: string; unit_price: number; cost: number; sku?: string }> = [];
     if (inventoryItemIds.length > 0) {
@@ -255,7 +293,7 @@ export async function enrichMaterialsWithT1Pricing(
 
     // Fallback: only attempt description-based matching when at least one default exists.
     // If defaults are completely wiped, keep pricing empty instead of re-populating via fuzzy matches.
-    if (inventoryItems.length === 0 && defaultsMap.size > 0) {
+    if (inventoryItems.length === 0 && defaultsByMaterialAndCategory.size > 0) {
       const { data } = await supabase
         .from('inventory')
         .select('id, name, unit_price, cost, sku')
@@ -303,10 +341,32 @@ export async function enrichMaterialsWithT1Pricing(
         }
       }
 
+      const itemMaterialType = plannerType === 'deck'
+        ? getDeckItemMaterialType(material, normalizedMaterialType)
+        : (normalizedMaterialType || 'default');
+
+      const resolveOverride = (baseKey: string): string | undefined => {
+        let matched = defaultsByMaterialAndCategory.get(`${itemMaterialType}::${baseKey}`);
+        if (matched) return matched;
+
+        // Try generic aluminum if color specific fails
+        if (itemMaterialType.startsWith('aluminum-')) {
+          matched = defaultsByMaterialAndCategory.get(`aluminum::${baseKey}`);
+          if (matched) return matched;
+        }
+
+        // Try default/generic match
+        matched = defaultsByMaterialAndCategory.get(`default::${baseKey}`);
+        if (matched) return matched;
+
+        // Check fallback map
+        return fallbackDefaultsByCategory.get(baseKey);
+      };
+
       // STRATEGY 2: Match by category using Project Wizard Defaults
       if (!inventoryItem) {
         const categoryKey = material.category.toLowerCase();
-        let inventoryItemId = defaultsMap.get(categoryKey);
+        let inventoryItemId = resolveOverride(categoryKey);
         matchedDefaultKey = inventoryItemId ? categoryKey : undefined;
         
         // If no direct category match, try smart matching based on description
@@ -321,21 +381,22 @@ export async function enrichMaterialsWithT1Pricing(
           const tryLengthFirst = (baseKey: string): string | undefined => {
             if (material.lumberLength) {
               const lengthKey = `${baseKey} (${material.lumberLength}')`;
-              const lengthMatch = defaultsMap.get(lengthKey);
+              const lengthMatch = resolveOverride(lengthKey);
               if (lengthMatch) {
                 matchedDefaultKey = lengthKey;
                 return lengthMatch;
               }
             }
-            if (defaultsMap.has(baseKey)) {
+            const genericMatch = resolveOverride(baseKey);
+            if (genericMatch) {
               matchedDefaultKey = baseKey;
             }
-            return defaultsMap.get(baseKey);
+            return genericMatch;
           };
 
           // Helper to match and track the key
           const tryMatch = (key: string): string | undefined => {
-            const match = defaultsMap.get(key);
+            const match = resolveOverride(key);
             if (match) matchedDefaultKey = key;
             return match;
           };
