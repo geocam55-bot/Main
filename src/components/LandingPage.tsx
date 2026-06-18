@@ -413,12 +413,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
             </h1>
             
             <p className="text-slate-600 font-normal text-base sm:text-lg mt-6 leading-relaxed max-w-xl">
-              Prospaces CRM connects sales, projects, inventory, and teams – designed specifically for home improvement, lumber, and project-based businesses.
-            </p>
-            
-            <p className="text-sm font-semibold text-slate-500 mt-4 flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#1E6FD9]"></span>
-              No generic CRM workflows. Everything is tailored to your industry.
+              Prospaces CRM connects sales, projects, inventory, and teams.
             </p>
 
             {/* Direct CRM Access buttons */}
