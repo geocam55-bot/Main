@@ -985,8 +985,9 @@ const router = createBrowserRouter([
   },
 ]);
 
-import { LOGO_BASE64 } from './components/LogoBase64';
+import { LOGO_BASE64, FAVICON_BASE64 } from './components/LogoBase64';
 const logoAsset = LOGO_BASE64;
+const faviconAsset = FAVICON_BASE64;
 
 import { registerServiceWorker, unregisterServiceWorker } from './utils/pwa';
 
@@ -1000,12 +1001,12 @@ export default function App() {
     const link = document.createElement('link');
     link.rel = 'icon';
     link.type = 'image/png';
-    link.href = logoAsset;
+    link.href = faviconAsset;
     document.head.appendChild(link);
     
     const appleLink = document.createElement('link');
     appleLink.rel = 'apple-touch-icon';
-    appleLink.href = logoAsset;
+    appleLink.href = faviconAsset;
     document.head.appendChild(appleLink);
 
     // Temporary safety: keep service workers unregistered so deployed clients
