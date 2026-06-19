@@ -329,7 +329,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
           {/* Logo brand with navigation triggers */}
           <div className="flex items-center gap-4 sm:gap-10">
             <div className="flex items-center cursor-pointer" onClick={() => { setSelectedSpaceInfo(null); setActiveNavTab(null); }}>
-              <Logo size="md" className="h-16 md:h-20 lg:h-[84px] w-auto transition-all duration-200" />
+              <Logo size="md" className="h-[60px] w-[250px] transition-all duration-200" />
             </div>
 
             {/* Desktop Center Navigation Links */}
