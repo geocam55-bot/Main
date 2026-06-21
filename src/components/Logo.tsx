@@ -1,7 +1,7 @@
 import React from 'react';
-import { LOGO_BASE64 } from './LogoBase64';
+import { APPLE_ICON_BASE64 } from './LogoBase64';
 
-const logoAsset = LOGO_BASE64;
+const logoAsset = APPLE_ICON_BASE64;
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
