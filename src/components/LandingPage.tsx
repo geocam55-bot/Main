@@ -399,7 +399,8 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       </header>
 
       {/* ── HERO SECTION ── */}
-      <main className="flex-grow max-w-7xl mx-auto px-6 sm:px-8 py-12 md:py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+      <div className="w-full bg-[#e3effc] border-b border-blue-100">
+        <main className="flex-grow max-w-7xl mx-auto px-6 sm:px-8 py-12 md:py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
         
         {/* Left Column Text Content */}
         <div className="lg:col-span-5 flex flex-col justify-center">
@@ -718,6 +719,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
         </div>
 
       </main>
+      </div>
 
       {/* ── LOWER AUDIENCES SECTION (Built for Teams) ── */}
       <section id="features-section" className="bg-white border-t border-slate-100 py-16 md:py-24">

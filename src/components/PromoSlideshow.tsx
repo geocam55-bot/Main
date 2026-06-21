@@ -537,7 +537,7 @@ const CalendarScreen = () => {
         <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
           <div className="p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Logo size="sm" className="h-8 w-auto" />
+              <Logo size="sm" className="h-8 w-auto" showText={false} />
               ProSpaces
             </h2>
           </div>
@@ -761,7 +761,7 @@ const FeaturesScreen = () => {
         <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0 border-r border-slate-800">
           <div className="p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Logo size="sm" className="h-8 w-auto" />
+              <Logo size="sm" className="h-8 w-auto" showText={false} />
               ProSpaces
             </h2>
           </div>
@@ -838,7 +838,7 @@ const TeamDashboardScreen = () => {
         <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
           <div className="p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Logo size="sm" className="h-8 w-auto" />
+              <Logo size="sm" className="h-8 w-auto" showText={false} />
               ProSpaces
             </h2>
           </div>
@@ -1004,7 +1004,7 @@ const DashboardScreen = () => (
       <div className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-800">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Logo size="sm" className="h-8 w-auto" />
+            <Logo size="sm" className="h-8 w-auto" showText={false} />
             ProSpaces
           </h2>
         </div>
@@ -1203,7 +1203,7 @@ const ContactPortalScreen = () => (
       <div className="w-64 bg-slate-900 text-white flex flex-col">
         <div className="p-6 border-b border-slate-800">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Logo size="sm" className="h-8 w-auto" />
+            <Logo size="sm" className="h-8 w-auto" showText={false} />
             ProSpaces
           </h2>
         </div>
