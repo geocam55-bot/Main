@@ -94,6 +94,7 @@ const AdminFixUsers = lazyNamed(() => import('./components/AdminFixUsers'), 'Adm
 const About = lazyNamed(() => import('./components/About'), 'About');
 const PortalMessagesAdmin = lazyNamed(() => import('./components/MessagingHub'), 'MessagingHub');
 const SubscriptionBilling = lazyNamed(() => import('./components/subscription/SubscriptionBilling'), 'SubscriptionBilling');
+const KnowledgeBase = lazyNamed(() => import('./components/KnowledgeBase'), 'KnowledgeBase');
 // Planners
 const KitchenPlanner = lazyNamed(() => import('./components/planners/KitchenPlanner'), 'KitchenPlanner');
 const DeckPlanner = lazyNamed(() => import('./components/planners/DeckPlanner'), 'DeckPlanner');
@@ -910,6 +911,7 @@ export function AppContent() {
               {currentView === 'subscription-agreement' && <SubscriptionAgreement organization={organization} />}
               {currentView === 'about' && <About />}
               {currentView === 'admin-fix-users' && <AdminFixUsers user={user} />}
+              {currentView === 'knowledge-base' && <KnowledgeBase />}
               </Suspense>
             </div>
           </main>

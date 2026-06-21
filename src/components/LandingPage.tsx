@@ -12,6 +12,7 @@ import { HomeImprovementBenefits } from './HomeImprovementBenefits';
 import { LumberSuppliersBenefits } from './LumberSuppliersBenefits';
 import { ProDeskBenefits } from './ProDeskBenefits';
 import { MultiLocationBenefits } from './MultiLocationBenefits';
+import { KnowledgeBase } from './KnowledgeBase';
 import { motion } from 'motion/react';
 import { 
   Info, 
@@ -358,32 +359,47 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 <span>Pricing</span>
                 <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
+              <button 
+                onClick={() => setActiveNavTab('knowledge')}
+                className={`group flex items-center gap-1.5 hover:text-[#1E6FD9] transition-all py-1 px-1 cursor-pointer ${activeNavTab === 'knowledge' ? 'text-[#1E6FD9] border-b-2 border-[#1E6FD9]' : ''}`}
+                id="nav-btn-knowledge"
+              >
+                <span>Knowledge Base</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
+              </button>
             </nav>
           </div>
 
           {/* Right Header Navigation with support for mobile tab views */}
           <div className="flex items-center gap-3 sm:gap-6">
             {/* Mobile Navigation controls */}
-            <div className="flex md:hidden items-center gap-2 text-xs font-bold text-slate-500 mr-1 select-none">
+            <div className="flex md:hidden items-center gap-1.5 text-[10px] sm:text-xs font-bold text-slate-500 mr-1 select-none">
               <button 
                 onClick={() => setActiveNavTab('features')}
-                className={`group flex items-center gap-1 px-2 py-1 rounded ${activeNavTab === 'features' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
+                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'features' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
               >
                 <span>Features</span>
                 <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
               <button 
                 onClick={() => setActiveNavTab('why')}
-                className={`group flex items-center gap-1 px-2 py-1 rounded ${activeNavTab === 'why' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
+                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'why' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
               >
                 <span>Why Us</span>
                 <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
               <button 
                 onClick={() => setActiveNavTab('pricing')}
-                className={`group flex items-center gap-1 px-2 py-1 rounded ${activeNavTab === 'pricing' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
+                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'pricing' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
               >
                 <span>Pricing</span>
+                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
+              </button>
+              <button 
+                onClick={() => setActiveNavTab('knowledge')}
+                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'knowledge' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
+              >
+                <span>Help KB</span>
                 <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
             </div>
@@ -1175,6 +1191,57 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-all font-semibold"
               >
                 Close View
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* KNOWLEDGE BASE MODAL OVERLAY */}
+      {activeNavTab === 'knowledge' && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-3xl w-full max-w-7xl h-[92vh] max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-slate-100"
+          >
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center px-6 sm:px-8">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center text-[#1E6FD9]">
+                  <HelpCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-black text-slate-800 tracking-tight flex items-center gap-2">
+                    ProSpaces Help Center
+                  </h2>
+                  <p className="text-[10px] text-slate-400 font-semibold font-mono">
+                    Official Documentation &amp; AI Assist
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActiveNavTab(null)}
+                className="h-9 w-9 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-705 flex items-center justify-center transition-colors font-bold text-xl cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="flex-1 overflow-y-auto bg-slate-50 font-sans">
+              <KnowledgeBase />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-white flex items-center justify-between text-xs text-slate-400 px-6 sm:px-8 shrink-0">
+              <span className="hidden sm:inline">Looking for live agent onboarding? Schedule a live Zoom demo session.</span>
+              <span className="sm:hidden">Zoom demo onboarding sessions available.</span>
+              <button 
+                onClick={() => setActiveNavTab(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg transition-all font-semibold"
+              >
+                Close Portal
               </button>
             </div>
           </motion.div>

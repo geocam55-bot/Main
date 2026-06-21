@@ -31,6 +31,7 @@ import {
   Clock,
   ArrowLeft,
   Globe,
+  HelpCircle,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -109,6 +110,7 @@ export function Navigation({
           { id: 'bids', label: 'Deals', icon: FileText, count: unreadBidsCount },
           { id: 'messages', label: 'Message Space', icon: MessageSquare },
           { id: 'notes', label: 'Notes', icon: StickyNote },
+          { id: 'knowledge-base', label: 'Help Center', icon: HelpCircle },
         ]
       : [];
 
