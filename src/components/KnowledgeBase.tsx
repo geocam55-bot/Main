@@ -19,7 +19,7 @@ import {
   Layers,
   Heart,
   CheckCircle2,
-  X,
+  X as XIcon,
   Mail,
   ExternalLink,
   Check,
@@ -561,7 +561,7 @@ export function KnowledgeBase({
                     onClick={() => setSearchQuery('')}
                     className="p-2 text-slate-400 hover:text-slate-600 transition-colors mr-2 cursor-pointer"
                   >
-                    <X className="h-4 w-4" />
+                    <XIcon className="h-4 w-4" />
                   </button>
                 )}
               </div>
@@ -650,7 +650,7 @@ export function KnowledgeBase({
                       onClick={() => setSelectedCategory(null)}
                       className="text-[10px] font-extrabold text-[#1E6FD9] hover:text-[#1154A8] bg-blue-50 border border-blue-100 flex items-center gap-1 px-3 py-1 rounded-full cursor-pointer transition-colors"
                     >
-                      Reset category <X className="h-3 w-3" />
+                      Reset category <XIcon className="h-3 w-3" />
                     </button>
                   )}
                 </div>

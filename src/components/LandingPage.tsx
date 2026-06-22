@@ -40,7 +40,8 @@ import {
   Layers2,
   FileSpreadsheet,
   AlertBubble,
-  HelpCircle
+  HelpCircle,
+  X
 } from 'lucide-react';
 
 /* ── Image Asset Imports ── */

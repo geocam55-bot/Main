@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { BookOpen, X } from 'lucide-react';
+import { BookOpen, X as XIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { KnowledgeBase } from './KnowledgeBase';
@@ -110,7 +110,7 @@ export function InteractiveModuleHelp({
               onClick={() => setIsOpen(false)}
               className="h-8 w-8 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors font-bold text-lg cursor-pointer"
             >
-              <X className="h-4 w-4" />
+              <XIcon className="h-4 w-4" />
             </button>
           </div>
 
