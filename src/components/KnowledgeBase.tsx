@@ -687,13 +687,39 @@ export function KnowledgeBase({
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        art =>
-          art.title.toLowerCase().includes(q) ||
-          art.content.toLowerCase().includes(q) ||
-          art.tags.some(tag => tag.toLowerCase().includes(q))
-      );
+      const q = searchQuery.toLowerCase().trim();
+      const normalize = (s: string) => s.replace(/[.\-_'"]/g, ' ').replace(/\s+/g, ' ').trim();
+      const cleanQ = normalize(q);
+
+      result = result.filter(art => {
+        const cleanTitle = normalize(art.title.toLowerCase());
+        const cleanContent = normalize(art.content.toLowerCase());
+
+        // 1. Direct or normalized direct check
+        if (cleanTitle.includes(cleanQ) || cleanContent.includes(cleanQ)) {
+          return true;
+        }
+
+        // 2. Substring tag check
+        if (art.tags.some(tag => {
+          const cleanTag = normalize(tag.toLowerCase());
+          return cleanTag.includes(cleanQ) || cleanQ.includes(cleanTag);
+        })) {
+          return true;
+        }
+
+        // 3. Token-based fallback check (all non-trivial key tokens exist in the article)
+        const tokens = cleanQ.split(' ').filter(t => t.length > 2);
+        if (tokens.length > 0) {
+          return tokens.every(tok => 
+            cleanTitle.includes(tok) || 
+            cleanContent.includes(tok) || 
+            art.tags.some(tag => tag.toLowerCase().includes(tok))
+          );
+        }
+
+        return false;
+      });
     }
 
     return result;
@@ -743,6 +769,8 @@ export function KnowledgeBase({
     // Contextual matching from KB articles
     setTimeout(() => {
       const q = userMsg.toLowerCase().trim();
+      const normalize = (s: string) => s.replace(/[.\-_'"]/g, ' ').replace(/\s+/g, ' ').trim();
+      const cleanQ = normalize(q);
       let answerText = '';
 
       // 1. Synonym expansions
@@ -795,13 +823,13 @@ export function KnowledgeBase({
       if (q.includes('log') || q.includes('logs') || q.includes('audit') || q.includes('compliance')) {
         searchTerms.push('security', 'audit', 'logs', 'compliance', 'admin');
       }
-      if (q.includes('kpi') || q.includes('kpis') || q.includes('metric') || q.includes('metrics') || q.includes('calculation') || q.includes('forecast') || q.includes('ratio') || q.includes('ratios') || q.includes('performance') || q.includes('value')) {
-        searchTerms.push('kpi', 'sales', 'deals', 'marketing', 'operations', 'forecast', 'reports-kpis');
+      if (q.includes('kpi') || q.includes('kpis') || q.includes('metric') || q.includes('metrics') || q.includes('calculation') || q.includes('forecast') || q.includes('ratio') || q.includes('ratios') || q.includes('performance') || q.includes('value') || q.includes('days') || q.includes('close') || q.includes('age') || q.includes('velocity') || q.includes('avg')) {
+        searchTerms.push('kpi', 'sales', 'deals', 'marketing', 'operations', 'forecast', 'reports-kpis', 'days-to-close', 'deal-age', 'velocity');
       }
 
       // 2. Tokenize original query to match individual keywords
       const stopWords = new Set(['how', 'do', 'i', 'create', 'a', 'the', 'to', 'in', 'and', 'of', 'about', 'for', 'with', 'is', 'on', 'can', 'what', 'you', 'me', 'my', 'we', 'our', 'help', 'with']);
-      const tokens = q.split(/[\s,.\-?/!]+/).filter(tok => tok.length > 2 && !stopWords.has(tok));
+      const tokens = cleanQ.split(' ').filter(tok => tok.length > 2 && !stopWords.has(tok));
 
       // Add tokens to search terms
       tokens.forEach(tok => {
@@ -815,30 +843,34 @@ export function KnowledgeBase({
       KNOWLEDGE_ARTICLES.forEach(art => {
         let score = 0;
 
+        const cleanTitle = normalize(art.title.toLowerCase());
+        const cleanContent = normalize(art.content.toLowerCase());
+
         // Direct phrase check has extreme priority
-        if (art.title.toLowerCase().includes(q) || art.content.toLowerCase().includes(q)) {
+        if (cleanTitle.includes(cleanQ) || cleanContent.includes(cleanQ)) {
           score += 150;
         }
 
         // Full tag query match
         art.tags.forEach(tag => {
-          if (q.includes(tag.toLowerCase())) {
+          const cleanTag = normalize(tag.toLowerCase());
+          if (cleanQ.includes(cleanTag) || cleanTag.includes(cleanQ)) {
             score += 50;
           }
         });
 
         // Check individual search terms
         searchTerms.forEach(term => {
-          const lowerTitle = art.title.toLowerCase();
-          const lowerContent = art.content.toLowerCase();
+          const cleanTerm = normalize(term);
+          if (!cleanTerm) return;
 
-          if (lowerTitle.includes(term)) {
+          if (cleanTitle.includes(cleanTerm)) {
             score += 30; // Strong match on title keywords
           }
-          if (art.tags.some(t => t.toLowerCase() === term)) {
+          if (art.tags.some(t => normalize(t.toLowerCase()) === cleanTerm)) {
             score += 20; // Match on actual tag
           }
-          if (lowerContent.includes(term)) {
+          if (cleanContent.includes(cleanTerm)) {
             score += 5; // Moderate match on body content
           }
         });
@@ -850,7 +882,7 @@ export function KnowledgeBase({
       });
 
       if (bestArticle && maxScore >= 15) {
-        answerText = `Great question! Based on our Article **"${bestArticle.title}"**:\n\n${bestArticle.content.slice(0, 380)}...\n\n👉 **Read the complete guide titled "${bestArticle.title}"** above for full step-by-step instructions!`;
+        answerText = `Great question! Based on our Article **"${bestArticle.title}"**:\n\n${bestArticle.content.slice(0, 420)}...\n\n👉 **Read the complete guide titled "${bestArticle.title}"** above for full step-by-step instructions!`;
       } else if (q.includes('hello') || q.includes('hi ') || q.includes('hey') || q.includes('greetings')) {
         answerText = "Hello! 👋 Welcome to ProSpaces Support. How can I assist you with your workspace setups today? Try asking about 'estimates', 'custom fields', 'invite users', or 'customer portal'.";
       } else if (q.includes('creator') || q.includes('who built') || q.includes('who are you')) {
