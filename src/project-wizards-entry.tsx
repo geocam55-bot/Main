@@ -165,6 +165,7 @@ function ProjectWizardsApp() {
   const handleLogout = () => {
     setUser(null);
     setSession(null);
+    window.location.href = '/';
   };
 
   if (isMobile) {

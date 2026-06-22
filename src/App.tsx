@@ -665,7 +665,7 @@ export function AppContent() {
     } finally {
       setUser(null);
       setOrganization(null);
-      setCurrentView('landing');
+      setCurrentView('member-login');
       setSession(null);
       // Clear persisted view so user doesn't land on a protected page after logout
       sessionStorage.removeItem('prospaces_current_view');

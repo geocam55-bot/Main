@@ -177,6 +177,7 @@ function MarketingApp() {
     setUser(null);
     setSession(null);
     setAccessToken(undefined);
+    window.location.href = '/';
   };
 
   if (isMobile) {

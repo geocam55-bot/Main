@@ -172,6 +172,7 @@ function ITApp() {
     setUser(null);
     setSession(null);
     setAccessToken(undefined);
+    window.location.href = '/';
   };
 
   if (loading) {

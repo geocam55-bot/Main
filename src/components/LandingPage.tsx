@@ -14,7 +14,7 @@ import { ProDeskBenefits } from './ProDeskBenefits';
 import { MultiLocationBenefits } from './MultiLocationBenefits';
 import { KnowledgeBase } from './KnowledgeBase';
 import { MultiDeviceMockup } from './MultiDeviceMockup';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Info, 
   ChevronRight, 
@@ -41,7 +41,8 @@ import {
   FileSpreadsheet,
   AlertBubble,
   HelpCircle,
-  X
+  X,
+  Menu
 } from 'lucide-react';
 
 /* ── Image Asset Imports ── */
@@ -227,7 +228,8 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
   // Local state to keep track of the interactive mockup dashboard tab
   const [activeTab, setActiveTab] = useState<SpaceKey>('sales');
   // State for header sub-menus information modals
-  const [activeNavTab, setActiveNavTab] = useState<'features' | 'why' | 'pricing' | null>(null);
+  const [activeNavTab, setActiveNavTab] = useState<'features' | 'why' | 'pricing' | 'knowledge' | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (selectedAudience === 'home-improvement') {
     return <HomeImprovementBenefits onBack={() => setSelectedAudience(null)} onGetStarted={onGetStarted} />;
@@ -328,15 +330,15 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
     >
       {/* ── HEADER ── */}
       <header className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-md border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 py-4 sm:py-5 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between">
           {/* Logo brand with navigation triggers */}
-          <div className="flex items-center gap-4 sm:gap-10">
-            <div className="flex items-center cursor-pointer" onClick={() => { setSelectedSpaceInfo(null); setActiveNavTab(null); }}>
-              <Logo size="md" className="h-[60px] w-auto transition-all duration-200" />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center cursor-pointer" onClick={() => { setSelectedSpaceInfo(null); setActiveNavTab(null); setMobileMenuOpen(false); }}>
+              <Logo size="md" className="h-[40px] sm:h-[50px] md:h-[60px] w-auto transition-all duration-200" />
             </div>
 
             {/* Desktop Center Navigation Links */}
-            <nav className="hidden md:flex items-center gap-8 text-base font-semibold text-[#002f5d]">
+            <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-base font-semibold text-[#002f5d] ml-4 lg:ml-10">
               <button 
                 onClick={() => setActiveNavTab('features')}
                 className={`group flex items-center gap-1.5 hover:text-[#1E6FD9] transition-all py-1 px-1 cursor-pointer ${activeNavTab === 'features' ? 'text-[#1E6FD9] border-b-2 border-[#1E6FD9]' : ''}`}
@@ -372,48 +374,70 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
             </nav>
           </div>
 
-          {/* Right Header Navigation with support for mobile tab views */}
-          <div className="flex items-center gap-3 sm:gap-6">
-            {/* Mobile Navigation controls */}
-            <div className="flex md:hidden items-center gap-1.5 text-[10px] sm:text-xs font-bold text-slate-500 mr-1 select-none">
-              <button 
-                onClick={() => setActiveNavTab('features')}
-                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'features' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
-              >
-                <span>Features</span>
-                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
-              </button>
-              <button 
-                onClick={() => setActiveNavTab('why')}
-                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'why' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
-              >
-                <span>Why Us</span>
-                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
-              </button>
-              <button 
-                onClick={() => setActiveNavTab('pricing')}
-                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'pricing' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
-              >
-                <span>Pricing</span>
-                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
-              </button>
-              <button 
-                onClick={() => setActiveNavTab('knowledge')}
-                className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'knowledge' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
-              >
-                <span>Help</span>
-                <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
-              </button>
-            </div>
-
+          {/* Right Header Navigation */}
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={onGetStarted}
-              className="bg-[#1E6FD9] hover:bg-[#155FBC] text-white text-xs sm:text-sm font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-blue-500/10 active:scale-[0.98]"
+              className="bg-[#1E6FD9] hover:bg-[#155FBC] text-white text-[11px] sm:text-xs md:text-sm font-semibold px-3 sm:px-5 py-2 rounded-full transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-blue-500/10 active:scale-[0.98] cursor-pointer"
             >
               Start Free Trial
             </button>
+
+            {/* Mobile Menu Toggle Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-1.5 sm:p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-all focus:outline-none cursor-pointer"
+              aria-label="Toggle menu"
+              title="Toggle Menu"
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Menu className="h-5 w-5 sm:h-6 sm:w-6" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Dropdown Navigation Menu */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              className="md:hidden bg-white border-t border-slate-100 overflow-hidden shadow-lg"
+            >
+              <div className="px-5 py-4 flex flex-col gap-2 font-semibold text-slate-700 max-w-7xl mx-auto">
+                <button
+                  onClick={() => { setActiveNavTab('features'); setMobileMenuOpen(false); }}
+                  className={`flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all ${activeNavTab === 'features' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : ''}`}
+                >
+                  <span className="text-sm">Features</span>
+                  <span className="text-[#1E6FD9] text-xs">✦</span>
+                </button>
+                <button
+                  onClick={() => { setActiveNavTab('why'); setMobileMenuOpen(false); }}
+                  className={`flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all ${activeNavTab === 'why' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : ''}`}
+                >
+                  <span className="text-sm">Why ProSpaces CRM</span>
+                  <span className="text-[#1E6FD9] text-xs">✦</span>
+                </button>
+                <button
+                  onClick={() => { setActiveNavTab('pricing'); setMobileMenuOpen(false); }}
+                  className={`flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all ${activeNavTab === 'pricing' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : ''}`}
+                >
+                  <span className="text-sm">Pricing</span>
+                  <span className="text-[#1E6FD9] text-xs">✦</span>
+                </button>
+                <button
+                  onClick={() => { setActiveNavTab('knowledge'); setMobileMenuOpen(false); }}
+                  className={`flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all ${activeNavTab === 'knowledge' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : ''}`}
+                >
+                  <span className="text-sm">Knowledge Base & Help</span>
+                  <span className="text-[#1E6FD9] text-xs">✦</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
       {/* ── HERO SECTION ── */}
