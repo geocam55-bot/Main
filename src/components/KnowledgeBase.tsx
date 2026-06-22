@@ -61,9 +61,9 @@ const KNOWLEDGE_CATEGORIES: Category[] = [
     name: 'Getting Started',
     description: 'Learn the core concepts, sign up steps, and initial workspace configurations.',
     icon: Compass,
-    color: 'text-emerald-700',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-100',
+    color: 'text-sky-700',
+    bgColor: 'bg-sky-50',
+    borderColor: 'border-sky-100',
   },
   {
     id: 'contacts',
@@ -259,13 +259,19 @@ How to audit team activity:
   }
 ];
 
-export function KnowledgeBase() {
+export function KnowledgeBase({
+  embedded = false,
+  initialCategory = null,
+}: {
+  embedded?: boolean;
+  initialCategory?: string | null;
+} = {}) {
   // SUB-NAV TABS: 'kb' | 'status' | 'contact'
   const [activeSubTab, setActiveSubTab] = useState<'kb' | 'status' | 'contact'>('kb');
 
   // KNOWLEDGE STATE
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(initialCategory);
   const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
 
   // Ratings feedback State
@@ -291,10 +297,10 @@ export function KnowledgeBase() {
   // Reset parameters when changing sub-tabs
   useEffect(() => {
     setSearchQuery('');
-    setSelectedCategory(null);
+    setSelectedCategory(initialCategory);
     setActiveArticleId(null);
     setTicketSubmitted(false);
-  }, [activeSubTab]);
+  }, [activeSubTab, initialCategory]);
 
   // SELECT CURRENT ACTIVE ARTICLE
   const activeArticle = useMemo(() => {
@@ -396,84 +402,119 @@ export function KnowledgeBase() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans select-none">
+    <div className={`w-full bg-[#F8FAFC] text-slate-800 flex flex-col font-sans select-none ${embedded ? '' : 'min-h-screen'}`}>
       
-      {/* ── 1. HELP CENTER HEADER (MATCHING PIPEDRIVE DARK GREEN HEADER) ── */}
-      <header className="w-full bg-[#0A432D] text-white px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-[#083624] shrink-0 sticky top-0 z-30 shadow-md">
-        <div className="flex items-center gap-6 sm:gap-10">
-          
-          {/* Logo Branding */}
-          <div 
-            onClick={() => setActiveSubTab('kb')}
-            className="flex items-center gap-2 cursor-pointer select-none group"
-          >
-            <div className="h-6 w-6 rounded-full bg-white text-[#0A432D] font-black flex items-center justify-center text-xs tracking-tighter shadow-sm transition-transform duration-300 group-hover:scale-105">
-              P
+      {/* ── 1. HELP CENTER HEADER ── */}
+      {!embedded ? (
+        <header className="w-full bg-[#1E6FD9] text-white px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-[#1154A8] shrink-0 sticky top-0 z-30 shadow-md">
+          <div className="flex items-center gap-6 sm:gap-10">
+            
+            {/* Logo Branding */}
+            <div 
+              onClick={() => setActiveSubTab('kb')}
+              className="flex items-center gap-2 cursor-pointer select-none group"
+            >
+              <div className="h-6 w-6 rounded-full bg-white text-[#1E6FD9] font-black flex items-center justify-center text-xs tracking-tighter shadow-sm transition-transform duration-300 group-hover:scale-105">
+                P
+              </div>
+              <span className="font-sans font-black tracking-widest text-xs sm:text-sm uppercase text-blue-100">
+                Help
+              </span>
             </div>
-            <span className="font-sans font-black tracking-widest text-xs sm:text-sm uppercase text-emerald-100">
-              Help Center
-            </span>
+
+            {/* Navigation Links inside dark green header */}
+            <nav className="flex items-center gap-4 sm:gap-6 text-xs font-bold text-white/80">
+              <button
+                onClick={() => { setActiveSubTab('kb'); setActiveArticleId(null); setSelectedCategory(null); }}
+                className={`pb-1 px-1 transition-all relative ${
+                  activeSubTab === 'kb' 
+                    ? 'text-white' 
+                    : 'hover:text-white'
+                }`}
+              >
+                <span>Knowledge Base</span>
+                {activeSubTab === 'kb' && (
+                  <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveSubTab('status')}
+                className={`pb-1 px-1 transition-all relative ${
+                  activeSubTab === 'status' 
+                    ? 'text-white' 
+                    : 'hover:text-white'
+                }`}
+              >
+                <span>Status</span>
+                {activeSubTab === 'status' && (
+                  <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveSubTab('contact')}
+                className={`pb-1 px-1 transition-all relative ${
+                  activeSubTab === 'contact' 
+                    ? 'text-white' 
+                    : 'hover:text-white'
+                }`}
+              >
+                <span>Contact Support</span>
+                {activeSubTab === 'contact' && (
+                  <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+                )}
+              </button>
+            </nav>
           </div>
 
-          {/* Navigation Links inside dark green header */}
-          <nav className="flex items-center gap-4 sm:gap-6 text-xs font-bold text-white/80">
+          {/* Right Search minimal launcher */}
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/15 transition-all flex items-center justify-center text-white cursor-pointer" title="Search Portal Launcher">
+              <Search className="h-4 w-4" />
+            </div>
+          </div>
+        </header>
+      ) : (
+        /* Compact inline subtabs inside embedded view */
+        <div className="w-full bg-[#1E6FD9] text-white px-6 py-2 flex items-center justify-between border-b border-[#1154A8] shrink-0 sticky top-0 z-30 shadow-sm">
+          <nav className="flex items-center gap-4 sm:gap-6 text-[11px] font-bold text-white/80">
             <button
               onClick={() => { setActiveSubTab('kb'); setActiveArticleId(null); setSelectedCategory(null); }}
-              className={`pb-1 px-1 transition-all relative ${
-                activeSubTab === 'kb' 
-                  ? 'text-white' 
-                  : 'hover:text-white'
-              }`}
+              className={`pb-1 px-1 transition-all relative ${activeSubTab === 'kb' ? 'text-white' : 'hover:text-white'}`}
             >
               <span>Knowledge Base</span>
               {activeSubTab === 'kb' && (
-                <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+                <motion.div layoutId="embeddedHeaderUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
               )}
             </button>
             <button
               onClick={() => setActiveSubTab('status')}
-              className={`pb-1 px-1 transition-all relative ${
-                activeSubTab === 'status' 
-                  ? 'text-white' 
-                  : 'hover:text-white'
-              }`}
+              className={`pb-1 px-1 transition-all relative ${activeSubTab === 'status' ? 'text-white' : 'hover:text-white'}`}
             >
               <span>Status</span>
               {activeSubTab === 'status' && (
-                <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+                <motion.div layoutId="embeddedHeaderUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
               )}
             </button>
             <button
               onClick={() => setActiveSubTab('contact')}
-              className={`pb-1 px-1 transition-all relative ${
-                activeSubTab === 'contact' 
-                  ? 'text-white' 
-                  : 'hover:text-white'
-              }`}
+              className={`pb-1 px-1 transition-all relative ${activeSubTab === 'contact' ? 'text-white' : 'hover:text-white'}`}
             >
               <span>Contact Support</span>
               {activeSubTab === 'contact' && (
-                <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+                <motion.div layoutId="embeddedHeaderUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
               )}
             </button>
           </nav>
         </div>
+      )}
 
-        {/* Right Search minimal launcher */}
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/15 transition-all flex items-center justify-center text-white cursor-pointer" title="Search Portal Launcher">
-            <Search className="h-4 w-4" />
-          </div>
-        </div>
-      </header>
-
-      {/* ── 2. HIGH-FIDELITY GREEN BANNER (MINT TO DEEP SWIRL + VECTOR ARTWORK) ── */}
+      {/* ── 2. HIGH-FIDELITY BLUE BANNER ── */}
       {activeSubTab === 'kb' && (
-        <div className="w-full bg-[#D4EFE1] py-10 sm:py-14 px-6 md:px-12 relative overflow-hidden border-b border-emerald-200">
+        <div className="w-full bg-[#E3F2FD] py-10 sm:py-14 px-6 md:px-12 relative overflow-hidden border-b border-blue-200">
           
-          {/* Deep Forest green swirl shape on raw right side (inspired exactly by attached reference) */}
-          <div className="absolute right-0 top-0 bottom-0 w-[42%] bg-[#08422C] rounded-l-[160px] hidden lg:block z-0 relative">
-            {/* Soft grid overlay in forest section */}
+          {/* Deep corporate blue swirl shape on raw right side (inspired exactly by attached reference) */}
+          <div className="absolute right-0 top-0 bottom-0 w-[42%] bg-[#1E6FD9] rounded-l-[160px] hidden lg:block z-0 relative">
+            {/* Soft grid overlay in blue section */}
             <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:14px_24px]" />
           </div>
 
@@ -482,17 +523,17 @@ export function KnowledgeBase() {
             {/* Left section: Title & Search bar details */}
             <div className="flex-1 flex flex-col text-left max-w-2xl">
               
-              <h1 className="text-3xl sm:text-5xl font-black text-[#0A432D] tracking-tight leading-none mb-3">
-                Knowledge Base
+              <h1 className="text-3xl sm:text-5xl font-black text-[#1E6FD9] tracking-tight leading-none mb-3">
+                Help
               </h1>
               
-              <p className="text-xs sm:text-sm font-semibold text-[#0C4F35]/85 mb-6 max-w-md leading-relaxed">
+              <p className="text-xs sm:text-sm font-semibold text-[#0F4C81]/85 mb-6 max-w-md leading-relaxed">
                 Connect your team, sync inventory metrics, configure dynamic specs and explore CRM solutions with direct indexing.
               </p>
 
               {/* Large search input layout centered beautifully */}
-              <div className="w-full relative shadow-lg rounded-full bg-white text-slate-800 flex items-center p-1 sm:p-1.5 border border-[#BCE1CD] focus-within:ring-4 focus-within:ring-[#0A432D]/10 transition-all">
-                <div className="p-3 pl-4 text-emerald-800">
+              <div className="w-full relative shadow-lg rounded-full bg-white text-slate-800 flex items-center p-1 sm:p-1.5 border border-[#BDDCFF] focus-within:ring-4 focus-within:ring-[#1E6FD9]/10 transition-all">
+                <div className="p-3 pl-4 text-blue-700">
                   <Search className="h-4 sm:h-5 w-4 sm:w-5" />
                 </div>
                 <input
@@ -502,6 +543,15 @@ export function KnowledgeBase() {
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     if (activeArticleId) setActiveArticleId(null); // return to lists
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (filteredArticles.length > 0) {
+                        setActiveArticleId(filteredArticles[0].id);
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }
                   }}
                   className="flex-1 px-1 py-1.5 sm:py-2.5 bg-transparent text-xs sm:text-sm focus:outline-none text-slate-900 placeholder:text-slate-400 font-bold"
                 />
@@ -518,7 +568,7 @@ export function KnowledgeBase() {
 
               {/* Suggestions quick tags */}
               <div className="flex flex-wrap items-center gap-2 mt-4 text-[10px] sm:text-xs">
-                <span className="text-[#0C4F35] font-black opacity-85 uppercase tracking-wider text-[9px]">Try:</span>
+                <span className="text-[#0F4C81] font-black opacity-85 uppercase tracking-wider text-[9px]">Try:</span>
                 {['welcome', 'invite', 'custom fields', 'proposals', '3d planners'].map(term => (
                   <button
                     key={term}
@@ -526,7 +576,7 @@ export function KnowledgeBase() {
                       setSearchQuery(term);
                       if (activeArticleId) setActiveArticleId(null);
                     }}
-                    className="px-2.5 py-0.5 rounded-full bg-[#EAF8F1] border border-[#BCE1CD] text-[#0A432D] font-extrabold hover:bg-emerald-100 transition-colors cursor-pointer text-[10px]"
+                    className="px-2.5 py-0.5 rounded-full bg-blue-50 border border-[#BDDCFF] text-[#1E6FD9] font-extrabold hover:bg-blue-100 transition-colors cursor-pointer text-[10px]"
                   >
                     {term}
                   </button>
@@ -539,18 +589,18 @@ export function KnowledgeBase() {
               {/* Elegant open book SVG with pristine shadow, purple book ribbon and green hardcover */}
               <svg viewBox="0 0 240 180" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-xl transform -rotate-2">
                 {/* Book outer hardcover border support */}
-                <path d="M12 165 C70 160, 110 165, 120 172 C130 165, 170 160, 228 165 L224 25 C166 20, 130 25, 120 32 C110 25, 74 20, 16 25 Z" fill="#063222" stroke="#042015" strokeWidth="2.5" />
+                <path d="M12 165 C70 160, 110 165, 120 172 C130 165, 170 160, 228 165 L224 25 C166 20, 130 25, 120 32 C110 25, 74 20, 16 25 Z" fill="#114C93" stroke="#0C3970" strokeWidth="2.5" />
                 
                 {/* 3D paper layers edge depth block */}
-                <path d="M18 160 C72 155, 108 160, 118 167 C128 160, 164 155, 218 160 L220 28 C166 23, 130 28, 120 35 C110 28, 74 23, 20 28 Z" fill="#E6EDE9" />
+                <path d="M18 160 C72 155, 108 160, 118 167 C128 160, 164 155, 218 160 L220 28 C166 23, 130 28, 120 35 C110 28, 74 23, 20 28 Z" fill="#E3EFFD" />
                 
                 {/* Left Page (White side) */}
                 <path d="M22 155 C74 150, 108 153, 118 162 L120 30 C110 23, 76 20, 24 25 Z" fill="#FFFFFF" />
-                <path d="M118 162 L120 30 L115 30 L113 162 Z" fill="#F4F8F6" />
+                <path d="M118 162 L120 30 L115 30 L113 162 Z" fill="#F0F6FD" />
                 
                 {/* Right Page (Slight shaded side) */}
                 <path d="M122 162 C132 153, 166 150, 218 155 L216 25 C164 20, 130 23, 120 30 Z" fill="#FAFCFB" />
-                <path d="M118 30 C119 50, 119 140, 122 162" stroke="#D3E5DC" strokeWidth="2" />
+                <path d="M118 30 C119 50, 119 140, 122 162" stroke="#BDDCFF" strokeWidth="2" />
                 
                 {/* Writing Guidelines representation on left page matching attached image book */}
                 <path d="M34 50 H98" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
@@ -592,13 +642,13 @@ export function KnowledgeBase() {
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
                 <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                   <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
-                    <Layers className="h-4 w-4 text-emerald-700" />
+                    <Layers className="h-4 w-4 text-[#1E6FD9]" />
                     Browse topics by department
                   </h2>
                   {selectedCategory && (
                     <button
                       onClick={() => setSelectedCategory(null)}
-                      className="text-[10px] font-extrabold text-[#0A432D] hover:text-[#062F20] bg-emerald-50 border border-emerald-100 flex items-center gap-1 px-3 py-1 rounded-full cursor-pointer transition-colors"
+                      className="text-[10px] font-extrabold text-[#1E6FD9] hover:text-[#1154A8] bg-blue-50 border border-blue-100 flex items-center gap-1 px-3 py-1 rounded-full cursor-pointer transition-colors"
                     >
                       Reset category <X className="h-3 w-3" />
                     </button>
@@ -616,8 +666,8 @@ export function KnowledgeBase() {
                         onClick={() => setSelectedCategory(isSelected ? null : cat.id)}
                         className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
                           isSelected
-                            ? 'border-emerald-600 bg-emerald-50/50 shadow-sm ring-2 ring-emerald-650/10'
-                            : 'border-slate-100 hover:border-emerald-200 hover:bg-slate-50/80 bg-white'
+                            ? 'border-blue-600 bg-blue-50/50 shadow-sm ring-2 ring-blue-600/10'
+                            : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50/80 bg-white'
                         }`}
                       >
                         <div className={`p-2.5 rounded-lg ${cat.bgColor} ${cat.color} mb-2`}>
@@ -661,7 +711,7 @@ export function KnowledgeBase() {
                         setSearchQuery('');
                         setSelectedCategory(null);
                       }}
-                      className="mt-4 px-4 py-2 bg-emerald-700 text-white hover:bg-emerald-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      className="mt-4 px-4 py-2 bg-[#1E6FD9] text-white hover:bg-[#1154A8] text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       Clear Search Flags
                     </button>
@@ -676,7 +726,7 @@ export function KnowledgeBase() {
                         <div
                           key={art.id}
                           onClick={() => setActiveArticleId(art.id)}
-                          className="p-5 rounded-xl bg-white border border-slate-205/60 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-98"
+                          className="p-5 rounded-xl bg-white border border-slate-205/60 hover:border-blue-350 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-98"
                         >
                           <div>
                             <div className="flex items-center gap-2 mb-3">
@@ -689,7 +739,7 @@ export function KnowledgeBase() {
                               </span>
                             </div>
 
-                            <h3 className="text-xs sm:text-sm font-black text-slate-800 group-hover:text-emerald-700 transition-colors leading-snug">
+                            <h3 className="text-xs sm:text-sm font-black text-slate-800 group-hover:text-[#1E6FD9] transition-colors leading-snug">
                               {art.title}
                             </h3>
 
@@ -726,11 +776,11 @@ export function KnowledgeBase() {
                           onClick={() => setActiveArticleId(art.id)}
                           className="p-3.5 rounded-xl bg-white border border-slate-200/80 hover:border-[#1E6FD9]/35 hover:shadow-sm cursor-pointer transition-all flex items-center gap-3"
                         >
-                          <div className="h-8 w-8 shrink-0 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center">
+                          <div className="h-8 w-8 shrink-0 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center">
                             <BookOpen className="h-4 w-4" />
                           </div>
                           <div className="overflow-hidden">
-                            <h4 className="text-[11.5px] font-black text-slate-700 leading-snug hover:text-emerald-700 truncate">
+                            <h4 className="text-[11.5px] font-black text-slate-700 leading-snug hover:text-[#1E6FD9] truncate">
                               {art.title}
                             </h4>
                             <span className="text-[9px] text-slate-400 font-semibold block mt-0.5">
@@ -758,7 +808,7 @@ export function KnowledgeBase() {
                     <ArrowLeft className="h-4 w-4 stroke-[3]" /> Back to index list
                   </button>
                   <div className="text-slate-400 font-semibold flex items-center gap-1">
-                    <span>Help Center</span>
+                    <span>Help</span>
                     <ChevronRight className="h-3 w-3" />
                     <span className="capitalize">{activeArticle.category.replace('-', ' ')}</span>
                   </div>
@@ -766,7 +816,7 @@ export function KnowledgeBase() {
 
                 {/* Sub headers details */}
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-800 uppercase tracking-wider">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-black bg-blue-50 text-blue-800 uppercase tracking-wider">
                     {KNOWLEDGE_CATEGORIES.find(c => c.id === activeArticle.category)?.name || activeArticle.category}
                   </span>
                   <span className="text-slate-300 font-bold">•</span>
@@ -797,7 +847,7 @@ export function KnowledgeBase() {
                           setSearchQuery(tag);
                           setActiveArticleId(null);
                         }}
-                        className="px-2.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer transition-colors font-semibold"
+                        className="px-2.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-[#1E6FD9] cursor-pointer transition-colors font-semibold"
                       >
                         #{tag}
                       </span>
@@ -808,14 +858,14 @@ export function KnowledgeBase() {
                   <div className="flex items-center gap-2">
                     <span className="font-extrabold text-slate-400 text-[10px] uppercase tracking-wider">Was this helpful?</span>
                     {feedbackSubmitted[activeArticle.id] ? (
-                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded flex items-center gap-1">
+                      <span className="text-[10px] font-black text-blue-850 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded flex items-center gap-1">
                         <Check className="h-3 w-3 stroke-[3]" /> Feedback saved!
                       </span>
                     ) : (
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           onClick={() => handleFeedback(activeArticle.id, 'helpful')}
-                          className="px-2.5 py-1 rounded border border-slate-205 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-250 text-[10px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 rounded border border-slate-205 text-slate-600 hover:bg-blue-50 hover:text-[#1E6FD9] hover:border-blue-250 text-[10px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
                         >
                           <ThumbsUp className="h-3 w-3" /> Yes
                         </button>
@@ -841,7 +891,7 @@ export function KnowledgeBase() {
                       <button
                         key={r.id}
                         onClick={() => setActiveArticleId(r.id)}
-                        className="p-2.5 rounded bg-white text-left text-slate-700 hover:text-emerald-700 border border-slate-150 flex justify-between items-center text-xs' cursor-pointer text-xs"
+                        className="p-2.5 rounded bg-white text-left text-slate-700 hover:text-[#1E6FD9] border border-slate-150 flex justify-between items-center text-xs' cursor-pointer text-xs"
                       >
                         <span className="font-bold truncate">{r.title}</span>
                         <ChevronRight className="h-3 w-3 text-slate-400 shrink-0" />
@@ -867,8 +917,8 @@ export function KnowledgeBase() {
                   <h3 className="text-base font-black text-slate-800">ProSpaces Live System Status</h3>
                   <p className="text-xs text-slate-400 font-bold block mt-0.5">Real-time status updates for the ProSpaces platform services.</p>
                 </div>
-                <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-100">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="flex items-center gap-2 bg-blue-50 text-blue-800 px-3 py-1.5 rounded-full border border-blue-100">
+                  <span className="h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse" />
                   <span className="text-[11px] font-black uppercase tracking-wider">All Systems Operational</span>
                 </div>
               </div>
@@ -888,7 +938,7 @@ export function KnowledgeBase() {
                   ].map(node => (
                     <div key={node.id} className="p-4 bg-slate-50 border border-slate-200/70 rounded-xl flex items-center justify-between shadow-xs">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                        <div className="h-7 w-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
                           <Activity className="h-4 w-4" />
                         </div>
                         <div>
@@ -896,7 +946,7 @@ export function KnowledgeBase() {
                           <span className="text-[9px] text-slate-400 font-mono tracking-wide">Ping response: {node.delay}</span>
                         </div>
                       </div>
-                      <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded">
+                      <span className="text-[10px] font-extrabold text-blue-800 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded">
                         {node.status}
                       </span>
                     </div>
@@ -915,7 +965,7 @@ export function KnowledgeBase() {
                   </div>
                   <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex gap-0.5">
                     {Array.from({ length: 45 }).map((_, i) => (
-                      <div key={i} className="flex-1 h-full bg-emerald-500" title={`Day -${45 - i}: 100% operational`} />
+                      <div key={i} className="flex-1 h-full bg-blue-500" title={`Day -${45 - i}: 100% operational`} />
                     ))}
                   </div>
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider text-center block mt-1">
@@ -948,16 +998,16 @@ export function KnowledgeBase() {
                   animate={{ scale: 1, opacity: 1 }}
                   className="py-12 flex flex-col items-center justify-center text-center max-w-sm mx-auto"
                 >
-                  <div className="h-14 w-14 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xl mb-4 shadow-sm">
+                  <div className="h-14 w-14 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-bold text-xl mb-4 shadow-sm">
                     ✓
                   </div>
                   <h4 className="text-sm font-extrabold text-slate-800">Support ticket compiled successfully!</h4>
-                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                    We've registered your ticket category under <span className="font-bold text-slate-650">#{ticketCategory}</span>. A specialized help desks administrator will connect with you under 2 commercial hours.
+                  <p className="text-xs text-slate-405 mt-2 leading-relaxed">
+                    We&#39;ve registered your ticket category under <span className="font-bold text-slate-650">#{ticketCategory}</span>. A specialized help desks administrator will connect with you under 2 commercial hours.
                   </p>
                   <button 
                     onClick={() => setTicketSubmitted(false)}
-                    className="mt-6 px-4 py-2 bg-[#0A432D] hover:bg-[#072F20] text-white text-xs font-extrabold rounded-lg transition-colors cursor-pointer"
+                    className="mt-6 px-4 py-2 bg-[#1E6FD9] hover:bg-[#1154A8] text-white text-xs font-extrabold rounded-lg transition-colors cursor-pointer"
                   >
                     Send Another Ticket
                   </button>
@@ -975,7 +1025,7 @@ export function KnowledgeBase() {
                       placeholder="e.g. Setting up custom contact domain subdomain routing"
                       value={ticketSubject}
                       onChange={(e) => setTicketSubject(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 placeholder:text-slate-400"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-600 focus:bg-white text-slate-800 placeholder:text-slate-400"
                     />
                   </div>
 
@@ -986,7 +1036,7 @@ export function KnowledgeBase() {
                       <select 
                         value={ticketCategory}
                         onChange={(e) => setTicketCategory(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-700"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-600 focus:bg-white text-slate-700"
                       >
                         <option value="Initial CRM Setups">Initial CRM Setups</option>
                         <option value="Billing & Pricing">Billing &amp; Pricing</option>
@@ -997,10 +1047,10 @@ export function KnowledgeBase() {
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block font-sans">Corporate Urgency</label>
+                      <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block font-sans font-black">Corporate Urgency</label>
                       <select 
                         defaultValue="Normal Response"
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-700"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-600 focus:bg-white text-slate-700"
                       >
                         <option value="Low: General Questions">Low: General Questions</option>
                         <option value="Normal Response">Normal: Under 2 Hours</option>
@@ -1018,7 +1068,7 @@ export function KnowledgeBase() {
                       rows={5}
                       value={ticketDescription}
                       onChange={(e) => setTicketDescription(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 placeholder:text-slate-400"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-600 focus:bg-white text-slate-800 placeholder:text-slate-400"
                     />
                   </div>
 
@@ -1026,7 +1076,7 @@ export function KnowledgeBase() {
                   <div className="pt-2 flex justify-end">
                     <button
                       type="submit"
-                      className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                      className="px-5 py-2.5 bg-[#1E6FD9] hover:bg-[#1154A8] text-white font-extrabold rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
                     >
                       <Send className="h-3.5 w-3.5" /> Submit Support Ticket
                     </button>
@@ -1043,18 +1093,18 @@ export function KnowledgeBase() {
         <div className="lg:col-span-4 flex flex-col gap-6">
           
           {/* ProSpaces Support AI Agent panel (Stays responsive right) */}
-          <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col max-h-[520px]">
+          <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-blue-950 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col max-h-[520px]">
             {/* Soft Ambient glowing light in corners */}
-            <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
+            <div className="absolute right-0 top-0 w-24 h-24 bg-blue-500/10 rounded-full blur-xl pointer-events-none" />
             
             <div className="flex items-center gap-2 mb-4 border-b border-white/10 pb-3 shrink-0">
-              <div className="h-7 w-7 rounded bg-emerald-600 flex items-center justify-center">
-                <Sparkles className="h-3.5 w-3.5 text-cyan-300 fill-cyan-300 animate-pulse" />
+              <div className="h-7 w-7 rounded bg-blue-600 flex items-center justify-center">
+                <Sparkles className="h-3.5 w-3.5 text-cyan-330 fill-cyan-300 animate-pulse" />
               </div>
               <div>
-                <h3 className="text-xs font-black tracking-tight">ProSpaces AI virtual Agent</h3>
-                <span className="text-[9px] text-emerald-300 font-extrabold flex items-center gap-1 mt-0.5">
-                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" /> Direct Document Searcher
+                <h3 className="text-xs font-black tracking-tight font-sans">ProSpaces AI virtual Agent</h3>
+                <span className="text-[9px] text-blue-300 font-extrabold flex items-center gap-1 mt-0.5">
+                  <span className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /> Direct Document Searcher
                 </span>
               </div>
             </div>
@@ -1066,7 +1116,7 @@ export function KnowledgeBase() {
                   key={idx}
                   className={`flex flex-col max-w-[85%] rounded xl:rounded-xl p-2.5 text-xs font-sans leading-relaxed ${
                     msg.sender === 'user'
-                      ? 'bg-emerald-600 text-white self-end ml-auto rounded-tr-none font-bold'
+                      ? 'bg-[#1E6FD9] text-white self-end ml-auto rounded-tr-none font-bold'
                       : 'bg-white/15 text-slate-100 self-start mr-auto rounded-tl-none font-medium'
                   }`}
                 >
@@ -1090,12 +1140,12 @@ export function KnowledgeBase() {
                 placeholder="Ask bot about estimates..."
                 value={assistantInput}
                 onChange={(e) => setAssistantInput(e.target.value)}
-                className="flex-1 bg-white/5 border border-white/10 text-xs rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 placeholder:text-slate-500 font-semibold"
+                className="flex-1 bg-white/5 border border-white/10 text-xs rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 placeholder:text-slate-500 font-semibold"
               />
               <button
                 type="submit"
                 disabled={!assistantInput.trim() || isAssistantTyping}
-                className="p-2 rounded-lg bg-emerald-600/90 border border-emerald-500 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                className="p-2 rounded-lg bg-blue-600/90 border border-blue-500 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center shrink-0"
               >
                 <Send className="h-3 w-3 stroke-[3.5]" />
               </button>
@@ -1105,7 +1155,7 @@ export function KnowledgeBase() {
           {/* Quick Support channels */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col text-slate-800">
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1 mb-2">
-              <MessageSquare className="h-3.5 w-3.5 text-emerald-800" />
+              <MessageSquare className="h-3.5 w-3.5 text-blue-650" />
               Direct Contacts Channel
             </h3>
             <p className="text-[11px] text-slate-400 font-semibold mb-4 leading-relaxed">

@@ -400,7 +400,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 onClick={() => setActiveNavTab('knowledge')}
                 className={`group flex items-center gap-0.5 px-1.5 py-1 rounded ${activeNavTab === 'knowledge' ? 'bg-[#1E6FD9]/10 text-[#1E6FD9]' : 'hover:bg-slate-100'}`}
               >
-                <span>Help KB</span>
+                <span>Help</span>
                 <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
             </div>
@@ -939,7 +939,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 </div>
                 <div>
                   <h2 className="text-sm sm:text-base font-black text-slate-800 tracking-tight flex items-center gap-2">
-                    ProSpaces Help Center
+                    Help
                   </h2>
                   <p className="text-[10px] text-slate-400 font-semibold font-mono">
                     Official Documentation &amp; AI Assist

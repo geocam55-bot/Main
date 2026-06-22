@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { BookOpen, CheckCircle2, Copy, Minimize2, PlayCircle, Square, X } from 'lucide-react';
+import { BookOpen, X } from 'lucide-react';
 import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent } from './ui/dialog';
+import { KnowledgeBase } from './KnowledgeBase';
 
 export interface HelpStep {
   title: string;
   body: string;
-  /** CSS selector of the UI element this step should spotlight. */
   targetSelector?: string;
-  /** Which side to place the tooltip (default: 'bottom'). */
   placement?: 'top' | 'bottom' | 'left' | 'right';
 }
 
@@ -41,11 +38,21 @@ interface InteractiveModuleHelpProps {
   description: string;
   moduleIcon: LucideIcon;
   triggerLabel?: string;
-  steps: HelpStep[];
-  actions: HelpAction[];
+  steps?: HelpStep[];
+  actions?: HelpAction[];
   badges?: HelpBadge[];
   howToGuides?: HelpHowToGuide[];
 }
+
+const mapModuleKeyToCategory = (key: string): string | null => {
+  if (!key) return null;
+  const k = key.toLowerCase();
+  if (k.includes('customer') || k.includes('contact')) return 'contacts';
+  if (k.includes('deal') || k.includes('bid')) return 'deals';
+  if (k.includes('planner')) return 'planners';
+  if (k.includes('security') || k.includes('user') || k.includes('admin')) return 'security-admin';
+  return 'getting-started';
+};
 
 export function InteractiveModuleHelp({
   moduleKey,
@@ -53,66 +60,17 @@ export function InteractiveModuleHelp({
   title,
   description,
   moduleIcon: ModuleIcon,
-  triggerLabel = 'Module Help',
-  steps,
-  actions,
-  badges = [],
-  howToGuides = [],
+  triggerLabel = 'Help',
 }: InteractiveModuleHelpProps) {
-  const helpOnboardingVersion = 'v1';
   const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [activeStep, setActiveStep] = useState(0);
-
-  const shouldMaximizeOnOpen = () =>
-    typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches;
 
   const openHelp = () => {
-    setIsMinimized(false);
-    setIsMaximized(shouldMaximizeOnOpen());
     setIsOpen(true);
   };
 
-  const stepStorageKey = useMemo(
-    () => `prospaces.${moduleKey}.help.step.${userId}`,
-    [moduleKey, userId]
-  );
-  const seenStorageKey = useMemo(
-    () => `prospaces.${moduleKey}.help.seen.${helpOnboardingVersion}.${userId}`,
-    [moduleKey, userId]
-  );
-
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    if (open) {
-      setIsMinimized(false);
-      setIsMaximized(shouldMaximizeOnOpen());
-      localStorage.setItem(seenStorageKey, 'true');
-    } else {
-      setIsMinimized(false);
-      setIsMaximized(false);
-    }
   };
-
-  const runAction = (action: () => void) => {
-    action();
-    setIsOpen(false);
-  };
-
-  useEffect(() => {
-    const savedStep = localStorage.getItem(stepStorageKey);
-    if (savedStep !== null) {
-      const parsed = Number(savedStep);
-      if (!Number.isNaN(parsed)) {
-        setActiveStep(Math.max(0, Math.min(parsed, steps.length - 1)));
-      }
-    }
-  }, [stepStorageKey, steps.length]);
-
-  useEffect(() => {
-    localStorage.setItem(stepStorageKey, String(activeStep));
-  }, [activeStep, stepStorageKey]);
 
   return (
     <>
@@ -121,171 +79,48 @@ export function InteractiveModuleHelp({
           variant="outline"
           size="sm"
           onClick={openHelp}
-          title={triggerLabel}
-          className="flex items-center gap-2 px-2 sm:px-3"
+          title="Help"
+          className="flex items-center gap-2 px-2.5 sm:px-3 text-slate-700 border-slate-200 bg-white hover:bg-slate-50 shadow-xs"
         >
-          <BookOpen className="h-4 w-4" />
-          <span className="hidden sm:inline">{triggerLabel}</span>
-          <span className="sm:hidden">Help</span>
+          <BookOpen className="h-4 w-4 text-slate-500" />
+          <span>Help</span>
         </Button>
       </div>
 
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent
-          className={`[&>button]:hidden overflow-y-auto p-4 sm:p-6 ${
-            isMaximized
-              ? '!inset-0 !top-0 !left-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none sm:!max-w-none rounded-none'
-              : isMinimized
-                ? 'w-[calc(100vw-0.75rem)] max-w-[1200px] max-h-[180px] sm:w-[98vw] overflow-hidden'
-                : '!inset-0 !top-0 !left-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none rounded-none sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!right-auto sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!h-auto sm:!max-h-[92dvh] sm:!w-[98vw] sm:!max-w-[1200px] sm:rounded-lg'
-          }`}
+          className="[&>button]:hidden overflow-y-auto p-0 fixed inset-0 top-0 left-0 translate-x-0 translate-y-0 h-screen w-screen max-h-screen max-w-none sm:max-w-none rounded-none border-0 flex flex-col shadow-2xl transition-all duration-300"
         >
-          <DialogHeader>
-            <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-1.5 sm:-mx-6 sm:-mt-6">
-              <DialogTitle className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                <ModuleIcon className="h-4 w-4 text-slate-600" />
-                <span className="truncate">{title}</span>
-              </DialogTitle>
-              <div className="-mr-3 -my-1.5 ml-3 flex shrink-0 items-center">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="hidden h-8 w-11 rounded-none text-slate-700 hover:bg-slate-200/80 hover:text-slate-900 sm:inline-flex"
-                  onClick={() => {
-                    if (!shouldMaximizeOnOpen()) {
-                      return;
-                    }
-                    setIsMinimized((prev) => {
-                      const next = !prev;
-                      if (next) {
-                        setIsMaximized(false);
-                      }
-                      return next;
-                    });
-                  }}
-                  title={isMinimized ? 'Restore Help' : 'Minimize Help'}
-                >
-                  <Minimize2 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-11 rounded-none text-slate-700 hover:bg-slate-200/80 hover:text-slate-900"
-                  onClick={() => {
-                    setIsMaximized((prev) => {
-                      const next = !prev;
-                      if (next) {
-                        setIsMinimized(false);
-                      }
-                      return next;
-                    });
-                  }}
-                  title={isMaximized ? 'Restore Help Window' : 'Maximize Help Window'}
-                >
-                  {isMaximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-11 rounded-none text-slate-700 hover:bg-[#e81123] hover:text-white"
-                  onClick={() => setIsOpen(false)}
-                  title="Close Help"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
+          {/* Unified Custom Help Header */}
+          <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center px-6 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-[#1E6FD9] text-white flex items-center justify-center font-bold">
+                <ModuleIcon className="h-4.5 w-4.5" strokeWidth={2.5} />
+              </div>
+              <div className="text-left">
+                <h2 className="text-xs sm:text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
+                  Help Center
+                </h2>
+                <p className="text-[10px] text-slate-400 font-semibold font-mono">
+                  Official Guides &amp; Support Chat
+                </p>
               </div>
             </div>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
+            <button 
+              onClick={() => setIsOpen(false)}
+              className="h-8 w-8 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors font-bold text-lg cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-          {!isMinimized && (
-            <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Guided Steps</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {steps.map((step, index) => (
-                  <button
-                    key={step.title}
-                    onClick={() => setActiveStep(index)}
-                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                      activeStep === index
-                        ? 'border-sky-300 bg-sky-50 text-sky-900'
-                        : 'border-border bg-background hover:bg-muted'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span>{step.title}</span>
-                      {activeStep === index && <CheckCircle2 className="h-4 w-4 text-sky-600" />}
-                    </div>
-                  </button>
-                ))}
-              </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{steps[activeStep]?.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{steps[activeStep]?.body}</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {badges.map((badge) => (
-                      <Badge key={`${badge.label}-${badge.value}`} variant={badge.variant || 'secondary'}>
-                        {badge.label}: {badge.value}
-                      </Badge>
-                    ))}
-                    <Badge variant="outline">Step {activeStep + 1} of {steps.length}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Try These Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                  {actions.map((action) => {
-                    const ActionIcon = action.icon;
-                    return (
-                      <Button
-                        key={action.label}
-                        variant={action.variant || 'outline'}
-                        className={`justify-start min-w-0 whitespace-normal text-left ${action.fullWidth ? 'xl:col-span-2' : ''}`}
-                        onClick={() => runAction(action.onClick)}
-                      >
-                        <ActionIcon className="mr-2 h-4 w-4" />
-                        {action.label}
-                      </Button>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-
-              {howToGuides.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">How To</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {howToGuides.map((guide) => (
-                      <div key={guide.title} className="rounded-lg border border-border bg-background p-3">
-                        <h4 className="text-sm font-semibold text-foreground">{guide.title}</h4>
-                        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-                          {guide.steps.map((step) => (
-                            <li key={`${guide.title}-${step}`}>{step}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-            </div>
-          )}
+          {/* Render the core Knowledge Search page inside modal */}
+          <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+            <KnowledgeBase 
+              embedded={true} 
+              initialCategory={mapModuleKeyToCategory(moduleKey)} 
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </>
