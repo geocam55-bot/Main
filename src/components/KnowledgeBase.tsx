@@ -101,6 +101,15 @@ const KNOWLEDGE_CATEGORIES: Category[] = [
     color: 'text-rose-700',
     bgColor: 'bg-rose-50',
     borderColor: 'border-rose-100',
+  },
+  {
+    id: 'reports-kpis',
+    name: 'KPIs & Diagnostics',
+    description: 'Understanding total sales, win rates, close ratios, weighted pipelines, and campaign conversion telemetry.',
+    icon: Activity,
+    color: 'text-indigo-800',
+    bgColor: 'bg-indigo-50/50',
+    borderColor: 'border-indigo-100',
   }
 ];
 
@@ -385,6 +394,238 @@ Adjusting your brand aesthetics:
 2. Choose from curated design presets, including **Modern Carbon**, **Slate Minimalist**, **Warm Timber**, and **Steel Blue**.
 3. **Hex Color Specificity**: Add your unique brand hex values to keep client portals matching your actual business website.
 4. **Optimized Logo Ingestion**: Upload transparent PNG files. The CRM's customer portal uses these graphics to label external magic-link portals, maintaining high quality for client exports.`
+  },
+  {
+    id: 'deck-planner-howto',
+    title: 'How to Utilize the 3D Deck Planner: Designing Balusters & Selecting Composite Materials',
+    category: 'planners',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['deck', 'decking', 'composite', 'timber', 'planners', 'railing', 'outdoor', '3d', 'builder'],
+    content: `Learn how to configure our 3D Deck Planner to compile professional deck building cost estimations and structural designs in real time.
+
+Designing procedure:
+1. Access any Deal or Contact record, navigate to **Design Spaces** and select the **Deck Builder** pane.
+2. **Set Surface Dimensions**: Select deck length, projection depth, and elevate the deck structure to desired heights. Grid parameters scale instantly.
+3. **Select Materials**: Toggle between standard Pressure-Treated Timber and premium Redwood-toned Composites. The costing database updates unit lines instantly based on materials.
+4. **Configure Railing Profiles**: Apply continuous rails, select metal balusters or modern glass inserts, and specify stairway counts if required.
+5. **Compute & Export Cost Estimations**: Click **Sync to Deal** to push structural joists, ledger boards, deck screws, concrete footings, and composite board inventories directly to your current bid list.`
+  },
+  {
+    id: 'roof-planner-howto',
+    title: 'How to Design Roof Profiles: Map Hip, Gable, Pitch Slopes & Finishing Trims',
+    category: 'planners',
+    readTime: '5 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['roof', 'roofing', 'pitch', 'shingle', 'metal', 'gable', 'hip', 'gutters', 'drip-edge', 'planners'],
+    content: `The ProSpaces automated 3D Roof Planner is engineered to estimate complete roofing sheets, shingle quantities, and gutter runs in seconds.
+
+Core design steps:
+1. Open active Client Designs and select the **3D Roof Builder** workspace.
+2. **Define Roof Profiles**: Choose Gable (triangular ends), Hip (four sloping sides), or Clean Slope Flat roof configurations.
+3. **Set Pitch Slope Specifics**: Slide the pitch angle from 4/12 up to a steep 12/12. Ridge heights and sheet volumes recalibrate instantly.
+4. **Specify Finishing Trims**: Choose linear footage parameters for ridge caps, valley flashings, drip edges, and matching aluminum gutters.
+5. **Select Architectural Shingles vs standing-seam Aluminum Metal**: View immediate materials lists.
+6. **Calculate Estimates**: Clicking **Sync to Deal** runs material estimations to push shingle squares, underlayment rolls, and flashing quantities directly to your active invoice.`
+  },
+  {
+    id: 'shed-garage-planner-howto',
+    title: 'How to Draft 3D Sheds & Garage Specs: Sizing Dimensions, Roll-Up Doors & Framing',
+    category: 'planners',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['shed', 'garage', 'framing', 'insulation', 'door', 'windows', 'sheathing', 'planners'],
+    content: `Configure outbuilding framing, structural columns, windows, and vinyl siding using the customizable 3D Shed & Garage Planner.
+
+Detailed design parameters:
+1. Select **Garage & Shed Builder** from the interactive Design Checkpoints menu.
+2. **Setup Sizing Specs**: Input width, depth, and wall plate heights. Select common preset sizes (such as 10x12, 12x20, or multi-car 24x24 frames).
+3. **Select Stud Framing & Insulation**: Choose between standard 16-inch or 24-inch center stud spacings, and inject R-13 or thermal R-19 fiberglass batts insulation parameters.
+4. **Add Overhead Gates & Picture Windows**: Drag and drop overhead roll-up doors, entry doors, or picture windows into the design layout.
+5. **Siding Materials selection**: Choose vinyl lap siding, board & batton timber, or corrugated steel sheet claddings.
+6. **Cost Syncing**: Export directly to pipeline deals, calculating precise 2x4 stud counts, siding panels, and sheathing sheets.`
+  },
+  {
+    id: 'sales-pipelines-howto',
+    title: 'How to Configure Custom Deal Pipelines: Managing Kanban Cards & Closing Bids',
+    category: 'deals',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['deals', 'pipelines', 'stages', 'kanban', 'sales', 'closing', 'estimates'],
+    content: `Keep your sales agents aligned by organizing incoming contracting leads on visual Kanban stages.
+
+Pipeline management rules:
+1. Open the **Deals** workspace to see your sequential status boards (Lead-In, On-Site Survey, Estimate Drafted, Out for Client Approval, Deal Won, Deal Lost).
+2. **Drag-and-Drop Operations**: Drag cards to represent pipeline progress. Top banner statistics recalculate your projected commissions and active deals volume instantly.
+3. **Quick Proposal Tracking**: Double-click any card to view detailed cost breakdowns, edit item prices, or check if the client has viewed their portal access magic-link.
+4. **Overdue deal alerts**: Toggle filter logs to prioritize aging leads requiring urgent follow-up consultations.`
+  },
+  {
+    id: 'appointments-caldav-howto',
+    title: 'How to Link CalDAV Calendars: Scheduling On-Site Surveys & Customer Bookings',
+    category: 'getting-started',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['appointments', 'calendar', 'caldav', 'schedule', 'booking', 'survey', 'onsite'],
+    content: `Maintain seamless availability sync by connecting your corporate calendar accounts (Google Suite, O365, iCloud) directly to ProSpaces.
+
+Scheduling setup procedures:
+1. Open the **Appointments Space** from your left-hand menu.
+2. **Synchronize CalDAV Nodes**: Provide your corporate calendar sync URL along with security authorization tokens.
+3. **Set Hours & Limits**: Define operational availability (e.g., Mon-Fri, 8 AM - 6 PM) and survey duration buffers (e.g., 60 minutes per site survey).
+4. **Embed Portal Consultations Widget**: Activate the scheduler inside customer portals, allowing clients to pick available slots instantly.
+5. **Confirmations & SMS Triggers**: The app dispatches automated confirmation sequences containing survey directions, designer profiles, and cancel/reschedule tokens.`
+  },
+  {
+    id: 'smtp-email-outbox-howto',
+    title: 'How to Setup Custom SMTP Outboxes: Custom Branded Deliveries & Recipient Alerts',
+    category: 'getting-started',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['smtp', 'email', 'custom-smtp', 'dkim', 'deliver', 'notifications', 'branding'],
+    content: `Stop letting contracts drop into spam folders! Configure your domain settings to route automated estimate invoice alerts through custom business SMTP outboxes.
+
+SMTP parameters setup guidelines:
+1. Access **Settings > SMTP Setup** under your administrator action drawer.
+2. **Fill Host Information**: Specify your secure Server Host (e.g. smtp.gmail.com), Port parameter (usually 587 for TLS or 465 for SSL), and SSL/TLS toggles.
+3. **Insert Outbox Credentials**: Record your business email address and secure App Password key.
+4. **Conduct Outbox Tests**: Click "Send Diagnostics Mail" to verify connection loops.
+5. **Email Layout Tailoring**: Inject custom footers, company phone links, logo attachments, and business state compliance texts to automatically wrap around dispatched bid emails.`
+  },
+  {
+    id: 'rls-troubleshoot-howto',
+    title: 'Row Level Security Diagnostics: Solving Access Alerts & Syncing Invalid Org IDs',
+    category: 'security-admin',
+    readTime: '5 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['rls', 'security', 'mismatch', 'invalid', 'org-id', 'diagnostic', 'troubleshoot', 'fix'],
+    content: `Row-Level Security (RLS) policies guard database integrity so users only view leads under their correct tenant organization. If teammates encounter access alerts, run these diagnostics.
+
+Step-by-step diagnostic fixes:
+1. Open **Admin settings > Advanced Diagnostics / IT Panel**.
+2. **Inspect Organisation Integrity**: Look for user profiles with empty or corrupted "organization_id" links.
+3. **Execute the Org ID Auto-Fixer**: Click **Fix Invalid Org IDs** to automatically search the database and heal orphaned profiles to match your primary organization tenant.
+4. **Review Role-level Policies**: Ensure that Agent vs Manager database policies are deployed by executing "Redeploy RLS Rules". This fixes table constraints instantly.`
+  },
+  {
+    id: 'inventory-ingestion-howto',
+    title: 'Bulk Ingesting Lumber & Fastener Price Books & Wiping Cached SKU Memory',
+    category: 'contacts',
+    readTime: '5 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['inventory', 'sku', 'wipe', 'import', 'excel', 'lumber', 'index', 'distributor'],
+    content: `Keep your 3D planner calculations accurate by maintaining up-to-date raw lumber, decking, shingles, and fastener catalogs from distributors.
+
+Ingestion procedures:
+1. Open the **Inventory Space** and click **Import Inventory**.
+2. **Map Columns**: Select your distributor Excel/CSV spreadsheet. Map standard fields (SKU ID, Material Group, Thickness/Length specs, Unit cost, Supplier name).
+3. **Execute Import**: Click 'Run Catalog Update'. The backend job queue parses details to prevent UI locks.
+4. **Fix outdated planner caches**: If older timber or siding prices persist inside planners, click **Wipe SKU Memory \& Index**. This purges local pricing state, forcing planners to pull from the newly ingested database.`
+  },
+  {
+    id: 'kpi-definitions-sales',
+    title: 'Definitions of Sales KPIs: Total Sales, Win Rate, and Close Ratio Formulas',
+    category: 'reports-kpis',
+    readTime: '3 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['kpi', 'sales', 'win-rate', 'close-rate', 'total-sales', 'definition', 'formula', 'revenue'],
+    content: `Understand the fundamental metrics monitoring your sales performance, performance ratios, and absolute sales generation.
+
+1. **Total Sales (Actualized Revenue)**:
+• **What it represents**: The sum total dollar value of all successfully closed contracts (deals marked "Won").
+• **How it is calculated**: Sum of final bid amounts for won opportunities. Active estimates, drafts, or lost deals are entirely excluded. 
+• **How to improve**: Enhance follow-up consistency on approved estimates and utilize custom portals to streamline electronic signature approvals.
+
+2. **Win Rate (Proposal Conversion Ratio)**:
+• **What it represents**: The proportion of closed-out proposals converted into actualized clients. 
+• **How it is calculated**: \`Win Rate = [Won Deals / (Won Deals + Lost Deals)] * 100\`
+• **Key Note**: This metric ignores currently in-progress active candidates to provide a pure look at your bid closing strength.
+• **Target Standard**: Industry-leading home renovators and contractors aim for win rates between 40% and 60% on qualified onsite bids.
+
+3. **Close Rate (Overall Conversion Metric)**:
+• **What it represents**: The overall throughput of your operational sales pipeline, factoring in total lead-in counts vs finalized contracts.
+• **How it is calculated**: Calculated dynamically based on current sales activity cycles relative to historical trends.`
+  },
+  {
+    id: 'kpi-definitions-pipeline',
+    title: 'Definitions of Pipeline KPIs: Understanding Weighted Value, Pipeline Value, Average Age & Velocity',
+    category: 'reports-kpis',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['kpi', 'pipeline', 'weighted-value', 'pipeline-value', 'deal-age', 'velocity', 'days-to-close', 'forecast'],
+    content: `Learn how probability-adjusted pipelines eliminate guesswork and provide precise financial forecasting.
+
+1. **Pipeline Value (Raw Value)**:
+• **What it represents**: The raw aggregate sum of all potential contracts currently situated in active pipeline columns (Estimate, On-Site, Portal Approval).
+• **Usage limit**: While useful as a ceiling, it assumes every single lead will buy.
+
+2. **Weighted Value (Probability-Adjusted Revenue Forecast)**:
+• **What it represents**: The real-world adjusted cash forecast based on the specific success probabilities of each board column.
+• **Common defaults**: Lead In = 10%, On-Site Survey = 30%, Estimate Drafted = 50%, Out for Portal Approval = 85%.
+• **How it is calculated**: \`Weighted Value = Sum(Deal Amount * Stage Success Probability)\`
+• **Business value**: Provides an airtight cash flow prediction for scheduling material purchases and planning lumber orders.
+
+3. **Avg Days to Close (Velocity Tracker)**:
+• **What it represents**: The elapsed timeframe required to convert a brand-new contact into a closed deal.
+• **How to lower**: Use customized portals and direct automated SMS alerts so estimates are scrutinized by homeowners without administrative latency.
+
+4. **Avg Deal Age (Aging Analysis)**:
+• **What it represents**: The average number of days that your currently open active deals have spent waiting in the pipeline.
+• **Significance**: Open deals with an age exceeding twice your typical 'Avg Days to Close' suggest a bottleneck or lost motivation.`
+  },
+  {
+    id: 'kpi-definitions-marketing',
+    title: 'Definitions of Marketing KPIs: Campaign Visibility, CTR, CPC, and Qualified Lead Conversion',
+    category: 'reports-kpis',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['kpi', 'marketing', 'ctr', 'cpc', 'qualified-leads', 'conversion', 'campaigns', 'roi'],
+    content: `Track raw campaigns to determine precise demand generation costs and conversion funnels.
+
+1. **Qualified Leads**:
+• **What it represents**: The subset of acquired leads matching your commercial buying profile and displaying operational intent (such as submitting an initial custom 3D deck or kitchen layout).
+• **Business priority**: Keeps sales agents focused on highly profitable bids.
+
+2. **Campaign Visibility Index**:
+• **What it represents**: Multi-channel reach KPI tracking digital impressions, organic searches, social interactions, and local map clicks.
+
+3. **CTR (Click-Through Rate)**:
+• **What it represents**: The performance of your ad copy and links.
+• **How it is calculated**: \`CTR = (Clicks / Impressions) * 100\`
+
+4. **CPC & Cost Per Acquisition (CPA)**:
+• **What it represents**: Average budgets required to generate an individual dynamic planner submission or signed client.`
+  },
+  {
+    id: 'kpi-definitions-ops',
+    title: 'Definitions of IT & Operations KPIs: SKU Accuracy, Stockout Ratios, and Audit Traceability',
+    category: 'reports-kpis',
+    readTime: '3 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['kpi', 'operations', 'sku-accuracy', 'stockout', 'audit', 'traceability', 'it', 'rls'],
+    content: `Operations metrics balance backend efficiency with catalog accuracy inside your 3D planner calculations.
+
+1. **SKU Accuracy**:
+• **What it represents**: The correlation between live supplier prices and structural pricing indexes inside the 3D Planner calculators.
+• **Target**: Standard is 99+% to keep estimated costs synchronized with invoice margins.
+
+2. **Fewer Stockouts Ratio**:
+• **What it represents**: The reduction of material unavailability alerts inside lumber or deck building pipelines. Keeps timelines intact.
+
+3. **Audit Traceability**:
+• **What it represents**: A security baseline ensuring 100% of user logins, proposal updates, configuration overrides, and customer exports are recorded under encrypted logs.`
   }
 ];
 
@@ -506,8 +747,8 @@ export function KnowledgeBase({
 
       // 1. Synonym expansions
       const searchTerms = [q];
-      if (q.includes('quote') || q.includes('quotes') || q.includes('estimator') || q.includes('estimation') || q.includes('pricing') || q.includes('bid') || q.includes('proposal')) {
-        searchTerms.push('estimates', 'bids', 'deals', 'proposals', 'pricing');
+      if (q.includes('quote') || q.includes('quotes') || q.includes('estimator') || q.includes('estimation') || q.includes('pricing') || q.includes('bid') || q.includes('proposal') || q.includes('deal') || q.includes('deals')) {
+        searchTerms.push('estimates', 'bids', 'deals', 'proposals', 'pricing', 'pipelines');
       }
       if (q.includes('import') || q.includes('csv') || q.includes('excel') || q.includes('contacts') || q.includes('upload') || q.includes('spreadsheet') || q.includes('bulk')) {
         searchTerms.push('import', 'csv', 'bulk', 'mapping', 'contacts', 'spreadsheet');
@@ -527,6 +768,24 @@ export function KnowledgeBase({
       if (q.includes('kitchen') || q.includes('cabinate') || q.includes('cabinet') || q.includes('appliance') || q.includes('island')) {
         searchTerms.push('kitchen', 'design', 'cabinets', 'appliances', 'backsplash');
       }
+      if (q.includes('deck') || q.includes('decking') || q.includes('composite') || q.includes('railing') || q.includes('baluster') || q.includes('balusters')) {
+        searchTerms.push('deck', 'decking', 'composite', 'timber', 'planners');
+      }
+      if (q.includes('roof') || q.includes('roofing') || q.includes('gable') || q.includes('hip') || q.includes('pitch') || q.includes('shingle') || q.includes('shingles')) {
+        searchTerms.push('roof', 'roofing', 'pitch', 'shingle', 'metal');
+      }
+      if (q.includes('shed') || q.includes('sheds') || q.includes('garage') || q.includes('garages') || q.includes('framing') || q.includes('insulation')) {
+        searchTerms.push('shed', 'garage', 'framing', 'insulation', 'door');
+      }
+      if (q.includes('pipeline') || q.includes('pipelines') || q.includes('kanban') || q.includes('stage') || q.includes('stages')) {
+        searchTerms.push('deals', 'pipelines', 'stages', 'kanban');
+      }
+      if (q.includes('appointment') || q.includes('appointments') || q.includes('calendar') || q.includes('caldav') || q.includes('booking') || q.includes('book')) {
+        searchTerms.push('appointments', 'calendar', 'caldav', 'schedule');
+      }
+      if (q.includes('smtp') || q.includes('email') || q.includes('outbox') || q.includes('mail') || q.includes('dkim') || q.includes('tls') || q.includes('ssl')) {
+        searchTerms.push('smtp', 'email', 'custom-smtp', 'notifications');
+      }
       if (q.includes('theme') || q.includes('brand') || q.includes('color') || q.includes('colors') || q.includes('logo') || q.includes('preset') || q.includes('custom-portal')) {
         searchTerms.push('theme', 'palette', 'brand', 'logo', 'custom-portal');
       }
@@ -535,6 +794,9 @@ export function KnowledgeBase({
       }
       if (q.includes('log') || q.includes('logs') || q.includes('audit') || q.includes('compliance')) {
         searchTerms.push('security', 'audit', 'logs', 'compliance', 'admin');
+      }
+      if (q.includes('kpi') || q.includes('kpis') || q.includes('metric') || q.includes('metrics') || q.includes('calculation') || q.includes('forecast') || q.includes('ratio') || q.includes('ratios') || q.includes('performance') || q.includes('value')) {
+        searchTerms.push('kpi', 'sales', 'deals', 'marketing', 'operations', 'forecast', 'reports-kpis');
       }
 
       // 2. Tokenize original query to match individual keywords
