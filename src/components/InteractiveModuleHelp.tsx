@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { BookOpen, X } from 'lucide-react';
 import { Button } from './ui/button';
-import { Dialog, DialogContent } from './ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { KnowledgeBase } from './KnowledgeBase';
 
 export interface HelpStep {
@@ -98,9 +98,9 @@ export function InteractiveModuleHelp({
                 <ModuleIcon className="h-4.5 w-4.5" strokeWidth={2.5} />
               </div>
               <div className="text-left">
-                <h2 className="text-xs sm:text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
+                <DialogTitle className="text-xs sm:text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
                   Help Center
-                </h2>
+                </DialogTitle>
                 <p className="text-[10px] text-slate-400 font-semibold font-mono">
                   Official Guides &amp; Support Chat
                 </p>
