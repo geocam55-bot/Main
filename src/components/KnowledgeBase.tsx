@@ -21,9 +21,16 @@ import {
   CheckCircle2,
   X,
   Mail,
-  ExternalLink
+  ExternalLink,
+  Check,
+  Activity,
+  AlertCircle,
+  Clock,
+  Phone,
+  Video,
+  FileDown
 } from 'lucide-react';
-import { useTheme } from './ThemeProvider';
+import { motion, AnimatePresence } from 'motion/react';
 
 // TYPES DEFINITION
 export interface Article {
@@ -54,43 +61,43 @@ const KNOWLEDGE_CATEGORIES: Category[] = [
     name: 'Getting Started',
     description: 'Learn the core concepts, sign up steps, and initial workspace configurations.',
     icon: Compass,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-100',
+    color: 'text-emerald-700',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-100',
   },
   {
     id: 'contacts',
     name: 'CRM & Contacts',
     description: 'Import contacts, create custom fields, organize pipeline records, and set smart follow-ups.',
     icon: UserCheck,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-100',
+    color: 'text-[#1E6FD9]',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-100',
   },
   {
     id: 'deals',
     name: 'Deals & Proposals',
     description: 'Drafting estimates, automated invoicing, customer portal feedback, and contract signatures.',
     icon: FileText,
-    color: 'text-amber-600',
+    color: 'text-amber-700',
     bgColor: 'bg-amber-50',
     borderColor: 'border-amber-100',
   },
   {
     id: 'planners',
-    name: 'Dynamic 3D Planners',
+    name: '3D Planners',
     description: 'How to utilize integrated Kitchen, Deck, Roof, Garage, and Shed builders to capture custom criteria.',
     icon: Wrench,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-100',
+    color: 'text-indigo-700',
+    bgColor: 'bg-indigo-50',
+    borderColor: 'border-indigo-100',
   },
   {
     id: 'security-admin',
-    name: 'Admin & Security',
+    name: 'Admin & Operations',
     description: 'Managing organization settings, seat licenses, access control permissions, and audit logs.',
     icon: ShieldCheck,
-    color: 'text-rose-600',
+    color: 'text-rose-700',
     bgColor: 'bg-rose-50',
     borderColor: 'border-rose-100',
   }
@@ -106,13 +113,13 @@ const KNOWLEDGE_ARTICLES: Article[] = [
     lastUpdated: 'June 20, 2026',
     popularity: 5,
     tags: ['welcome', 'install', 'setup', 'first-time', 'organisation'],
-    content: `Welcome to ProSpaces CRM! We are thrilled to have you here. ProSpaces is a premium, offline-first CRM tailored specifically for modern contracting and building services professionals.
+    content: `Welcome to ProSpaces CRM! We are thrilled to have you here. ProSpaces is a premium, cloud-synced CRM tailored specifically for modern contracting, lumber suppliers, and commercial building operations.
 
-To get started with your new CRM account:
-1. **Set Up Your Organization Profile**: Go to Admin Settings > Settings. Add your logo, commercial address, and tax information. This will automatically populate your upcoming proposals and invoices.
-2. **Configure Your Subdomain Space**: Head to the 'Customer Portal' settings in your Admin drop-down. Configure custom colors so clients feel aligned with your brand identity.
-3. **Invite Your Core Team members**: In Admin Operations > Users, invite team roles ranging from Sales Agents to Directors. Each role carries specific, secure permissions.
-4. **Download Your Logo Asset**: Always ensure your uploaded logo represents your brand cleanly to reinforce client trust.`
+To get started with your new workspace account:
+1. **Set Up Your Organization Profile**: Expand Admin Settings and select Settings. Add your business logo, primary commercial address, and state tax information. This will automatically populate your upcoming proposals and branded estimate invoices.
+2. **Configure Your Subdomain Space**: Head to the 'Customer Portal' config inside Settings. Formulate beautiful accent colors so custom builders feel trusted and aligned with your branding.
+3. **Invite Your Core Team Members**: In Admin Operations > Users, invite team roles ranging from Sales Agents to Directors. Each role carries specific, secure permissions.
+4. **Download Your Logo Asset**: Ensure your uploaded logo is high contrast to maintain pristine visuals on client exports.`
   },
   {
     id: 'invite-team',
@@ -122,18 +129,18 @@ To get started with your new CRM account:
     lastUpdated: 'June 18, 2026',
     popularity: 4,
     tags: ['users', 'roles', 'team', 'permissions', 'invite'],
-    content: `Inviting teammates and setting up their permissions ensures your operations continue efficiently without sacrificing confidential security.
+    content: `Inviting teammates and setting up their permissions ensures your operations run smoothly without sacrificing confidential security and administrative workflows.
 
 Roles available in ProSpaces CRM:
-• **Super Admin**: Ultimate platform controls. Ideal for founders and IT administrators.
-• **Director**: High-level managerial visibility. Can approve contracts and override billing pipelines but lacks access to master system logs.
-• **Admin**: Managerial workflows including invoice dispatching, creating customer portal accounts, and running exports.
-• **Manager**: Manages assigned teams and deals; can assign tasks and view activity analytics.
-• **Agent (Salesperson)**: Focuses directly on contacts, personal calendar items, proposal updates, and dynamic custom estimate builders.
+• **Super Admin**: Ultimate platform controls. Ideal for owners, founders, and IT directors.
+• **Director**: High-level managerial visibility. Can approve custom contracts and override status pipelines, but lacks direct IT server logs.
+• **Admin**: General operation controls, including invoice dispatching, creating customer portal accounts, and running file backups.
+• **Manager**: Manages assigned teams and deals; can assign active checklist tasks and view regional activity analytics.
+• **Agent (Salesperson)**: Focuses directly on contacts, personal calendar items, proposal updates, and initiating dynamic estimate planners.
 
 To invite a user:
-1. Expand the **Admin settings** dropdown in the header and select **Users**.
-2. Click **Add New User** or invite via email.
+1. Hover/click the **Admin settings** dropdown in the header and select **Users**.
+2. Click **Add New User** or invite via secure email.
 3. Assign their corresponding workspace role.
 4. Provide their starting password, which they can update securely under their internal Profile settings.`
   },
@@ -147,16 +154,16 @@ To invite a user:
     lastUpdated: 'May 14, 2026',
     popularity: 5,
     tags: ['import', 'bulk', 'contacts', 'csv', 'mapping'],
-    content: `Moving from a spreadsheet to a dedicated CRM can feel daunting, but ProSpaces automates standard CSV imports to streamline your transition.
+    content: `Moving from static spreadsheets to a dedicated collaborative CRM can feel daunting, but ProSpaces automates standard CSV imports to streamline your transition.
 
 Step-by-Step Bulk Import:
-1. Navigate to the **Admin Dropdown Menu** and select **Import/Export**.
+1. Click the **Admin Dropdown** at the top right and select **Import/Export**.
 2. Download our lightweight **CSV import template** to align your existing column headers in seconds.
-3. Click 'Upload File' and select your completed spreadsheet.
-4. **Map the Columns**: The importer matches Standard Fields (First Name, Email, Phone Number, Mailing Address) automatically. For unique details, choose "Map to Custom Dynamic Field".
+3. Click 'Upload File' and select your completed contractor spreadsheet.
+4. **Map the Columns**: The importer matches Standard Fields (First Name, Email, Phone Number, Mailing Address) automatically. For unique custom contractor metadata, choose "Map to Custom Dynamic Field".
 5. Click **Run Import Process**.
 
-*Tip to Prevent Mismatches*: Ensure all phone numbers follow standard formatting. If you encounter errors, check the 'Scheduled Imports & Background Manager' page under Admin dropdown to view import audit highlights.`
+*Tip to Prevent Mismatches*: Ensure all phone numbers follow standard formatting. If you encounter errors, check the 'Scheduled Imports \& Background Manager' page under Admin dropdown to view import audit highlights.`
   },
   {
     id: 'dynamic-custom-fields',
@@ -166,10 +173,10 @@ Step-by-Step Bulk Import:
     lastUpdated: 'May 02, 2026',
     popularity: 3,
     tags: ['fields', 'customization', 'attributes', 'dynamic'],
-    content: `Every construction or home improvement specialist has specific details they need to capture—for example, measuring electrical amps, roof pitch angles, or floor surface types.
+    content: `Every construction, flooring, or framing specialist has specific details they need to capture—for example, measuring electrical amps, roof pitch angles, lumber species, or exact square footages.
 
 Through **Dynamic Custom Fields**, you can record key metrics directly on a contact card:
-1. Open any customer card inside the **Contacts** page.
+1. Open any customer card inside your **Contacts** list.
 2. Select **Edit Details** and scroll past the core address.
 3. Click **Add New Attributes**.
 4. Define your field type: Plain Text, Numeric Magnitude, or Select Dropdowns.
@@ -253,9 +260,10 @@ How to audit team activity:
 ];
 
 export function KnowledgeBase() {
-  const { theme } = useTheme();
+  // SUB-NAV TABS: 'kb' | 'status' | 'contact'
+  const [activeSubTab, setActiveSubTab] = useState<'kb' | 'status' | 'contact'>('kb');
 
-  // STATE
+  // KNOWLEDGE STATE
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
@@ -263,21 +271,30 @@ export function KnowledgeBase() {
   // Ratings feedback State
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<{ [key: string]: 'helpful' | 'unhelpful' }>({});
   
+  // Custom ticket submitting form State
+  const [ticketSubject, setTicketSubject] = useState('');
+  const [ticketDescription, setTicketDescription] = useState('');
+  const [ticketCategory, setTicketCategory] = useState('General Info');
+  const [ticketSubmitted, setTicketSubmitted] = useState(false);
+
   // Dynamic Local Assistant chat simulation
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantMessages, setAssistantMessages] = useState<Array<{ sender: 'user' | 'assistant', text: string, timestamp: string }>>([
     {
       sender: 'assistant',
-      text: 'Hi! I am the ProSpaces Support Assistant. Ask me anything about configuring your CRM, dynamic fields, inviting team members, or utilizing our 3D design planners!',
+      text: 'Hi there! I am the ProSpaces Support Bot. Ask me anything about configuring your CRM, dynamic fields, inviting team members, or utilizing our active 3D planners!',
       timestamp: 'Just now'
     }
   ]);
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
 
-  // Close article or selection when category changes
+  // Reset parameters when changing sub-tabs
   useEffect(() => {
+    setSearchQuery('');
+    setSelectedCategory(null);
     setActiveArticleId(null);
-  }, [selectedCategory]);
+    setTicketSubmitted(false);
+  }, [activeSubTab]);
 
   // SELECT CURRENT ACTIVE ARTICLE
   const activeArticle = useMemo(() => {
@@ -311,12 +328,26 @@ export function KnowledgeBase() {
     return KNOWLEDGE_ARTICLES.filter(art => art.popularity >= 5).slice(0, 4);
   }, []);
 
-  // ARBITRARY FEEDBACK HANDLING
+  // FEEDBACK HANDLING
   const handleFeedback = (articleId: string, type: 'helpful' | 'unhelpful') => {
     setFeedbackSubmitted(prev => ({
       ...prev,
       [articleId]: type
     }));
+  };
+
+  // TICKET HANDLING
+  const handleTicketSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketSubject.trim() || !ticketDescription.trim()) return;
+
+    setTicketSubmitted(true);
+    // Auto reset values after time
+    setTimeout(() => {
+      setTicketSubject('');
+      setTicketDescription('');
+      setTicketCategory('General Info');
+    }, 2000);
   };
 
   // ASSISTANT HELPER CHAT ENGINE (Simulates AI-supported KB contextual answering)
@@ -346,14 +377,13 @@ export function KnowledgeBase() {
       );
 
       if (matchedArticle) {
-        answerText = `Great question! Based on our Article "${matchedArticle.title}":\n\n${matchedArticle.content.slice(0, 320)}...\n\n👉 Learn more in the linked article "${matchedArticle.title}" in the ${KNOWLEDGE_CATEGORIES.find(c => c.id === matchedArticle.category)?.name || 'guides'} category!`;
+        answerText = `Great question! Based on our Article "${matchedArticle.title}":\n\n${matchedArticle.content.slice(0, 300)}...\n\n👉 Read the complete guide titled "${matchedArticle.title}" above for full step-by-step instructions!`;
       } else if (q.includes('hello') || q.includes('hi ') || q.includes('hey')) {
-        answerText = "Hello! 👋 How can I guide you inside ProSpaces CRM today? Try asking about 'estimates', 'custom fields', 'invite users', or 'customer portal'.";
+        answerText = "Hello! 👋 Welcome to ProSpaces Support. How can I assist you with your workspace setups today? Try asking about 'estimates', 'custom fields', 'invite users', or 'customer portal'.";
       } else if (q.includes('creator') || q.includes('who built') || q.includes('who are you')) {
-        answerText = "I am the ProSpaces interactive virtual assistant, designed to map standard support documentation to your queries instantly.";
+        answerText = "I am the ProSpaces system assistant, designed to securely map support handbooks to your questions in real time.";
       } else {
-        // Default generic helpful answer summarizing features
-        answerText = "I couldn't find a direct article match for that precise term, but I'm happy to outline the core solution! ProSpaces CRM allows you to manage contacts, track dynamic bids, share modern customer portals, and launch 3D structure planners. Try searching terms like 'logo', 'portal', representational 'estimates', or 'CSV import' in the search bar above!";
+        answerText = "I couldn't find a direct document matching that precise phrasing, but I can guide you! ProSpaces CRM allows you to sync contacts, build custom estimation sheets, open client-facing portal nodes, and execute 3D structures. Try searching for 'welcome', 'import contacts', or 'custom fields' in the search box above!";
       }
 
       setAssistantMessages(prev => [...prev, {
@@ -362,355 +392,682 @@ export function KnowledgeBase() {
         timestamp: 'Just now'
       }]);
       setIsAssistantTyping(false);
-    }, 900);
+    }, 850);
   };
 
   return (
-    <div className="w-full min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
-      {/* ── Sub Header banner ── */}
-      <div className="w-full bg-gradient-to-r from-[#002f5d] to-[#1E6FD9] text-white py-14 px-6 md:px-12 relative overflow-hidden">
-        {/* Subtle geometric circles */}
-        <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-white/5 pointer-events-none" />
-        <div className="absolute left-1/3 -bottom-10 w-64 h-64 rounded-full bg-white/5 pointer-events-none" />
-
-        <div className="max-w-5xl mx-auto flex flex-col items-center text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-xs font-bold uppercase tracking-wider mb-4 border border-white/15">
-            <Sparkle className="h-3 w-3 text-cyan-300 fill-cyan-300" />
-            Support Center
-          </div>
+    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans select-none">
+      
+      {/* ── 1. HELP CENTER HEADER (MATCHING PIPEDRIVE DARK GREEN HEADER) ── */}
+      <header className="w-full bg-[#0A432D] text-white px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-[#083624] shrink-0 sticky top-0 z-30 shadow-md">
+        <div className="flex items-center gap-6 sm:gap-10">
           
-          <h1 className="text-3xl md:text-4xl lg:text-5xl font-black tracking-tight mb-4">
-            ProSpaces Help &amp; Knowledge Base
-          </h1>
-          <p className="text-base md:text-lg text-blue-100 max-w-2xl mb-8">
-            Search our guides, learn setup workflows, configure custom dynamic attributes, and align client portals seamlessly.
-          </p>
-
-          {/* Large custom search input */}
-          <div className="w-full max-w-2xl relative shadow-xl rounded-2xl bg-white text-slate-800 flex items-center p-1.5 border border-slate-200">
-            <div className="p-3 text-slate-400">
-              <Search className="h-6 w-6" />
+          {/* Logo Branding */}
+          <div 
+            onClick={() => setActiveSubTab('kb')}
+            className="flex items-center gap-2 cursor-pointer select-none group"
+          >
+            <div className="h-6 w-6 rounded-full bg-white text-[#0A432D] font-black flex items-center justify-center text-xs tracking-tighter shadow-sm transition-transform duration-300 group-hover:scale-105">
+              P
             </div>
-            <input
-              type="text"
-              placeholder="Search guides, setup answers, planners, custom fields, PDF logo..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (activeArticleId) setActiveArticleId(null); // Return to list view during active search
-              }}
-              className="flex-1 px-2 py-3 bg-transparent text-base focus:outline-none text-slate-900 placeholder:text-slate-400 font-medium"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="p-2 text-slate-400 hover:text-slate-600 transition-colors mr-1"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
+            <span className="font-sans font-black tracking-widest text-xs sm:text-sm uppercase text-emerald-100">
+              Help Center
+            </span>
+          </div>
+
+          {/* Navigation Links inside dark green header */}
+          <nav className="flex items-center gap-4 sm:gap-6 text-xs font-bold text-white/80">
+            <button
+              onClick={() => { setActiveSubTab('kb'); setActiveArticleId(null); setSelectedCategory(null); }}
+              className={`pb-1 px-1 transition-all relative ${
+                activeSubTab === 'kb' 
+                  ? 'text-white' 
+                  : 'hover:text-white'
+              }`}
+            >
+              <span>Knowledge Base</span>
+              {activeSubTab === 'kb' && (
+                <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveSubTab('status')}
+              className={`pb-1 px-1 transition-all relative ${
+                activeSubTab === 'status' 
+                  ? 'text-white' 
+                  : 'hover:text-white'
+              }`}
+            >
+              <span>Status</span>
+              {activeSubTab === 'status' && (
+                <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveSubTab('contact')}
+              className={`pb-1 px-1 transition-all relative ${
+                activeSubTab === 'contact' 
+                  ? 'text-white' 
+                  : 'hover:text-white'
+              }`}
+            >
+              <span>Contact Support</span>
+              {activeSubTab === 'contact' && (
+                <motion.div layoutId="headerUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full" />
+              )}
+            </button>
+          </nav>
+        </div>
+
+        {/* Right Search minimal launcher */}
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/15 transition-all flex items-center justify-center text-white cursor-pointer" title="Search Portal Launcher">
+            <Search className="h-4 w-4" />
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* ── Main Layout Body ── */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow w-full">
-        
-        {/* Left Column (8 cols): FAQ Articles Browser */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
+      {/* ── 2. HIGH-FIDELITY GREEN BANNER (MINT TO DEEP SWIRL + VECTOR ARTWORK) ── */}
+      {activeSubTab === 'kb' && (
+        <div className="w-full bg-[#D4EFE1] py-10 sm:py-14 px-6 md:px-12 relative overflow-hidden border-b border-emerald-200">
           
-          {/* CATEGORIES GRID (Only shown when not displaying a specific article, or can act as quick filter tabs) */}
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-150">
-            <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-              <h2 className="text-sm font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
-                <Layers className="h-4 w-4 text-blue-500" />
-                Browse by Category
-              </h2>
-              {selectedCategory && (
-                <button
-                  onClick={() => setSelectedCategory(null)}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors bg-blue-50 px-2.5 py-1 rounded-full"
-                >
-                  Clear filter <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              {KNOWLEDGE_CATEGORIES.map((cat) => {
-                const CatIcon = cat.icon;
-                const isSelected = selectedCategory === cat.id;
-
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(isSelected ? null : cat.id)}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all cursor-pointer ${
-                      isSelected
-                        ? 'border-[#1E6FD9] bg-blue-50/70 shadow-sm ring-2 ring-[#1E6FD9]/10'
-                        : 'border-slate-150 hover:border-blue-300 hover:bg-slate-50/50'
-                    }`}
-                  >
-                    <div className={`p-3 rounded-full ${cat.bgColor} ${cat.color} mb-2.5`}>
-                      <CatIcon className="h-5 w-5" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-800 leading-tight">
-                      {cat.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          {/* Deep Forest green swirl shape on raw right side (inspired exactly by attached reference) */}
+          <div className="absolute right-0 top-0 bottom-0 w-[42%] bg-[#08422C] rounded-l-[160px] hidden lg:block z-0 relative">
+            {/* Soft grid overlay in forest section */}
+            <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:14px_24px]" />
           </div>
 
-          {/* ────── LIST VIEW OR DETAIL VIEW ────── */}
-          {!activeArticle ? (
-            <div className="flex flex-col gap-4">
-              <h2 className="text-xl font-extrabold text-[#002f5d] tracking-tight flex items-center justify-between">
-                <span>
-                  {searchQuery ? 'Search Results' : selectedCategory ? `${KNOWLEDGE_CATEGORIES.find(c => c.id === selectedCategory)?.name} Articles` : 'Knowledge Base Handbook'}
-                </span>
-                <span className="text-xs font-bold bg-slate-200 text-slate-600 px-3 py-1 rounded-full">
-                  {filteredArticles.length} {filteredArticles.length === 1 ? 'Article' : 'Articles'}
-                </span>
-              </h2>
+          <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-10 relative z-10">
+            
+            {/* Left section: Title & Search bar details */}
+            <div className="flex-1 flex flex-col text-left max-w-2xl">
+              
+              <h1 className="text-3xl sm:text-5xl font-black text-[#0A432D] tracking-tight leading-none mb-3">
+                Knowledge Base
+              </h1>
+              
+              <p className="text-xs sm:text-sm font-semibold text-[#0C4F35]/85 mb-6 max-w-md leading-relaxed">
+                Connect your team, sync inventory metrics, configure dynamic specs and explore CRM solutions with direct indexing.
+              </p>
 
-              {filteredArticles.length === 0 ? (
-                <div className="bg-white rounded-3xl p-12 text-center border border-slate-150 flex flex-col items-center justify-center">
-                  <HelpCircle className="h-14 w-14 text-slate-300 mb-4 animate-bounce" />
-                  <h3 className="text-lg font-bold text-slate-700">No guides matching your query</h3>
-                  <p className="text-sm text-slate-400 max-w-md mt-2">
-                    Try checking your spelling, clear active classification tabs, or direct your query to our live simulated support assistant on the right rail.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setSelectedCategory(null);
-                    }}
-                    className="mt-6 px-5 py-2 bg-[#1E6FD9] text-white hover:bg-[#155fc2] text-xs font-bold rounded-xl shadow-sm transition-all"
-                  >
-                    Reset Search &amp; Categories
-                  </button>
+              {/* Large search input layout centered beautifully */}
+              <div className="w-full relative shadow-lg rounded-full bg-white text-slate-800 flex items-center p-1 sm:p-1.5 border border-[#BCE1CD] focus-within:ring-4 focus-within:ring-[#0A432D]/10 transition-all">
+                <div className="p-3 pl-4 text-emerald-800">
+                  <Search className="h-4 sm:h-5 w-4 sm:w-5" />
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredArticles.map((art) => {
-                    const catInfo = KNOWLEDGE_CATEGORIES.find(c => c.id === art.category);
-                    const CatIcon = catInfo ? catInfo.icon : FileText;
+                <input
+                  type="text"
+                  placeholder="Search help center..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    if (activeArticleId) setActiveArticleId(null); // return to lists
+                  }}
+                  className="flex-1 px-1 py-1.5 sm:py-2.5 bg-transparent text-xs sm:text-sm focus:outline-none text-slate-900 placeholder:text-slate-400 font-bold"
+                />
+                
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="p-2 text-slate-400 hover:text-slate-600 transition-colors mr-2 cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Suggestions quick tags */}
+              <div className="flex flex-wrap items-center gap-2 mt-4 text-[10px] sm:text-xs">
+                <span className="text-[#0C4F35] font-black opacity-85 uppercase tracking-wider text-[9px]">Try:</span>
+                {['welcome', 'invite', 'custom fields', 'proposals', '3d planners'].map(term => (
+                  <button
+                    key={term}
+                    onClick={() => {
+                      setSearchQuery(term);
+                      if (activeArticleId) setActiveArticleId(null);
+                    }}
+                    className="px-2.5 py-0.5 rounded-full bg-[#EAF8F1] border border-[#BCE1CD] text-[#0A432D] font-extrabold hover:bg-emerald-100 transition-colors cursor-pointer text-[10px]"
+                  >
+                    {term}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Artwork: Premium Open Book with Purple Bookmark ribbon */}
+            <div className="hidden lg:flex items-center justify-center w-64 h-48 select-none relative shrink-0">
+              {/* Elegant open book SVG with pristine shadow, purple book ribbon and green hardcover */}
+              <svg viewBox="0 0 240 180" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-xl transform -rotate-2">
+                {/* Book outer hardcover border support */}
+                <path d="M12 165 C70 160, 110 165, 120 172 C130 165, 170 160, 228 165 L224 25 C166 20, 130 25, 120 32 C110 25, 74 20, 16 25 Z" fill="#063222" stroke="#042015" strokeWidth="2.5" />
+                
+                {/* 3D paper layers edge depth block */}
+                <path d="M18 160 C72 155, 108 160, 118 167 C128 160, 164 155, 218 160 L220 28 C166 23, 130 28, 120 35 C110 28, 74 23, 20 28 Z" fill="#E6EDE9" />
+                
+                {/* Left Page (White side) */}
+                <path d="M22 155 C74 150, 108 153, 118 162 L120 30 C110 23, 76 20, 24 25 Z" fill="#FFFFFF" />
+                <path d="M118 162 L120 30 L115 30 L113 162 Z" fill="#F4F8F6" />
+                
+                {/* Right Page (Slight shaded side) */}
+                <path d="M122 162 C132 153, 166 150, 218 155 L216 25 C164 20, 130 23, 120 30 Z" fill="#FAFCFB" />
+                <path d="M118 30 C119 50, 119 140, 122 162" stroke="#D3E5DC" strokeWidth="2" />
+                
+                {/* Writing Guidelines representation on left page matching attached image book */}
+                <path d="M34 50 H98" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M34 65 H102" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M34 80 H96" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M34 95 H100" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M34 110 H92" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M34 125 H98" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M34 140 H80" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+
+                {/* Writing Guidelines representation on right page */}
+                <path d="M138 51 H202" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M138 66 H196" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M138 81 H204" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M138 96 H190" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M138 111 H200" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M138 126 H194" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M138 141 H160" stroke="#CFDFD6" strokeWidth="1.5" strokeLinecap="round" />
+
+                {/* Royal Violet Bookmark ribbon draped over the Left Page (inspired exactly by user reference) */}
+                <path d="M58 20 L68 20 L68 94 L63 87 L58 94 Z" fill="#6366F1" />
+                <path d="M58 20 L68 20 L68 22 L58 22 Z" fill="#4F46E5" />
+              </svg>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ── 3. DETAILED SUB-VIEW DIRECT SWITCHES ── */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow w-full">
+        
+        {/* TAB 1: KNOWLEDGE BASE HANDBOOK EXPLORER */}
+        {activeSubTab === 'kb' && (
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            
+            {/* Category selection bar */}
+            {!activeArticle && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                  <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-emerald-700" />
+                    Browse topics by department
+                  </h2>
+                  {selectedCategory && (
+                    <button
+                      onClick={() => setSelectedCategory(null)}
+                      className="text-[10px] font-extrabold text-[#0A432D] hover:text-[#062F20] bg-emerald-50 border border-emerald-100 flex items-center gap-1 px-3 py-1 rounded-full cursor-pointer transition-colors"
+                    >
+                      Reset category <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 px-1">
+                  {KNOWLEDGE_CATEGORIES.map((cat) => {
+                    const CatIcon = cat.icon;
+                    const isSelected = selectedCategory === cat.id;
 
                     return (
-                      <div
-                        key={art.id}
-                        onClick={() => setActiveArticleId(art.id)}
-                        className="p-5 rounded-3xl bg-white border border-slate-150 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer flex flex-col justify-between group active:scale-98"
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategory(isSelected ? null : cat.id)}
+                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-emerald-600 bg-emerald-50/50 shadow-sm ring-2 ring-emerald-650/10'
+                            : 'border-slate-100 hover:border-emerald-200 hover:bg-slate-50/80 bg-white'
+                        }`}
                       >
-                        <div>
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${catInfo?.bgColor || 'bg-slate-50'} ${catInfo?.color || 'text-slate-500'}`}>
-                              <CatIcon className="h-2.5 w-2.5" />
-                              {catInfo?.name || art.category}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {art.readTime}
-                            </span>
-                          </div>
-                          
-                          <h3 className="text-base font-extrabold text-slate-900 group-hover:text-[#1E6FD9] transition-all tracking-tight leading-snug">
-                            {art.title}
-                          </h3>
-
-                          <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed">
-                            {art.content}
-                          </p>
+                        <div className={`p-2.5 rounded-lg ${cat.bgColor} ${cat.color} mb-2`}>
+                          <CatIcon className="h-4 w-4" />
                         </div>
-
-                        <div className="border-t border-slate-50 mt-4 pt-3 flex justify-between items-center">
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            Updated {art.lastUpdated}
-                          </span>
-                          <span className="text-xs font-semibold text-blue-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                            Read article <ChevronRight className="h-3 w-3" />
-                          </span>
-                        </div>
-                      </div>
+                        <span className="text-[10px] sm:text-xs font-black text-slate-800 leading-snug">
+                          {cat.name}
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* POPULAR ARTICLES CARDS (Only displayed on empty query) */}
-              {!searchQuery && !selectedCategory && (
-                <div className="mt-6">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-                    <Heart className="h-4 w-4 text-red-500 fill-red-500" />
-                    Highly Visited Handbooks
-                  </h3>
+            {/* List vs Single active article reader */}
+            {!activeArticle ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between pb-2">
+                  <h2 className="text-lg font-black text-slate-800 tracking-tight">
+                    {searchQuery 
+                      ? 'Filtered Results' 
+                      : selectedCategory 
+                        ? `${KNOWLEDGE_CATEGORIES.find(c => c.id === selectedCategory)?.name} Guides` 
+                        : 'Articles & Handbooks'}
+                  </h2>
+                  <span className="text-xs text-slate-500 font-extrabold bg-slate-100 px-3 py-1 rounded-full">
+                    {filteredArticles.length} {filteredArticles.length === 1 ? 'Article' : 'Articles'}
+                  </span>
+                </div>
+
+                {filteredArticles.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-10 text-center border border-slate-150 flex flex-col items-center justify-center">
+                    <HelpCircle className="h-12 w-12 text-slate-350 mb-3 animate-pulse" />
+                    <h3 className="text-sm font-black text-slate-700">No matching search query found</h3>
+                    <p className="text-xs text-slate-400 max-w-sm mt-1.5 leading-relaxed">
+                      Please check the keywords or click 'Reset search' below. You can also chat with the ProSpaces Assistant on the panel side.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSelectedCategory(null);
+                      }}
+                      className="mt-4 px-4 py-2 bg-emerald-700 text-white hover:bg-emerald-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Clear Search Flags
+                    </button>
+                  </div>
+                ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {popularArticles.map((art) => (
-                      <div
-                        key={art.id}
-                        onClick={() => setActiveArticleId(art.id)}
-                        className="p-4 rounded-2xl bg-white border border-slate-150 hover:border-blue-200 transition-all cursor-pointer flex items-center gap-3.5"
+                    {filteredArticles.map((art) => {
+                      const catInfo = KNOWLEDGE_CATEGORIES.find(c => c.id === art.category);
+                      const CatIcon = catInfo ? catInfo.icon : FileText;
+
+                      return (
+                        <div
+                          key={art.id}
+                          onClick={() => setActiveArticleId(art.id)}
+                          className="p-5 rounded-xl bg-white border border-slate-205/60 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-98"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider ${catInfo?.bgColor || 'bg-slate-50'} ${catInfo?.color || 'text-slate-500'}`}>
+                                <CatIcon className="h-2.5 w-2.5" />
+                                {catInfo?.name || art.category}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold">
+                                {art.readTime}
+                              </span>
+                            </div>
+
+                            <h3 className="text-xs sm:text-sm font-black text-slate-800 group-hover:text-emerald-700 transition-colors leading-snug">
+                              {art.title}
+                            </h3>
+
+                            <p className="text-[11px] text-slate-400 mt-2 line-clamp-3 leading-relaxed">
+                              {art.content}
+                            </p>
+                          </div>
+
+                          <div className="border-t border-slate-50 mt-4 pt-3 flex justify-between items-center text-[10px]">
+                            <span className="text-slate-400 font-semibold">
+                              Updated {art.lastUpdated}
+                            </span>
+                            <span className="font-extrabold text-[#1E6FD9] flex items-center gap-0.5 group-hover:translate-x-1 transition-transform">
+                              Read <ChevronRight className="h-3 w-3" />
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Popular Guides bottom panel */}
+                {!searchQuery && !selectedCategory && (
+                  <div className="mt-4 pt-2">
+                    <h3 className="text-xs font-black uppercase text-slate-450 tracking-wider mb-3 flex items-center gap-1.5">
+                      <Heart className="h-3.5 w-3.5 text-rose-500 fill-rose-500" />
+                      Frequently Read Articles
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {popularArticles.map((art) => (
+                        <div
+                          key={art.id}
+                          onClick={() => setActiveArticleId(art.id)}
+                          className="p-3.5 rounded-xl bg-white border border-slate-200/80 hover:border-[#1E6FD9]/35 hover:shadow-sm cursor-pointer transition-all flex items-center gap-3"
+                        >
+                          <div className="h-8 w-8 shrink-0 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center">
+                            <BookOpen className="h-4 w-4" />
+                          </div>
+                          <div className="overflow-hidden">
+                            <h4 className="text-[11.5px] font-black text-slate-700 leading-snug hover:text-emerald-700 truncate">
+                              {art.title}
+                            </h4>
+                            <span className="text-[9px] text-slate-400 font-semibold block mt-0.5">
+                              {art.readTime} • Setup guide
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            ) : (
+              
+              /* ── SINGLE ARTICLE DETAILED READS ── */
+              <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-slate-200/80 flex flex-col">
+                
+                {/* Back Breadcrumbs */}
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 flex-wrap gap-2 text-[10px] sm:text-xs">
+                  <button
+                    onClick={() => setActiveArticleId(null)}
+                    className="flex items-center gap-1.5 font-bold text-slate-500 hover:text-[#1E6FD9] transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4 stroke-[3]" /> Back to index list
+                  </button>
+                  <div className="text-slate-400 font-semibold flex items-center gap-1">
+                    <span>Help Center</span>
+                    <ChevronRight className="h-3 w-3" />
+                    <span className="capitalize">{activeArticle.category.replace('-', ' ')}</span>
+                  </div>
+                </div>
+
+                {/* Sub headers details */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-800 uppercase tracking-wider">
+                    {KNOWLEDGE_CATEGORIES.find(c => c.id === activeArticle.category)?.name || activeArticle.category}
+                  </span>
+                  <span className="text-slate-300 font-bold">•</span>
+                  <span className="text-[10px] text-slate-400 font-bold">{activeArticle.readTime}</span>
+                  <span className="text-slate-300 font-bold">•</span>
+                  <span className="text-[10px] text-slate-400 font-bold">Updated {activeArticle.lastUpdated}</span>
+                </div>
+
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 leading-tight mb-5 tracking-tight">
+                  {activeArticle.title}
+                </h2>
+
+                {/* Main article content formatted cleanly */}
+                <div className="text-slate-600 text-xs sm:text-sm leading-relaxed space-y-4 whitespace-pre-wrap pt-2 pb-6 border-b border-slate-100 font-medium">
+                  {activeArticle.content}
+                </div>
+
+                {/* Tag list and helpful ratings */}
+                <div className="pt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-xs">
+                  
+                  {/* Article tag buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mr-1">Tags:</span>
+                    {activeArticle.tags.map(tag => (
+                      <span
+                        key={tag}
+                        onClick={() => {
+                          setSearchQuery(tag);
+                          setActiveArticleId(null);
+                        }}
+                        className="px-2.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer transition-colors font-semibold"
                       >
-                        <div className="h-10 w-10 shrink-0 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
-                          <BookOpen className="h-5 w-5" />
-                        </div>
-                        <div className="overflow-hidden">
-                          <h4 className="text-sm font-bold text-slate-800 leading-snug hover:text-[#1E6FD9] transition-all truncate">
-                            {art.title}
-                          </h4>
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            {art.readTime} • Updated {art.lastUpdated}
-                          </span>
-                        </div>
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Rating feedback button matching standard Help Centers */}
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-slate-400 text-[10px] uppercase tracking-wider">Was this helpful?</span>
+                    {feedbackSubmitted[activeArticle.id] ? (
+                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded flex items-center gap-1">
+                        <Check className="h-3 w-3 stroke-[3]" /> Feedback saved!
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => handleFeedback(activeArticle.id, 'helpful')}
+                          className="px-2.5 py-1 rounded border border-slate-205 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-250 text-[10px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <ThumbsUp className="h-3 w-3" /> Yes
+                        </button>
+                        <button
+                          onClick={() => handleFeedback(activeArticle.id, 'unhelpful')}
+                          className="px-2.5 py-1 rounded border border-slate-205 text-slate-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-250 text-[10px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <ThumbsDown className="h-3 w-3" /> No
+                        </button>
                       </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Related matches panel */}
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mt-6">
+                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2.5">
+                    Other handbooks in this category
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {KNOWLEDGE_ARTICLES.filter(art => art.category === activeArticle.category && art.id !== activeArticle.id).slice(0, 2).map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => setActiveArticleId(r.id)}
+                        className="p-2.5 rounded bg-white text-left text-slate-700 hover:text-emerald-700 border border-slate-150 flex justify-between items-center text-xs' cursor-pointer text-xs"
+                      >
+                        <span className="font-bold truncate">{r.title}</span>
+                        <ChevronRight className="h-3 w-3 text-slate-400 shrink-0" />
+                      </button>
                     ))}
                   </div>
                 </div>
-              )}
-            </div>
-          ) : (
-            /* ────── DETAILS READING CAP ────── */
-            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-150 flex flex-col">
+
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* TAB 2: SYSTEM UPTIME STATUS MONITOR */}
+        {activeSubTab === 'status' && (
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
               
-              {/* Back breadcrumbs */}
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 flex-wrap gap-2">
-                <button
-                  onClick={() => setActiveArticleId(null)}
-                  className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#1E6FD9] transition-colors"
-                >
-                  <ArrowLeft className="h-4 w-4" /> Back to Guides List
-                </button>
-                <div className="text-xs text-slate-400 font-medium flex items-center gap-1">
-                  <span>Help Center</span>
-                  <ChevronRight className="h-3 w-3" />
-                  <span className="capitalize">{activeArticle.category.replace('-', ' ')}</span>
-                  <ChevronRight className="h-3 w-3" />
-                  <span className="truncate max-w-[150px]">{activeArticle.title}</span>
+              {/* Uptime Header status */}
+              <div className="flex items-center justify-between pb-6 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-black text-slate-800">ProSpaces Live System Status</h3>
+                  <p className="text-xs text-slate-400 font-bold block mt-0.5">Real-time status updates for the ProSpaces platform services.</p>
+                </div>
+                <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-100">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[11px] font-black uppercase tracking-wider">All Systems Operational</span>
                 </div>
               </div>
 
-              {/* Dynamic Header Metrics */}
-              <div className="flex items-center gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 text-[#1E6FD9]">
-                  {KNOWLEDGE_CATEGORIES.find(c => c.id === activeArticle.category)?.name || activeArticle.category}
-                </span>
-                <span className="text-xs text-slate-400 font-semibold">•</span>
-                <span className="text-xs text-slate-400 font-semibold">{activeArticle.readTime}</span>
-                <span className="text-xs text-slate-400 font-semibold">•</span>
-                <span className="text-xs text-slate-400 font-semibold">Updated {activeArticle.lastUpdated}</span>
-              </div>
-
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight mb-6">
-                {activeArticle.title}
-              </h2>
-
-              <div className="text-slate-700 text-sm md:text-base leading-relaxed space-y-4 whitespace-pre-wrap font-sans border-b border-slate-100 pb-8">
-                {activeArticle.content}
-              </div>
-
-              {/* Tags & Feedback row */}
-              <div className="pt-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                {/* Article tags */}
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  <span className="text-xs font-bold text-slate-400 mr-1.5 uppercase tracking-wider">Tags:</span>
-                  {activeArticle.tags.map(tag => (
-                    <span
-                      key={tag}
-                      onClick={() => {
-                        setSearchQuery(tag);
-                        setActiveArticleId(null);
-                      }}
-                      className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 cursor-pointer transition-colors"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Rating component */}
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-500">Was this guide helpful?</span>
-                  
-                  {feedbackSubmitted[activeArticle.id] ? (
-                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 animate-pulse">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Thank you for your feedback!
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleFeedback(activeArticle.id, 'helpful')}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <ThumbsUp className="h-3.5 w-3.5" /> Yes
-                      </button>
-                      <button
-                        onClick={() => handleFeedback(activeArticle.id, 'unhelpful')}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <ThumbsDown className="h-3.5 w-3.5" /> No
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Related posts */}
-              <div className="bg-slate-50 rounded-2xl p-5 mt-8 border border-slate-150">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 block">
-                  Other Guides in Category
-                </h3>
+              {/* Server Nodes Grid list */}
+              <div className="py-6 space-y-4">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Individual portal servers</span>
+                
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  {KNOWLEDGE_ARTICLES.filter(art => art.category === activeArticle.category && art.id !== activeArticle.id).slice(0, 2).map((rel) => (
-                    <div
-                      key={rel.id}
-                      onClick={() => setActiveArticleId(rel.id)}
-                      className="px-3.5 py-2.5 rounded-xl bg-white border border-slate-150 hover:border-blue-200 cursor-pointer transition-all flex items-center justify-between"
-                    >
-                      <span className="text-xs font-bold text-slate-700 truncate">{rel.title}</span>
-                      <ChevronRight className="h-3 w-3 text-slate-400 shrink-0" />
+                  {[
+                    { name: 'Core CRM Database Sync', id: 'db', status: 'Optimal', delay: '12ms' },
+                    { name: 'Gemini AI Assistant Service', id: 'ai', status: 'Optimal', delay: '74ms' },
+                    { name: 'Customer Client Portals API', id: 'portal', status: 'Optimal', delay: '20ms' },
+                    { name: '3D Deck & Kitchen Planners Engine', id: 'planners', status: 'Optimal', delay: '38ms' },
+                    { name: 'Branded Estimates & PDF Compiler', id: 'pdf', status: 'Optimal', delay: '41ms' },
+                    { name: 'Mail Dispatcher Notification Node', id: 'mail', status: 'Optimal', delay: '19ms' }
+                  ].map(node => (
+                    <div key={node.id} className="p-4 bg-slate-50 border border-slate-200/70 rounded-xl flex items-center justify-between shadow-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                          <Activity className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-black text-slate-700 block">{node.name}</span>
+                          <span className="text-[9px] text-slate-400 font-mono tracking-wide">Ping response: {node.delay}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded">
+                        {node.status}
+                      </span>
                     </div>
                   ))}
-                  {KNOWLEDGE_ARTICLES.filter(art => art.category === activeArticle.category && art.id !== activeArticle.id).length === 0 && (
-                    <span className="text-xs text-slate-400 italic">No additional articles in this category.</span>
-                  )}
+                </div>
+              </div>
+
+              {/* Incidents tracking log */}
+              <div className="border-t border-slate-100 pt-6">
+                <h4 className="text-[10px] font-black uppercase text-slate-450 tracking-wider mb-3">Historic Uptime Record (Last 90 days)</h4>
+                
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col gap-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-bold">Overall Average SLA</span>
+                    <span className="font-extrabold text-[#1E6FD9]">99.982%</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex gap-0.5">
+                    {Array.from({ length: 45 }).map((_, i) => (
+                      <div key={i} className="flex-1 h-full bg-emerald-500" title={`Day -${45 - i}: 100% operational`} />
+                    ))}
+                  </div>
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider text-center block mt-1">
+                    No system degradation incidents reported in past months.
+                  </span>
                 </div>
               </div>
 
             </div>
-          )}
+          </div>
+        )}
 
-        </div>
+        {/* TAB 3: CONTACT SUPPORT / SUBMIT TAPE FORM */}
+        {activeSubTab === 'contact' && (
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-[#E2E8F0]">
+              
+              {/* Support submission header */}
+              <div className="pb-6 border-b border-slate-100">
+                <h3 className="text-base font-black text-slate-800">Submit a Support Ticket</h3>
+                <p className="text-xs text-slate-400 font-bold block mt-1 leading-relaxed">
+                  Have a direct question about CRM settings, bulk uploading lumber products, custom domains, or team seat overrides? Contact our helpful tech specialists.
+                </p>
+              </div>
 
-        {/* Right Column (4 cols): AI Support Assistant Box & Direct offline contact */}
+              {ticketSubmitted ? (
+                /* Success Ticketing animations */
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="py-12 flex flex-col items-center justify-center text-center max-w-sm mx-auto"
+                >
+                  <div className="h-14 w-14 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xl mb-4 shadow-sm">
+                    ✓
+                  </div>
+                  <h4 className="text-sm font-extrabold text-slate-800">Support ticket compiled successfully!</h4>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    We've registered your ticket category under <span className="font-bold text-slate-650">#{ticketCategory}</span>. A specialized help desks administrator will connect with you under 2 commercial hours.
+                  </p>
+                  <button 
+                    onClick={() => setTicketSubmitted(false)}
+                    className="mt-6 px-4 py-2 bg-[#0A432D] hover:bg-[#072F20] text-white text-xs font-extrabold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Send Another Ticket
+                  </button>
+                </motion.div>
+              ) : (
+                /* Submitting Ticket Form layout */
+                <form onSubmit={handleTicketSubmit} className="py-6 space-y-4">
+                  
+                  {/* Subject Line */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block">Subject Topic</label>
+                    <input 
+                      type="text"
+                      required
+                      placeholder="e.g. Setting up custom contact domain subdomain routing"
+                      value={ticketSubject}
+                      onChange={(e) => setTicketSubject(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Urgency Classification details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block">Department Category</label>
+                      <select 
+                        value={ticketCategory}
+                        onChange={(e) => setTicketCategory(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-700"
+                      >
+                        <option value="Initial CRM Setups">Initial CRM Setups</option>
+                        <option value="Billing & Pricing">Billing &amp; Pricing</option>
+                        <option value="Custom API Integrations">Custom API Integrations</option>
+                        <option value="3D Deck/Kitchen Planners">3D Deck/Kitchen Planners</option>
+                        <option value="General Info">General Info</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block font-sans">Corporate Urgency</label>
+                      <select 
+                        defaultValue="Normal Response"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-700"
+                      >
+                        <option value="Low: General Questions">Low: General Questions</option>
+                        <option value="Normal Response">Normal: Under 2 Hours</option>
+                        <option value="High: Blocking Issues">High: Direct Incident Callback</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Body description */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block">Detailed description of the issue</label>
+                    <textarea 
+                      required
+                      placeholder="Please delineate step-by-step what occurred or list the spec features you require guidance with..."
+                      rows={5}
+                      value={ticketDescription}
+                      onChange={(e) => setTicketDescription(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-205 rounded-lg text-xs font-bold focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Action submit buttons */}
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                    >
+                      <Send className="h-3.5 w-3.5" /> Submit Support Ticket
+                    </button>
+                  </div>
+
+                </form>
+              )}
+
+            </div>
+          </div>
+        )}
+
+        {/* ── 4. RIGHT COLUMN (4 cols): AI SUPPORT BOT SIDEBAR PANEL ── */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           
-          {/* ────── AI SUPPORTER ASSISTANT BOX ────── */}
-          <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-blue-950 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col max-h-[500px]">
-            {/* Ambient gradients */}
-            <div className="absolute right-0 top-0 w-24 h-24 bg-blue-500/10 rounded-full blur-xl pointer-events-none" />
+          {/* ProSpaces Support AI Agent panel (Stays responsive right) */}
+          <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col max-h-[520px]">
+            {/* Soft Ambient glowing light in corners */}
+            <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
             
-            <div className="flex items-center gap-2 mb-4 border-b border-white/10 pb-3">
-              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Sparkles className="h-4 w-4 text-cyan-300 fill-cyan-300 animate-pulse" />
+            <div className="flex items-center gap-2 mb-4 border-b border-white/10 pb-3 shrink-0">
+              <div className="h-7 w-7 rounded bg-emerald-600 flex items-center justify-center">
+                <Sparkles className="h-3.5 w-3.5 text-cyan-300 fill-cyan-300 animate-pulse" />
               </div>
               <div>
-                <h3 className="text-sm font-bold tracking-tight">ProSpaces AI Assistant</h3>
-                <span className="text-[10px] text-cyan-400 font-extrabold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Direct KB Matcher
+                <h3 className="text-xs font-black tracking-tight">ProSpaces AI virtual Agent</h3>
+                <span className="text-[9px] text-emerald-300 font-extrabold flex items-center gap-1 mt-0.5">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" /> Direct Document Searcher
                 </span>
               </div>
             </div>
 
-            {/* Conversation message logs container */}
-            <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 py-1 max-h-[250px] min-h-[180px] scrollbar-thin">
-              {assistantMessages.map((msg, i) => (
+            {/* Simulated support logs lists */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 py-1 max-h-[290px] min-h-[190px] scrollbar-thin">
+              {assistantMessages.map((msg, idx) => (
                 <div
-                  key={i}
-                  className={`flex flex-col max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${
+                  key={idx}
+                  className={`flex flex-col max-w-[85%] rounded xl:rounded-xl p-2.5 text-xs font-sans leading-relaxed ${
                     msg.sender === 'user'
-                      ? 'bg-[#1E6FD9] text-white self-end ml-auto rounded-tr-none'
-                      : 'bg-white/10 text-slate-200 self-start mr-auto rounded-tl-none'
+                      ? 'bg-emerald-600 text-white self-end ml-auto rounded-tr-none font-bold'
+                      : 'bg-white/15 text-slate-100 self-start mr-auto rounded-tl-none font-medium'
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{msg.text}</p>
@@ -718,83 +1075,67 @@ export function KnowledgeBase() {
               ))}
 
               {isAssistantTyping && (
-                <div className="bg-white/10 text-slate-200 self-start rounded-2xl rounded-tl-none p-3 max-w-[50%] mr-auto text-xs flex items-center gap-1">
+                <div className="bg-white/10 text-slate-200 self-start rounded-xl rounded-tl-none p-2.5 max-w-[45%] mr-auto text-xs flex items-center gap-1">
                   <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.18s]" />
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.36s]" />
                 </div>
               )}
             </div>
 
-            {/* Chat Input form */}
-            <form onSubmit={handleAssistantSubmit} className="mt-4 flex items-center gap-1.5 border-t border-white/10 pt-3">
+            {/* Input Submission helper bar */}
+            <form onSubmit={handleAssistantSubmit} className="mt-4 flex items-center gap-1.5 border-t border-white/10 pt-3 shrink-0">
               <input
                 type="text"
-                placeholder="Ask about dynamic fields, permissions..."
+                placeholder="Ask bot about estimates..."
                 value={assistantInput}
                 onChange={(e) => setAssistantInput(e.target.value)}
-                className="flex-1 bg-white/5 border border-white/10 text-xs rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 placeholder:text-slate-500"
+                className="flex-1 bg-white/5 border border-white/10 text-xs rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 placeholder:text-slate-500 font-semibold"
               />
               <button
                 type="submit"
                 disabled={!assistantInput.trim() || isAssistantTyping}
-                className="p-2.5 rounded-xl bg-blue-600 border border-blue-500 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                className="p-2 rounded-lg bg-emerald-600/90 border border-emerald-500 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center shrink-0"
               >
-                <Send className="h-3.5 w-3.5" />
+                <Send className="h-3 w-3 stroke-[3.5]" />
               </button>
             </form>
           </div>
 
-          {/* ────── CUSTOM TICKET SUBMISSION ────── */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-150 shadow-sm flex flex-col">
-            <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2 mb-3">
-              <MessageSquare className="h-4 w-4 text-orange-500" />
-              Need Direct Support?
+          {/* Quick Support channels */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col text-slate-800">
+            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1 mb-2">
+              <MessageSquare className="h-3.5 w-3.5 text-emerald-800" />
+              Direct Contacts Channel
             </h3>
-            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              If our guides or assistant haven&apos;t fully completed your answer, our team of helpful support specialists can address your custom inquiry.
+            <p className="text-[11px] text-slate-400 font-semibold mb-4 leading-relaxed">
+              If your request needs structural layout consultation, scheduling a screen-share session is often the fastest route.
             </p>
 
-            <div className="space-y-3">
+            <div className="space-y-2 text-xs font-black text-slate-700">
               <a
                 href="mailto:support@prospaces.com"
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-slate-205 hover:bg-slate-50 transition-colors bg-white cursor-pointer"
               >
-                <Mail className="h-4 w-4 text-slate-500" /> support@prospaces.com
+                <Mail className="h-3.5 w-3.5 text-slate-400" />
+                <span>support@prospaces.com</span>
               </a>
-              <div className="text-[10px] text-slate-400 text-center italic mt-2">
-                Typical reply duration: Under 2 hours (Mon–Fri)
-              </div>
+              <button
+                onClick={() => setActiveSubTab('contact')}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-slate-205 text-slate-700 hover:bg-slate-50 transition-colors bg-white cursor-pointer"
+              >
+                <Video className="h-3.5 w-3.5 text-slate-400" />
+                <span>Schedule live Zoom demo</span>
+              </button>
             </div>
-          </div>
-
-          {/* Quick Stats list */}
-          <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col gap-3">
-            <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-              Quick System Stats
-            </h4>
-            
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-500 font-medium">Platform Status</span>
-              <span className="font-extrabold text-emerald-600 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> All Systems Operational
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center text-xs border-t border-slate-200/55 pt-2">
-              <span className="text-slate-500 font-medium">Last release version</span>
-              <span className="font-bold text-slate-700">v2.14.8 (Enterprise)</span>
-            </div>
-
-            <div className="flex justify-between items-center text-xs border-t border-slate-200/55 pt-2">
-              <span className="text-slate-500 font-medium">Secure Backup Cycle</span>
-              <span className="font-bold text-slate-700">Continuous Hourly</span>
-            </div>
+            <span className="text-[9px] text-slate-450 text-center font-bold italic mt-2.5 block">
+              Global Support: Mon–Fri, 9am–5pm PST
+            </span>
           </div>
 
         </div>
 
-      </div>
+      </main>
     </div>
   );
 }
