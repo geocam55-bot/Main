@@ -31,6 +31,7 @@ import {
   FileDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Logo } from './Logo';
 
 // TYPES DEFINITION
 export interface Article {
@@ -256,6 +257,134 @@ How to audit team activity:
 4. Export options: Click 'Export Logs' to retrieve standard spreadsheets or archives.
 
 *IP Constraints & SSO*: If your group requires advanced IP Whitelists or Active Directory alignment, explore the 'Security & Access Protocols' section under master Settings.`
+  },
+  {
+    id: 'rls-database-security',
+    title: 'Row-Level Security (RLS) Guide: User-Specific Partitioning & Data Isolation Policies',
+    category: 'security-admin',
+    readTime: '5 min read',
+    lastUpdated: 'June 21, 2026',
+    popularity: 5,
+    tags: ['rls', 'security', 'database', 'isolation', 'permissions', 'supabase', 'tenant'],
+    content: `Protecting contact leads and business transaction accounts is fully backed by real PostgreSQL design protocols. ProSpaces utilizes rigorous Row-Level Security (RLS) on database tables to guarantee multi-tenant branch privacy.
+
+How RLS protects your active workspace:
+• **Tenant-Level Filtering**: Every single query executed on CRM tables is automatically filtered through the authenticated user's active 'organization_id'. It is structurally impossible for separate companies to access your lead data.
+• **Role-Based Controls**: Custom database policies inspect if an actor's profile carries Agent, Manager, or Director authorizations before permitting mutations or file edits.
+• **Supervisor Level Override**: While sales agents are limited purely to personal contracts, managers and directors hold specialized overrides to coordinate broader regional teams.
+
+Notice an access alert? Run the **RLS Setup Guide** or click **Fix Invalid Org IDs** inside your Admin diagnostics suite to scan for and resolve profile mismatches instantly.`
+  },
+  {
+    id: 'messaging-hub-guide',
+    title: 'Unified Messaging Hub: Configuring Threaded Chats, Customer Rooms & Staff Notes',
+    category: 'contacts',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['messaging', 'chat', 'communications', 'thread', 'portal', 'internal-notes'],
+    content: `The ProSpaces Messaging Hub brings together client conversations, internal team channels, and secure portal-user threads into one interface. This eliminates the need for external chat programs.
+
+Best practices for managing the Hub:
+1. **Threaded Discussions**: Click 'Reply' to discuss specific tasks within message threads. This prevents main panels from becoming cluttered.
+2. **Confidential Staff Annotations**: Type your message and select the 'Internal Note' toggle. This creates a secure, yellow-shaded annotation in the discussion pane visible *only* to teammates, while remaining completely hidden from the client portal.
+3. **Convert Texts into Actions**: Received a message requesting an extra deck board or fixture update? Hover over the message clip and click **Create Follow-Up Task** to automatically generate a workspace task with original messages preserved.
+4. **Polling Intervals**: In development, active chat windows execute a state update check every 30 seconds to fetch inbound portal replies synchronously.`
+  },
+  {
+    id: 'background-imports-manager',
+    title: 'Configuring Background Imports, Document Repositories & Automated Job Processors',
+    category: 'security-admin',
+    readTime: '6 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['background', 'imports', 'jobs', 'onedrive', 'processing', 'queue', 'billing'],
+    content: `Importing massive contractor price books or bulk contacts takes high-performance handling. ProSpaces routes long-standing spreadsheet imports through a dedicated Background Job Queue to prevent slow browser sessions.
+
+Understanding asynchronous operations:
+• **The Job Pool Manager**: Go to the **Admin settings** dropdown and select **Background Manager**. Here you will see active, scheduled, and historically resolved batch workflows.
+• **OneDrive Synchronization**: Under **Documents**, connect your OneDrive directories. The background runner pulls design shapes and files every 30 minutes.
+• **Spreadsheet Recovery**: If a vendor inventory spreadsheet contains malformed pricing strings, the import processor pauses, records the mismatched row inside the background logs, and allows you to load corrected sheets.`
+  },
+  {
+    id: 'inventory-skus-optimization',
+    title: 'Managing High-Speed SKU Databases, Raw Material Inventories & Pricing Books',
+    category: 'contacts',
+    readTime: '5 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['inventory', 'sku', 'lumber', 'suppliers', 'pricing', 'diagnostic', 'index'],
+    content: `To build accurate estimates inside the 3D Planners, you can access an integrated, fast-loading raw materials list. Linking items to your active inventory ensures that changes in raw material costs update current bids dynamically.
+
+Optimizing material pricing and index lookups:
+1. View structural supplies in the **Inventory Space** section.
+2. **Ingest Excel Price Files**: Click **Import Inventory** inside the main Inventory manager to map distributor columns (SKU ID, Material, Thickness, Unit Price).
+3. **Run Inventory Diagnostics**: If specific deck hardware, steel roofing, or fasteners are missing from planners search, execute the **Inventory Index Fixer**. This runs a diagnostic wipe on outdated local SKU keys and repopulated lists.
+4. **Configure Dynamic Margins**: Define local markup percentages (e.g., 15% margin on lumber flashing) to auto-adjust quotes before presenting lines to the client.`
+  },
+  {
+    id: 'integrations-mail-calendar',
+    title: 'Multi-Account Sync Guide: Linking CalDAV Schedulers & SMTP Mail Outbox Hubs',
+    category: 'getting-started',
+    readTime: '4 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['email', 'calendar', 'oauth', 'setup', 'appointments', 'smtp'],
+    content: `To send branded quotes and calendar updates directly from your business identity, connect your email clients and calendar schedulers to your active representative slot.
+
+How to configure mail & schedules:
+• **Setup Custom Outboxes**: Under **Settings > SMTP Setup**, register your mail parameters or click the modern OAuth prompt (Workspace/O365) to delegate safe sending tokens.
+• **Synchronize Customer Portal Schedulers**: Connecting your corporate calendar allows prospective clients to view your availability. They can select appointment times, which sync with your central calendar in seconds.
+• **Set Up Auto-Reminders**: Enable notifications inside your **Appointments Space** to dispatch custom text/email alerts 24 hours before a designer inspects a structural site.`
+  },
+  {
+    id: 'kitchen-planner-layouts',
+    title: 'Utilizing the 3D Kitchen Planner: Creating Custom L-Shapes, Islands & Appliance Cuts',
+    category: 'planners',
+    readTime: '5 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 5,
+    tags: ['kitchen', 'design', 'planner', 'appliances', 'backsplash', 'cabinets'],
+    content: `Capture perfect design details using the built-in 3D Kitchen Planner. Build immersive, spatial mockups directly inside your client folder.
+
+Step-by-step layout design:
+1. Open the customer workspace folder and click **Design Spaces**.
+2. Select **Kitchen Planner** to open the 3D stage and design panel.
+3. **Room Dimensions**: Input room height and specify the layout orientation (L-Shape, G-Shape, Galley, or Single Wall with Island).
+4. **Appliance Cutouts**: Place standard-sized refrigerator, stove, and dishwasher slots into the 3D footprint.
+5. **Cabinet Configurations**: Click 'Add Upper/Lower Cabinets', choose species (Oak, Maple, or Painted Shaker), and configure backsplash tiling widths.
+6. **Material Callout Generation**: Click **Sync to Deal** to auto-generate corresponding material cost lines on your active estimate.`
+  },
+  {
+    id: 'tenant-billing-seats',
+    title: 'Scaling Operations: Managing Organization Tenants, Seat Licenses & Modules',
+    category: 'security-admin',
+    readTime: '5 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 4,
+    tags: ['tenants', 'organizations', 'seats', 'billing', 'subscription', 'modules'],
+    content: `ProSpaces is built to scale alongside your business operations. Our Organization Administrator panel allows you to customize features, toggle access slots, and review licenses.
+
+Key metrics to manage:
+• **Interactive Feature Toggles**: Keep workspace layouts simple by turning off irrelevant modules (e.g. disabling Garage or Roof Planners if you specialize solely in Kitchen redesigns). This is managed under **Admin > Modules Manager**.
+• **Agent Seats Allocation**: See how many active representative logins exist. Safely invite or terminate agent profiles to optimize your monthly enterprise licensing plan.
+• **Separate Division Tenancy**: For companies operating across multiple regions, establish independent sub-organizations. This isolates local accounts, while letting executives view master summaries.`
+  },
+  {
+    id: 'brand-theme-customization',
+    title: 'Theme Customization: Branded Client Portals & Accent Palette Presets',
+    category: 'getting-started',
+    readTime: '3 min read',
+    lastUpdated: 'June 22, 2026',
+    popularity: 3,
+    tags: ['theme', 'palette', 'brand', 'design-system', 'custom-portal', 'logo'],
+    content: `Provide a consistent visual experience across your corporate portal and estimator interfaces. You can easily modify both your internal design aesthetics and customer-facing viewports.
+
+Adjusting your brand aesthetics:
+1. Navigate to **Settings > Theme System Configuration** inside your Administrator dashboard.
+2. Choose from curated design presets, including **Modern Carbon**, **Slate Minimalist**, **Warm Timber**, and **Steel Blue**.
+3. **Hex Color Specificity**: Add your unique brand hex values to keep client portals matching your actual business website.
+4. **Optimized Logo Ingestion**: Upload transparent PNG files. The CRM's customer portal uses these graphics to label external magic-link portals, maintaining high quality for client exports.`
   }
 ];
 
@@ -372,19 +501,95 @@ export function KnowledgeBase({
 
     // Contextual matching from KB articles
     setTimeout(() => {
-      const q = userMsg.toLowerCase();
+      const q = userMsg.toLowerCase().trim();
       let answerText = '';
 
-      // Match keywords in articles
-      const matchedArticle = KNOWLEDGE_ARTICLES.find(art => 
-        art.title.toLowerCase().includes(q) || 
-        art.tags.some(t => t.toLowerCase().includes(q)) ||
-        art.content.toLowerCase().includes(q)
-      );
+      // 1. Synonym expansions
+      const searchTerms = [q];
+      if (q.includes('quote') || q.includes('quotes') || q.includes('estimator') || q.includes('estimation') || q.includes('pricing') || q.includes('bid') || q.includes('proposal')) {
+        searchTerms.push('estimates', 'bids', 'deals', 'proposals', 'pricing');
+      }
+      if (q.includes('import') || q.includes('csv') || q.includes('excel') || q.includes('contacts') || q.includes('upload') || q.includes('spreadsheet') || q.includes('bulk')) {
+        searchTerms.push('import', 'csv', 'bulk', 'mapping', 'contacts', 'spreadsheet');
+      }
+      if (q.includes('invite') || q.includes('user') || q.includes('users') || q.includes('team') || q.includes('permission') || q.includes('permissions') || q.includes('role') || q.includes('roles') || q.includes('staff')) {
+        searchTerms.push('users', 'roles', 'team', 'permissions', 'invite');
+      }
+      if (q.includes('portal') || q.includes('client') || q.includes('customer') || q.includes('subdomain') || q.includes('e-signature') || q.includes('approval')) {
+        searchTerms.push('portal', 'client', 'customer', 'approvals', 'signatures');
+      }
+      if (q.includes('field') || q.includes('fields') || q.includes('attribute') || q.includes('attributes') || q.includes('niche') || q.includes('customize')) {
+        searchTerms.push('fields', 'customization', 'attributes', 'dynamic');
+      }
+      if (q.includes('inventory') || q.includes('sku') || q.includes('lumber') || q.includes('material') || q.includes('materials') || q.includes('price book')) {
+        searchTerms.push('inventory', 'sku', 'lumber', 'pricing', 'material');
+      }
+      if (q.includes('kitchen') || q.includes('cabinate') || q.includes('cabinet') || q.includes('appliance') || q.includes('island')) {
+        searchTerms.push('kitchen', 'design', 'cabinets', 'appliances', 'backsplash');
+      }
+      if (q.includes('theme') || q.includes('brand') || q.includes('color') || q.includes('colors') || q.includes('logo') || q.includes('preset') || q.includes('custom-portal')) {
+        searchTerms.push('theme', 'palette', 'brand', 'logo', 'custom-portal');
+      }
+      if (q.includes('rls') || q.includes('isolation') || q.includes('tenant') || q.includes('row level security') || q.includes('security') || q.includes('database')) {
+        searchTerms.push('rls', 'security', 'database', 'isolation', 'tenant');
+      }
+      if (q.includes('log') || q.includes('logs') || q.includes('audit') || q.includes('compliance')) {
+        searchTerms.push('security', 'audit', 'logs', 'compliance', 'admin');
+      }
 
-      if (matchedArticle) {
-        answerText = `Great question! Based on our Article "${matchedArticle.title}":\n\n${matchedArticle.content.slice(0, 300)}...\n\n👉 Read the complete guide titled "${matchedArticle.title}" above for full step-by-step instructions!`;
-      } else if (q.includes('hello') || q.includes('hi ') || q.includes('hey')) {
+      // 2. Tokenize original query to match individual keywords
+      const stopWords = new Set(['how', 'do', 'i', 'create', 'a', 'the', 'to', 'in', 'and', 'of', 'about', 'for', 'with', 'is', 'on', 'can', 'what', 'you', 'me', 'my', 'we', 'our', 'help', 'with']);
+      const tokens = q.split(/[\s,.\-?/!]+/).filter(tok => tok.length > 2 && !stopWords.has(tok));
+
+      // Add tokens to search terms
+      tokens.forEach(tok => {
+        if (!searchTerms.includes(tok)) searchTerms.push(tok);
+      });
+
+      // 3. Score articles
+      let bestArticle: typeof KNOWLEDGE_ARTICLES[0] | null = null;
+      let maxScore = 0;
+
+      KNOWLEDGE_ARTICLES.forEach(art => {
+        let score = 0;
+
+        // Direct phrase check has extreme priority
+        if (art.title.toLowerCase().includes(q) || art.content.toLowerCase().includes(q)) {
+          score += 150;
+        }
+
+        // Full tag query match
+        art.tags.forEach(tag => {
+          if (q.includes(tag.toLowerCase())) {
+            score += 50;
+          }
+        });
+
+        // Check individual search terms
+        searchTerms.forEach(term => {
+          const lowerTitle = art.title.toLowerCase();
+          const lowerContent = art.content.toLowerCase();
+
+          if (lowerTitle.includes(term)) {
+            score += 30; // Strong match on title keywords
+          }
+          if (art.tags.some(t => t.toLowerCase() === term)) {
+            score += 20; // Match on actual tag
+          }
+          if (lowerContent.includes(term)) {
+            score += 5; // Moderate match on body content
+          }
+        });
+
+        if (score > maxScore) {
+          maxScore = score;
+          bestArticle = art;
+        }
+      });
+
+      if (bestArticle && maxScore >= 15) {
+        answerText = `Great question! Based on our Article **"${bestArticle.title}"**:\n\n${bestArticle.content.slice(0, 380)}...\n\n👉 **Read the complete guide titled "${bestArticle.title}"** above for full step-by-step instructions!`;
+      } else if (q.includes('hello') || q.includes('hi ') || q.includes('hey') || q.includes('greetings')) {
         answerText = "Hello! 👋 Welcome to ProSpaces Support. How can I assist you with your workspace setups today? Try asking about 'estimates', 'custom fields', 'invite users', or 'customer portal'.";
       } else if (q.includes('creator') || q.includes('who built') || q.includes('who are you')) {
         answerText = "I am the ProSpaces system assistant, designed to securely map support handbooks to your questions in real time.";
@@ -412,13 +617,11 @@ export function KnowledgeBase({
             {/* Logo Branding */}
             <div 
               onClick={() => setActiveSubTab('kb')}
-              className="flex items-center gap-2 cursor-pointer select-none group"
+              className="flex items-center gap-3 cursor-pointer select-none group"
             >
-              <div className="h-6 w-6 rounded-full bg-white text-[#1E6FD9] font-black flex items-center justify-center text-xs tracking-tighter shadow-sm transition-transform duration-300 group-hover:scale-105">
-                P
-              </div>
-              <span className="font-sans font-black tracking-widest text-xs sm:text-sm uppercase text-blue-100">
-                Help
+              <Logo size="sm" showText={false} className="h-8 w-auto shrink-0 transition-transform duration-300 group-hover:scale-105 bg-white p-1 rounded-md" />
+              <span className="font-sans font-black tracking-widest text-xs sm:text-sm uppercase text-white">
+                Help Center
               </span>
             </div>
 
@@ -466,12 +669,8 @@ export function KnowledgeBase({
             </nav>
           </div>
 
-          {/* Right Search minimal launcher */}
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/15 transition-all flex items-center justify-center text-white cursor-pointer" title="Search Portal Launcher">
-              <Search className="h-4 w-4" />
-            </div>
-          </div>
+          {/* Right spacer for header layout symmetry */}
+          <div className="w-8 h-8" />
         </header>
       ) : (
         /* Compact inline subtabs inside embedded view */
