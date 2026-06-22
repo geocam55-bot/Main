@@ -31,7 +31,7 @@ export function MultiDeviceMockup() {
       <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-emerald-200/30 rounded-full blur-2xl -z-10" />
       
       {/* ── 1. LAPTOP MOCKUP (BASE) ── */}
-      <div className="relative w-[92%] sm:w-[94%] left-[4%] sm:left-[3%] top-[2%] transition-all duration-500 ease-out group-hover:scale-[1.01]">
+      <div className="relative w-[92%] sm:w-[94%] top-[2%] transition-all duration-500 ease-out group-hover:scale-[1.01]">
         
         {/* Screen Frame Bezel */}
         <div className="bg-[#1E293B] rounded-2xl sm:rounded-3xl p-1.5 sm:p-2.5 shadow-2xl border border-slate-700/50 relative overflow-hidden flex flex-col">
@@ -307,7 +307,7 @@ export function MultiDeviceMockup() {
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.35, duration: 0.5, type: 'spring', stiffness: 90 }}
-        className="absolute left-[3%] sm:left-[4%] bottom-[7%] sm:bottom-[10%] w-[150px] xs:w-[170px] sm:w-[220px] aspect-[9/18.5] bg-[#0F172A] rounded-[24px] sm:rounded-[36px] p-1.5 sm:p-2.5 shadow-2xl border border-slate-700/50 hover:translate-y-[-6px] hover:scale-[1.04] transition-all duration-300 z-20 cursor-grab active:cursor-grabbing"
+        className="absolute left-[3%] sm:left-[4%] bottom-[2%] w-[85px] xs:w-[100px] sm:w-[130px] md:w-[155px] lg:w-[175px] aspect-[9/18.5] bg-[#0F172A] rounded-[14px] sm:rounded-[28px] p-0.5 sm:p-2 shadow-2xl border border-slate-700/50 hover:translate-y-[-6px] hover:scale-[1.04] transition-all duration-300 z-20 cursor-grab active:cursor-grabbing"
       >
         {/* Phone Speaker & Dynamic Island Notch */}
         <div className="absolute top-2.5 sm:top-3.5 left-1/2 -translate-x-1/2 h-4 w-12 bg-black rounded-lg flex items-center justify-center p-0.5 z-30">
@@ -316,7 +316,7 @@ export function MultiDeviceMockup() {
         </div>
 
         {/* Smartphone Screen Inner Frame */}
-        <div className="w-full h-full bg-slate-50 text-slate-800 rounded-[18px] sm:rounded-[28px] overflow-hidden flex flex-col relative select-none font-sans text-[7px] sm:text-xs">
+        <div className="w-full h-full bg-slate-50 text-slate-800 rounded-[12px] sm:rounded-[24px] overflow-hidden flex flex-col relative select-none font-sans text-[7px] sm:text-xs">
           
           {/* Mobile Top Status Row */}
           <div className="p-3 pb-1 pt-4 sm:pt-6 sm:p-4 bg-slate-100 font-bold font-mono text-[7px] sm:text-[9.5px] flex justify-between items-center text-slate-400 shrink-0">
