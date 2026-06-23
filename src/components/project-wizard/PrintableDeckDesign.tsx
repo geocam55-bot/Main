@@ -3,6 +3,7 @@ import { DeckConfig } from '../../types/deck';
 import { Deck3DRenderer } from '../deck/Deck3DRenderer';
 import { MaterialsList } from '../deck/MaterialsList';
 import { DeckMaterials } from '../../types/deck';
+import { DeckCanvas } from '../deck/DeckCanvas';
 
 interface PrintableDeckDesignProps {
   config: DeckConfig;
@@ -98,15 +99,24 @@ export function PrintableDeckDesign({
         </div>
       </div>
 
+      {/* 2D Blueprint Plans & Elevations */}
+      <div className="mb-6 break-before-page">
+        <h2 className="text-lg font-bold text-foreground mb-3">2D Blueprint Plans & Elevations</h2>
+        <div className="border border-border p-4 bg-background">
+          <DeckCanvas config={config} />
+        </div>
+      </div>
+
       {/* Plan View & Elevation */}
-      <div className="mb-6">
+      <div className="mb-6 break-before-page">
         <h2 className="text-lg font-bold text-foreground mb-3">3D Deck Visualization</h2>
         <div className="w-full h-[600px] border border-border bg-gradient-to-br from-sky-100 to-blue-200">
           {snapshotUrl ? (
             <img src={snapshotUrl} alt="3D Deck Snapshot" className="w-full h-full object-contain" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-              <p>Switch to 3D view before printing to see 3D visualization</p>
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground p-8 text-center">
+              <p className="font-semibold">3D snapshot is generated on-demand when switching to the 3D viewer.</p>
+              <p className="text-xs mt-1 text-muted-foreground">To include the 3D render in your printout, please click "3D" on the design canvas page once before printing.</p>
             </div>
           )}
         </div>

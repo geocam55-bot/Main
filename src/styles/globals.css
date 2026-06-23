@@ -55,6 +55,8 @@
   html {
     margin: 0 !important;
     padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   body {
@@ -62,15 +64,25 @@
     overflow: visible !important;
     padding: 0 !important;
     margin: 0 !important;
+    height: auto !important;
   }
 
-  /* Add substantial top padding to main content */
-  #root {
-    padding-top: 0.5in !important;
-  }
-
-  #root > div {
-    padding-top: 0.5in !important;
+  /* Reset all outer containers so the content flows naturally over pages */
+  #root, 
+  #root > div, 
+  main, 
+  .h-screen, 
+  .min-h-screen, 
+  .overflow-hidden, 
+  .overflow-auto,
+  .flex-1 {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
+    padding-top: 0 !important;
   }
 
   /* Hide scrollbars */
@@ -84,8 +96,9 @@
     max-height: none !important;
   }
 
-  header {
-    background: white !important;
+  /* Hide global navigation header completely */
+  header, nav {
+    display: none !important;
   }
 
   .print\:hidden {
