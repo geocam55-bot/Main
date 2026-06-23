@@ -1094,7 +1094,7 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
   };
 
   return (
-    <div className="space-y-6 print:space-y-2 print:break-before-page">
+    <div className="space-y-6 print:space-y-2">
       {/* Main Top View */}
       <div className="bg-muted rounded-lg p-6 border border-border print:bg-background print:border-black print:p-2 print:rounded-none print:break-inside-avoid">
         <canvas
@@ -1107,7 +1107,7 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
             handlePointerUp(e);
           }}
           onClick={handleCanvasClick}
-          className="w-full bg-background rounded border border-border print:border-black print:shadow-none print:rounded-none print:scale-[0.65] print:origin-top aspect-[1.4] touch-none select-none"
+          className="w-full bg-background rounded border border-border print:border-black print:shadow-none print:rounded-none aspect-[1.4] touch-none select-none"
         />
       </div>
 
@@ -1117,14 +1117,14 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
           <h3 className="font-semibold text-foreground mb-3 print:mb-1 print:text-base">Front Elevation</h3>
           <canvas
             ref={frontViewRef}
-            className="w-full bg-background rounded border border-border print:border-black print:shadow-none print:rounded-none print:scale-[0.65] print:origin-top aspect-[1.4]"
+            className="w-full bg-background rounded border border-border print:border-black print:shadow-none print:rounded-none aspect-[1.4]"
           />
         </div>
         <div className="bg-muted rounded-lg p-4 border border-border print:bg-background print:border-black print:p-2 print:rounded-none print:break-inside-avoid">
           <h3 className="font-semibold text-foreground mb-3 print:mb-1 print:text-base">Side Elevation</h3>
           <canvas
             ref={sideViewRef}
-            className="w-full bg-background rounded border border-border print:border-black print:shadow-none print:rounded-none print:scale-[0.65] print:origin-top aspect-[1.4]"
+            className="w-full bg-background rounded border border-border print:border-black print:shadow-none print:rounded-none aspect-[1.4]"
           />
         </div>
       </div>

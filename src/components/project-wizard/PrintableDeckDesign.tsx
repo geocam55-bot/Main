@@ -29,7 +29,7 @@ export function PrintableDeckDesign({
   // Materials tracked for print rendering
 
   return (
-    <div className="hidden print:block print:pt-8">
+    <div className="deck-planner-print-container">
       {/* Header */}
       <div className="border-b-2 border-black pb-4 mb-6 print:mt-8">
         <h1 className="text-3xl font-bold mb-2">Deck Plan & Materials List</h1>
@@ -138,7 +138,7 @@ export function PrintableDeckDesign({
             </div>
           </div>
         )}
-        <div className="border border-black">
+        <div>
           <MaterialsList materials={materials} compact={false} />
         </div>
       </div>

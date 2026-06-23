@@ -48,3 +48,189 @@ html, body, #root {
   color: var(--color-text, #0f172a);
   min-height: 100vh;
 }
+
+/* Custom class for Printable Deck Planner hidden by default on screen */
+.deck-planner-print-container {
+  display: none !important;
+}
+
+/* Print Styles for Deck Planner and general documents */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.6in 0.6in 0.6in 0.6in;
+  }
+
+  html, body {
+    background: white !important;
+    color: black !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Reset all outer layouts so containers fit multiple pages naturally, preventing flex/scroll truncation */
+  #root, 
+  #root > div,
+  .theme-provider,
+  [class*="ThemeProvider"],
+  main, 
+  .h-screen, 
+  .min-h-screen, 
+  .overflow-hidden, 
+  .overflow-auto,
+  .flex-1 {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide global navigation, menus, and on-screen controls completely */
+  header, nav, footer, aside, .print-hidden, button, [className*="print-hidden"] {
+    display: none !important;
+  }
+
+  /* Core print page-break helpers */
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  /* Support both styled and custom page break classes */
+  .break-before-page,
+  .print\:break-before-page {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  .break-inside-avoid,
+  .print\:break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Show custom printable container on print and style beautifully */
+  .deck-planner-print-container {
+    display: block !important;
+    background: white !important;
+    color: black !important;
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Restore essential display categories inside our printable container */
+  .deck-planner-print-container .grid {
+    display: grid !important;
+  }
+  
+  .deck-planner-print-container .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  
+  .deck-planner-print-container .grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  
+  .deck-planner-print-container .gap-4 {
+    gap: 1rem !important;
+  }
+
+  .deck-planner-print-container .gap-x-6 {
+    column-gap: 1.5rem !important;
+  }
+
+  .deck-planner-print-container .gap-y-3 {
+    row-gap: 0.75rem !important;
+  }
+
+  .deck-planner-print-container .flex {
+    display: flex !important;
+  }
+  
+  .deck-planner-print-container .justify-between {
+    justify-content: space-between !important;
+  }
+
+  .deck-planner-print-container .items-center {
+    align-items: center !important;
+  }
+
+  .deck-planner-print-container .text-foreground {
+    color: black !important;
+  }
+
+  /* Force visibility of canvases, scale naturally without transforming/cropping */
+  canvas {
+    display: block !important;
+    max-width: 100% !important;
+    height: auto !important;
+    transform: none !important;
+    margin: 0 auto !important;
+  }
+
+  /* Better table and Bill of Materials layout printing */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    border: 1px solid #000000 !important;
+  }
+  
+  thead {
+    display: table-header-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  tr, td, th {
+    border: 1px solid #e2e8f0 !important;
+  }
+  
+  th {
+    background-color: #f1f5f9 !important;
+    color: black !important;
+    font-weight: 600 !important;
+    text-shadow: none !important;
+  }
+
+  td, th {
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+  }
+
+  /* Remove background gradient wrappers on print */
+  .bg-gradient-to-br {
+    background: none !important;
+    background-color: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  /* Remove scrollbars from print completely */
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+  
+  scrollbar-width: none !important;
+}
+

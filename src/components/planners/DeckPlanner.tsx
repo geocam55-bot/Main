@@ -341,7 +341,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
       </div>
 
       {/* Content */}
-      <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 ${isSidebarOpen ? 'max-w-7xl' : 'max-w-[1600px] transition-all duration-300'}`}>
+      <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 print:hidden ${isSidebarOpen ? 'max-w-7xl' : 'max-w-[1600px] transition-all duration-300'}`}>
         {activeTab === 'design' && (
           <div className="flex flex-col lg:flex-row gap-6">
             {isSidebarOpen && (
