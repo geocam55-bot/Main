@@ -272,7 +272,7 @@ export function MultiDeviceMockup() {
                   <span className="text-[7px] sm:text-[9.5px] font-mono text-slate-500 font-semibold uppercase">ProSpaces AI</span>
                 </div>
                 <div className="text-[8px] sm:text-xs text-slate-300">
-                  Write a follow-up email that we has a discount code <span className="font-bold text-yellow-400 font-mono">WOW15</span>.
+                  Write a follow-up email that includes a discount code <span className="font-bold text-yellow-400 font-mono">WOW15</span>.
                 </div>
                 
                 {/* Generation bar animation */}
