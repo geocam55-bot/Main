@@ -182,6 +182,13 @@ export const buildRowsToDelete = (
 };
 
 // Helper: generate length-specific entries for a lumber category
+const uniquifyCategory = (categoryGroup: string, category: string): string => {
+  if (['Railing', 'Spindles/Pickets', 'Posts'].includes(categoryGroup)) {
+    return `${categoryGroup} - ${category}`;
+  }
+  return category;
+};
+
 const lumberLengthEntries = (baseName: string): string[] =>
   STANDARD_LUMBER_LENGTHS.map((len) => `${baseName} (${len}')`);
 
@@ -218,8 +225,9 @@ const aluminumDeckCategories = {
   'Framing - Posts by Length': lumberLengthEntries('Posts'),
   'Decking': ['Decking Boards', 'Stair Treads'],
   'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
-  'Railing': ['Aluminum Top & Bottom Rail', 'Picket Packages', 'Clear Glass Pickets (CDG-6)', 'Angled Stair Glass Pickets (CAG-6)', 'Aluminum Posts', 'Aluminum Stair Posts'],
-  'Railing - Tempered Glass Panels by Size': aluminumGlassPanelEntries(),
+  'Railing': ["6'", "8'", "10'", "12'"],
+  'Spindles/Pickets': ["6'", "8'", "10'", "12'", "Stair"],
+  'Posts': ["Inline", "Corner", "End", "Stair", "Angle", "Gate"],
   'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws', 'Post Base Plate Cover', 'Decorative Post Cap', 'Universal Angle Bracket (UAB)', 'Vinyl Insert for Glass (GVI)', 'Rubber Blocks for Glass (GRB-10)', 'Rail Support Legs (SRSL)', 'Lag Bolts (post mounting)', 'Self Drilling Screws'],
 };
 
@@ -666,7 +674,8 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
   const isAluminumColorSensitiveCategory = (sectionName: string, category: string): boolean => {
     return selectedDeckRailingType === 'aluminum' && (
       sectionName === 'Railing'
-      || sectionName === 'Railing - Tempered Glass Panels by Size'
+      || sectionName === 'Spindles/Pickets'
+      || sectionName === 'Posts'
       || (sectionName === 'Hardware' && ALUMINUM_ONLY_HARDWARE_CATEGORIES.has(category))
     );
   };
@@ -686,7 +695,8 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
 
     const merged = { ...baseCategories };
     merged['Railing'] = aluminumDeckCategories['Railing'];
-    merged['Railing - Tempered Glass Panels by Size'] = aluminumDeckCategories['Railing - Tempered Glass Panels by Size'];
+    merged['Spindles/Pickets'] = aluminumDeckCategories['Spindles/Pickets'];
+    merged['Posts'] = aluminumDeckCategories['Posts'];
 
     const baseHardware = baseCategories['Hardware'] || [];
     const mergedHardware = [
@@ -1122,22 +1132,23 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {categories.map((category) => {
                         const effectiveMaterialType = getDeckEffectiveMaterialType(sectionName, category);
-                        const cfValue = showCF ? getOrgCF('deck', effectiveMaterialType, category) : 1;
+                        const uniqueCategory = uniquifyCategory(sectionName, category);
+                        const cfValue = showCF ? getOrgCF('deck', effectiveMaterialType, uniqueCategory) : 1;
                         return (
                           <div key={category} className="space-y-2">
                             <Label htmlFor={`deck-${selectedDeckType}-${category}`} className="text-foreground">{category}</Label>
                             <InventoryCombobox
                               id={`deck-${selectedDeckType}-${category}`}
                               items={inventoryItems}
-                              value={getDefaultValue('deck', effectiveMaterialType, category)}
-                              onChange={(value) => handleDefaultChange('deck', effectiveMaterialType, category, value)}
+                              value={getDefaultValue('deck', effectiveMaterialType, uniqueCategory)}
+                              onChange={(value) => handleDefaultChange('deck', effectiveMaterialType, uniqueCategory, value)}
                               placeholder="Select inventory item..."
                             />
                             {showCF && (
                               <div className="flex items-center gap-2">
                                 <Label className="text-xs text-muted-foreground whitespace-nowrap">CF:</Label>
                                 {(() => {
-                                  const cfKey = getCFKey('deck', effectiveMaterialType, category);
+                                  const cfKey = getCFKey('deck', effectiveMaterialType, uniqueCategory);
                                   const editVal = cfEditValues[cfKey];
                                   const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(cfValue));
                                   return (
@@ -1146,8 +1157,8 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                                         type="text"
                                         inputMode="decimal"
                                         value={displayVal}
-                                        onChange={(e) => handleCFInputChange('deck', effectiveMaterialType, category, e.target.value)}
-                                        onBlur={() => handleCFInputBlur('deck', effectiveMaterialType, category)}
+                                        onChange={(e) => handleCFInputChange('deck', effectiveMaterialType, uniqueCategory, e.target.value)}
+                                        onBlur={() => handleCFInputBlur('deck', effectiveMaterialType, uniqueCategory)}
                                         placeholder="1"
                                         className="h-7 w-24 text-xs text-foreground"
                                         title="Conversion Factor: raw qty × CF = purchase qty. E.g., 25/box → CF=0.04. Enter any decimal."

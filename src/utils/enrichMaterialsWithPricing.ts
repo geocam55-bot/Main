@@ -420,26 +420,29 @@ export async function enrichMaterialsWithT1Pricing(
             inventoryItemId = tryMatch('post anchors');
           } else if (description.includes('decking') || description.includes('deck board')) {
             inventoryItemId = tryLengthFirst('decking boards');
-          } else if (description.includes('railing post')) {
-            inventoryItemId = tryMatch('railing posts');
-          } else if (description.includes('aluminum posts')) {
-            inventoryItemId = tryMatch('aluminum posts');
-          } else if (description.includes('aluminum stair posts')) {
-            inventoryItemId = tryMatch('aluminum stair posts');
-          } else if (description.includes('aluminum top & bottom rail')) {
-            inventoryItemId = tryMatch('aluminum top & bottom rail');
-          } else if (description.includes('top rail') || description.includes('cap rail')) {
-            inventoryItemId = tryMatch('railing top rail');
-          } else if (description.includes('bottom rail')) {
-            inventoryItemId = tryMatch('railing bottom rail');
+          } else if (description.includes('aluminum top & bottom rail') || description.includes('top & bottom rail')) {
+            let lengthKey = "6'";
+            if (description.includes('6 ft') || description.includes('(6\'')) lengthKey = "6'";
+            else if (description.includes('8 ft') || description.includes('(8\'')) lengthKey = "8'";
+            else if (description.includes('10 ft') || description.includes('(10\'')) lengthKey = "10'";
+            else if (description.includes('12 ft') || description.includes('(12\'')) lengthKey = "12'";
+            inventoryItemId = tryMatch(`railing - ${lengthKey}`);
+          } else if (description.includes('picket package')) {
+            if (description.toLowerCase().includes('stair')) {
+              inventoryItemId = tryMatch('spindles/pickets - stair');
+            } else {
+              inventoryItemId = tryMatch("spindles/pickets - 6'");
+            }
+          } else if (description.includes('clear glass pickets')) {
+            inventoryItemId = tryMatch("spindles/pickets - 6'");
+          } else if (description.includes('angled stair glass pickets')) {
+            inventoryItemId = tryMatch("spindles/pickets - stair");
+          } else if (description.toLowerCase().includes('aluminum stair posts') || description.toLowerCase().includes('stair post')) {
+            inventoryItemId = tryMatch('posts - stair');
+          } else if (description.toLowerCase().includes('aluminum posts') || description.toLowerCase().includes('railing post')) {
+            inventoryItemId = tryMatch('posts - inline');
           } else if (description.includes('tempered glass panel')) {
             inventoryItemId = tryMatch(description);
-          } else if (description.includes('clear glass pickets (cdg-6)')) {
-            inventoryItemId = tryMatch('clear glass pickets (cdg-6)');
-          } else if (description.includes('angled stair glass pickets (cag-6)')) {
-            inventoryItemId = tryMatch('angled stair glass pickets (cag-6)');
-          } else if (description.includes('picket package')) {
-            inventoryItemId = tryMatch('picket packages');
           } else if (description.includes('post base plate cover')) {
             inventoryItemId = tryMatch('post base plate cover');
           } else if (description.includes('decorative post cap')) {

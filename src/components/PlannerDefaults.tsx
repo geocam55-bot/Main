@@ -119,8 +119,9 @@ const aluminumDeckCategories = {
   'Framing - Posts by Length': lumberLengthEntries('Posts'),
   'Decking': ['Decking Boards', 'Stair Treads'],
   'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
-  'Railing': ['Aluminum Top & Bottom Rail', 'Picket Packages', 'Clear Glass Pickets (CDG-6)', 'Angled Stair Glass Pickets (CAG-6)', 'Aluminum Posts', 'Aluminum Stair Posts'],
-  'Railing - Tempered Glass Panels by Size': aluminumGlassPanelEntries(),
+  'Railing': ["6'", "8'", "10'", "12'"],
+  'Spindles/Pickets': ["6'", "8'", "10'", "12'", "Stair"],
+  'Posts': ["Inline", "Corner", "End", "Stair", "Angle", "Gate"],
   'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws', 'Post Base Plate Cover', 'Decorative Post Cap', 'Universal Angle Bracket (UAB)', 'Vinyl Insert for Glass (GVI)', 'Rubber Blocks for Glass (GRB-10)', 'Rail Support Legs (SRSL)', 'Lag Bolts (post mounting)', 'Self Drilling Screws'],
 };
 
@@ -134,6 +135,13 @@ const ALUMINUM_ONLY_HARDWARE_CATEGORIES = new Set([
   'Lag Bolts (post mounting)',
   'Self Drilling Screws',
 ]);
+
+const uniquifyCategory = (categoryGroup: string, category: string): string => {
+  if (['Railing', 'Spindles/Pickets', 'Posts'].includes(categoryGroup)) {
+    return `${categoryGroup} - ${category}`;
+  }
+  return category;
+};
 
 /** Industry-standard suggested conversion factors (ft per piece → CF = 1/length).
  *  Used as final fallback when no org or user CF is set. */
@@ -403,7 +411,8 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
       && selectedRailingType === 'aluminum'
       && (
         categoryGroup === 'Railing'
-        || categoryGroup === 'Railing - Tempered Glass Panels by Size'
+        || categoryGroup === 'Spindles/Pickets'
+        || categoryGroup === 'Posts'
         || (categoryGroup === 'Hardware' && ALUMINUM_ONLY_HARDWARE_CATEGORIES.has(category))
       );
   };
@@ -423,7 +432,8 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
 
     const merged = { ...baseCategories };
     merged['Railing'] = aluminumDeckCategories['Railing'];
-    merged['Railing - Tempered Glass Panels by Size'] = aluminumDeckCategories['Railing - Tempered Glass Panels by Size'];
+    merged['Spindles/Pickets'] = aluminumDeckCategories['Spindles/Pickets'];
+    merged['Posts'] = aluminumDeckCategories['Posts'];
 
     const baseHardware = baseCategories['Hardware'] || [];
     const mergedHardware = [
@@ -864,10 +874,11 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                     {items.map((category) => {
                       const baseMatType = selectedMaterialType === 'default' ? null : selectedMaterialType;
                       const matType = getEffectiveMaterialType(baseMatType, categoryGroup, category);
-                      const currentValue = getDefaultValue(matType, category);
-                      const orgValue = getOrgDefaultValue(matType, category);
+                      const uniqueCategory = uniquifyCategory(categoryGroup, category);
+                      const currentValue = getDefaultValue(matType, uniqueCategory);
+                      const orgValue = getOrgDefaultValue(matType, uniqueCategory);
                       const isCustomized = currentValue !== orgValue;
-                      const cfValue = showCF ? getConversionFactor(matType, category) : 1;
+                      const cfValue = showCF ? getConversionFactor(matType, uniqueCategory) : 1;
 
                       return (
                         <div key={category} className="space-y-2">
@@ -881,7 +892,7 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                             id={`${plannerType}-${selectedMaterialType}-${category}`}
                             items={inventoryItems}
                             value={currentValue}
-                            onChange={(value) => handleDefaultChange(matType, category, value)}
+                            onChange={(value) => handleDefaultChange(matType, uniqueCategory, value)}
                             placeholder="Select inventory item..."
                           />
                           {showCF && (
@@ -890,10 +901,10 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                                 CF:
                               </Label>
                               {(() => {
-                                const cfKey = getCFKey(matType, category);
+                                const cfKey = getCFKey(matType, uniqueCategory);
                                 const editVal = cfEditValues[cfKey];
-                                const userHasCF = hasUserCF(matType, category);
-                                const orgCFVal = getOrgCF(matType, category);
+                                const userHasCF = hasUserCF(matType, uniqueCategory);
+                                const orgCFVal = getOrgCF(matType, uniqueCategory);
                                 const isInherited = !userHasCF && orgCFVal !== 1;
                                 const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(cfValue));
                                 return (
@@ -903,8 +914,8 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                                       type="text"
                                       inputMode="decimal"
                                       value={displayVal}
-                                      onChange={(e) => handleCFInputChange(matType, category, e.target.value)}
-                                      onBlur={() => handleCFInputBlur(matType, category)}
+                                      onChange={(e) => handleCFInputChange(matType, uniqueCategory, e.target.value)}
+                                      onBlur={() => handleCFInputBlur(matType, uniqueCategory)}
                                       placeholder={orgCFVal !== 1 ? String(orgCFVal) : '1'}
                                       className={`h-7 w-24 text-xs ${isInherited ? 'border-amber-300 bg-amber-50/50' : ''}`}
                                       title="Conversion Factor: raw qty × CF = purchase qty. E.g., 25 screws/box → CF=0.04 (1÷25). Enter any decimal."
