@@ -1599,6 +1599,15 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               finalCleanedRec.name = "Unnamed Contact";
             }
           }
+          if (table === "inventory" && !finalCleanedRec.name) {
+            const firstLineDesc = finalCleanedRec.description ? String(finalCleanedRec.description).split('\n')[0].trim() : '';
+            const fallbackName = firstLineDesc || (finalCleanedRec.sku ? `Product ${finalCleanedRec.sku}` : '');
+            if (fallbackName) {
+              finalCleanedRec.name = fallbackName;
+            } else {
+              finalCleanedRec.name = "Unnamed Product";
+            }
+          }
           if (table === "contacts" && !finalCleanedRec.name) continue;
           if (table === "inventory" && !finalCleanedRec.sku) continue;
           if (table === "opportunities" && !finalCleanedRec.title) continue;
@@ -1658,7 +1667,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         const cleanedRecordsList = Array.from(cleanedRecordsMap.values());
 
         // Exec chunked self-healing upserts
-        const chunkSize = 1000;
+        const chunkSize = 150;
         let insertCount = 0;
         let errorCount = 0;
         let lastErrDetail = "";
@@ -1696,6 +1705,10 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
             }
 
             const msg = upsertErr.message || "";
+            const errCode = upsertErr.code || "";
+            const errDetails = upsertErr.details || "";
+            console.warn(`[Scheduler Supabase] [Upsert Error Details] Attempt ${attempts} failed: message="${msg}", code="${errCode}", details="${errDetails}"`);
+
             let colToExclude: string | null = null;
 
             const match1 = msg.match(/Could not find the '([^']+)' column/i);
