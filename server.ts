@@ -373,20 +373,25 @@ export async function syncOneDriveFileOnBackend(task: any) {
     throw new Error("No connected OAuth accounts found on the server. Please connect under connected Microsoft OneDrive panel first.");
   }
 
-  // 2. Filter for MS accounts
+  // 2. Filter and sort MS accounts
+  // We sort accounts by connectedAt in descending order (newest first). This ensures that if there are duplicate or old accounts, we always try the most recent ones first.
   const accounts = kvData
     .map((item: any) => ({ ...item.value, kvKey: item.key }))
-    .filter((a: any) => a.provider === 'outlook');
+    .filter((a: any) => a.provider === 'outlook')
+    .sort((a: any, b: any) => new Date(b.connectedAt || 0).getTime() - new Date(a.connectedAt || 0).getTime());
 
   if (accounts.length === 0) {
     throw new Error("No connected Microsoft OneDrive accounts found in database records.");
   }
 
-  // 3. Match user account
+  // 3. Find candidates. If creatorStr is specified and matches any account email, prioritize those first, but keep them sorted by connectedAt descending.
   const creatorStr = String(task.creator || '').toLowerCase().trim();
-  const selectedAccount = accounts.find((acc: any) => 
+  const matchingAccounts = accounts.filter((acc: any) => 
     String(acc.email || '').toLowerCase().trim() === creatorStr
-  ) || accounts[0];
+  );
+  
+  // Use matching accounts if available, otherwise fallback to all accounts
+  const candidateAccounts = matchingAccounts.length > 0 ? matchingAccounts : accounts;
 
   const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
   const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
@@ -395,58 +400,81 @@ export async function syncOneDriveFileOnBackend(task: any) {
     throw new Error("Microsoft API credentials (AZURE_CLIENT_ID/AZURE_CLIENT_SECRET) are not configured as environment variables in this tournament.");
   }
 
-  let accessToken = selectedAccount.access_token;
-  const expiresAt = selectedAccount.token_expires_at ? new Date(selectedAccount.token_expires_at) : null;
-  const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
+  let accessToken = '';
+  let selectedAccount: any = null;
+  let lastErrorMsg = '';
 
-  if (needsRefresh && selectedAccount.refresh_token) {
-    console.log(`[OneDrive Background Sync] Fetching fresh OAuth access token for ${selectedAccount.email}`);
-    try {
-      const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: AZURE_CLIENT_ID,
-          client_secret: AZURE_CLIENT_SECRET,
-          refresh_token: selectedAccount.refresh_token,
-          grant_type: 'refresh_token'
-        })
-      });
+  for (const account of candidateAccounts) {
+    console.log(`[OneDrive Background Sync] Attempting to authorize using connected account: ${account.email} (Connected: ${account.connectedAt || 'unknown'}, ID: ${account.id || 'unknown'})`);
+    
+    let currentAccessToken = account.access_token;
+    const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
+    const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
 
-      if (!tokenResp.ok) {
-        throw new Error(`Token endpoint responded with status: ${tokenResp.status} - ${await tokenResp.text()}`);
-      }
+    if (needsRefresh && account.refresh_token) {
+      console.log(`[OneDrive Background Sync] Fetching fresh OAuth access token for ${account.email}`);
+      try {
+        const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: AZURE_CLIENT_ID,
+            client_secret: AZURE_CLIENT_SECRET,
+            refresh_token: account.refresh_token,
+            grant_type: 'refresh_token'
+          })
+        });
 
-      const tokenJson: any = await tokenResp.json();
-      accessToken = tokenJson.access_token;
-      selectedAccount.access_token = tokenJson.access_token;
-      if (tokenJson.refresh_token) {
-        selectedAccount.refresh_token = tokenJson.refresh_token;
-      }
-      selectedAccount.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
-
-      await supabase.from('kv_store_8405be07').upsert({
-        key: selectedAccount.kvKey,
-        value: selectedAccount
-      });
-      console.log(`[OneDrive Background Sync] Re-authorized OneDrive access successfully.`);
-    } catch (refreshErr: any) {
-      const errMsg = refreshErr?.message || String(refreshErr);
-      console.error(`[OneDrive Background Sync] Token refresh warning for ${selectedAccount.email}:`, errMsg);
-      
-      let friendlyError = errMsg;
-      if (errMsg.includes("invalid_client") || errMsg.includes("AADSTS7000215")) {
-        friendlyError = `[Azure/OneDrive Auth Error] AADSTS7000215: Invalid Azure Client Secret. It looks like you've provided the "Secret ID" (a GUID) from the Azure Certificates & secrets page instead of the "Value" column. Please generate a new client secret in Azure, copy its actual "Value" column (which is a text string of symbols and letters), and configure it as the AZURE_CLIENT_SECRET environment variable in Google AI Studio Settings.`;
-      } else if (errMsg.includes("unauthorized_client") || errMsg.includes("AADSTS700016")) {
-        const isSwapped = AZURE_CLIENT_ID.includes('~') || !(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(AZURE_CLIENT_ID.trim()));
-        if (isSwapped) {
-          friendlyError = `[Azure/OneDrive Auth Error] AADSTS700016: Application not found. It looks like you have SWAPPED the Application (Client) ID and the Client Secret! Your AZURE_CLIENT_ID currently contains a secret value with a '~' character. Please swap them back in your Google AI Studio Settings: set AZURE_CLIENT_ID to the UUID/Guid Application ID (the one like "${AZURE_CLIENT_SECRET}") and set AZURE_CLIENT_SECRET to the secret Value (the one like "${AZURE_CLIENT_ID}").`;
-        } else {
-          friendlyError = `[Azure/OneDrive Auth Error] AADSTS700016: Application with identifier '${AZURE_CLIENT_ID}' was not found. Please ensure that in the Azure App Registration of your app, under "Supported account types", you selected "Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)". If it is selected as single tenant, personal accounts won't be able to log in.`;
+        if (!tokenResp.ok) {
+          throw new Error(`Token endpoint responded with status: ${tokenResp.status} - ${await tokenResp.text()}`);
         }
+
+        const tokenJson: any = await tokenResp.json();
+        currentAccessToken = tokenJson.access_token;
+        account.access_token = tokenJson.access_token;
+        if (tokenJson.refresh_token) {
+          account.refresh_token = tokenJson.refresh_token;
+        }
+        account.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
+
+        await supabase.from('kv_store_8405be07').upsert({
+          key: account.kvKey,
+          value: account
+        });
+        console.log(`[OneDrive Background Sync] Re-authorized OneDrive access successfully for ${account.email}.`);
+        accessToken = currentAccessToken;
+        selectedAccount = account;
+        break; // Successfully authorized! Exit loop.
+      } catch (refreshErr: any) {
+        const errMsg = refreshErr?.message || String(refreshErr);
+        console.error(`[OneDrive Background Sync] Token refresh failed for ${account.email}:`, errMsg);
+        lastErrorMsg = errMsg;
+        // Continue to the next candidate account in the loop
       }
-      throw new Error(`OneDrive login/refresh failed: ${friendlyError}`);
+    } else if (currentAccessToken) {
+      console.log(`[OneDrive Background Sync] Existing token for ${account.email} is still valid.`);
+      accessToken = currentAccessToken;
+      selectedAccount = account;
+      break; // Token is valid! Exit loop.
     }
+  }
+
+  if (!accessToken || !selectedAccount) {
+    // If we failed all accounts, provide a comprehensive explanation using the last encountered error
+    let friendlyError = lastErrorMsg || "No active access tokens found and no refresh tokens succeeded.";
+    if (lastErrorMsg.includes("invalid_client") || lastErrorMsg.includes("AADSTS7000215")) {
+      friendlyError = `[Azure/OneDrive Auth Error] AADSTS7000215: Invalid Azure Client Secret. It looks like you've provided the "Secret ID" (a GUID) from the Azure Certificates & secrets page instead of the "Value" column. Please generate a new client secret in Azure, copy its actual "Value" column (which is a text string of symbols and letters), and configure it as the AZURE_CLIENT_SECRET environment variable in Google AI Studio Settings.`;
+    } else if (lastErrorMsg.includes("unauthorized_client") || lastErrorMsg.includes("AADSTS700016")) {
+      const isSwapped = AZURE_CLIENT_ID.includes('~') || !(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(AZURE_CLIENT_ID.trim()));
+      if (isSwapped) {
+        friendlyError = `[Azure/OneDrive Auth Error] AADSTS700016: Application not found. It looks like you have SWAPPED the Application (Client) ID and the Client Secret! Your AZURE_CLIENT_ID currently contains a secret value with a '~' character. Please swap them back in your Google AI Studio Settings: set AZURE_CLIENT_ID to the UUID/Guid Application ID (the one like "${AZURE_CLIENT_SECRET}") and set AZURE_CLIENT_SECRET to the secret Value (the one like "${AZURE_CLIENT_ID}").`;
+      } else {
+        friendlyError = `[Azure/OneDrive Auth Error] AADSTS700016: Application with identifier '${AZURE_CLIENT_ID}' was not found. Please ensure that in the Azure App Registration of your app, under "Supported account types", you selected "Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)". If it is selected as single tenant, personal accounts won't be able to log in.`;
+      }
+    } else if (lastErrorMsg.includes("invalid_grant") || lastErrorMsg.includes("AADSTS70000")) {
+      friendlyError = `[Azure/OneDrive Auth Error] AADSTS70000: The refresh token is invalid or was issued for a different client ID. This can happen if the client ID was changed, or if the token is too old. Please reconnect your Microsoft account under the connected Microsoft OneDrive panel.`;
+    }
+    throw new Error(`OneDrive login/refresh failed: ${friendlyError}`);
   }
 
   if (!accessToken) {
@@ -525,57 +553,88 @@ async function uploadOneDriveFileFromBackend(task: any, base64Content: string) {
 
   if (kvErr || !kvData || kvData.length === 0) return;
 
+  // 2. Filter and sort MS accounts
+  // We sort accounts by connectedAt in descending order (newest first). This ensures that if there are duplicate or old accounts, we always try the most recent ones first.
   const accounts = kvData
     .map((item: any) => ({ ...item.value, kvKey: item.key }))
-    .filter((a: any) => a.provider === 'outlook');
+    .filter((a: any) => a.provider === 'outlook')
+    .sort((a: any, b: any) => new Date(b.connectedAt || 0).getTime() - new Date(a.connectedAt || 0).getTime());
 
   if (accounts.length === 0) return;
 
+  // 3. Find candidates. If creatorStr is specified and matches any account email, prioritize those first, but keep them sorted by connectedAt descending.
   const creatorStr = String(task.creator || '').toLowerCase().trim();
-  const selectedAccount = accounts.find((acc: any) => 
+  const matchingAccounts = accounts.filter((acc: any) => 
     String(acc.email || '').toLowerCase().trim() === creatorStr
-  ) || accounts[0];
+  );
+  
+  // Use matching accounts if available, otherwise fallback to all accounts
+  const candidateAccounts = matchingAccounts.length > 0 ? matchingAccounts : accounts;
 
   const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
   const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
 
   if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) return;
 
-  let accessToken = selectedAccount.access_token;
-  const expiresAt = selectedAccount.token_expires_at ? new Date(selectedAccount.token_expires_at) : null;
-  const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
+  let accessToken = '';
+  let selectedAccount: any = null;
 
-  if (needsRefresh && selectedAccount.refresh_token) {
-    try {
-      const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: AZURE_CLIENT_ID,
-          client_secret: AZURE_CLIENT_SECRET,
-          refresh_token: selectedAccount.refresh_token,
-          grant_type: 'refresh_token'
-        })
-      });
-      if (tokenResp.ok) {
-        const tokenJson: any = await tokenResp.json();
-        accessToken = tokenJson.access_token;
-        selectedAccount.access_token = tokenJson.access_token;
-        if (tokenJson.refresh_token) {
-          selectedAccount.refresh_token = tokenJson.refresh_token;
-        }
-        selectedAccount.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
-        await supabase.from('kv_store_8405be07').upsert({
-          key: selectedAccount.kvKey,
-          value: selectedAccount
+  for (const account of candidateAccounts) {
+    console.log(`[OneDrive Background Export] Attempting to authorize using connected account: ${account.email} (Connected: ${account.connectedAt || 'unknown'}, ID: ${account.id || 'unknown'})`);
+    
+    let currentAccessToken = account.access_token;
+    const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
+    const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
+
+    if (needsRefresh && account.refresh_token) {
+      console.log(`[OneDrive Background Export] Fetching fresh OAuth access token for ${account.email}`);
+      try {
+        const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: AZURE_CLIENT_ID,
+            client_secret: AZURE_CLIENT_SECRET,
+            refresh_token: account.refresh_token,
+            grant_type: 'refresh_token'
+          })
         });
+
+        if (tokenResp.ok) {
+          const tokenJson: any = await tokenResp.json();
+          currentAccessToken = tokenJson.access_token;
+          account.access_token = tokenJson.access_token;
+          if (tokenJson.refresh_token) {
+            account.refresh_token = tokenJson.refresh_token;
+          }
+          account.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
+
+          await supabase.from('kv_store_8405be07').upsert({
+            key: account.kvKey,
+            value: account
+          });
+          console.log(`[OneDrive Background Export] Re-authorized OneDrive access successfully for ${account.email}.`);
+          accessToken = currentAccessToken;
+          selectedAccount = account;
+          break; // Successfully authorized! Exit loop.
+        } else {
+          console.error(`[OneDrive Background Export] Token refresh response failed for ${account.email}: ${tokenResp.status}`);
+        }
+      } catch (refreshErr) {
+        console.error(`[OneDrive Background Export] Token refresh error for ${account.email}:`, refreshErr);
       }
-    } catch (refreshErr) {
-      console.error('[OneDrive Background Export] Refresh token warning:', refreshErr);
+    } else if (currentAccessToken) {
+      console.log(`[OneDrive Background Export] Existing token for ${account.email} is still valid.`);
+      accessToken = currentAccessToken;
+      selectedAccount = account;
+      break; // Token is valid! Exit loop.
     }
   }
 
-  if (!accessToken) return;
+  if (!accessToken) {
+    console.error(`[OneDrive Background Export] Could not authorize any OneDrive session for task.`);
+    return;
+  }
 
   const buffer = Buffer.from(base64Content, 'base64');
   console.log(`[OneDrive Background Export] Uploading fresh spreadsheet ${fileName} back into OneDrive...`);
@@ -1270,12 +1329,13 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         const contactsLegacyMap = new Map<string, string>();
         const contactsNameMap = new Map<string, string>();
         const contactsEmailMap = new Map<string, string>();
+        const existingContactsMap = new Map<string, any>();
         hasMore = true;
         offset = 0;
         while (hasMore) {
           const { data: cData, error: cErr } = await db
             .from("contacts")
-            .select("id, legacy_number, name, email")
+            .select("id, legacy_number, name, email, company")
             .eq("organization_id", organizationId)
             .range(offset, offset + pageLimit - 1);
           if (cErr || !cData || cData.length === 0) {
@@ -1285,6 +1345,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
               if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
               if (c.email) contactsEmailMap.set(c.email.toLowerCase().trim(), c.id);
+              existingContactsMap.set(c.id, c);
             });
             offset += pageLimit;
           }
@@ -1348,7 +1409,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           }
         }
 
-        const cleanedRecordsList: any[] = [];
+        const cleanedRecordsMap = new Map<string, any>();
 
         for (const rec of parsedRecords) {
           const mappedRec: any = { organization_id: organizationId };
@@ -1544,26 +1605,57 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           if (table === "bids" && !finalCleanedRec.title) continue;
 
           // Map deduplicated ID references
+          let targetId = '';
           if (table === "contacts") {
             const existingId = (finalCleanedRec.legacy_number && contactsLegacyMap.get(String(finalCleanedRec.legacy_number).trim())) ||
                                (finalCleanedRec.email && contactsEmailMap.get(String(finalCleanedRec.email).toLowerCase().trim())) ||
                                (finalCleanedRec.name && contactsNameMap.get(String(finalCleanedRec.name).toLowerCase().trim()));
-            finalCleanedRec.id = existingId || crypto.randomUUID();
+            targetId = existingId || crypto.randomUUID();
           } else if (table === "inventory") {
             const existingId = finalCleanedRec.sku && inventorySkuMap.get(String(finalCleanedRec.sku).toLowerCase().trim());
-            finalCleanedRec.id = existingId || crypto.randomUUID();
+            targetId = existingId || crypto.randomUUID();
           } else if (table === "opportunities") {
             const existingId = finalCleanedRec.title && opportunitiesMap.get(String(finalCleanedRec.title).toLowerCase().trim());
-            finalCleanedRec.id = existingId || crypto.randomUUID();
+            targetId = existingId || crypto.randomUUID();
           } else if (table === "bids") {
             const existingId = finalCleanedRec.title && bidsTitleMap.get(String(finalCleanedRec.title).toLowerCase().trim());
-            finalCleanedRec.id = existingId || crypto.randomUUID();
+            targetId = existingId || crypto.randomUUID();
           } else {
-            finalCleanedRec.id = crypto.randomUUID();
+            targetId = crypto.randomUUID();
           }
 
-          cleanedRecordsList.push(finalCleanedRec);
+          finalCleanedRec.id = targetId;
+
+          // Merge fields into any existing record in batch OR existing DB record
+          const existingInBatch = cleanedRecordsMap.get(targetId);
+          const existingInDb = table === "contacts" ? existingContactsMap.get(targetId) : null;
+          const baseRec = existingInBatch || existingInDb || {};
+
+          const mergedRec = { ...baseRec };
+          for (const [key, val] of Object.entries(finalCleanedRec)) {
+            if (val !== undefined && val !== null && val !== "") {
+              if (table === "contacts" && key === "name") {
+                // Keep the existing name if it's a real name and the new name is a fallback company name
+                const incomingNameStr = String(val).trim();
+                const incomingCompanyStr = String(finalCleanedRec.company || baseRec.company || "").trim();
+                const incomingIsFallback = incomingNameStr.toLowerCase() === incomingCompanyStr.toLowerCase();
+
+                const existingNameStr = String(baseRec.name || "").trim();
+                const existingCompanyStr = String(baseRec.company || "").trim();
+                const existingIsReal = existingNameStr !== "" && existingNameStr.toLowerCase() !== existingCompanyStr.toLowerCase();
+
+                if (incomingIsFallback && existingIsReal) {
+                  continue; // Skip overwriting with the fallback name
+                }
+              }
+              mergedRec[key] = val;
+            }
+          }
+
+          cleanedRecordsMap.set(targetId, mergedRec);
         }
+
+        const cleanedRecordsList = Array.from(cleanedRecordsMap.values());
 
         // Exec chunked self-healing upserts
         const chunkSize = 1000;
