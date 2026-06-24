@@ -328,12 +328,48 @@ function calculateNextRunTime(task: any, baseDate = new Date()): Date {
   }
 }
 
+// Helper to perform fetch requests with generous timeout and automatic retries for flaky Microsoft APIs
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, delayMs = 1500, timeoutMs = 45000): Promise<Response> {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const mergedOptions = { ...options, signal: controller.signal };
+
+    try {
+      const response = await fetch(url, mergedOptions);
+      clearTimeout(id);
+      
+      // Retry on server-side issues (5xx) or rate limits (429)
+      if (response.status >= 500 || response.status === 429) {
+        if (attempt === retries) {
+          return response;
+        }
+        console.warn(`[OneDrive Retry] Attempt ${attempt} returned status ${response.status}. Retrying in ${delayMs}ms...`);
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      return response;
+    } catch (err: any) {
+      clearTimeout(id);
+      lastError = err;
+      if (attempt === retries) {
+        throw err;
+      }
+      const isTimeout = err.name === 'AbortError';
+      console.warn(`[OneDrive Retry] Attempt ${attempt} failed (${isTimeout ? 'Timeout (>45s)' : err.message || err}). Retrying in ${delayMs}ms...`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  throw lastError || new Error("Maximum retries reached");
+}
+
 // Helper to search folders recursively for a file name
 async function scanFolderRecursiveServer(accessToken: string, folderId: string, targetName: string, depth = 0): Promise<any> {
   if (depth > 4) return null; // safety depth limit
   try {
     const url = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children?$select=id,name,folder,file,size`;
-    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const resp = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!resp.ok) return null;
 
     const json: any = await resp.json();
@@ -414,7 +450,7 @@ export async function syncOneDriveFileOnBackend(task: any) {
     if (needsRefresh && account.refresh_token) {
       console.log(`[OneDrive Background Sync] Fetching fresh OAuth access token for ${account.email}`);
       try {
-        const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        const tokenResp = await fetchWithRetry('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -487,7 +523,7 @@ export async function syncOneDriveFileOnBackend(task: any) {
 
   try {
     const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(fileName)}')?$select=id,name,file`;
-    const searchResp = await fetch(searchUrl, {
+    const searchResp = await fetchWithRetry(searchUrl, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
 
@@ -523,7 +559,7 @@ export async function syncOneDriveFileOnBackend(task: any) {
   // 5. Download the file as array buffer
   console.log(`[OneDrive Background Sync] Found OneDrive ID ${fileId}. Downloading payload...`);
   const downloadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`;
-  const downloadResp = await fetch(downloadUrl, {
+  const downloadResp = await fetchWithRetry(downloadUrl, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
 
@@ -589,7 +625,7 @@ async function uploadOneDriveFileFromBackend(task: any, base64Content: string) {
     if (needsRefresh && account.refresh_token) {
       console.log(`[OneDrive Background Export] Fetching fresh OAuth access token for ${account.email}`);
       try {
-        const tokenResp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        const tokenResp = await fetchWithRetry('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -653,7 +689,7 @@ async function uploadOneDriveFileFromBackend(task: any, base64Content: string) {
     console.error(`[OneDrive Background Export] Lookup target error, defaulting to OneDrive root upload:`, err);
   }
 
-  const uploadResp = await fetch(uploadUrl, {
+  const uploadResp = await fetchWithRetry(uploadUrl, {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -907,18 +943,21 @@ async function executeScheduledTask(task: any) {
         });
 
         if (moduleKey === 'inventory') {
-          if (normalizedRecord.UnitPrice !== undefined && normalizedRecord.PriceTier1 === undefined) {
-            normalizedRecord.PriceTier1 = Number(normalizedRecord.UnitPrice);
-          }
-          if (normalizedRecord.PriceTier1 !== undefined && normalizedRecord.UnitPrice === undefined) {
-            normalizedRecord.UnitPrice = Number(normalizedRecord.PriceTier1);
-          }
+          // Ensure Tier 1 is always exactly equal to UnitPrice
+          normalizedRecord.PriceTier1 = normalizedRecord.UnitPrice !== undefined ? Number(normalizedRecord.UnitPrice) : undefined;
+
+          // If PriceTier2, 3, 4, 5 are blank strings, treat them as undefined to allow fallback
+          if (normalizedRecord.PriceTier2 === "") delete normalizedRecord.PriceTier2;
+          if (normalizedRecord.PriceTier3 === "") delete normalizedRecord.PriceTier3;
+          if (normalizedRecord.PriceTier4 === "") delete normalizedRecord.PriceTier4;
+          if (normalizedRecord.PriceTier5 === "") delete normalizedRecord.PriceTier5;
+
           const defaultPrice = normalizedRecord.UnitPrice !== undefined ? Number(normalizedRecord.UnitPrice) : 0;
           if (normalizedRecord.PriceTier1 === undefined) normalizedRecord.PriceTier1 = defaultPrice;
-          if (normalizedRecord.PriceTier2 === undefined) normalizedRecord.PriceTier2 = normalizedRecord.PriceTier1;
-          if (normalizedRecord.PriceTier3 === undefined) normalizedRecord.PriceTier3 = normalizedRecord.PriceTier1;
-          if (normalizedRecord.PriceTier4 === undefined) normalizedRecord.PriceTier4 = normalizedRecord.PriceTier1;
-          if (normalizedRecord.PriceTier5 === undefined) normalizedRecord.PriceTier5 = normalizedRecord.PriceTier1;
+          if (normalizedRecord.PriceTier2 === undefined) normalizedRecord.PriceTier2 = defaultPrice;
+          if (normalizedRecord.PriceTier3 === undefined) normalizedRecord.PriceTier3 = defaultPrice;
+          if (normalizedRecord.PriceTier4 === undefined) normalizedRecord.PriceTier4 = defaultPrice;
+          if (normalizedRecord.PriceTier5 === undefined) normalizedRecord.PriceTier5 = defaultPrice;
           if (normalizedRecord.Unit === undefined) normalizedRecord.Unit = 'ea';
         }
 
@@ -1479,7 +1518,10 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               }
               else if (lowerKey === "unitprice" || lowerKey === "price" || lowerKey === "sellprice" || lowerKey === "unit_price") {
                 const parsedPr = parseFloat(String(cleanVal));
-                mappedRec.unit_price = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+                if (!isNaN(parsedPr)) {
+                  mappedRec.unit_price = Math.round(parsedPr * 100);
+                  mappedRec.price_tier_1 = mappedRec.unit_price; // Tier 1 = UnitPrice
+                }
               }
               else if (lowerKey === "cost" || lowerKey === "costprice" || lowerKey === "unitcost") {
                 const parsedCs = parseFloat(String(cleanVal));
@@ -1489,24 +1531,39 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
               else if (lowerKey === "unit" || lowerKey === "unitofmeasure" || lowerKey === "uom" || lowerKey === "unit_of_measure") mappedRec.unit_of_measure = cleanVal;
               else if (lowerKey === "pricetier1" || lowerKey === "tier1" || lowerKey === "retail") {
-                const parsedPr = parseFloat(String(cleanVal));
-                mappedRec.price_tier_1 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+                // Ignore spreadsheet PriceTier1 column, as Tier 1 is strictly mapped to UnitPrice
               }
               else if (lowerKey === "pricetier2" || lowerKey === "tier2" || lowerKey === "vip") {
-                const parsedPr = parseFloat(String(cleanVal));
-                mappedRec.price_tier_2 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+                if (cleanVal !== "") {
+                  const parsedPr = parseFloat(String(cleanVal));
+                  if (!isNaN(parsedPr)) {
+                    mappedRec.price_tier_2 = Math.round(parsedPr * 100);
+                  }
+                }
               }
               else if (lowerKey === "pricetier3" || lowerKey === "tier3" || lowerKey === "vipb" || lowerKey === "vip_b" || lowerKey === "vip b" || lowerKey === "eliteb" || lowerKey === "elite-b") {
-                const parsedPr = parseFloat(String(cleanVal));
-                mappedRec.price_tier_3 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+                if (cleanVal !== "") {
+                  const parsedPr = parseFloat(String(cleanVal));
+                  if (!isNaN(parsedPr)) {
+                    mappedRec.price_tier_3 = Math.round(parsedPr * 100);
+                  }
+                }
               }
               else if (lowerKey === "pricetier4" || lowerKey === "tier4" || lowerKey === "vipa" || lowerKey === "vip_a" || lowerKey === "vip a" || lowerKey === "elitea" || lowerKey === "elite-a") {
-                const parsedPr = parseFloat(String(cleanVal));
-                mappedRec.price_tier_4 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+                if (cleanVal !== "") {
+                  const parsedPr = parseFloat(String(cleanVal));
+                  if (!isNaN(parsedPr)) {
+                    mappedRec.price_tier_4 = Math.round(parsedPr * 100);
+                  }
+                }
               }
               else if (lowerKey === "pricetier5" || lowerKey === "tier5" || lowerKey === "wholesale") {
-                const parsedPr = parseFloat(String(cleanVal));
-                mappedRec.price_tier_5 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
+                if (cleanVal !== "") {
+                  const parsedPr = parseFloat(String(cleanVal));
+                  if (!isNaN(parsedPr)) {
+                    mappedRec.price_tier_5 = Math.round(parsedPr * 100);
+                  }
+                }
               }
             } 
             else if (table === "opportunities") {
@@ -1763,7 +1820,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           try {
             // 1. Backfill baseline keyword search terms if the table is public.inventory
             if (table === "inventory") {
-              console.log(`[Scheduler Supabase] [Reindex] Automatically generating background database search keywords for organization: "${organizationId}"...`);
+              console.log(`[Scheduler Supabase] [Reindex] Automatically regenerating background database search keywords for organization: "${organizationId}"...`);
               const backfillKeywordsSql = `
                 UPDATE public.inventory
                 SET
@@ -1779,8 +1836,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
                   ),
                   keyword_version = 'kw_v1',
                   keywords_generated_at = now()
-                WHERE organization_id = '${organizationId}'
-                  AND (search_keywords IS NULL OR cardinality(search_keywords) = 0 OR keywords_generated_at IS NULL);
+                WHERE organization_id = '${organizationId}';
               `;
               await db.rpc('exec_sql', { sql: backfillKeywordsSql });
               console.log(`[Scheduler Supabase] [Reindex] Completed automated keyword search backfill.`);

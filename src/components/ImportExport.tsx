@@ -1757,7 +1757,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             setOnedriveFiles(filesList);
           }
         } else {
-          const res = await safeFetch(`/api/import-export/storage/${drive}`);
+          const res = await safeFetch(`/api/import-export/storage/${drive}`, undefined, 60000);
           if (!res.ok) {
             throw new Error(`HTTP status ${res.status}`);
           }
@@ -1840,7 +1840,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             fileName: fileName,
             fileContent: finalBase64
           })
-        });
+        }, 120000);
 
         if (!uploadRes.ok) {
           throw new Error(`Failed to upload to server storage: ${uploadRes.statusText}`);

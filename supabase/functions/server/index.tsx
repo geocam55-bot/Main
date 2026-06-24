@@ -1650,6 +1650,42 @@ app.get(`${PREFIX}/azure-health`, async (c) => {
   });
 });
 
+// Helper to perform fetch requests with generous timeout and automatic retries for flaky Microsoft APIs
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, delayMs = 1500, timeoutMs = 45000): Promise<Response> {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const mergedOptions = { ...options, signal: controller.signal };
+
+    try {
+      const response = await fetch(url, mergedOptions);
+      clearTimeout(id);
+      
+      // Retry on server-side issues (5xx) or rate limits (429)
+      if (response.status >= 500 || response.status === 429) {
+        if (attempt === retries) {
+          return response;
+        }
+        console.warn(`[OneDrive Retry] Attempt ${attempt} returned status ${response.status}. Retrying in ${delayMs}ms...`);
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      return response;
+    } catch (err: any) {
+      clearTimeout(id);
+      lastError = err;
+      if (attempt === retries) {
+        throw err;
+      }
+      const isTimeout = err.name === 'AbortError';
+      console.warn(`[OneDrive Retry] Attempt ${attempt} failed (${isTimeout ? 'Timeout (>45s)' : err.message || err}). Retrying in ${delayMs}ms...`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  throw lastError || new Error("Maximum retries reached");
+}
+
 // ── ONEDRIVE FILE BROWSER ────────────────────────────────────────────────
 async function getMicrosoftTokenForEmail(userId: string, email: string): Promise<string | null> {
   const kvKey = `outlook_${email.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
@@ -1679,7 +1715,7 @@ app.post(`${PREFIX}/onedrive-files`, async (c) => {
     if (!accessToken) return c.json({ error: 'OneDrive account not connected. Please reconnect.' }, 401);
     const base = 'https://graph.microsoft.com/v1.0/me/drive';
     const path = folderId ? `${base}/items/${folderId}/children` : `${base}/root/children`;
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${path}?$top=200&$orderby=name asc&$select=id,name,folder,file,size,lastModifiedDateTime`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
@@ -1709,7 +1745,7 @@ app.post(`${PREFIX}/onedrive-file-content`, async (c) => {
     if (!email || !fileId) return c.json({ error: 'Missing email or fileId' }, 400);
     const accessToken = await getMicrosoftTokenForEmail(auth.user.id, email);
     if (!accessToken) return c.json({ error: 'OneDrive account not connected. Please reconnect.' }, 401);
-    const metaRes = await fetch(
+    const metaRes = await fetchWithRetry(
       `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}?$select=id,name,file`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
@@ -1718,7 +1754,7 @@ app.post(`${PREFIX}/onedrive-file-content`, async (c) => {
       return c.json({ error: err?.error?.message || 'Failed to get file info' }, metaRes.status);
     }
     const meta = await metaRes.json();
-    const dlRes = await fetch(
+    const dlRes = await fetchWithRetry(
       `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
@@ -1791,7 +1827,7 @@ async function syncOneDriveFileOnSupabaseServer(supabase: any, task: any, userId
   let fileId = null;
   try {
     const searchUrl = `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(fileName)}')?$select=id,name,file`;
-    const searchResp = await fetch(searchUrl, {
+    const searchResp = await fetchWithRetry(searchUrl, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
     if (searchResp.ok) {
@@ -1806,7 +1842,7 @@ async function syncOneDriveFileOnSupabaseServer(supabase: any, task: any, userId
   if (!fileId) {
     try {
       const childrenUrl = `https://graph.microsoft.com/v1.0/me/drive/root/children?$select=id,name,file`;
-      const childrenResp = await fetch(childrenUrl, {
+      const childrenResp = await fetchWithRetry(childrenUrl, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       if (childrenResp.ok) {
@@ -1824,7 +1860,7 @@ async function syncOneDriveFileOnSupabaseServer(supabase: any, task: any, userId
   }
 
   const downloadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`;
-  const downloadResp = await fetch(downloadUrl, {
+  const downloadResp = await fetchWithRetry(downloadUrl, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
 
@@ -1898,7 +1934,7 @@ async function uploadOneDriveFileFromSupabaseServer(supabase: any, task: any, us
   }
 
   const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileName)}:/content`;
-  const uploadResp = await fetch(uploadUrl, {
+  const uploadResp = await fetchWithRetry(uploadUrl, {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
