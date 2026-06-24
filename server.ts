@@ -837,11 +837,11 @@ async function executeScheduledTask(task: any) {
           else if (lowerK === 'project name' || lowerK === 'projectname') key = 'ProjectName';
           else if (lowerK === 'deal value' || lowerK === 'dealvalue') key = 'DealValue';
           else if (lowerK === 'close date' || lowerK === 'closedate') key = 'CloseDate';
-          else if (lowerK === 'pricetier1' || lowerK === 'price_tier_1' || lowerK === 'tier1') key = 'PriceTier1';
-          else if (lowerK === 'pricetier2' || lowerK === 'price_tier_2' || lowerK === 'tier2') key = 'PriceTier2';
-          else if (lowerK === 'pricetier3' || lowerK === 'price_tier_3' || lowerK === 'tier3') key = 'PriceTier3';
-          else if (lowerK === 'pricetier4' || lowerK === 'price_tier_4' || lowerK === 'tier4') key = 'PriceTier4';
-          else if (lowerK === 'pricetier5' || lowerK === 'price_tier_5' || lowerK === 'tier5') key = 'PriceTier5';
+          else if (lowerK === 'pricetier1' || lowerK === 'price_tier_1' || lowerK === 'tier1' || lowerK === 'retail') key = 'PriceTier1';
+          else if (lowerK === 'pricetier2' || lowerK === 'price_tier_2' || lowerK === 'tier2' || lowerK === 'vip') key = 'PriceTier2';
+          else if (lowerK === 'pricetier3' || lowerK === 'price_tier_3' || lowerK === 'tier3' || lowerK === 'vipb' || lowerK === 'vip_b' || lowerK === 'vip b' || lowerK === 'eliteb' || lowerK === 'elite-b') key = 'PriceTier3';
+          else if (lowerK === 'pricetier4' || lowerK === 'price_tier_4' || lowerK === 'tier4' || lowerK === 'vipa' || lowerK === 'vip_a' || lowerK === 'vip a' || lowerK === 'elitea' || lowerK === 'elite-a') key = 'PriceTier4';
+          else if (lowerK === 'pricetier5' || lowerK === 'price_tier_5' || lowerK === 'tier5' || lowerK === 'wholesale') key = 'PriceTier5';
           else if (lowerK === 'unit' || lowerK === 'unitofmeasure' || lowerK === 'unit_of_measure' || lowerK === 'uom') key = 'Unit';
           else if (lowerK === 'imageurl' || lowerK === 'image_url' || lowerK === 'image') key = 'image_url';
           normalizedRecord[key] = v;
@@ -1427,23 +1427,23 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               else if (lowerKey === "image" || lowerKey === "imageurl" || lowerKey === "photo") mappedRec.image_url = cleanVal;
               else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
               else if (lowerKey === "unit" || lowerKey === "unitofmeasure" || lowerKey === "uom" || lowerKey === "unit_of_measure") mappedRec.unit_of_measure = cleanVal;
-              else if (lowerKey === "pricetier1" || lowerKey === "tier1") {
+              else if (lowerKey === "pricetier1" || lowerKey === "tier1" || lowerKey === "retail") {
                 const parsedPr = parseFloat(String(cleanVal));
                 mappedRec.price_tier_1 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
               }
-              else if (lowerKey === "pricetier2" || lowerKey === "tier2") {
+              else if (lowerKey === "pricetier2" || lowerKey === "tier2" || lowerKey === "vip") {
                 const parsedPr = parseFloat(String(cleanVal));
                 mappedRec.price_tier_2 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
               }
-              else if (lowerKey === "pricetier3" || lowerKey === "tier3") {
+              else if (lowerKey === "pricetier3" || lowerKey === "tier3" || lowerKey === "vipb" || lowerKey === "vip_b" || lowerKey === "vip b" || lowerKey === "eliteb" || lowerKey === "elite-b") {
                 const parsedPr = parseFloat(String(cleanVal));
                 mappedRec.price_tier_3 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
               }
-              else if (lowerKey === "pricetier4" || lowerKey === "tier4") {
+              else if (lowerKey === "pricetier4" || lowerKey === "tier4" || lowerKey === "vipa" || lowerKey === "vip_a" || lowerKey === "vip a" || lowerKey === "elitea" || lowerKey === "elite-a") {
                 const parsedPr = parseFloat(String(cleanVal));
                 mappedRec.price_tier_4 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
               }
-              else if (lowerKey === "pricetier5" || lowerKey === "tier5") {
+              else if (lowerKey === "pricetier5" || lowerKey === "tier5" || lowerKey === "wholesale") {
                 const parsedPr = parseFloat(String(cleanVal));
                 mappedRec.price_tier_5 = isNaN(parsedPr) ? 0 : Math.round(parsedPr * 100);
               }
@@ -1529,6 +1529,15 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           }
 
           // Ensure basic values exist
+          if (table === "contacts" && !finalCleanedRec.name) {
+            // Self-healing contact name resolution: fall back to company, email, or legacy number
+            const fallbackName = finalCleanedRec.company || finalCleanedRec.email || (finalCleanedRec.legacy_number ? `Account ${finalCleanedRec.legacy_number}` : '');
+            if (fallbackName) {
+              finalCleanedRec.name = fallbackName;
+            } else {
+              finalCleanedRec.name = "Unnamed Contact";
+            }
+          }
           if (table === "contacts" && !finalCleanedRec.name) continue;
           if (table === "inventory" && !finalCleanedRec.sku) continue;
           if (table === "opportunities" && !finalCleanedRec.title) continue;
