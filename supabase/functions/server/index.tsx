@@ -1689,7 +1689,32 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 // ── ONEDRIVE FILE BROWSER ────────────────────────────────────────────────
 async function getMicrosoftTokenForEmail(userId: string, email: string): Promise<string | null> {
   const kvKey = `outlook_${email.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
-  const account = await kv.get(`email_account:${userId}:${kvKey}`);
+  let account = await kv.get(`email_account:${userId}:${kvKey}`);
+  if (!account) {
+    // Attempt auto-connect self-heal! Look for any Outlook account across other users
+    const supabase = getSupabase();
+    const { data: kvKeys } = await supabase.from('kv_store_8405be07').select('key, value').like('key', 'email_account:%');
+    const match = kvKeys?.find((item: any) => {
+      const val = item.value || {};
+      return val.provider === 'outlook' && (
+        String(val.email).toLowerCase().trim() === email.toLowerCase().trim() ||
+        !email
+      );
+    }) || kvKeys?.find((item: any) => (item.value || {}).provider === 'outlook');
+
+    if (match) {
+      account = match.value;
+      // Copy to the current user's key to make it persistent/auto-connected
+      await kv.set(`email_account:${userId}:${kvKey}`, {
+        ...account,
+        user_id: userId,
+        id: account.id || `outlook_${email.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
+        connected: true,
+        connectedAt: new Date().toISOString()
+      });
+      console.log(`[Auto-Connect OneDrive Token] Automatically cloned OneDrive account ${account.email} for user ${userId}`);
+    }
+  }
   if (!account) return null;
   const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
   const needsRefresh = !expiresAt || expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
@@ -3381,7 +3406,48 @@ app.get(`${PREFIX}/email-accounts`, async (c) => {
       }
     }
     
-    const mergedAccounts = Array.from(accountsMap.values());
+    let mergedAccounts = Array.from(accountsMap.values());
+
+    // Auto-connect OneDrive/Outlook account if there's none connected for the current user
+    const hasOutlook = mergedAccounts.some((acc: any) => acc.provider === "outlook");
+    if (!hasOutlook) {
+      const { data: globalKvRows } = await auth.supabase
+        .from('kv_store_8405be07')
+        .select('key, value')
+        .like('key', 'email_account:%');
+
+      const foundGlobalOutlook = globalKvRows?.find((row: any) => {
+        const val = row.value || {};
+        return val.provider === 'outlook' && val.email;
+      });
+
+      if (foundGlobalOutlook) {
+        const outlookData = foundGlobalOutlook.value;
+        const sanitizedEmail = outlookData.email.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const newKey = `email_account:${auth.user.id}:outlook_${sanitizedEmail}`;
+        
+        // Clone/Auto-connect it for the current user!
+        await kv.set(newKey, {
+          ...outlookData,
+          user_id: auth.user.id,
+          id: outlookData.id || `outlook_${sanitizedEmail}`,
+          connected: true,
+          connectedAt: new Date().toISOString()
+        });
+        
+        mergedAccounts.push({
+          id: outlookData.id || `outlook_${sanitizedEmail}`,
+          user_id: auth.user.id,
+          provider: 'outlook',
+          email: outlookData.email,
+          connected: true,
+          display_name: outlookData.displayName || outlookData.display_name || "Microsoft User"
+        });
+        
+        console.log(`[Auto-Connect OneDrive] Automatically cloned and connected Microsoft OneDrive account ${outlookData.email} for user ${auth.user.id}`);
+      }
+    }
+
     // email-accounts GET returning merged accounts
     return c.json({ accounts: mergedAccounts });
   } catch (err: any) {

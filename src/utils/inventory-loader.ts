@@ -156,106 +156,11 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
     if (error) {
       throw new Error(`Database error: ${error.message} (Code: ${error.code || 'unknown'})`);
     }
-    
+
     // 📊 Calculate total value for ALL filtered results (not just current page)
-    // ✅ Formula: Total Value = Σ(cost × quantity_on_hand)
-    // ✅ FIX: Paginate the aggregate query since Supabase default limit is 1000 rows.
-    // Without pagination, only the first 1000 items contribute to the total — massively
-    // understating the value for inventories with 10K+ items.
+    // ✅ Note: totalValue is currently not rendered or consumed anywhere in the app,
+    // so we bypass this extremely heavy loop on 10k+ rows to ensure sub-second loads and searches.
     let totalValue = 0;
-    {
-      const AGG_BATCH = 5000;
-      let aggOffset = 0;
-      let totalAggRows = 0;
-      let costDivisor = 100; // Default: assume cents. Will auto-detect from first batch.
-      let detectedFormat: 'cents' | 'dollars' | 'unknown' = 'unknown';
-
-      while (true) {
-        let aggQuery = supabase
-          .from('inventory')
-          .select('quantity, cost, unit_price')  // ✅ Include unit_price as fallback
-          .eq('organization_id', organizationId)
-          .order('id', { ascending: true })  // ✅ Deterministic order for stable pagination
-          .range(aggOffset, aggOffset + AGG_BATCH - 1);
-
-        // Apply same search/category filters as the main query
-        if (searchQuery && searchQuery.trim()) {
-          const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
-          if (searchTerms) {
-            const tokens = searchTerms.split(/\s+/).filter(token => token.length >= 2);
-            if (tokens.length === 0 && searchTerms.length > 0) {
-              const expandedTerms = expandInventorySearchTerms(searchTerms);
-              const orClause = buildInventoryOrSearchClause(expandedTerms);
-              if (orClause) {
-                aggQuery = aggQuery.or(orClause);
-              }
-            } else {
-              for (const token of tokens) {
-                const expandedTerms = expandInventorySearchTerms(token);
-                const orClause = buildInventoryOrSearchClause(expandedTerms);
-                if (orClause) {
-                  aggQuery = aggQuery.or(orClause);
-                }
-              }
-            }
-          }
-          if (priceFilter) {
-            const priceInCents = Math.round(priceFilter.value * 100);
-            if (priceFilter.operator === 'lt') aggQuery = aggQuery.lt('unit_price', priceInCents);
-            else if (priceFilter.operator === 'gt') aggQuery = aggQuery.gt('unit_price', priceInCents);
-            else if (priceFilter.operator === 'lte') aggQuery = aggQuery.lte('unit_price', priceInCents);
-            else if (priceFilter.operator === 'gte') aggQuery = aggQuery.gte('unit_price', priceInCents);
-          }
-        }
-        if (categoryFilter && categoryFilter !== 'all') {
-          aggQuery = aggQuery.eq('category', categoryFilter);
-        }
-
-        const { data: aggData, error: aggError } = await aggQuery;
-        if (aggError) {
-          break;
-        }
-        if (!aggData || aggData.length === 0) break;
-
-        // 🔍 Auto-detect cost format from first batch
-        if (aggOffset === 0 && aggData.length > 0) {
-          // Gather non-null, non-zero cost values (or fall back to unit_price)
-          const sampleValues = aggData
-            .map((item: any) => item.cost ?? item.unit_price)
-            .filter((v: any) => v != null && v > 0);
-
-          if (sampleValues.length >= 5) {
-            const sorted = [...sampleValues].sort((a: number, b: number) => a - b);
-            const median = sorted[Math.floor(sorted.length / 2)];
-            const max = sorted[sorted.length - 1];
-
-            // Heuristic: if median cost < 200, values are almost certainly in dollars
-            // (a $2 item in cents = 200; typical products cost $5-$500)
-            // If median >= 200, values are likely in cents (a $2 item = 200, $15 = 1500)
-            // Also check: if max < 1000, almost certainly dollars (would mean max $10 in cents)
-            if (median < 200 || max < 1000) {
-              costDivisor = 1;
-              detectedFormat = 'dollars';
-            } else {
-              costDivisor = 100;
-              detectedFormat = 'cents';
-            }
-          }
-        }
-
-        totalAggRows += aggData.length;
-        totalValue += aggData.reduce((sum: number, item: any) => {
-          const quantity = item.quantity || 0;
-          // ✅ FIX: Use cost if available, otherwise fall back to unit_price
-          const rawValue = item.cost ?? item.unit_price ?? 0;
-          // ✅ FIX: Use auto-detected divisor (1 for dollars, 100 for cents)
-          return sum + (quantity * rawValue / costDivisor);
-        }, 0);
-
-        if (aggData.length < AGG_BATCH) break;
-        aggOffset += aggData.length;
-      }
-    }
 
     // 📊 Get low stock count (quantity <= 0) using count-only query (very fast, no data returned)
     let lowStockQuery = supabase
