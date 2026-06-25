@@ -1725,7 +1725,9 @@ async function getMicrosoftTokenForEmail(userId: string, email: string): Promise
       if (td.refresh_token) account.refresh_token = td.refresh_token;
       account.token_expires_at = new Date(Date.now() + td.expires_in * 1000).toISOString();
       await kv.set(`email_account:${userId}:${kvKey}`, account);
-    } catch { /* use existing token */ }
+    } catch (e: any) {
+      console.warn(`[OneDrive Refresh Failure] Failed to refresh token for ${email}:`, e?.message || e);
+    }
   }
   return account.access_token || null;
 }

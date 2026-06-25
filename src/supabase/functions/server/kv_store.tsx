@@ -27,6 +27,59 @@ export const set = async (key: string, value: any): Promise<void> => {
   if (error) {
     throw new Error(error.message);
   }
+
+  // Intercept and synchronize matching email/OneDrive account credentials across profiles
+  if (key.startsWith("email_account:") && !key.includes(":by_email:") && value && value.provider && value.email) {
+    try {
+      const { data } = await supabase
+        .from("kv_store_8405be07")
+        .select("key, value")
+        .like("key", "email_account:%");
+      
+      if (data && data.length > 0) {
+        const targetEmail = String(value.email).toLowerCase().trim();
+        const targetProvider = value.provider;
+        const updates: any[] = [];
+        
+        for (const row of data) {
+          if (row.key === key || row.key.includes(":by_email:")) continue;
+          const val = row.value || {};
+          if (
+            val.provider === targetProvider && 
+            String(val.email).toLowerCase().trim() === targetEmail
+          ) {
+            // Check if the current tokens are actually different, to avoid infinite recursion
+            if (
+              val.access_token !== value.access_token ||
+              val.refresh_token !== value.refresh_token ||
+              val.token_expires_at !== value.token_expires_at
+            ) {
+              const updatedVal = {
+                ...val,
+                access_token: value.access_token,
+                refresh_token: value.refresh_token || val.refresh_token,
+                token_expires_at: value.token_expires_at,
+                status: value.status || val.status || 'active',
+                connected: true
+              };
+              updates.push({
+                key: row.key,
+                value: updatedVal
+              });
+            }
+          }
+        }
+        
+        if (updates.length > 0) {
+          console.log(`[Credential Sync] Syncing tokens for ${targetEmail} across ${updates.length} other profiles.`);
+          // Do upsert on other rows directly
+          await supabase.from("kv_store_8405be07").upsert(updates);
+        }
+      }
+    } catch (e: any) {
+      console.error("[Credential Sync Error] Failed to sync email credentials:", e?.message || e);
+    }
+  }
 };
 
 // Get retrieves a key-value pair from the database.
