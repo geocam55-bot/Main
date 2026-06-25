@@ -1,21 +1,12 @@
-import { createClient } from './src/utils/supabase/client';
+import * as fs from 'fs';
 
-async function main() {
-  const supabase = createClient();
-  const searchSku = '84895031';
-  
-  const { data, error } = await supabase
-    .from('inventory')
-    .select('*')
-    .eq('sku', searchSku);
-
-  if (error) {
-    console.error('Error fetching SKU:', error);
-    return;
-  }
-
-  console.log(`Query results for SKU "${searchSku}":`);
-  console.log(JSON.stringify(data, null, 2));
+function main() {
+  const content = fs.readFileSync('onedrive/onedrive_inventory_import.csv', 'utf8');
+  const lines = content.split('\n');
+  const headers = lines[0];
+  console.log('Headers:', headers);
+  const match = lines.find(l => l.includes('00275932'));
+  console.log('Match:', match);
 }
 
-main().catch(console.error);
+main();
