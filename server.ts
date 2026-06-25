@@ -1344,6 +1344,23 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url"].forEach(k => existingDbCols.add(k));
         }
 
+        let priceTierLabels: any = null;
+        if (table === "inventory" && organizationId) {
+          try {
+            const { data: orgSettings } = await db
+              .from('kv_store_8405be07')
+              .select('value')
+              .eq('key', 'org_settings_extra:' + organizationId)
+              .maybeSingle();
+            if (orgSettings && orgSettings.value && orgSettings.value.price_tier_labels) {
+              priceTierLabels = orgSettings.value.price_tier_labels;
+              console.log(`[Scheduler Supabase] Loaded custom price tier labels for organization ${organizationId}:`, priceTierLabels);
+            }
+          } catch (err) {
+            console.error(`[Scheduler Supabase] Error fetching custom price tier labels:`, err);
+          }
+        }
+
         // Caching references with unlimited paginated scans to bypass Supabase default 1,000 row limits
         const profilesMap = new Map<string, string>();
         let hasMore = true;
@@ -1520,7 +1537,6 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
                 const parsedPr = parseFloat(String(cleanVal));
                 if (!isNaN(parsedPr)) {
                   mappedRec.unit_price = Math.round(parsedPr * 100);
-                  mappedRec.price_tier_1 = mappedRec.unit_price; // Tier 1 = UnitPrice
                 }
               }
               else if (lowerKey === "cost" || lowerKey === "costprice" || lowerKey === "unitcost") {
@@ -1530,38 +1546,41 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               else if (lowerKey === "image" || lowerKey === "imageurl" || lowerKey === "photo") mappedRec.image_url = cleanVal;
               else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
               else if (lowerKey === "unit" || lowerKey === "unitofmeasure" || lowerKey === "uom" || lowerKey === "unit_of_measure") mappedRec.unit_of_measure = cleanVal;
-              else if (lowerKey === "pricetier1" || lowerKey === "tier1" || lowerKey === "retail") {
-                // Ignore spreadsheet PriceTier1 column, as Tier 1 is strictly mapped to UnitPrice
-              }
-              else if (lowerKey === "pricetier2" || lowerKey === "tier2" || lowerKey === "vip") {
-                if (cleanVal !== "") {
-                  const parsedPr = parseFloat(String(cleanVal));
-                  if (!isNaN(parsedPr)) {
-                    mappedRec.price_tier_2 = Math.round(parsedPr * 100);
+              else {
+                // Check against dynamic price tier labels if loaded
+                let matchedTier = 0;
+                if (priceTierLabels) {
+                  const normKey = lowerKey.trim();
+                  const t1Label = String(priceTierLabels.t1 || "").toLowerCase().replace(/[\s\-_#/()]/g, "").trim();
+                  const t2Label = String(priceTierLabels.t2 || "").toLowerCase().replace(/[\s\-_#/()]/g, "").trim();
+                  const t3Label = String(priceTierLabels.t3 || "").toLowerCase().replace(/[\s\-_#/()]/g, "").trim();
+                  const t4Label = String(priceTierLabels.t4 || "").toLowerCase().replace(/[\s\-_#/()]/g, "").trim();
+                  const t5Label = String(priceTierLabels.t5 || "").toLowerCase().replace(/[\s\-_#/()]/g, "").trim();
+
+                  if (normKey && normKey !== "0") {
+                    if (normKey === t1Label) matchedTier = 1;
+                    else if (normKey === t2Label) matchedTier = 2;
+                    else if (normKey === t3Label) matchedTier = 3;
+                    else if (normKey === t4Label) matchedTier = 4;
+                    else if (normKey === t5Label) matchedTier = 5;
                   }
                 }
-              }
-              else if (lowerKey === "pricetier3" || lowerKey === "tier3" || lowerKey === "vipb" || lowerKey === "vip_b" || lowerKey === "vip b" || lowerKey === "eliteb" || lowerKey === "elite-b") {
-                if (cleanVal !== "") {
-                  const parsedPr = parseFloat(String(cleanVal));
-                  if (!isNaN(parsedPr)) {
-                    mappedRec.price_tier_3 = Math.round(parsedPr * 100);
-                  }
+
+                if (matchedTier === 0) {
+                  // Standard hardcoded fallbacks as secondary check
+                  if (lowerKey === "pricetier1" || lowerKey === "tier1" || lowerKey === "retail") matchedTier = 1;
+                  else if (lowerKey === "pricetier2" || lowerKey === "tier2" || lowerKey === "vip") matchedTier = 2;
+                  else if (lowerKey === "pricetier3" || lowerKey === "tier3" || lowerKey === "vipb" || lowerKey === "vip_b" || lowerKey === "vip b" || lowerKey === "eliteb" || lowerKey === "elite-b") matchedTier = 3;
+                  else if (lowerKey === "pricetier4" || lowerKey === "tier4" || lowerKey === "vipa" || lowerKey === "vip_a" || lowerKey === "vip a" || lowerKey === "elitea" || lowerKey === "elite-a") matchedTier = 4;
+                  else if (lowerKey === "pricetier5" || lowerKey === "tier5" || lowerKey === "wholesale") matchedTier = 5;
                 }
-              }
-              else if (lowerKey === "pricetier4" || lowerKey === "tier4" || lowerKey === "vipa" || lowerKey === "vip_a" || lowerKey === "vip a" || lowerKey === "elitea" || lowerKey === "elite-a") {
-                if (cleanVal !== "") {
-                  const parsedPr = parseFloat(String(cleanVal));
-                  if (!isNaN(parsedPr)) {
-                    mappedRec.price_tier_4 = Math.round(parsedPr * 100);
-                  }
-                }
-              }
-              else if (lowerKey === "pricetier5" || lowerKey === "tier5" || lowerKey === "wholesale") {
-                if (cleanVal !== "") {
-                  const parsedPr = parseFloat(String(cleanVal));
-                  if (!isNaN(parsedPr)) {
-                    mappedRec.price_tier_5 = Math.round(parsedPr * 100);
+
+                if (matchedTier >= 1 && matchedTier <= 5) {
+                  if (cleanVal !== "") {
+                    const parsedPr = parseFloat(String(cleanVal));
+                    if (!isNaN(parsedPr)) {
+                      mappedRec[`price_tier_${matchedTier}` as keyof typeof mappedRec] = Math.round(parsedPr * 100);
+                    }
                   }
                 }
               }

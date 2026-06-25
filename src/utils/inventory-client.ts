@@ -489,14 +489,14 @@ export async function createInventoryClient(itemData: any) {
     if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
     if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
 
-    // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 then let them be Tier1
+    // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 or undefined then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
       ? cleanData.price_tier_1 
       : (cleanData.unit_price !== undefined ? cleanData.unit_price : 0);
-    if (cleanData.price_tier_2 === 0) cleanData.price_tier_2 = fallbackT1;
-    if (cleanData.price_tier_3 === 0) cleanData.price_tier_3 = fallbackT1;
-    if (cleanData.price_tier_4 === 0) cleanData.price_tier_4 = fallbackT1;
-    if (cleanData.price_tier_5 === 0) cleanData.price_tier_5 = fallbackT1;
+    if (cleanData.price_tier_2 === 0 || cleanData.price_tier_2 === undefined) cleanData.price_tier_2 = fallbackT1;
+    if (cleanData.price_tier_3 === 0 || cleanData.price_tier_3 === undefined) cleanData.price_tier_3 = fallbackT1;
+    if (cleanData.price_tier_4 === 0 || cleanData.price_tier_4 === undefined) cleanData.price_tier_4 = fallbackT1;
+    if (cleanData.price_tier_5 === 0 || cleanData.price_tier_5 === undefined) cleanData.price_tier_5 = fallbackT1;
 
     injectMetadataIntoDescription(cleanData, itemData);
 
