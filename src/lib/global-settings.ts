@@ -57,6 +57,7 @@ export function getPriceTierLabels(): PriceTierLabels {
  * Get the display label for a single tier number (1-5)
  */
 export function getPriceTierLabel(tier: number): string {
+  if (tier === 0) return 'UnitPrice';
   const labels = getPriceTierLabels();
   const key = `t${tier}` as keyof PriceTierLabels;
   return labels[key] || `T${tier}`;
@@ -68,14 +69,17 @@ export function getPriceTierLabel(tier: number): string {
  */
 export function getActivePriceLevels(): string[] {
   const labels = getPriceTierLabels();
-  return [labels.t1, labels.t2, labels.t3, labels.t4, labels.t5]
+  const activeTiers = [labels.t1, labels.t2, labels.t3, labels.t4, labels.t5]
     .filter(l => l && l.trim() !== '' && l.trim() !== '0');
+  const list = ['UnitPrice'];
+  return list.concat(activeTiers.filter(l => l !== 'UnitPrice'));
 }
 
 /**
  * Check if a specific tier number (1-5) is active (not labeled '0' or empty)
  */
 export function isTierActive(tier: number): boolean {
+  if (tier === 0) return true;
   const labels = getPriceTierLabels();
   const key = `t${tier}` as keyof PriceTierLabels;
   const label = labels[key];
@@ -94,6 +98,11 @@ export function getActiveTierNumbers(): number[] {
  * Dynamically built from configured tier labels + legacy fallbacks
  */
 export function priceLevelToTier(priceLevel: string): number {
+  if (!priceLevel) return 1;
+  const cleanLevel = priceLevel.trim().toLowerCase();
+  if (cleanLevel === 'unitprice' || cleanLevel === 'unit price' || cleanLevel === 'unit_price') {
+    return 0; // 0 represents the base UnitPrice
+  }
   const labels = getPriceTierLabels();
 
   // Build dynamic mapping from configured labels
@@ -114,13 +123,14 @@ export function priceLevelToTier(priceLevel: string): number {
   if (!mapping['Premium'])    mapping['Premium']    = 4;
   if (!mapping['Standard'])   mapping['Standard']   = 4;
 
-  return mapping[priceLevel] || 1; // Default to tier 1 if not found
+  return mapping[priceLevel] !== undefined ? mapping[priceLevel] : 1; // Default to tier 1 if not found
 }
 
 /**
  * Map inventory tier numbers to price level names (uses configured labels)
  */
 export function tierToPriceLevel(tier: number): string {
+  if (tier === 0) return 'UnitPrice';
   return getPriceTierLabel(tier);
 }
 

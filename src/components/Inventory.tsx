@@ -77,6 +77,7 @@ interface InventoryItem {
   minStock?: number;
   maxStock?: number;
   cost: number;
+  unitPrice: number;
   priceTier1: number;
   priceTier2: number;
   priceTier3: number;
@@ -289,6 +290,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       minStock: 0,
       maxStock: 0,
       cost: costInDollars,
+      unitPrice: unitPriceInDollars,
       priceTier1,
       priceTier2,
       priceTier3,
@@ -1636,7 +1638,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 bg-muted lg:bg-transparent p-3 lg:p-0 rounded-md">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4 mt-4 bg-muted lg:bg-transparent p-3 lg:p-0 rounded-md">
                           <div>
                             <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Category</p>
                             <p className="text-xs sm:text-sm text-foreground mt-0.5 truncate">{item.category || 'N/A'}</p>
@@ -1656,6 +1658,10 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                           <div>
                             <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Cost</p>
                             <p className="text-xs sm:text-sm text-foreground mt-0.5 font-medium">${item.cost.toFixed(2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Unit Price</p>
+                            <p className="text-xs sm:text-sm text-foreground mt-0.5 font-medium text-cyan-700">${item.unitPrice.toFixed(2)}</p>
                           </div>
                         </div>
 

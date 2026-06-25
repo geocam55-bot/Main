@@ -1865,6 +1865,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                               <SelectValue placeholder="Select default price level" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="UnitPrice">UnitPrice</SelectItem>
                               {[
                                 { key: 't1' as const, tier: 1 },
                                 { key: 't2' as const, tier: 2 },

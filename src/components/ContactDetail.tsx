@@ -158,6 +158,8 @@ interface InventoryItem {
   sku: string;
   description: string;
   cost: number;
+  unitPrice?: number;
+  unit_price?: number;
   priceTier1: number;
   priceTier2?: number;
   priceTier3?: number;
@@ -710,6 +712,9 @@ export function ContactDetail({
   // Helper functions for line items management
   const getPriceForTier = (item: InventoryItem | undefined, tier: number = 1): number => {
     if (!item) return 0;
+    if (tier === 0) {
+      return item.unitPrice || (item.unit_price ? item.unit_price / 100 : 0) || item.priceTier1 || item.price_tier_1 || 0;
+    }
     // Try priceTier1, priceTier2, etc.
     const tierKey = `priceTier${tier}` as keyof InventoryItem;
     if (tierKey in item) {
@@ -2971,9 +2976,16 @@ export function ContactDetail({
                         
                         // Get pricing from inventory item if available
                         const tier = editingBid?.price_tier || 1;
-                        const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
-                        const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
-                        const tierPrice = inventoryItem ? Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || item.unitPrice || 0) : Number(item.unitPrice || 0);
+                        let tierPrice = Number(item.unitPrice || 0);
+                        if (inventoryItem) {
+                          if (tier === 0) {
+                            tierPrice = Number(inventoryItem.unitPrice || (inventoryItem.unit_price ? inventoryItem.unit_price / 100 : 0) || inventoryItem.priceTier1 || 0);
+                          } else {
+                            const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
+                            const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
+                            tierPrice = Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || item.unitPrice || 0);
+                          }
+                        }
                         const baseCost = inventoryItem?.cost || item.cost || 0;
                         
                         // Line item display data ready

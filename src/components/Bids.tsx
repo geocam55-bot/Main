@@ -457,10 +457,14 @@ export function Bids({ user }: BidsProps) {
         if (inventoryItem) {
           // get price for the selected price tier
           const tier = editFormData.priceTier || 1;
-          const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
-          const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
-          
-          const newUnitPrice = Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || inventoryItem.price || 0);
+          let newUnitPrice = 0;
+          if (tier === 0) {
+            newUnitPrice = Number(inventoryItem.unitPrice || (inventoryItem.unit_price ? inventoryItem.unit_price / 100 : 0) || inventoryItem.priceTier1 || 0);
+          } else {
+            const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
+            const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
+            newUnitPrice = Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || inventoryItem.price || 0);
+          }
           
           const subtotal = item.quantity * newUnitPrice;
           const newTotal = subtotal - (subtotal * (item.discount || 0) / 100);
@@ -1124,9 +1128,16 @@ export function Bids({ user }: BidsProps) {
                         
                         // Get pricing from inventory item if available
                         const tier = editFormData.priceTier || 1;
-                        const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
-                        const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
-                        const tierPrice = inventoryItem ? Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || item.unitPrice || 0) : Number(item.unitPrice || 0);
+                        let tierPrice = Number(item.unitPrice || 0);
+                        if (inventoryItem) {
+                          if (tier === 0) {
+                            tierPrice = Number(inventoryItem.unitPrice || (inventoryItem.unit_price ? inventoryItem.unit_price / 100 : 0) || inventoryItem.priceTier1 || 0);
+                          } else {
+                            const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
+                            const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
+                            tierPrice = Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || item.unitPrice || 0);
+                          }
+                        }
                         const baseCost = inventoryItem?.cost || item.cost || 0;
 
                         return (

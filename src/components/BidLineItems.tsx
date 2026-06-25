@@ -25,6 +25,8 @@ interface InventoryItem {
   sku: string;
   description: string;
   cost: number;
+  unitPrice?: number;
+  unit_price?: number;
   priceTier1: number;
   price_tier_1?: number;
   priceTier2?: number;
@@ -114,6 +116,9 @@ export function BidLineItems({ isOpen, onClose, inventoryItems: propsInventoryIt
 
   // Helper function to get price for the given tier
   const getPriceForTier = (item: InventoryItem): number => {
+    if (priceTier === 0) {
+      return item.unitPrice || (item.unit_price ? item.unit_price / 100 : 0) || item.priceTier1 || item.price_tier_1 || 0;
+    }
     const tierKey = `priceTier${priceTier}` as keyof InventoryItem;
     const snakeKey = `price_tier_${priceTier}` as keyof InventoryItem;
     
