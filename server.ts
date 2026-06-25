@@ -1591,11 +1591,12 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               mappedRec.unit_price = mappedRec.price_tier_1;
             }
             const defaultPrice = mappedRec.unit_price || 0;
-            if (mappedRec.price_tier_1 === undefined) mappedRec.price_tier_1 = defaultPrice;
-            if (mappedRec.price_tier_2 === undefined) mappedRec.price_tier_2 = defaultPrice;
-            if (mappedRec.price_tier_3 === undefined) mappedRec.price_tier_3 = defaultPrice;
-            if (mappedRec.price_tier_4 === undefined) mappedRec.price_tier_4 = defaultPrice;
-            if (mappedRec.price_tier_5 === undefined) mappedRec.price_tier_5 = defaultPrice;
+            if (mappedRec.price_tier_1 === undefined || mappedRec.price_tier_1 === 0) mappedRec.price_tier_1 = defaultPrice;
+            const t1 = mappedRec.price_tier_1 || defaultPrice;
+            if (mappedRec.price_tier_2 === undefined || mappedRec.price_tier_2 === 0) mappedRec.price_tier_2 = t1;
+            if (mappedRec.price_tier_3 === undefined || mappedRec.price_tier_3 === 0) mappedRec.price_tier_3 = t1;
+            if (mappedRec.price_tier_4 === undefined || mappedRec.price_tier_4 === 0) mappedRec.price_tier_4 = t1;
+            if (mappedRec.price_tier_5 === undefined || mappedRec.price_tier_5 === 0) mappedRec.price_tier_5 = t1;
             if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
 
             const metadataObj: any = {};
