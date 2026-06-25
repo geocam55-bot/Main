@@ -248,13 +248,27 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
     // This handles the case where a previous import put VIP data into price_tier_5.
     const shouldMigrateT5toT2 = t5Inactive && t5Value != null && t5Value !== 0
       && (dbItem.price_tier_2 == null || dbItem.price_tier_2 === 0);
-    const priceTier2 = shouldMigrateT5toT2 ? t5Value / 100
+    let priceTier2 = shouldMigrateT5toT2 ? t5Value / 100
                      : dbItem.price_tier_2 != null ? dbItem.price_tier_2 / 100
                      : priceTier1;
-    const priceTier3 = dbItem.price_tier_3 != null ? dbItem.price_tier_3 / 100 : priceTier1;
-    const priceTier4 = dbItem.price_tier_4 != null ? dbItem.price_tier_4 / 100 : priceTier1;
-    // T5: if tier is inactive, always default to 0 regardless of DB value
-    const priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
+    if (priceTier2 === 0) {
+      priceTier2 = priceTier1;
+    }
+
+    let priceTier3 = dbItem.price_tier_3 != null ? dbItem.price_tier_3 / 100 : priceTier1;
+    if (priceTier3 === 0) {
+      priceTier3 = priceTier1;
+    }
+
+    let priceTier4 = dbItem.price_tier_4 != null ? dbItem.price_tier_4 / 100 : priceTier1;
+    if (priceTier4 === 0) {
+      priceTier4 = priceTier1;
+    }
+
+    let priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
+    if (priceTier5 === 0) {
+      priceTier5 = priceTier1;
+    }
     
     // Parse description metadata comments if present
     let rawDescription = dbItem.description || '';

@@ -1229,19 +1229,35 @@ function mapInventoryItem(dbItem: any): any {
   
   // For T2-T4: if the tier is NULL in the DB, fall back to priceTier1 (Retail).
   // Business logic: if no specific tier price is set, the item sells at Retail.
-  // A value of 0 in the DB is a legitimate $0.00 price and is preserved as-is.
+  // If Tier2,Tier3,Tier4,Tier5 is 0 then let it be Tier1.
   // T2 (VIP): also check inactive T5 for auto-migration
   // ✅ FIX: Also migrate when T2 is 0 (not just NULL) if T5 has a real non-zero value.
   // This handles the case where a previous import put VIP data into price_tier_5.
   const shouldMigrateT5toT2 = t5Inactive && t5Value != null && t5Value !== 0
     && (dbItem.price_tier_2 == null || dbItem.price_tier_2 === 0);
-  const priceTier2 = shouldMigrateT5toT2 ? t5Value / 100
+  let priceTier2 = shouldMigrateT5toT2 ? t5Value / 100
                    : dbItem.price_tier_2 != null ? dbItem.price_tier_2 / 100
                    : priceTier1;
-  const priceTier3 = dbItem.price_tier_3 != null ? dbItem.price_tier_3 / 100 : priceTier1;
-  const priceTier4 = dbItem.price_tier_4 != null ? dbItem.price_tier_4 / 100 : priceTier1;
-  // T5: if tier is inactive, always default to 0 regardless of DB value
-  const priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
+  if (priceTier2 === 0) {
+    priceTier2 = priceTier1;
+  }
+
+  let priceTier3 = dbItem.price_tier_3 != null ? dbItem.price_tier_3 / 100 : priceTier1;
+  if (priceTier3 === 0) {
+    priceTier3 = priceTier1;
+  }
+
+  let priceTier4 = dbItem.price_tier_4 != null ? dbItem.price_tier_4 / 100 : priceTier1;
+  if (priceTier4 === 0) {
+    priceTier4 = priceTier1;
+  }
+
+  // T5: if tier is inactive and user has not requested active fallback, normally 0.
+  // But if Tier5 is 0, let it be Tier1.
+  let priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
+  if (priceTier5 === 0) {
+    priceTier5 = priceTier1;
+  }
 
   // Parse description metadata comments if present
   let rawDescription = dbItem.description || '';

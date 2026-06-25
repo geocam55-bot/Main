@@ -122,14 +122,19 @@ export function BidLineItems({ isOpen, onClose, inventoryItems: propsInventoryIt
     const tierKey = `priceTier${priceTier}` as keyof InventoryItem;
     const snakeKey = `price_tier_${priceTier}` as keyof InventoryItem;
     
+    let price = 0;
     if (tierKey in item && typeof item[tierKey] === 'number') {
-      return item[tierKey] as number;
+      price = item[tierKey] as number;
+    } else if (snakeKey in item && typeof item[snakeKey] === 'number') {
+      price = item[snakeKey] as number;
+    } else {
+      price = item.priceTier1 || item.price_tier_1 || 0;
     }
-    if (snakeKey in item && typeof item[snakeKey] === 'number') {
-      return item[snakeKey] as number;
+
+    if (price === 0 && priceTier >= 2 && priceTier <= 5) {
+      return item.priceTier1 || item.price_tier_1 || 0;
     }
-    // Fallback to tier 1
-    return item.priceTier1 || item.price_tier_1 || 0;
+    return price;
   };
 
   // Auto-populate unit price when inventory item is selected

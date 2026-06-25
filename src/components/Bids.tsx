@@ -464,6 +464,9 @@ export function Bids({ user }: BidsProps) {
             const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
             const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
             newUnitPrice = Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || inventoryItem.price || 0);
+            if (newUnitPrice === 0 && tier >= 2 && tier <= 5) {
+              newUnitPrice = Number(inventoryItem.priceTier1 || inventoryItem.price_tier_1 || inventoryItem.price || 0);
+            }
           }
           
           const subtotal = item.quantity * newUnitPrice;
@@ -1136,6 +1139,9 @@ export function Bids({ user }: BidsProps) {
                             const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
                             const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
                             tierPrice = Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || item.unitPrice || 0);
+                            if (tierPrice === 0 && tier >= 2 && tier <= 5) {
+                              tierPrice = Number(inventoryItem.priceTier1 || inventoryItem.price_tier_1 || item.unitPrice || 0);
+                            }
                           }
                         }
                         const baseCost = inventoryItem?.cost || item.cost || 0;

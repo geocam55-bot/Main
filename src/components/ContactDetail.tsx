@@ -717,11 +717,18 @@ export function ContactDetail({
     }
     // Try priceTier1, priceTier2, etc.
     const tierKey = `priceTier${tier}` as keyof InventoryItem;
+    let price = 0;
     if (tierKey in item) {
-      return Number(item[tierKey]) || 0;
+      price = Number(item[tierKey]) || 0;
+    } else {
+      // Fallback to price_tier_1
+      price = item.price_tier_1 || item.priceTier1 || 0;
     }
-    // Fallback to price_tier_1
-    return item.price_tier_1 || item.priceTier1 || 0;
+
+    if (price === 0 && tier >= 2 && tier <= 5) {
+      return item.priceTier1 || item.price_tier_1 || 0;
+    }
+    return price;
   };
 
   const calculateLineItemTotal = (quantity: number, unitPrice: number, discount: number): number => {
@@ -2984,6 +2991,9 @@ export function ContactDetail({
                             const tierKey = `priceTier${tier}` as keyof typeof inventoryItem;
                             const snakeKey = `price_tier_${tier}` as keyof typeof inventoryItem;
                             tierPrice = Number(inventoryItem[tierKey] || inventoryItem[snakeKey] || item.unitPrice || 0);
+                            if (tierPrice === 0 && tier >= 2 && tier <= 5) {
+                              tierPrice = Number(inventoryItem.priceTier1 || inventoryItem.price_tier_1 || item.unitPrice || 0);
+                            }
                           }
                         }
                         const baseCost = inventoryItem?.cost || item.cost || 0;

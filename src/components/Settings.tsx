@@ -40,9 +40,11 @@ import {
   Hammer,
   Sun,
   Moon,
+  Database,
 } from 'lucide-react';
 import type { User } from '../App';
 import { tenantsAPI, settingsAPI } from '../utils/api';
+import { createClient } from '../utils/supabase/client';
 import { DEFAULT_PRICE_TIER_LABELS, type PriceTierLabels, getPriceTierLabel, getActivePriceLevels, AVAILABLE_MODULES } from '../lib/global-settings';
 import { buildCustomText, type CustomExportField, type CustomExportTemplate } from '../utils/export-engine';
 
@@ -216,6 +218,105 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [isSavingOrg, setIsSavingOrg] = useState(false);
+  const [isReindexing, setIsReindexing] = useState(false);
+  const [isRemovingDuplicates, setIsRemovingDuplicates] = useState(false);
+  const [isRemovingUndefined, setIsRemovingUndefined] = useState(false);
+
+  const runReindex = async () => {
+    setIsReindexing(true);
+    const toastId = toast.loading('Reindexing database tables...');
+    try {
+      const supabase = createClient();
+      const sql = `REINDEX TABLE public.inventory; REINDEX TABLE public.contacts;`;
+      
+      let { error } = await supabase.rpc('exec_sql', { sql });
+      if (error) {
+        const fallback = await supabase.rpc('execute_sql_query', { sql_text: sql });
+        error = fallback.error;
+      }
+
+      if (error) {
+        console.error('Reindex database error:', error);
+        toast.error(`Reindex failed: ${error.message || 'Unknown database error'}`, { id: toastId });
+      } else {
+        toast.success('Database tables reindexed successfully!', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('Reindex error:', err);
+      toast.error(`Failed to execute: ${err.message || err}`, { id: toastId });
+    } finally {
+      setIsReindexing(false);
+    }
+  };
+
+  const runRemoveDuplicates = async () => {
+    setIsRemovingDuplicates(true);
+    const toastId = toast.loading('Removing duplicate records...');
+    try {
+      const supabase = createClient();
+      const sql = `
+        DELETE FROM public.inventory 
+        WHERE id IN (
+          SELECT id 
+          FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY LOWER(TRIM(sku)) ORDER BY id ASC) as row_num 
+            FROM public.inventory 
+            WHERE sku IS NOT NULL AND TRIM(sku) != ''
+          ) t 
+          WHERE t.row_num > 1
+        );
+      `;
+      
+      let { error } = await supabase.rpc('exec_sql', { sql });
+      if (error) {
+        const fallback = await supabase.rpc('execute_sql_query', { sql_text: sql });
+        error = fallback.error;
+      }
+
+      if (error) {
+        console.error('Remove duplicates database error:', error);
+        toast.error(`Remove duplicates failed: ${error.message || 'Unknown database error'}`, { id: toastId });
+      } else {
+        toast.success('Duplicate inventory records removed successfully!', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('Remove duplicates error:', err);
+      toast.error(`Failed to execute: ${err.message || err}`, { id: toastId });
+    } finally {
+      setIsRemovingDuplicates(false);
+    }
+  };
+
+  const runRemoveUndefined = async () => {
+    setIsRemovingUndefined(true);
+    const toastId = toast.loading('Removing "UNDEFINED" SKU records...');
+    try {
+      const supabase = createClient();
+      const sql = `
+        DELETE FROM public.inventory 
+        WHERE (sku IS NOT NULL AND LOWER(TRIM(sku)) = 'undefined') 
+           OR (description IS NOT NULL AND LOWER(TRIM(description)) = 'undefined');
+      `;
+      
+      let { error } = await supabase.rpc('exec_sql', { sql });
+      if (error) {
+        const fallback = await supabase.rpc('execute_sql_query', { sql_text: sql });
+        error = fallback.error;
+      }
+
+      if (error) {
+        console.error('Remove undefined database error:', error);
+        toast.error(`Remove undefined failed: ${error.message || 'Unknown database error'}`, { id: toastId });
+      } else {
+        toast.success('Undefined SKU inventory records removed successfully!', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('Remove undefined error:', err);
+      toast.error(`Failed to execute: ${err.message || err}`, { id: toastId });
+    } finally {
+      setIsRemovingUndefined(false);
+    }
+  };
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showDatabaseWarning, setShowDatabaseWarning] = useState(false);
   const [showLayoutDialog, setShowLayoutDialog] = useState(false);
@@ -1362,6 +1463,100 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                     Updating organization mode...
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Database Management Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5 text-indigo-600" />
+                  Database Management
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Perform system maintenance on your organization's database tables. These operations run direct database queries.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  {/* Option 1: Reindex Tables */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 first:pt-0">
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm text-foreground">Reindex Tables</p>
+                      <p className="text-xs text-muted-foreground max-w-xl">
+                        Rebuild indexes on the inventory and contacts tables to optimize search speeds and query response times.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={runReindex} 
+                      disabled={isReindexing || isRemovingDuplicates || isRemovingUndefined}
+                      variant="outline"
+                      type="button"
+                      className="sm:w-48 justify-center shrink-0 border-indigo-200 hover:bg-indigo-50/50 dark:border-indigo-900/50 dark:hover:bg-indigo-950/20"
+                    >
+                      {isReindexing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Reindexing...
+                        </>
+                      ) : (
+                        'Reindex Tables'
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Option 2: Remove Duplicate Records */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-t">
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm text-foreground">Remove Duplicate Records</p>
+                      <p className="text-xs text-muted-foreground max-w-xl">
+                        Scan the inventory table for duplicate SKU codes and remove duplicates, retaining only the first created record for each unique SKU.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={runRemoveDuplicates} 
+                      disabled={isReindexing || isRemovingDuplicates || isRemovingUndefined}
+                      variant="outline"
+                      type="button"
+                      className="sm:w-48 justify-center shrink-0 border-amber-200 hover:bg-amber-50/50 dark:border-amber-900/50 dark:hover:bg-amber-950/20"
+                    >
+                      {isRemovingDuplicates ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Removing...
+                        </>
+                      ) : (
+                        'Remove Duplicate Records'
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Option 3: Remove "UNDEFINED" SKUs */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-t">
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm text-foreground">Remove "UNDEFINED" SKUs</p>
+                      <p className="text-xs text-muted-foreground max-w-xl">
+                        Clean up the inventory table by permanently deleting any records where the SKU or description is strictly labeled as "UNDEFINED" (case-insensitive).
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={runRemoveUndefined} 
+                      disabled={isReindexing || isRemovingDuplicates || isRemovingUndefined}
+                      variant="outline"
+                      type="button"
+                      className="sm:w-48 justify-center shrink-0 border-rose-200 hover:bg-rose-200/50 dark:border-rose-900/50 dark:hover:bg-rose-950/20 text-rose-700 dark:text-rose-400"
+                    >
+                      {isRemovingUndefined ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Removing...
+                        </>
+                      ) : (
+                        'Remove Undefined SKUs'
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
