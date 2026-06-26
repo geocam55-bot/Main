@@ -52,3 +52,23 @@ ALTER TABLE organization_settings
 ADD COLUMN IF NOT EXISTS export_templates JSONB DEFAULT '[]'::jsonb;
 
 COMMENT ON COLUMN organization_settings.export_templates IS 'Custom export templates for Quotes and Planners, created by super_admin';
+
+-- =============================================================================
+-- Add ReorderLevel, Location, UPC, Supplier, and Supplier SKU columns to inventory table
+-- =============================================================================
+ALTER TABLE public.inventory ADD COLUMN IF NOT EXISTS reorder_level INTEGER DEFAULT 0;
+ALTER TABLE public.inventory ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE public.inventory ADD COLUMN IF NOT EXISTS upc TEXT;
+ALTER TABLE public.inventory ADD COLUMN IF NOT EXISTS supplier TEXT;
+ALTER TABLE public.inventory ADD COLUMN IF NOT EXISTS supplier_sku TEXT;
+
+COMMENT ON COLUMN public.inventory.reorder_level IS 'The threshold quantity at which stock should be reordered (defaults to 0)';
+COMMENT ON COLUMN public.inventory.location IS 'The physical bin or location identifier of the item in the warehouse or store';
+COMMENT ON COLUMN public.inventory.upc IS 'Universal Product Code (UPC) or barcode number for item identification';
+COMMENT ON COLUMN public.inventory.supplier IS 'The manufacturer, distributor, or supplier of the inventory item';
+COMMENT ON COLUMN public.inventory.supplier_sku IS 'The supplier-specific stock keeping unit (SKU) code';
+
+CREATE INDEX IF NOT EXISTS idx_inventory_upc ON public.inventory(upc);
+CREATE INDEX IF NOT EXISTS idx_inventory_location ON public.inventory(location);
+CREATE INDEX IF NOT EXISTS idx_inventory_supplier ON public.inventory(supplier);
+CREATE INDEX IF NOT EXISTS idx_inventory_supplier_sku ON public.inventory(supplier_sku);

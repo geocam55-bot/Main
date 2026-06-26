@@ -488,6 +488,12 @@ export async function createInventoryClient(itemData: any) {
     }
     if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
     if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
+    if (itemData.reorder_level !== undefined) cleanData.reorder_level = itemData.reorder_level;
+    if (itemData.location !== undefined) cleanData.location = itemData.location;
+    if (itemData.upc !== undefined) cleanData.upc = itemData.upc;
+    if (itemData.supplier !== undefined) cleanData.supplier = itemData.supplier;
+    if (itemData.supplierSKU !== undefined) cleanData.supplier_sku = itemData.supplierSKU;
+    if (itemData.supplier_sku !== undefined) cleanData.supplier_sku = itemData.supplier_sku;
 
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 or undefined then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
@@ -589,6 +595,12 @@ export async function updateInventoryClient(id: string, itemData: any) {
     }
     if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
     if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
+    if (itemData.reorder_level !== undefined) cleanData.reorder_level = itemData.reorder_level;
+    if (itemData.location !== undefined) cleanData.location = itemData.location;
+    if (itemData.upc !== undefined) cleanData.upc = itemData.upc;
+    if (itemData.supplier !== undefined) cleanData.supplier = itemData.supplier;
+    if (itemData.supplierSKU !== undefined) cleanData.supplier_sku = itemData.supplierSKU;
+    if (itemData.supplier_sku !== undefined) cleanData.supplier_sku = itemData.supplier_sku;
 
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
@@ -679,66 +691,100 @@ export async function upsertInventoryBySKUClient(itemData: any) {
 
     // Clean the data - only include fields that exist in the database
     const cleanData: any = {
-      name: itemData.name,
-      sku: itemData.sku,
+      name: itemData.name !== undefined ? itemData.name : (itemData.ItemName !== undefined ? itemData.ItemName : (itemData.Name !== undefined ? itemData.Name : undefined)),
+      sku: itemData.sku !== undefined ? itemData.sku : (itemData.SKU !== undefined ? itemData.SKU : undefined),
       organization_id: organizationId,
     };
 
     // Add optional fields only if they exist - ONLY valid database columns
     if (itemData.description !== undefined) cleanData.description = itemData.description;
     if (itemData.category !== undefined) cleanData.category = itemData.category;
-    if (itemData.quantity !== undefined) {
+    
+    const qtyRaw = itemData.quantity !== undefined ? itemData.quantity : (itemData.quantityOnHand !== undefined ? itemData.quantityOnHand : (itemData.Quantity !== undefined ? itemData.Quantity : undefined));
+    if (qtyRaw !== undefined) {
       // Parse quantity as integer - handle decimal values by rounding
-      const qty = typeof itemData.quantity === 'string' 
-        ? parseFloat(itemData.quantity) 
-        : itemData.quantity;
+      const qty = typeof qtyRaw === 'string' ? parseFloat(qtyRaw) : qtyRaw;
       cleanData.quantity = Math.round(qty);
     }
-    if (itemData.quantity_on_order !== undefined) {
+    
+    const qtyOnOrderRaw = itemData.quantity_on_order !== undefined ? itemData.quantity_on_order : (itemData.quantityOnOrder !== undefined ? itemData.quantityOnOrder : (itemData.QuantityOnOrder !== undefined ? itemData.QuantityOnOrder : undefined));
+    if (qtyOnOrderRaw !== undefined) {
       // Parse quantity_on_order as integer - handle decimal values by rounding
-      const qtyOnOrder = typeof itemData.quantity_on_order === 'string' 
-        ? parseFloat(itemData.quantity_on_order) 
-        : itemData.quantity_on_order;
+      const qtyOnOrder = typeof qtyOnOrderRaw === 'string' ? parseFloat(qtyOnOrderRaw) : qtyOnOrderRaw;
       cleanData.quantity_on_order = Math.round(qtyOnOrder);
     }
-    if (itemData.unit_price !== undefined) {
+    
+    const unitPriceRaw = itemData.unit_price !== undefined ? itemData.unit_price : (itemData.unitPrice !== undefined ? itemData.unitPrice : (itemData.UnitPrice !== undefined ? itemData.UnitPrice : undefined));
+    if (unitPriceRaw !== undefined) {
       // Convert unit_price to cents (integer) - multiply by 100
-      const price = typeof itemData.unit_price === 'string' 
-        ? parseFloat(itemData.unit_price) 
-        : itemData.unit_price;
+      const price = typeof unitPriceRaw === 'string' ? parseFloat(unitPriceRaw) : unitPriceRaw;
       cleanData.unit_price = Math.round(price * 100);
     }
-    if (itemData.cost !== undefined) {
+    
+    const costRaw = itemData.cost !== undefined ? itemData.cost : (itemData.Cost !== undefined ? itemData.Cost : undefined);
+    if (costRaw !== undefined) {
       // Convert cost to cents (integer) - multiply by 100
-      const cost = typeof itemData.cost === 'string' 
-        ? parseFloat(itemData.cost) 
-        : itemData.cost;
+      const cost = typeof costRaw === 'string' ? parseFloat(costRaw) : costRaw;
       cleanData.cost = Math.round(cost * 100);
     }
-    if (itemData.image_url !== undefined) cleanData.image_url = itemData.image_url;
+    
+    const imageUrlRaw = itemData.image_url !== undefined ? itemData.image_url : (itemData.imageUrl !== undefined ? itemData.imageUrl : (itemData.imageURL !== undefined ? itemData.imageURL : (itemData.ImageURL !== undefined ? itemData.ImageURL : undefined)));
+    if (imageUrlRaw !== undefined) cleanData.image_url = imageUrlRaw;
+    
     // Price tiers (stored in cents)
-    if (itemData.price_tier_1 !== undefined) {
-      const p = typeof itemData.price_tier_1 === 'string' ? parseFloat(itemData.price_tier_1) : itemData.price_tier_1;
+    const p1Raw = itemData.price_tier_1 !== undefined ? itemData.price_tier_1 : (itemData.priceTier1 !== undefined ? itemData.priceTier1 : (itemData.PriceTier1 !== undefined ? itemData.PriceTier1 : undefined));
+    if (p1Raw !== undefined) {
+      const p = typeof p1Raw === 'string' ? parseFloat(p1Raw) : p1Raw;
       cleanData.price_tier_1 = Math.round(p * 100);
     }
-    if (itemData.price_tier_2 !== undefined) {
-      const p = typeof itemData.price_tier_2 === 'string' ? parseFloat(itemData.price_tier_2) : itemData.price_tier_2;
+    
+    const p2Raw = itemData.price_tier_2 !== undefined ? itemData.price_tier_2 : (itemData.priceTier2 !== undefined ? itemData.priceTier2 : (itemData.PriceTier2 !== undefined ? itemData.PriceTier2 : undefined));
+    if (p2Raw !== undefined) {
+      const p = typeof p2Raw === 'string' ? parseFloat(p2Raw) : p2Raw;
       cleanData.price_tier_2 = Math.round(p * 100);
     }
-    if (itemData.price_tier_3 !== undefined) {
-      const p = typeof itemData.price_tier_3 === 'string' ? parseFloat(itemData.price_tier_3) : itemData.price_tier_3;
+    
+    const p3Raw = itemData.price_tier_3 !== undefined ? itemData.price_tier_3 : (itemData.priceTier3 !== undefined ? itemData.priceTier3 : (itemData.PriceTier3 !== undefined ? itemData.PriceTier3 : undefined));
+    if (p3Raw !== undefined) {
+      const p = typeof p3Raw === 'string' ? parseFloat(p3Raw) : p3Raw;
       cleanData.price_tier_3 = Math.round(p * 100);
     }
-    if (itemData.price_tier_4 !== undefined) {
-      const p = typeof itemData.price_tier_4 === 'string' ? parseFloat(itemData.price_tier_4) : itemData.price_tier_4;
+    
+    const p4Raw = itemData.price_tier_4 !== undefined ? itemData.price_tier_4 : (itemData.priceTier4 !== undefined ? itemData.priceTier4 : (itemData.PriceTier4 !== undefined ? itemData.PriceTier4 : undefined));
+    if (p4Raw !== undefined) {
+      const p = typeof p4Raw === 'string' ? parseFloat(p4Raw) : p4Raw;
       cleanData.price_tier_4 = Math.round(p * 100);
     }
-    if (itemData.price_tier_5 !== undefined) {
-      const p = typeof itemData.price_tier_5 === 'string' ? parseFloat(itemData.price_tier_5) : itemData.price_tier_5;
+    
+    const p5Raw = itemData.price_tier_5 !== undefined ? itemData.price_tier_5 : (itemData.priceTier5 !== undefined ? itemData.priceTier5 : (itemData.PriceTier5 !== undefined ? itemData.PriceTier5 : undefined));
+    if (p5Raw !== undefined) {
+      const p = typeof p5Raw === 'string' ? parseFloat(p5Raw) : p5Raw;
       cleanData.price_tier_5 = Math.round(p * 100);
     }
-    if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
-    if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
+    
+    const deptRaw = itemData.department_code !== undefined ? itemData.department_code : (itemData.departmentCode !== undefined ? itemData.departmentCode : (itemData.DepartmentCode !== undefined ? itemData.DepartmentCode : undefined));
+    if (deptRaw !== undefined) cleanData.department_code = deptRaw;
+    
+    const unitRaw = itemData.unit_of_measure !== undefined ? itemData.unit_of_measure : (itemData.unitOfMeasure !== undefined ? itemData.unitOfMeasure : (itemData.unit !== undefined ? itemData.unit : (itemData.Unit !== undefined ? itemData.Unit : undefined)));
+    if (unitRaw !== undefined) cleanData.unit_of_measure = unitRaw;
+    
+    const reorderRaw = itemData.reorder_level !== undefined ? itemData.reorder_level : (itemData.reorderLevel !== undefined ? itemData.reorderLevel : (itemData.ReorderLevel !== undefined ? itemData.ReorderLevel : undefined));
+    if (reorderRaw !== undefined) {
+      const r = typeof reorderRaw === 'string' ? parseInt(reorderRaw) : reorderRaw;
+      cleanData.reorder_level = isNaN(r) ? 0 : r;
+    }
+    
+    const locRaw = itemData.location !== undefined ? itemData.location : (itemData.Location !== undefined ? itemData.Location : undefined);
+    if (locRaw !== undefined) cleanData.location = locRaw;
+    
+    const upcRaw = itemData.upc !== undefined ? itemData.upc : (itemData.UPC !== undefined ? itemData.UPC : undefined);
+    if (upcRaw !== undefined) cleanData.upc = upcRaw;
+    
+    const supplierRaw = itemData.supplier !== undefined ? itemData.supplier : (itemData.Supplier !== undefined ? itemData.Supplier : undefined);
+    if (supplierRaw !== undefined) cleanData.supplier = supplierRaw;
+    
+    const supplierSkuRaw = itemData.supplier_sku !== undefined ? itemData.supplier_sku : (itemData.supplierSKU !== undefined ? itemData.supplierSKU : (itemData.SupplierSKU !== undefined ? itemData.SupplierSKU : undefined));
+    if (supplierSkuRaw !== undefined) cleanData.supplier_sku = supplierSkuRaw;
 
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
@@ -874,66 +920,100 @@ export async function bulkUpsertInventoryBySKUClient(itemsData: any[]) {
     // Clean all items data
     const cleanItems = itemsData.map(itemData => {
       const cleanData: any = {
-        name: itemData.name,
-        sku: itemData.sku,
+        name: itemData.name !== undefined ? itemData.name : (itemData.ItemName !== undefined ? itemData.ItemName : (itemData.Name !== undefined ? itemData.Name : undefined)),
+        sku: itemData.sku !== undefined ? itemData.sku : (itemData.SKU !== undefined ? itemData.SKU : undefined),
         organization_id: organizationId,
       };
 
       // Add optional fields only if they exist
       if (itemData.description !== undefined) cleanData.description = itemData.description;
       if (itemData.category !== undefined) cleanData.category = itemData.category;
-      if (itemData.quantity !== undefined) {
+      
+      const qtyRaw = itemData.quantity !== undefined ? itemData.quantity : (itemData.quantityOnHand !== undefined ? itemData.quantityOnHand : (itemData.Quantity !== undefined ? itemData.Quantity : undefined));
+      if (qtyRaw !== undefined) {
         // Parse quantity as integer - handle decimal values by rounding
-        const qty = typeof itemData.quantity === 'string' 
-          ? parseFloat(itemData.quantity) 
-          : itemData.quantity;
+        const qty = typeof qtyRaw === 'string' ? parseFloat(qtyRaw) : qtyRaw;
         cleanData.quantity = Math.round(qty);
       }
-      if (itemData.quantity_on_order !== undefined) {
+      
+      const qtyOnOrderRaw = itemData.quantity_on_order !== undefined ? itemData.quantity_on_order : (itemData.quantityOnOrder !== undefined ? itemData.quantityOnOrder : (itemData.QuantityOnOrder !== undefined ? itemData.QuantityOnOrder : undefined));
+      if (qtyOnOrderRaw !== undefined) {
         // Parse quantity_on_order as integer - handle decimal values by rounding
-        const qtyOnOrder = typeof itemData.quantity_on_order === 'string' 
-          ? parseFloat(itemData.quantity_on_order) 
-          : itemData.quantity_on_order;
+        const qtyOnOrder = typeof qtyOnOrderRaw === 'string' ? parseFloat(qtyOnOrderRaw) : qtyOnOrderRaw;
         cleanData.quantity_on_order = Math.round(qtyOnOrder);
       }
-      if (itemData.unit_price !== undefined) {
+      
+      const unitPriceRaw = itemData.unit_price !== undefined ? itemData.unit_price : (itemData.unitPrice !== undefined ? itemData.unitPrice : (itemData.UnitPrice !== undefined ? itemData.UnitPrice : undefined));
+      if (unitPriceRaw !== undefined) {
         // Convert unit_price to cents (integer) - multiply by 100
-        const price = typeof itemData.unit_price === 'string' 
-          ? parseFloat(itemData.unit_price) 
-          : itemData.unit_price;
+        const price = typeof unitPriceRaw === 'string' ? parseFloat(unitPriceRaw) : unitPriceRaw;
         cleanData.unit_price = Math.round(price * 100);
       }
-      if (itemData.cost !== undefined) {
+      
+      const costRaw = itemData.cost !== undefined ? itemData.cost : (itemData.Cost !== undefined ? itemData.Cost : undefined);
+      if (costRaw !== undefined) {
         // Convert cost to cents (integer) - multiply by 100
-        const cost = typeof itemData.cost === 'string' 
-          ? parseFloat(itemData.cost) 
-          : itemData.cost;
+        const cost = typeof costRaw === 'string' ? parseFloat(costRaw) : costRaw;
         cleanData.cost = Math.round(cost * 100);
       }
-      if (itemData.image_url !== undefined) cleanData.image_url = itemData.image_url;
+      
+      const imageUrlRaw = itemData.image_url !== undefined ? itemData.image_url : (itemData.imageUrl !== undefined ? itemData.imageUrl : (itemData.imageURL !== undefined ? itemData.imageURL : (itemData.ImageURL !== undefined ? itemData.ImageURL : undefined)));
+      if (imageUrlRaw !== undefined) cleanData.image_url = imageUrlRaw;
+      
       // Price tiers (stored in cents)
-      if (itemData.price_tier_1 !== undefined) {
-        const p = typeof itemData.price_tier_1 === 'string' ? parseFloat(itemData.price_tier_1) : itemData.price_tier_1;
+      const p1Raw = itemData.price_tier_1 !== undefined ? itemData.price_tier_1 : (itemData.priceTier1 !== undefined ? itemData.priceTier1 : (itemData.PriceTier1 !== undefined ? itemData.PriceTier1 : undefined));
+      if (p1Raw !== undefined) {
+        const p = typeof p1Raw === 'string' ? parseFloat(p1Raw) : p1Raw;
         cleanData.price_tier_1 = Math.round(p * 100);
       }
-      if (itemData.price_tier_2 !== undefined) {
-        const p = typeof itemData.price_tier_2 === 'string' ? parseFloat(itemData.price_tier_2) : itemData.price_tier_2;
+      
+      const p2Raw = itemData.price_tier_2 !== undefined ? itemData.price_tier_2 : (itemData.priceTier2 !== undefined ? itemData.priceTier2 : (itemData.PriceTier2 !== undefined ? itemData.PriceTier2 : undefined));
+      if (p2Raw !== undefined) {
+        const p = typeof p2Raw === 'string' ? parseFloat(p2Raw) : p2Raw;
         cleanData.price_tier_2 = Math.round(p * 100);
       }
-      if (itemData.price_tier_3 !== undefined) {
-        const p = typeof itemData.price_tier_3 === 'string' ? parseFloat(itemData.price_tier_3) : itemData.price_tier_3;
+      
+      const p3Raw = itemData.price_tier_3 !== undefined ? itemData.price_tier_3 : (itemData.priceTier3 !== undefined ? itemData.priceTier3 : (itemData.PriceTier3 !== undefined ? itemData.PriceTier3 : undefined));
+      if (p3Raw !== undefined) {
+        const p = typeof p3Raw === 'string' ? parseFloat(p3Raw) : p3Raw;
         cleanData.price_tier_3 = Math.round(p * 100);
       }
-      if (itemData.price_tier_4 !== undefined) {
-        const p = typeof itemData.price_tier_4 === 'string' ? parseFloat(itemData.price_tier_4) : itemData.price_tier_4;
+      
+      const p4Raw = itemData.price_tier_4 !== undefined ? itemData.price_tier_4 : (itemData.priceTier4 !== undefined ? itemData.priceTier4 : (itemData.PriceTier4 !== undefined ? itemData.PriceTier4 : undefined));
+      if (p4Raw !== undefined) {
+        const p = typeof p4Raw === 'string' ? parseFloat(p4Raw) : p4Raw;
         cleanData.price_tier_4 = Math.round(p * 100);
       }
-      if (itemData.price_tier_5 !== undefined) {
-        const p = typeof itemData.price_tier_5 === 'string' ? parseFloat(itemData.price_tier_5) : itemData.price_tier_5;
+      
+      const p5Raw = itemData.price_tier_5 !== undefined ? itemData.price_tier_5 : (itemData.priceTier5 !== undefined ? itemData.priceTier5 : (itemData.PriceTier5 !== undefined ? itemData.PriceTier5 : undefined));
+      if (p5Raw !== undefined) {
+        const p = typeof p5Raw === 'string' ? parseFloat(p5Raw) : p5Raw;
         cleanData.price_tier_5 = Math.round(p * 100);
       }
-      if (itemData.department_code !== undefined) cleanData.department_code = itemData.department_code;
-      if (itemData.unit_of_measure !== undefined) cleanData.unit_of_measure = itemData.unit_of_measure;
+      
+      const deptRaw = itemData.department_code !== undefined ? itemData.department_code : (itemData.departmentCode !== undefined ? itemData.departmentCode : (itemData.DepartmentCode !== undefined ? itemData.DepartmentCode : undefined));
+      if (deptRaw !== undefined) cleanData.department_code = deptRaw;
+      
+      const unitRaw = itemData.unit_of_measure !== undefined ? itemData.unit_of_measure : (itemData.unitOfMeasure !== undefined ? itemData.unitOfMeasure : (itemData.unit !== undefined ? itemData.unit : (itemData.Unit !== undefined ? itemData.Unit : undefined)));
+      if (unitRaw !== undefined) cleanData.unit_of_measure = unitRaw;
+      
+      const reorderRaw = itemData.reorder_level !== undefined ? itemData.reorder_level : (itemData.reorderLevel !== undefined ? itemData.reorderLevel : (itemData.ReorderLevel !== undefined ? itemData.ReorderLevel : undefined));
+      if (reorderRaw !== undefined) {
+        const r = typeof reorderRaw === 'string' ? parseInt(reorderRaw) : reorderRaw;
+        cleanData.reorder_level = isNaN(r) ? 0 : r;
+      }
+      
+      const locRaw = itemData.location !== undefined ? itemData.location : (itemData.Location !== undefined ? itemData.Location : undefined);
+      if (locRaw !== undefined) cleanData.location = locRaw;
+      
+      const upcRaw = itemData.upc !== undefined ? itemData.upc : (itemData.UPC !== undefined ? itemData.UPC : undefined);
+      if (upcRaw !== undefined) cleanData.upc = upcRaw;
+      
+      const supplierRaw = itemData.supplier !== undefined ? itemData.supplier : (itemData.Supplier !== undefined ? itemData.Supplier : undefined);
+      if (supplierRaw !== undefined) cleanData.supplier = supplierRaw;
+      
+      const supplierSkuRaw = itemData.supplier_sku !== undefined ? itemData.supplier_sku : (itemData.supplierSKU !== undefined ? itemData.supplierSKU : (itemData.SupplierSKU !== undefined ? itemData.SupplierSKU : undefined));
+      if (supplierSkuRaw !== undefined) cleanData.supplier_sku = supplierSkuRaw;
 
       // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 then let them be Tier1
       const fallbackT1 = cleanData.price_tier_1 !== undefined 
@@ -1331,7 +1411,10 @@ function mapInventoryItem(dbItem: any): any {
     priceTier5,
     departmentCode: dbItem.department_code || '',
     unitOfMeasure: dbItem.unit_of_measure || 'ea',
-    reorderLevel: 0,
+    reorderLevel: dbItem.reorder_level !== undefined && dbItem.reorder_level !== null ? dbItem.reorder_level : 0,
+    upc: dbItem.upc || '',
+    supplier: dbItem.supplier || '',
+    supplierSKU: dbItem.supplier_sku || '',
     minStock: 0,
     maxStock: 0,
     status: metadata.status || dbItem.status || 'active',

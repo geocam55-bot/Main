@@ -371,25 +371,22 @@ function ScheduledJobs({ user, onNavigate }) {
       
       for (const record of data) {
         try {
+          const resolvedName = record.name || record.ItemName || record.Name || record.itemName;
+          const resolvedSku = record.sku || record.SKU || record.skuCode || record.sku_code || record.partNumber || record.part_number;
+          
           // Validate required fields
-          if (!record.name || !record.sku) {
-            errors.push(`Skipping record - Missing required fields (name: ${record.name}, sku: ${record.sku})`);
+          if (!resolvedName || !resolvedSku) {
+            errors.push(`Skipping record - Missing required fields (name: ${resolvedName || 'undefined'}, sku: ${resolvedSku || 'undefined'})`);
             continue;
           }
 
-          // Clean the inventory data
-          const cleanItem: any = {
-            name: record.name,
-            sku: record.sku,
-            description: record.description || '',
-            quantity: parseInt(record.quantity) || 0,
-            quantity_on_order: parseInt(record.quantity_on_order) || 0,
-            unit_price: parseFloat(record.unit_price) || 0,
-            cost: parseFloat(record.cost) || 0,
-            // Note: location, supplier, notes removed - not in simplified schema
-          };
-
-          cleanedInventory.push(cleanItem);
+          // We pass the record as-is, ensuring name and sku are populated,
+          // because bulkUpsertBySKUClient cleans and maps all fields robustly!
+          cleanedInventory.push({
+            ...record,
+            name: resolvedName,
+            sku: resolvedSku
+          });
         } catch (error: any) {
           errors.push(`Error cleaning inventory record: ${error.message}`);
         }

@@ -88,6 +88,7 @@ interface InventoryItem {
   supplierSKU?: string;
   leadTimeDays?: number;
   barcode?: string;
+  upc?: string;
   location?: string;
   imageUrl?: string;
   tags?: string[];
@@ -482,7 +483,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
         supplier: item.supplier || '',
         supplierSKU: item.supplierSKU || '',
         leadTimeDays: item.leadTimeDays || 0,
-        barcode: item.barcode || '',
+        barcode: item.barcode || item.upc || '',
         location: item.location || '',
         imageUrl: item.imageUrl || '',
         tags: item.tags?.join(', ') || '',
@@ -630,6 +631,8 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
         image_url: formData.imageUrl || '',
         location: formData.location || '',
         status: formData.status || 'active',
+        reorder_level: Number(formData.reorderLevel) || 0,
+        upc: formData.barcode || '',
       };
 
       if (editingItem) {

@@ -249,13 +249,18 @@ const CONTACTS_TEMPLATE_SAMPLE = [
 const INVENTORY_TEMPLATE_SAMPLE = [
   {
     "SKU": "ELEC-WIR-122",
-    "ItemName": "Copper Wire Romex 12/2 100ft",
+    "UPC": "012345678901",
+    "Supplier": "Southwire Co.",
+    "SupplierSKU": "SW-122-100",
+    "Name": "Copper Wire Romex 12/2 100ft",
     "Description": "Non-metallic sheathed electrical residential copper cable.",
     "Category": "Electrical",
     "Quantity": 45,
     "QuantityOnOrder": 15,
+    "ReorderLevel": 10,
     "Location": "Aisle 3A",
     "Status": "instock",
+    "DepartmentCode": "ELEC",
     "UnitPrice": 89.99,
     "Cost": 55.00,
     "PriceTier1": 89.99,
@@ -264,17 +269,22 @@ const INVENTORY_TEMPLATE_SAMPLE = [
     "PriceTier4": 74.99,
     "PriceTier5": 69.99,
     "Unit": "ea",
-    "ImageUrl": "https://example.com/images/elec-wir.jpg"
+    "ImageURL": "https://example.com/images/elec-wir.jpg"
   },
   {
     "SKU": "PLUM-PVC-075",
-    "ItemName": "PVC Pipe 3/4 Inch 10ft",
+    "UPC": "012345678902",
+    "Supplier": "Charlotte Pipe",
+    "SupplierSKU": "CP-PVC-075",
+    "Name": "PVC Pipe 3/4 Inch 10ft",
     "Description": "Schedule 40 PVC plumbing water line pipe. Light grey style.",
     "Category": "Plumbing",
     "Quantity": 150,
     "QuantityOnOrder": 0,
+    "ReorderLevel": 50,
     "Location": "Rack 12",
     "Status": "instock",
+    "DepartmentCode": "PLUM",
     "UnitPrice": 6.49,
     "Cost": 2.10,
     "PriceTier1": 6.49,
@@ -283,7 +293,7 @@ const INVENTORY_TEMPLATE_SAMPLE = [
     "PriceTier4": 4.99,
     "PriceTier5": 4.49,
     "Unit": "ea",
-    "ImageUrl": "https://example.com/images/pvc-pipe.jpg"
+    "ImageURL": "https://example.com/images/pvc-pipe.jpg"
   }
 ];
 
@@ -330,12 +340,18 @@ const SCHEMA_GUIDES = {
     description: "Map and manage hardware material catalogs, on-hand ledger counts, warehouse coordinate details, and pricing margins.",
     fields: [
       { name: "SKU", req: true, desc: "Unique inventory SKU part number (e.g., PIPE-PVC-01)." },
-      { name: "ItemName", req: true, desc: "Core material retail name or catalog identifier." },
+      { name: "Name / ItemName", req: true, desc: "Core material retail name or catalog identifier." },
+      { name: "UPC", req: false, desc: "Universal Product Code barcode (e.g. 012345678901)." },
+      { name: "Supplier", req: false, desc: "Sourcing distributor or vendor name (e.g. Southwire Co.)." },
+      { name: "SupplierSKU", req: false, desc: "Supplier catalog or part number reference (e.g. SW-122-100)." },
       { name: "Description", req: false, desc: "Technical details, packaging, raw material specifics." },
       { name: "Category", req: false, desc: "Catalog category (Electrical, Plumbing, Flooring)." },
       { name: "Quantity / QuantityOnHand", req: false, desc: "Internal current ledger count." },
       { name: "QuantityOnOrder", req: false, desc: "Current pending supplier delivery units count." },
+      { name: "ReorderLevel", req: false, desc: "Minimum count before triggering reorder alerts." },
       { name: "Location", req: false, desc: "Warehouse coordinates or bin code reference." },
+      { name: "Status", req: false, desc: "Inventory listing status (Active, InStock, LowStock, OutOfStock)." },
+      { name: "DepartmentCode", req: false, desc: "Accounting or warehouse department segment identifier." },
       { name: "UnitPrice", req: false, desc: "Active selling price (decimal format, e.g. 59.99)." },
       { name: "Cost", req: false, desc: "Sourcing acquire unit cost (decimal format, e.g. 24.50)." },
       { name: "PriceTier1", req: false, desc: "Tier 1 - Retail Price (equals base UnitPrice, e.g. 59.99)." },
@@ -344,7 +360,7 @@ const SCHEMA_GUIDES = {
       { name: "PriceTier4", req: false, desc: "Tier 4 - Preferred Price (decimal format, e.g. 44.99)." },
       { name: "PriceTier5", req: false, desc: "Tier 5 - Preferred VIP Price (decimal format, e.g. 39.99)." },
       { name: "Unit / UnitOfMeasure", req: false, desc: "Unit of Measure multiplier standard code (e.g. ea, lf, bf, pc)." },
-      { name: "ImageUrl", req: false, desc: "Raw web URL for material thumb image cataloging." }
+      { name: "ImageUrl / ImageURL", req: false, desc: "Raw web URL for material thumb image cataloging." }
     ]
   },
   deals: {
@@ -1254,6 +1270,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         else if (/pricetier4|price_tier_4|tier4/i.test(header)) key = "priceTier4";
         else if (/pricetier5|price_tier_5|tier5/i.test(header)) key = "priceTier5";
         else if (/unit_of_measure|unitofmeasure|unit|uom/i.test(header)) key = "unit";
+        else if (/reorderlevel|reorder_level/i.test(header)) key = "reorderLevel";
+        else if (/upc|barcode/i.test(header)) key = "upc";
+        else if (/suppliersku|supplier_sku/i.test(header)) key = "supplierSKU";
+        else if (/supplier|vendor/i.test(header)) key = "supplier";
+        else if (/departmentcode|department_code/i.test(header)) key = "departmentCode";
+        else if (/imageurl|image_url|photo|image/i.test(header)) key = "imageUrl";
         else if (/email/i.test(header)) key = "email";
         else if (/phone/i.test(header)) key = "phone";
         else if (/company/i.test(header)) key = "company";

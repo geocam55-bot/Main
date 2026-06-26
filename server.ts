@@ -1546,6 +1546,15 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               else if (lowerKey === "image" || lowerKey === "imageurl" || lowerKey === "photo") mappedRec.image_url = cleanVal;
               else if (lowerKey === "location" || lowerKey === "warehouse") mappedRec.location = cleanVal;
               else if (lowerKey === "unit" || lowerKey === "unitofmeasure" || lowerKey === "uom" || lowerKey === "unit_of_measure") mappedRec.unit_of_measure = cleanVal;
+              else if (lowerKey === "reorderlevel" || lowerKey === "reorder_level" || lowerKey === "minstock" || lowerKey === "min_stock") {
+                const parsedRl = parseInt(String(cleanVal));
+                mappedRec.reorder_level = isNaN(parsedRl) ? 0 : parsedRl;
+              }
+              else if (lowerKey === "upc" || lowerKey === "barcode" || lowerKey === "upccode") mappedRec.upc = cleanVal;
+              else if (lowerKey === "supplier" || lowerKey === "vendor") mappedRec.supplier = cleanVal;
+              else if (lowerKey === "suppliersku" || lowerKey === "supplier_sku" || lowerKey === "supplierpartnumber" || lowerKey === "supplierpart") mappedRec.supplier_sku = cleanVal;
+              else if (lowerKey === "status" || lowerKey === "state") mappedRec.status = cleanVal;
+              else if (lowerKey === "departmentcode" || lowerKey === "department_code" || lowerKey === "dept" || lowerKey === "department") mappedRec.department_code = cleanVal;
               else {
                 // Check against dynamic price tier labels if loaded
                 let matchedTier = 0;
