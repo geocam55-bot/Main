@@ -92,11 +92,33 @@ ORDER BY indexname;`;
     try {
       const supabase = createClient();
       
-      // Try to create indexes
-      const { error } = await supabase.rpc('exec_sql', { sql: SQL_INDEXES });
+      const statements = [
+        'CREATE INDEX IF NOT EXISTS idx_inventory_org_name ON public.inventory(organization_id, name);',
+        'CREATE INDEX IF NOT EXISTS idx_inventory_org_category ON public.inventory(organization_id, category);',
+        'CREATE INDEX IF NOT EXISTS idx_inventory_org_sku ON public.inventory(organization_id, sku);',
+        'CREATE EXTENSION IF NOT EXISTS pg_trgm;',
+        'CREATE INDEX IF NOT EXISTS idx_inventory_name_trgm ON public.inventory USING gin(name gin_trgm_ops);',
+        'CREATE INDEX IF NOT EXISTS idx_inventory_description_trgm ON public.inventory USING gin(description gin_trgm_ops);',
+        'CREATE INDEX IF NOT EXISTS idx_inventory_sku_trgm ON public.inventory USING gin(sku gin_trgm_ops);',
+        'ANALYZE public.inventory;'
+      ];
+
+      console.log('Starting sequential index creation...');
+      let succeededCount = 0;
+      let lastError = null;
+
+      for (const sql of statements) {
+        const { error } = await supabase.rpc('exec_sql', { sql });
+        if (error) {
+          console.error('Error executing query sequential:', sql, error);
+          lastError = error;
+        } else {
+          succeededCount++;
+        }
+      }
       
-      if (error) {
-        // If RPC doesn't exist, provide manual instructions
+      if (succeededCount === 0 && lastError) {
+        // If RPC doesn't exist or completely failed
         setResult({
           success: false,
           message: 'Please run this SQL manually in Supabase SQL Editor. Copy the SQL below and paste it into the SQL Editor tab in your Supabase dashboard.',
@@ -104,7 +126,7 @@ ORDER BY indexname;`;
       } else {
         setResult({
           success: true,
-          message: '✅ Indexes created successfully! Your inventory should now load 10-30x faster.',
+          message: `✅ Performance indexes created successfully (${succeededCount}/${statements.length} operations completed)! Your inventory should now load 10-30x faster. Please refresh the page.`,
         });
       }
     } catch (error: any) {

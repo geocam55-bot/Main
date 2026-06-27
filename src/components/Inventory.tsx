@@ -243,7 +243,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       'unit_of_measure': ['uom', 'unit', 'measure'],
       'quantity': ['qty', 'quantity_on_hand', 'quantityonhand', 'stock', 'inventory_on_hand', 'inventoryonhand'],
       'quantity_on_order': ['qty_on_order', 'quantityonorder', 'on_order', 'onorder'],
-      'reorder_level': ['reorderlevel', 'reorder_point', 'reorderpoint'],
+      'reorder_level': ['reorderlevel', 'reorder_point', 'reorderpoint', 'order_level', 'orderlevel', 'order_point', 'orderpoint'],
       'unit_price': ['unitprice', 'price', 'selling_price', 'sellingprice', 'price_tier_1', 'price_tier1'],
       'cost': ['cost_price', 'costprice', 'purchase_price', 'purchaseprice'],
       'upc': ['barcode', 'upc_code', 'upccode', 'ean', 'ean_code', 'eancode'],
@@ -252,6 +252,8 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       'lead_time_days': ['leadtimedays', 'lead_time', 'leadtime'],
       'notes': ['comments', 'comment'],
       'tags': ['labels', 'tag_list'],
+      'supplier': ['vendor', 'manufacturer', 'supplier_name', 'suppliername'],
+      'supplier_sku': ['supplier_part_number', 'supplierpartnumber', 'suppliersku', 'supplier_sku_code', 'vendor_sku', 'vendorsku', 'supplier_part_no', 'supplierpartno'],
     };
 
     const candidates = [targetKey, ...(aliases[targetKey] || [])];
@@ -387,12 +389,34 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       tagsArray = (dbTags as string).split(',').map((t: string) => t.trim()).filter(Boolean);
     }
     
+    // Smart swapping / fallback logic:
+    // If the database Name is generic (like a category hierarchy or "UNDEFINED") or empty, 
+    // and description contains the specific item title (like "SPACKLING DRYDEX 3.78L"),
+    // use the specific item title as the Name, and place the generic text as Description.
+    const rawName = getCaseInsensitive(dbItem, 'name', '');
+    let finalName = rawName;
+    let finalDescription = parsedDescription;
+    
+    const isGenericOrEmpty = !finalName || 
+      finalName.trim() === '' || 
+      finalName.trim().toUpperCase() === 'UNDEFINED' ||
+      (dbItem.category && finalName.trim().toLowerCase() === dbItem.category.trim().toLowerCase()) ||
+      finalName.trim().toLowerCase().includes('accessories for') ||
+      finalName.trim().toLowerCase().includes('pipes, fittings') ||
+      finalName.trim().toLowerCase().includes('hooks, squares') ||
+      finalName.trim().toLowerCase().includes('insulating materials');
+
+    if (isGenericOrEmpty && parsedDescription && parsedDescription.trim() !== '') {
+      finalName = parsedDescription;
+      finalDescription = rawName || '';
+    }
+
     return {
       id: dbItem.id,
-      name: getCaseInsensitive(dbItem, 'name', ''),
+      name: finalName,
       sku: getCaseInsensitive(dbItem, 'sku', ''),
       category: getCaseInsensitive(dbItem, 'category', ''),
-      description: parsedDescription,
+      description: finalDescription,
       unitOfMeasure: dbUnitOfMeasure,
       quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : dbQuantity,
       quantityOnOrder: dbQuantityOnOrder,
@@ -478,6 +502,26 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
               END $$;
             `
           });
+          
+          // ⚡ Optimistically create performance indexes sequentially in the background on first load
+          const performanceIndexes = [
+            'CREATE INDEX IF NOT EXISTS idx_inventory_org_name ON public.inventory(organization_id, name);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_org_category ON public.inventory(organization_id, category);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_org_sku ON public.inventory(organization_id, sku);',
+            'CREATE EXTENSION IF NOT EXISTS pg_trgm;',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_name_trgm ON public.inventory USING gin(name gin_trgm_ops);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_description_trgm ON public.inventory USING gin(description gin_trgm_ops);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_sku_trgm ON public.inventory USING gin(sku gin_trgm_ops);',
+            'ANALYZE public.inventory;'
+          ];
+          for (const idxSql of performanceIndexes) {
+            try {
+              await supabase.rpc('exec_sql', { sql: idxSql });
+            } catch (idxErr) {
+              console.warn('Silent fallback during auto-indexing:', idxSql, idxErr);
+            }
+          }
+
           migrationCheckedRef.current = true;
         } catch (err) {
           // Silent fallback if RPC not allowed

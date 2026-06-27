@@ -1415,7 +1415,7 @@ function mapInventoryItem(dbItem: any): any {
       'unit_of_measure': ['uom', 'unit', 'measure'],
       'quantity': ['qty', 'quantity_on_hand', 'quantityonhand', 'stock', 'inventory_on_hand', 'inventoryonhand'],
       'quantity_on_order': ['qty_on_order', 'quantityonorder', 'on_order', 'onorder'],
-      'reorder_level': ['reorderlevel', 'reorder_point', 'reorderpoint'],
+      'reorder_level': ['reorderlevel', 'reorder_point', 'reorderpoint', 'order_level', 'orderlevel', 'order_point', 'orderpoint'],
       'unit_price': ['unitprice', 'price', 'selling_price', 'sellingprice', 'price_tier_1', 'price_tier1'],
       'cost': ['cost_price', 'costprice', 'purchase_price', 'purchaseprice'],
       'upc': ['barcode', 'upc_code', 'upccode', 'ean', 'ean_code', 'eancode'],
@@ -1424,6 +1424,8 @@ function mapInventoryItem(dbItem: any): any {
       'lead_time_days': ['leadtimedays', 'lead_time', 'leadtime'],
       'notes': ['comments', 'comment'],
       'tags': ['labels', 'tag_list'],
+      'supplier': ['vendor', 'manufacturer', 'supplier_name', 'suppliername'],
+      'supplier_sku': ['supplier_part_number', 'supplierpartnumber', 'suppliersku', 'supplier_sku_code', 'vendor_sku', 'vendorsku', 'supplier_part_no', 'supplierpartno'],
     };
 
     const candidates = [targetKey, ...(aliases[targetKey] || [])];
@@ -1573,9 +1575,32 @@ function mapInventoryItem(dbItem: any): any {
     tagsArray = (dbTags as string).split(',').map((t: string) => t.trim()).filter(Boolean);
   }
 
+  // Smart swapping / fallback logic:
+  // If the database Name is generic (like a category hierarchy or "UNDEFINED") or empty, 
+  // and description contains the specific item title (like "SPACKLING DRYDEX 3.78L"),
+  // use the specific item title as the Name, and place the generic text as Description.
+  const rawName = getCaseInsensitive(dbItem, 'name', '');
+  let finalName = rawName;
+  let finalDescription = parsedDescription;
+  
+  const isGenericOrEmpty = !finalName || 
+    finalName.trim() === '' || 
+    finalName.trim().toUpperCase() === 'UNDEFINED' ||
+    (dbItem.category && finalName.trim().toLowerCase() === dbItem.category.trim().toLowerCase()) ||
+    finalName.trim().toLowerCase().includes('accessories for') ||
+    finalName.trim().toLowerCase().includes('pipes, fittings') ||
+    finalName.trim().toLowerCase().includes('hooks, squares') ||
+    finalName.trim().toLowerCase().includes('insulating materials');
+
+  if (isGenericOrEmpty && parsedDescription && parsedDescription.trim() !== '') {
+    finalName = parsedDescription;
+    finalDescription = rawName || '';
+  }
+
   return {
     ...snakeToCamel(dbItem),
-    description: parsedDescription,
+    name: finalName,
+    description: finalDescription,
     // Map simple schema to full schema
     quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : dbQuantity,
     quantityOnOrder: dbQuantityOnOrder,
