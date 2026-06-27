@@ -30,7 +30,7 @@ describe('ProjectQuoteGenerator', () => {
     getOrganizationSettingsMock.mockReset();
     createQuoteMock.mockReset();
     createQuoteMock.mockResolvedValue({ id: 'quote-1' });
-    getOrganizationSettingsMock.mockResolvedValue({ tax_rate: 0, tax_rate_2: 0 });
+    getOrganizationSettingsMock.mockResolvedValue({ tax_rate: 0, tax_rate_2: 0, quote_terms: 'Default Terms' });
   });
 
   it('lets planner users find CRM contacts when creating a quote', async () => {

@@ -50,9 +50,10 @@ export function ProjectQuoteGenerator({
   const [createAsDeal, setCreateAsDeal] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
-  // Organization tax settings
+  // Organization settings
   const [orgTaxRate, setOrgTaxRate] = useState<number>(0);
   const [orgTaxRate2, setOrgTaxRate2] = useState<number>(0);
+  const [orgQuoteTerms, setOrgQuoteTerms] = useState<string>('');
 
   // 🔍 DEBUG: Log materials when they change
   useEffect(() => {
@@ -91,14 +92,16 @@ export function ProjectQuoteGenerator({
       if (orgSettings) {
         setOrgTaxRate(orgSettings.tax_rate || 0);
         setOrgTaxRate2(orgSettings.tax_rate_2 || 0);
-        // Loaded tax rates from org settings
+        setOrgQuoteTerms(orgSettings.quote_terms || '');
+        // Loaded settings from org settings
       } else {
         // Fallback to localStorage if no settings in database
         const fallbackRate = getGlobalTaxRate();
         const fallbackRate2 = getGlobalTaxRate2();
         setOrgTaxRate(fallbackRate);
         setOrgTaxRate2(fallbackRate2);
-        // Using fallback tax rates
+        setOrgQuoteTerms(getDefaultQuoteTerms());
+        // Using fallback settings
       }
     } catch (error) {
       // Error loading organization settings
@@ -107,6 +110,7 @@ export function ProjectQuoteGenerator({
       const fallbackRate2 = getGlobalTaxRate2();
       setOrgTaxRate(fallbackRate);
       setOrgTaxRate2(fallbackRate2);
+      setOrgQuoteTerms(getDefaultQuoteTerms());
     }
   };
 
@@ -177,7 +181,7 @@ export function ProjectQuoteGenerator({
       ].filter(Boolean).join('\\n');
 
       // Get global organization settings
-      const defaultTerms = getDefaultQuoteTerms();
+      const defaultTerms = orgQuoteTerms || getDefaultQuoteTerms();
 
       // Calculate subtotal
       const subtotal = quoteAmount;
