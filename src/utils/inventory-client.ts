@@ -399,6 +399,39 @@ function injectMetadataIntoDescription(cleanData: any, itemData: any) {
   }
 }
 
+// Helper to dynamically align payload keys to match exact casing of columns present in the database table
+async function alignPayloadToDBCasing(supabase: any, payload: any, sampleId?: string): Promise<any> {
+  try {
+    let sample: any = null;
+    if (sampleId) {
+      const { data } = await supabase.from('inventory').select('*').eq('id', sampleId).maybeSingle();
+      sample = data;
+    }
+    if (!sample) {
+      const { data } = await supabase.from('inventory').select('*').limit(1).maybeSingle();
+      sample = data;
+    }
+    if (!sample) return payload;
+    
+    const aligned: any = {};
+    const sampleKeys = Object.keys(sample);
+    
+    for (const [key, val] of Object.entries(payload)) {
+      const cleanKey = key.toLowerCase().replace(/_/g, '');
+      const matchingKey = sampleKeys.find(sk => sk.toLowerCase().replace(/_/g, '') === cleanKey);
+      
+      if (matchingKey) {
+        aligned[matchingKey] = val;
+      } else {
+        aligned[key] = val;
+      }
+    }
+    return aligned;
+  } catch (err) {
+    return payload;
+  }
+}
+
 export async function createInventoryClient(itemData: any) {
   try {
     const supabase = createClient();
@@ -495,6 +528,25 @@ export async function createInventoryClient(itemData: any) {
     if (itemData.supplierSKU !== undefined) cleanData.supplier_sku = itemData.supplierSKU;
     if (itemData.supplier_sku !== undefined) cleanData.supplier_sku = itemData.supplier_sku;
 
+    // Add additional fields matching complete database schema
+    if (itemData.min_stock !== undefined) cleanData.min_stock = itemData.min_stock;
+    if (itemData.minStock !== undefined) cleanData.min_stock = itemData.minStock;
+    if (itemData.max_stock !== undefined) cleanData.max_stock = itemData.max_stock;
+    if (itemData.maxStock !== undefined) cleanData.max_stock = itemData.maxStock;
+    if (itemData.lead_time_days !== undefined) cleanData.lead_time_days = itemData.lead_time_days;
+    if (itemData.leadTimeDays !== undefined) cleanData.lead_time_days = itemData.leadTimeDays;
+    if (itemData.notes !== undefined) cleanData.notes = itemData.notes;
+    if (itemData.tags !== undefined) cleanData.tags = Array.isArray(itemData.tags) ? itemData.tags : [];
+    if (itemData.price_levels !== undefined) {
+      try {
+        cleanData.price_levels = typeof itemData.price_levels === 'string' && itemData.price_levels.trim() !== '' 
+          ? JSON.parse(itemData.price_levels) 
+          : itemData.price_levels;
+      } catch (e) {
+        cleanData.price_levels = itemData.price_levels;
+      }
+    }
+
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 or undefined then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
       ? cleanData.price_tier_1 
@@ -509,6 +561,7 @@ export async function createInventoryClient(itemData: any) {
     // Creating inventory item with clean data
 
     const keywordData = attachKeywordColumns(cleanData, itemData);
+    const alignedKeywordData = await alignPayloadToDBCasing(supabase, keywordData);
 
     const { data, error } = await performRobustQuery(
       async (payload) => {
@@ -518,7 +571,7 @@ export async function createInventoryClient(itemData: any) {
           .select()
           .single();
       },
-      keywordData
+      alignedKeywordData
     );
 
     if (error) throw error;
@@ -602,6 +655,25 @@ export async function updateInventoryClient(id: string, itemData: any) {
     if (itemData.supplierSKU !== undefined) cleanData.supplier_sku = itemData.supplierSKU;
     if (itemData.supplier_sku !== undefined) cleanData.supplier_sku = itemData.supplier_sku;
 
+    // Add additional fields matching complete database schema
+    if (itemData.min_stock !== undefined) cleanData.min_stock = itemData.min_stock;
+    if (itemData.minStock !== undefined) cleanData.min_stock = itemData.minStock;
+    if (itemData.max_stock !== undefined) cleanData.max_stock = itemData.max_stock;
+    if (itemData.maxStock !== undefined) cleanData.max_stock = itemData.maxStock;
+    if (itemData.lead_time_days !== undefined) cleanData.lead_time_days = itemData.lead_time_days;
+    if (itemData.leadTimeDays !== undefined) cleanData.lead_time_days = itemData.leadTimeDays;
+    if (itemData.notes !== undefined) cleanData.notes = itemData.notes;
+    if (itemData.tags !== undefined) cleanData.tags = Array.isArray(itemData.tags) ? itemData.tags : [];
+    if (itemData.price_levels !== undefined) {
+      try {
+        cleanData.price_levels = typeof itemData.price_levels === 'string' && itemData.price_levels.trim() !== '' 
+          ? JSON.parse(itemData.price_levels) 
+          : itemData.price_levels;
+      } catch (e) {
+        cleanData.price_levels = itemData.price_levels;
+      }
+    }
+
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
       ? cleanData.price_tier_1 
@@ -619,6 +691,7 @@ export async function updateInventoryClient(id: string, itemData: any) {
     // Updating inventory item with clean data
 
     const keywordData = attachKeywordColumns(cleanData, itemData);
+    const alignedKeywordData = await alignPayloadToDBCasing(supabase, keywordData, id);
 
     const { data, error } = await performRobustQuery(
       async (payload) => {
@@ -629,7 +702,7 @@ export async function updateInventoryClient(id: string, itemData: any) {
           .select()
           .single();
       },
-      keywordData
+      alignedKeywordData
     );
 
     if (error) throw error;
@@ -1325,23 +1398,72 @@ function snakeToCamel(obj: any): any {
   return obj;
 }
 
-// Helper to map simple database schema to expected format
+// Helper to map simple database schema to expected format with case-insensitive column lookups
 function mapInventoryItem(dbItem: any): any {
-  // Convert unit_price from cents (integer) back to dollars (decimal)
-  const unitPriceInDollars = dbItem.unit_price ? dbItem.unit_price / 100 : 0;
-  
-  // Convert cost from cents (integer) back to dollars (decimal)
-  const costInDollars = dbItem.cost ? dbItem.cost / 100 : 0;
+  const getCaseInsensitive = (obj: any, targetKey: string, fallback: any = undefined): any => {
+    if (!obj) return fallback;
+    
+    // 1. Direct match
+    if (obj[targetKey] !== undefined && obj[targetKey] !== null) return obj[targetKey];
+    
+    // 2. Define aliases for semantic fallback matching
+    const aliases: Record<string, string[]> = {
+      'name': ['item_name', 'itemname', 'title', 'item', 'product_name', 'productname', 'label'],
+      'description': ['desc', 'notes', 'long_description', 'longdescription'],
+      'sku': ['part_number', 'partnumber', 'item_code', 'itemcode', 'sku_code', 'skucode'],
+      'category': ['department', 'dept', 'group', 'class'],
+      'unit_of_measure': ['uom', 'unit', 'measure'],
+      'quantity': ['qty', 'quantity_on_hand', 'quantityonhand', 'stock', 'inventory_on_hand', 'inventoryonhand'],
+      'quantity_on_order': ['qty_on_order', 'quantityonorder', 'on_order', 'onorder'],
+      'reorder_level': ['reorderlevel', 'reorder_point', 'reorderpoint'],
+      'unit_price': ['unitprice', 'price', 'selling_price', 'sellingprice', 'price_tier_1', 'price_tier1'],
+      'cost': ['cost_price', 'costprice', 'purchase_price', 'purchaseprice'],
+      'upc': ['barcode', 'upc_code', 'upccode', 'ean', 'ean_code', 'eancode'],
+      'min_stock': ['minstock', 'minimum_stock', 'minimumstock'],
+      'max_stock': ['maxstock', 'maximum_stock', 'maximumstock'],
+      'lead_time_days': ['leadtimedays', 'lead_time', 'leadtime'],
+      'notes': ['comments', 'comment'],
+      'tags': ['labels', 'tag_list'],
+    };
+
+    const candidates = [targetKey, ...(aliases[targetKey] || [])];
+    const cleanCandidates = candidates.map(c => c.toLowerCase().replace(/_/g, ''));
+    
+    // 3. Match keys with lowercase and underscores removed
+    for (const k of Object.keys(obj)) {
+      const cleanK = k.toLowerCase().replace(/_/g, '');
+      if (cleanCandidates.includes(cleanK)) {
+        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+      }
+    }
+    
+    // 4. Exact lowercase match
+    const lowerCandidates = candidates.map(c => c.toLowerCase());
+    for (const k of Object.keys(obj)) {
+      const lowerK = k.toLowerCase();
+      if (lowerCandidates.includes(lowerK)) {
+        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+      }
+    }
+    
+    return fallback;
+  };
+
+  const rawUnitPrice = getCaseInsensitive(dbItem, 'unit_price', 0);
+  const rawCost = getCaseInsensitive(dbItem, 'cost', 0);
+  const unitPriceInDollars = rawUnitPrice ? rawUnitPrice / 100 : 0;
+  const costInDollars = rawCost ? rawCost / 100 : 0;
   
   // ✅ FIX: Use != null check instead of truthiness to properly handle $0.00 prices
   // A value of 0 is a legitimate price ($0.00) and should NOT trigger fallback
   
   // Auto-migrate: if T5 is inactive but has data, carry it into T2 (VIP) if T2 is NULL or 0.
   const t5Inactive = !isTierActive(5);
-  const t5Value = dbItem.price_tier_5 != null ? dbItem.price_tier_5 : null;
+  const t5Value = getCaseInsensitive(dbItem, 'price_tier_5');
   
   // Determine the base/retail price (T1 or unit_price)
-  const priceTier1 = dbItem.price_tier_1 != null ? dbItem.price_tier_1 / 100 : unitPriceInDollars;
+  const rawT1 = getCaseInsensitive(dbItem, 'price_tier_1');
+  const priceTier1 = rawT1 != null ? rawT1 / 100 : unitPriceInDollars;
   
   // For T2-T4: if the tier is NULL in the DB, fall back to priceTier1 (Retail).
   // Business logic: if no specific tier price is set, the item sells at Retail.
@@ -1349,34 +1471,37 @@ function mapInventoryItem(dbItem: any): any {
   // T2 (VIP): also check inactive T5 for auto-migration
   // ✅ FIX: Also migrate when T2 is 0 (not just NULL) if T5 has a real non-zero value.
   // This handles the case where a previous import put VIP data into price_tier_5.
+  const rawT2 = getCaseInsensitive(dbItem, 'price_tier_2');
   const shouldMigrateT5toT2 = t5Inactive && t5Value != null && t5Value !== 0
-    && (dbItem.price_tier_2 == null || dbItem.price_tier_2 === 0);
+    && (rawT2 == null || rawT2 === 0);
   let priceTier2 = shouldMigrateT5toT2 ? t5Value / 100
-                   : dbItem.price_tier_2 != null ? dbItem.price_tier_2 / 100
+                   : rawT2 != null ? rawT2 / 100
                    : priceTier1;
   if (priceTier2 === 0) {
     priceTier2 = priceTier1;
   }
 
-  let priceTier3 = dbItem.price_tier_3 != null ? dbItem.price_tier_3 / 100 : priceTier1;
+  const rawT3 = getCaseInsensitive(dbItem, 'price_tier_3');
+  let priceTier3 = rawT3 != null ? rawT3 / 100 : priceTier1;
   if (priceTier3 === 0) {
     priceTier3 = priceTier1;
   }
 
-  let priceTier4 = dbItem.price_tier_4 != null ? dbItem.price_tier_4 / 100 : priceTier1;
+  const rawT4 = getCaseInsensitive(dbItem, 'price_tier_4');
+  let priceTier4 = rawT4 != null ? rawT4 / 100 : priceTier1;
   if (priceTier4 === 0) {
     priceTier4 = priceTier1;
   }
 
   // T5: if tier is inactive and user has not requested active fallback, normally 0.
   // But if Tier5 is 0, let it be Tier1.
-  let priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
+  let priceTier5 = t5Inactive ? 0 : (t5Value != null ? t5Value / 100 : priceTier1);
   if (priceTier5 === 0) {
     priceTier5 = priceTier1;
   }
 
   // Parse description metadata comments if present
-  let rawDescription = dbItem.description || '';
+  let rawDescription = getCaseInsensitive(dbItem, 'description', '');
   let parsedDescription = rawDescription;
   let metadata: any = {};
   
@@ -1396,12 +1521,64 @@ function mapInventoryItem(dbItem: any): any {
     }
   }
   
+  const dbQuantity = getCaseInsensitive(dbItem, 'quantity', 0);
+  const dbQuantityOnOrder = getCaseInsensitive(dbItem, 'quantity_on_order', 0);
+  const dbReorderLevel = getCaseInsensitive(dbItem, 'reorder_level', 0);
+  const dbDepartmentCode = getCaseInsensitive(dbItem, 'department_code', '');
+  
+  let rawUnitOfMeasure = getCaseInsensitive(dbItem, 'unit_of_measure', 'ea');
+  let dbUnitOfMeasure = 'ea';
+  if (rawUnitOfMeasure) {
+    const uomLower = String(rawUnitOfMeasure).toLowerCase().trim();
+    if (uomLower === 'each' || uomLower === 'ea' || uomLower === 'pcs' || uomLower === 'pc' || uomLower === 'each (ea)') {
+      dbUnitOfMeasure = 'ea';
+    } else if (uomLower.includes('box')) {
+      dbUnitOfMeasure = 'box';
+    } else if (uomLower.includes('case')) {
+      dbUnitOfMeasure = 'case';
+    } else if (uomLower.includes('pound') || uomLower === 'lb' || uomLower === 'lbs') {
+      dbUnitOfMeasure = 'lb';
+    } else if (uomLower.includes('kilogram') || uomLower === 'kg' || uomLower === 'kgs') {
+      dbUnitOfMeasure = 'kg';
+    } else if (uomLower.includes('foot') || uomLower === 'ft' || uomLower === 'feet') {
+      dbUnitOfMeasure = 'ft';
+    } else if (uomLower.includes('meter') || uomLower === 'm') {
+      dbUnitOfMeasure = 'm';
+    } else if (uomLower.includes('gallon') || uomLower === 'gal') {
+      dbUnitOfMeasure = 'gal';
+    } else if (uomLower.includes('liter') || uomLower === 'l') {
+      dbUnitOfMeasure = 'l';
+    } else {
+      dbUnitOfMeasure = 'ea';
+    }
+  }
+
+  const dbLocation = getCaseInsensitive(dbItem, 'location', '');
+  const dbImageUrl = getCaseInsensitive(dbItem, 'image_url', '');
+  const dbSupplier = getCaseInsensitive(dbItem, 'supplier', '');
+  const dbSupplierSku = getCaseInsensitive(dbItem, 'supplier_sku', '');
+  const dbUpc = getCaseInsensitive(dbItem, 'upc', '');
+  const dbStatus = getCaseInsensitive(dbItem, 'status', 'active');
+  const dbMinStock = getCaseInsensitive(dbItem, 'min_stock', 0);
+  const dbMaxStock = getCaseInsensitive(dbItem, 'max_stock', 0);
+  const dbLeadTimeDays = getCaseInsensitive(dbItem, 'lead_time_days', 0);
+  const dbNotes = getCaseInsensitive(dbItem, 'notes', '');
+  const dbTags = getCaseInsensitive(dbItem, 'tags', []);
+  const dbPriceLevels = getCaseInsensitive(dbItem, 'price_levels', '');
+
+  let tagsArray: string[] = [];
+  if (Array.isArray(dbTags)) {
+    tagsArray = dbTags;
+  } else if (typeof dbTags === 'string') {
+    tagsArray = (dbTags as string).split(',').map((t: string) => t.trim()).filter(Boolean);
+  }
+
   return {
     ...snakeToCamel(dbItem),
     description: parsedDescription,
     // Map simple schema to full schema
-    quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : (dbItem.quantity || 0),
-    quantityOnOrder: dbItem.quantity_on_order || 0,
+    quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : dbQuantity,
+    quantityOnOrder: dbQuantityOnOrder,
     unitPrice: unitPriceInDollars,
     cost: costInDollars,
     priceTier1,
@@ -1409,20 +1586,24 @@ function mapInventoryItem(dbItem: any): any {
     priceTier3,
     priceTier4,
     priceTier5,
-    departmentCode: dbItem.department_code || '',
-    unitOfMeasure: dbItem.unit_of_measure || 'ea',
-    reorderLevel: dbItem.reorder_level !== undefined && dbItem.reorder_level !== null ? dbItem.reorder_level : 0,
-    upc: dbItem.upc || '',
-    supplier: dbItem.supplier || '',
-    supplierSKU: dbItem.supplier_sku || '',
-    minStock: 0,
-    maxStock: 0,
-    status: metadata.status || dbItem.status || 'active',
-    location: metadata.location || dbItem.location || '',
-    imageUrl: metadata.imageUrl || dbItem.image_url || '',
-    tags: [],
-    searchKeywords: Array.isArray(dbItem.search_keywords) ? dbItem.search_keywords : [],
-    keywordVersion: dbItem.keyword_version || null,
-    keywordsGeneratedAt: dbItem.keywords_generated_at || null,
+    departmentCode: dbDepartmentCode,
+    unitOfMeasure: dbUnitOfMeasure,
+    reorderLevel: dbReorderLevel,
+    upc: dbUpc,
+    barcode: dbUpc,
+    supplier: dbSupplier,
+    supplierSKU: dbSupplierSku,
+    minStock: dbMinStock,
+    maxStock: dbMaxStock,
+    leadTimeDays: dbLeadTimeDays,
+    notes: dbNotes,
+    priceLevels: typeof dbPriceLevels === 'object' && dbPriceLevels !== null ? JSON.stringify(dbPriceLevels) : (dbPriceLevels || ''),
+    status: metadata.status || dbStatus || 'active',
+    location: metadata.location || dbLocation || '',
+    imageUrl: metadata.imageUrl || dbImageUrl || '',
+    tags: tagsArray,
+    searchKeywords: Array.isArray(getCaseInsensitive(dbItem, 'search_keywords')) ? getCaseInsensitive(dbItem, 'search_keywords') : [],
+    keywordVersion: getCaseInsensitive(dbItem, 'keyword_version', null),
+    keywordsGeneratedAt: getCaseInsensitive(dbItem, 'keywords_generated_at', null),
   };
 }

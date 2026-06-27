@@ -1260,6 +1260,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         if (/item name|name/i.test(header)) key = "name";
         else if (/sku/i.test(header)) key = "sku";
         else if (/category/i.test(header)) key = "category";
+        else if (/quantity_on_order|quantity on order/i.test(header)) key = "quantityOnOrder";
         else if (/quantity/i.test(header)) key = "quantity";
         else if (/location/i.test(header)) key = "location";
         else if (/unitprice|unit_price/i.test(header)) key = "unitPrice";

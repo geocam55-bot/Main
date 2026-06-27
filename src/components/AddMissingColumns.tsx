@@ -139,6 +139,108 @@ BEGIN
   END IF;
 END $$;
 
+-- Add min_stock column if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'inventory' 
+    AND column_name = 'min_stock'
+  ) THEN
+    ALTER TABLE public.inventory 
+    ADD COLUMN min_stock integer DEFAULT 0;
+    RAISE NOTICE 'Added min_stock column to inventory';
+  ELSE
+    RAISE NOTICE 'Column min_stock already exists in inventory';
+  END IF;
+END $$;
+
+-- Add max_stock column if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'inventory' 
+    AND column_name = 'max_stock'
+  ) THEN
+    ALTER TABLE public.inventory 
+    ADD COLUMN max_stock integer DEFAULT 0;
+    RAISE NOTICE 'Added max_stock column to inventory';
+  ELSE
+    RAISE NOTICE 'Column max_stock already exists in inventory';
+  END IF;
+END $$;
+
+-- Add lead_time_days column if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'inventory' 
+    AND column_name = 'lead_time_days'
+  ) THEN
+    ALTER TABLE public.inventory 
+    ADD COLUMN lead_time_days integer DEFAULT 0;
+    RAISE NOTICE 'Added lead_time_days column to inventory';
+  ELSE
+    RAISE NOTICE 'Column lead_time_days already exists in inventory';
+  END IF;
+END $$;
+
+-- Add notes column if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'inventory' 
+    AND column_name = 'notes'
+  ) THEN
+    ALTER TABLE public.inventory 
+    ADD COLUMN notes text;
+    RAISE NOTICE 'Added notes column to inventory';
+  ELSE
+    RAISE NOTICE 'Column notes already exists in inventory';
+  END IF;
+END $$;
+
+-- Add tags column if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'inventory' 
+    AND column_name = 'tags'
+  ) THEN
+    ALTER TABLE public.inventory 
+    ADD COLUMN tags text[] DEFAULT '{}'::text[];
+    RAISE NOTICE 'Added tags column to inventory';
+  ELSE
+    RAISE NOTICE 'Column tags already exists in inventory';
+  END IF;
+END $$;
+
+-- Add price_levels column if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'inventory' 
+    AND column_name = 'price_levels'
+  ) THEN
+    ALTER TABLE public.inventory 
+    ADD COLUMN price_levels jsonb DEFAULT '{}'::jsonb;
+    RAISE NOTICE 'Added price_levels column to inventory';
+  ELSE
+    RAISE NOTICE 'Column price_levels already exists in inventory';
+  END IF;
+END $$;
+
 -- ============================================================================
 -- Create/Update Password Reset Function
 -- ============================================================================

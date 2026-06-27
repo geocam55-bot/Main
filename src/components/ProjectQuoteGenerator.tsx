@@ -41,6 +41,7 @@ export function ProjectQuoteGenerator({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
   const [quoteTitle, setQuoteTitle] = useState('');
+  const [isTitleEdited, setIsTitleEdited] = useState(false);
   const [quoteNotes, setQuoteNotes] = useState('');
   const [customerPriceLevel, setCustomerPriceLevel] = useState<string>(getPriceTierLabel(1));
   const [useManualAmount, setUseManualAmount] = useState(getDefaultManualMode);
@@ -71,6 +72,18 @@ export function ProjectQuoteGenerator({
       setCustomerPriceLevel(getPriceTierLabel(1));
     }
   }, [selectedCustomer]);
+
+  // Automatically pre-fill and sync quote title unless manually customized by the user
+  useEffect(() => {
+    if (isOpen && !isTitleEdited) {
+      const typeStr = projectType.charAt(0).toUpperCase() + projectType.slice(1);
+      if (selectedCustomer) {
+        setQuoteTitle(`${selectedCustomer.name} - ${typeStr} Quote`);
+      } else {
+        setQuoteTitle(`${typeStr} Construction Quote`);
+      }
+    }
+  }, [isOpen, selectedCustomer, projectType, isTitleEdited]);
 
   const loadOrganizationSettings = async () => {
     try {
@@ -117,17 +130,14 @@ export function ProjectQuoteGenerator({
 
   const handleGenerateQuote = async () => {
     if (!selectedCustomer?.id) {
-      showAlert('error', 'Please select a customer');
+      showAlert('error', 'Please select a customer to create a quote.');
       return;
     }
 
-    if (!quoteTitle.trim()) {
-      showAlert('error', 'Please enter a quote title');
-      return;
-    }
+    const finalTitle = quoteTitle.trim() || `${projectType.charAt(0).toUpperCase() + projectType.slice(1)} Construction Quote`;
 
     if (useManualAmount && !hasValidManualAmount) {
-      showAlert('error', 'Please enter a valid manual quote amount.');
+      showAlert('error', 'Please enter a valid manual subtotal amount.');
       return;
     }
 
@@ -188,7 +198,7 @@ export function ProjectQuoteGenerator({
 
       // Create quote data
       const quoteData = {
-        title: quoteTitle,
+        title: finalTitle,
         contact_id: selectedCustomer.id,
         contact_name: selectedCustomer.name || selectedCustomer.company || 'Unknown',
         price_tier: priceLevelToTier(customerPriceLevel),
@@ -217,6 +227,7 @@ export function ProjectQuoteGenerator({
       setTimeout(() => {
         setIsOpen(false);
         setQuoteTitle('');
+        setIsTitleEdited(false);
         setQuoteNotes('');
         setSelectedCustomer(null);
         setUseManualAmount(getDefaultManualMode());
@@ -321,7 +332,10 @@ export function ProjectQuoteGenerator({
           <Input
             id="quoteTitle"
             value={quoteTitle}
-            onChange={(e) => setQuoteTitle(e.target.value)}
+            onChange={(e) => {
+              setQuoteTitle(e.target.value);
+              setIsTitleEdited(true);
+            }}
             placeholder={`${projectType.charAt(0).toUpperCase() + projectType.slice(1)} Construction Quote`}
             className="h-9"
           />
@@ -439,7 +453,7 @@ export function ProjectQuoteGenerator({
         <div className="flex gap-2 pt-2">
           <Button 
             onClick={handleGenerateQuote}
-            disabled={isSaving || !selectedCustomer || !quoteTitle.trim() || (useManualAmount && !hasValidManualAmount)}
+            disabled={isSaving}
             className="flex-1 h-9"
             size="sm"
           >
@@ -456,7 +470,10 @@ export function ProjectQuoteGenerator({
             )}
           </Button>
           <Button 
-            onClick={() => setIsOpen(false)}
+            onClick={() => {
+              setIsOpen(false);
+              setIsTitleEdited(false);
+            }}
             variant="outline"
             disabled={isSaving}
             size="sm"

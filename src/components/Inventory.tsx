@@ -153,6 +153,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
     percent: number;
   } | null>(null);
   const notificationTimeoutRef = useRef<number | null>(null);
+  const migrationCheckedRef = useRef(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -226,53 +227,95 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
 
   // supabase is now a module-level singleton (see top of file)
 
-  // Helper to map database items
+  // Helper to map database items with case-insensitive column lookups and robust alias handling for ultimate resilience
+  const getCaseInsensitive = (obj: any, targetKey: string, fallback: any = undefined): any => {
+    if (!obj) return fallback;
+    
+    // 1. Direct match
+    if (obj[targetKey] !== undefined && obj[targetKey] !== null) return obj[targetKey];
+    
+    // 2. Define aliases for semantic fallback matching
+    const aliases: Record<string, string[]> = {
+      'name': ['item_name', 'itemname', 'title', 'item', 'product_name', 'productname', 'label'],
+      'description': ['desc', 'notes', 'long_description', 'longdescription'],
+      'sku': ['part_number', 'partnumber', 'item_code', 'itemcode', 'sku_code', 'skucode'],
+      'category': ['department', 'dept', 'group', 'class'],
+      'unit_of_measure': ['uom', 'unit', 'measure'],
+      'quantity': ['qty', 'quantity_on_hand', 'quantityonhand', 'stock', 'inventory_on_hand', 'inventoryonhand'],
+      'quantity_on_order': ['qty_on_order', 'quantityonorder', 'on_order', 'onorder'],
+      'reorder_level': ['reorderlevel', 'reorder_point', 'reorderpoint'],
+      'unit_price': ['unitprice', 'price', 'selling_price', 'sellingprice', 'price_tier_1', 'price_tier1'],
+      'cost': ['cost_price', 'costprice', 'purchase_price', 'purchaseprice'],
+      'upc': ['barcode', 'upc_code', 'upccode', 'ean', 'ean_code', 'eancode'],
+      'min_stock': ['minstock', 'minimum_stock', 'minimumstock'],
+      'max_stock': ['maxstock', 'maximum_stock', 'maximumstock'],
+      'lead_time_days': ['leadtimedays', 'lead_time', 'leadtime'],
+      'notes': ['comments', 'comment'],
+      'tags': ['labels', 'tag_list'],
+    };
+
+    const candidates = [targetKey, ...(aliases[targetKey] || [])];
+    const cleanCandidates = candidates.map(c => c.toLowerCase().replace(/_/g, ''));
+    
+    // 3. Match keys with lowercase and underscores removed
+    for (const k of Object.keys(obj)) {
+      const cleanK = k.toLowerCase().replace(/_/g, '');
+      if (cleanCandidates.includes(cleanK)) {
+        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+      }
+    }
+    
+    // 4. Exact lowercase match
+    const lowerCandidates = candidates.map(c => c.toLowerCase());
+    for (const k of Object.keys(obj)) {
+      const lowerK = k.toLowerCase();
+      if (lowerCandidates.includes(lowerK)) {
+        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+      }
+    }
+    
+    return fallback;
+  };
+
   const mapInventoryItem = (dbItem: any): InventoryItem => {
-    const unitPriceInDollars = dbItem.unit_price ? dbItem.unit_price / 100 : 0;
-    const costInDollars = dbItem.cost ? dbItem.cost / 100 : 0;
+    const rawUnitPrice = getCaseInsensitive(dbItem, 'unit_price', 0);
+    const rawCost = getCaseInsensitive(dbItem, 'cost', 0);
+    const unitPriceInDollars = rawUnitPrice ? rawUnitPrice / 100 : 0;
+    const costInDollars = rawCost ? rawCost / 100 : 0;
     
-    // ✅ FIX: Use != null check instead of truthiness to properly handle $0.00 prices
-    // A value of 0 is a legitimate price ($0.00) and should NOT trigger fallback
-    
-    // Auto-migrate: if T5 is inactive but has data, carry it into T2 (VIP) if T2 is NULL or 0.
     const t5Inactive = !isTierActive(5);
-    const t5Value = dbItem.price_tier_5 != null ? dbItem.price_tier_5 : null;
+    const t5Value = getCaseInsensitive(dbItem, 'price_tier_5');
     
-    // Determine the base/retail price (T1 or unit_price)
-    const priceTier1 = dbItem.price_tier_1 != null ? dbItem.price_tier_1 / 100 : unitPriceInDollars;
+    const rawT1 = getCaseInsensitive(dbItem, 'price_tier_1');
+    const priceTier1 = rawT1 != null ? rawT1 / 100 : unitPriceInDollars;
     
-    // For T2-T4: if the tier is NULL in the DB, fall back to priceTier1 (Retail).
-    // Business logic: if no specific tier price is set, the item sells at Retail.
-    // A value of 0 in the DB is a legitimate $0.00 price and is preserved as-is.
-    // T2 (VIP): also check inactive T5 for auto-migration
-    // ✅ FIX: Also migrate when T2 is 0 (not just NULL) if T5 has a real non-zero value.
-    // This handles the case where a previous import put VIP data into price_tier_5.
-    const shouldMigrateT5toT2 = t5Inactive && t5Value != null && t5Value !== 0
-      && (dbItem.price_tier_2 == null || dbItem.price_tier_2 === 0);
+    const rawT2 = getCaseInsensitive(dbItem, 'price_tier_2');
+    const shouldMigrateT5toT2 = t5Inactive && t5Value != null && t5Value !== 0 && (rawT2 == null || rawT2 === 0);
     let priceTier2 = shouldMigrateT5toT2 ? t5Value / 100
-                     : dbItem.price_tier_2 != null ? dbItem.price_tier_2 / 100
+                     : rawT2 != null ? rawT2 / 100
                      : priceTier1;
     if (priceTier2 === 0) {
       priceTier2 = priceTier1;
     }
 
-    let priceTier3 = dbItem.price_tier_3 != null ? dbItem.price_tier_3 / 100 : priceTier1;
+    const rawT3 = getCaseInsensitive(dbItem, 'price_tier_3');
+    let priceTier3 = rawT3 != null ? rawT3 / 100 : priceTier1;
     if (priceTier3 === 0) {
       priceTier3 = priceTier1;
     }
 
-    let priceTier4 = dbItem.price_tier_4 != null ? dbItem.price_tier_4 / 100 : priceTier1;
+    const rawT4 = getCaseInsensitive(dbItem, 'price_tier_4');
+    let priceTier4 = rawT4 != null ? rawT4 / 100 : priceTier1;
     if (priceTier4 === 0) {
       priceTier4 = priceTier1;
     }
 
-    let priceTier5 = t5Inactive ? 0 : (dbItem.price_tier_5 != null ? dbItem.price_tier_5 / 100 : priceTier1);
+    let priceTier5 = t5Inactive ? 0 : (t5Value != null ? t5Value / 100 : priceTier1);
     if (priceTier5 === 0) {
       priceTier5 = priceTier1;
     }
     
-    // Parse description metadata comments if present
-    let rawDescription = dbItem.description || '';
+    let rawDescription = getCaseInsensitive(dbItem, 'description', '');
     let parsedDescription = rawDescription;
     let metadata: any = {};
     
@@ -292,18 +335,70 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       }
     }
     
+    const dbQuantity = getCaseInsensitive(dbItem, 'quantity', 0);
+    const dbQuantityOnOrder = getCaseInsensitive(dbItem, 'quantity_on_order', 0);
+    const dbReorderLevel = getCaseInsensitive(dbItem, 'reorder_level', 0);
+    const dbDepartmentCode = getCaseInsensitive(dbItem, 'department_code', '');
+    
+    let rawUnitOfMeasure = getCaseInsensitive(dbItem, 'unit_of_measure', 'ea');
+    let dbUnitOfMeasure = 'ea';
+    if (rawUnitOfMeasure) {
+      const uomLower = String(rawUnitOfMeasure).toLowerCase().trim();
+      if (uomLower === 'each' || uomLower === 'ea' || uomLower === 'pcs' || uomLower === 'pc' || uomLower === 'each (ea)') {
+        dbUnitOfMeasure = 'ea';
+      } else if (uomLower.includes('box')) {
+        dbUnitOfMeasure = 'box';
+      } else if (uomLower.includes('case')) {
+        dbUnitOfMeasure = 'case';
+      } else if (uomLower.includes('pound') || uomLower === 'lb' || uomLower === 'lbs') {
+        dbUnitOfMeasure = 'lb';
+      } else if (uomLower.includes('kilogram') || uomLower === 'kg' || uomLower === 'kgs') {
+        dbUnitOfMeasure = 'kg';
+      } else if (uomLower.includes('foot') || uomLower === 'ft' || uomLower === 'feet') {
+        dbUnitOfMeasure = 'ft';
+      } else if (uomLower.includes('meter') || uomLower === 'm') {
+        dbUnitOfMeasure = 'm';
+      } else if (uomLower.includes('gallon') || uomLower === 'gal') {
+        dbUnitOfMeasure = 'gal';
+      } else if (uomLower.includes('liter') || uomLower === 'l') {
+        dbUnitOfMeasure = 'l';
+      } else {
+        dbUnitOfMeasure = 'ea';
+      }
+    }
+
+    const dbLocation = getCaseInsensitive(dbItem, 'location', '');
+    const dbImageUrl = getCaseInsensitive(dbItem, 'image_url', '');
+    const dbSupplier = getCaseInsensitive(dbItem, 'supplier', '');
+    const dbSupplierSku = getCaseInsensitive(dbItem, 'supplier_sku', '');
+    const dbUpc = getCaseInsensitive(dbItem, 'upc', '');
+    const dbStatus = getCaseInsensitive(dbItem, 'status', 'active');
+    const dbMinStock = getCaseInsensitive(dbItem, 'min_stock', 0);
+    const dbMaxStock = getCaseInsensitive(dbItem, 'max_stock', 0);
+    const dbLeadTimeDays = getCaseInsensitive(dbItem, 'lead_time_days', 0);
+    const dbNotes = getCaseInsensitive(dbItem, 'notes', '');
+    const dbTags = getCaseInsensitive(dbItem, 'tags', []);
+    const dbPriceLevels = getCaseInsensitive(dbItem, 'price_levels', '');
+
+    let tagsArray: string[] = [];
+    if (Array.isArray(dbTags)) {
+      tagsArray = dbTags;
+    } else if (typeof dbTags === 'string') {
+      tagsArray = (dbTags as string).split(',').map((t: string) => t.trim()).filter(Boolean);
+    }
+    
     return {
       id: dbItem.id,
-      name: dbItem.name || '',
-      sku: dbItem.sku || '',
-      category: dbItem.category || '',
+      name: getCaseInsensitive(dbItem, 'name', ''),
+      sku: getCaseInsensitive(dbItem, 'sku', ''),
+      category: getCaseInsensitive(dbItem, 'category', ''),
       description: parsedDescription,
-      unitOfMeasure: dbItem.unit_of_measure || 'ea',
-      quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : (dbItem.quantity || 0),
-      quantityOnOrder: dbItem.quantity_on_order || 0,
-      reorderLevel: 0,
-      minStock: 0,
-      maxStock: 0,
+      unitOfMeasure: dbUnitOfMeasure,
+      quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : dbQuantity,
+      quantityOnOrder: dbQuantityOnOrder,
+      reorderLevel: dbReorderLevel,
+      minStock: dbMinStock,
+      maxStock: dbMaxStock,
       cost: costInDollars,
       unitPrice: unitPriceInDollars,
       priceTier1,
@@ -311,13 +406,20 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       priceTier3,
       priceTier4,
       priceTier5,
-      departmentCode: dbItem.department_code || '',
-      status: metadata.status || dbItem.status || 'active',
-      tags: [],
-      imageUrl: metadata.imageUrl || dbItem.image_url || '',
-      location: metadata.location || dbItem.location || '',
-      createdAt: dbItem.created_at || '',
-      updatedAt: dbItem.updated_at || '',
+      departmentCode: dbDepartmentCode,
+      status: metadata.status || dbStatus || 'active',
+      tags: tagsArray,
+      imageUrl: metadata.imageUrl || dbImageUrl || '',
+      location: metadata.location || dbLocation || '',
+      supplier: dbSupplier,
+      supplierSKU: dbSupplierSku,
+      leadTimeDays: dbLeadTimeDays,
+      notes: dbNotes,
+      priceLevels: typeof dbPriceLevels === 'object' && dbPriceLevels !== null ? JSON.stringify(dbPriceLevels) : (dbPriceLevels || ''),
+      barcode: dbUpc,
+      upc: dbUpc,
+      createdAt: getCaseInsensitive(dbItem, 'created_at', ''),
+      updatedAt: getCaseInsensitive(dbItem, 'updated_at', ''),
     };
   };
 
@@ -346,6 +448,40 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
         setTableExists(false);
         showAlert('error', 'Your account is not assigned to an organization. Please contact your administrator.');
         return;
+      }
+
+      // Auto-reconcile database schema if not checked yet
+      if (!migrationCheckedRef.current) {
+        try {
+          await supabase.rpc('exec_sql', {
+            sql: `
+              DO $$
+              BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'min_stock') THEN
+                  ALTER TABLE public.inventory ADD COLUMN min_stock INTEGER DEFAULT 0;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'max_stock') THEN
+                  ALTER TABLE public.inventory ADD COLUMN max_stock INTEGER DEFAULT 0;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'lead_time_days') THEN
+                  ALTER TABLE public.inventory ADD COLUMN lead_time_days INTEGER DEFAULT 0;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'notes') THEN
+                  ALTER TABLE public.inventory ADD COLUMN notes TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'tags') THEN
+                  ALTER TABLE public.inventory ADD COLUMN tags TEXT[] DEFAULT '{}'::text[];
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'price_levels') THEN
+                  ALTER TABLE public.inventory ADD COLUMN price_levels JSONB DEFAULT '{}'::jsonb;
+                END IF;
+              END $$;
+            `
+          });
+          migrationCheckedRef.current = true;
+        } catch (err) {
+          // Silent fallback if RPC not allowed
+        }
       }
       
       // Save organization ID for duplicate cleaner
@@ -633,6 +769,15 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
         status: formData.status || 'active',
         reorder_level: Number(formData.reorderLevel) || 0,
         upc: formData.barcode || '',
+        supplier: formData.supplier || '',
+        supplierSKU: formData.supplierSKU || '',
+        supplier_sku: formData.supplierSKU || '',
+        minStock: Number(formData.minStock) || 0,
+        maxStock: Number(formData.maxStock) || 0,
+        leadTimeDays: Number(formData.leadTimeDays) || 0,
+        notes: formData.notes || '',
+        tags: formData.tags ? formData.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
+        priceLevels: formData.priceLevels || '',
       };
 
       if (editingItem) {
@@ -1655,18 +1800,28 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4 mt-4 bg-muted lg:bg-transparent p-3 lg:p-0 rounded-md">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4 mt-4 bg-muted lg:bg-transparent p-3 lg:p-0 rounded-md">
                           <div>
-                            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Category</p>
-                            <p className="text-xs sm:text-sm text-foreground mt-0.5 truncate">{item.category || 'N/A'}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Dept / Category</p>
+                            <p className="text-xs sm:text-sm text-foreground mt-0.5 truncate" title={item.departmentCode ? `Dept: ${item.departmentCode}` : 'Category'}>
+                              {item.departmentCode ? `${item.departmentCode} / ` : ''}{item.category || 'N/A'}
+                            </p>
                           </div>
                           <div>
                             <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Qty On Hand</p>
                             <p className="text-xs sm:text-sm text-foreground mt-0.5">
-                              <span className={item.quantityOnHand <= 0 ? "text-red-600 font-medium" : ""}>
+                              <span className={item.quantityOnHand <= 0 ? "text-red-600 font-semibold" : "font-medium"}>
                                 {item.quantityOnHand}
-                              </span> <span className="text-muted-foreground">{item.unitOfMeasure}</span>
+                              </span>
                             </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Unit of Measure</p>
+                            <p className="text-xs sm:text-sm text-foreground mt-0.5 uppercase">{item.unitOfMeasure || 'ea'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Qty On Order</p>
+                            <p className="text-xs sm:text-sm text-foreground mt-0.5">{item.quantityOnOrder || 0}</p>
                           </div>
                           <div>
                             <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Reorder Lvl</p>
@@ -1686,20 +1841,35 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                         <div className="flex flex-wrap gap-2 sm:gap-4 mt-3">
                           {item.supplier && (
                             <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                              <Tag className="h-3 w-3" />
-                              <span className="truncate max-w-[100px] sm:max-w-none">{item.supplier}</span>
+                              <Tag className="h-3 w-3 text-muted-foreground" />
+                              <span className="truncate max-w-[200px] sm:max-w-none">
+                                <span className="font-semibold text-muted-foreground mr-1">Supplier:</span>
+                                {item.supplier} {item.supplierSKU ? `(SKU: ${item.supplierSKU})` : ''}
+                              </span>
                             </div>
                           )}
                           {item.location && (
                             <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                              <MapPin className="h-3 w-3" />
-                              <span className="truncate max-w-[100px] sm:max-w-none">{item.location}</span>
+                              <MapPin className="h-3 w-3 text-muted-foreground" />
+                              <span className="truncate max-w-[150px] sm:max-w-none">
+                                <span className="font-semibold text-muted-foreground mr-1">Location:</span>
+                                {item.location}
+                              </span>
                             </div>
                           )}
                           {item.barcode && (
                             <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                              <Barcode className="h-3 w-3" />
-                              <span className="truncate max-w-[100px] sm:max-w-none">{item.barcode}</span>
+                              <Barcode className="h-3 w-3 text-muted-foreground" />
+                              <span className="truncate max-w-[200px] sm:max-w-none">
+                                <span className="font-semibold text-muted-foreground mr-1">UPC / Barcode:</span>
+                                {item.barcode}
+                              </span>
+                            </div>
+                          )}
+                          {item.notes && (
+                            <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                              <span className="font-semibold text-muted-foreground mr-1">Notes:</span>
+                              <span className="truncate max-w-[250px] sm:max-w-none">{item.notes}</span>
                             </div>
                           )}
                         </div>
@@ -2025,7 +2195,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
               <h3 className="text-sm text-foreground">Basic Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-foreground">Item Name *</label>
+                  <label className="text-sm text-foreground font-medium">Item Name / Name *</label>
                   <Input
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -2049,7 +2219,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground">Unit of Measure</label>
+                  <label className="text-sm text-foreground font-medium">Unit of Measure / Unit_of_Measure</label>
                   <Select value={formData.unitOfMeasure} onValueChange={(value) => setFormData({ ...formData, unitOfMeasure: value })}>
                     <SelectTrigger>
                       <SelectValue />
@@ -2092,7 +2262,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground">Quantity On Order</label>
+                  <label className="text-sm text-foreground font-medium">Quantity On Order / Quantity_on_order</label>
                   <Input
                     type="number"
                     value={formData.quantityOnOrder}
@@ -2100,7 +2270,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground">Reorder Level</label>
+                  <label className="text-sm text-foreground font-medium">Reorder Level / Reorder_level</label>
                   <Input
                     type="number"
                     value={formData.reorderLevel}
@@ -2166,7 +2336,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
               <h3 className="text-sm text-foreground">Supplier Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm text-foreground">Supplier</label>
+                  <label className="text-sm text-foreground font-medium">Supplier / Supplier</label>
                   <Input
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
@@ -2174,7 +2344,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground">Supplier SKU</label>
+                  <label className="text-sm text-foreground font-medium">Supplier SKU / Supplier_SKU</label>
                   <Input
                     value={formData.supplierSKU}
                     onChange={(e) => setFormData({ ...formData, supplierSKU: e.target.value })}
@@ -2197,7 +2367,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
               <h3 className="text-sm text-foreground">Additional Details</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm text-foreground">Barcode/UPC</label>
+                  <label className="text-sm text-foreground font-medium">UPC / Barcode</label>
                   <Input
                     value={formData.barcode}
                     onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
@@ -2234,7 +2404,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground">Department Code</label>
+                  <label className="text-sm text-foreground font-medium">Department Code / Department_code</label>
                   <Input
                     value={formData.departmentCode}
                     onChange={(e) => setFormData({ ...formData, departmentCode: e.target.value })}

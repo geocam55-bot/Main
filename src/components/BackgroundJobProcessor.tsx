@@ -109,6 +109,11 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
               // Extract and normalize image url and unit of measure keys robustly
               let imageUrlVal = '';
               let unitOfMeasureVal = '';
+              let reorderLevelVal = 0;
+              let locationVal = '';
+              let upcVal = '';
+              let supplierVal = '';
+              let supplierSkuVal = '';
 
               for (const [k, v] of Object.entries(record)) {
                 if (v === undefined || v === null) continue;
@@ -117,8 +122,18 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
                 
                 if (lk === 'imageurl' || lk === 'image') {
                   imageUrlVal = cleanVal;
-                } else if (lk === 'unit' || lk === 'unitofmeasure' || lk === 'uom') {
+                } else if (lk === 'unit' || lk === 'unitofmeasure' || lk === 'uom' || lk === 'unit_of_measure') {
                   unitOfMeasureVal = cleanVal;
+                } else if (lk === 'reorderlevel' || lk === 'reorder_level') {
+                  reorderLevelVal = parseInt(cleanVal) || 0;
+                } else if (lk === 'location' || lk === 'bin') {
+                  locationVal = cleanVal;
+                } else if (lk === 'upc' || lk === 'barcode') {
+                  upcVal = cleanVal;
+                } else if (lk === 'supplier' || lk === 'vendor') {
+                  supplierVal = cleanVal;
+                } else if (lk === 'suppliersku' || lk === 'supplier_sku') {
+                  supplierSkuVal = cleanVal;
                 }
               }
 
@@ -135,6 +150,12 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
               } else {
                 inventoryData.unit_of_measure = 'ea'; // default fallback
               }
+
+              inventoryData.reorder_level = reorderLevelVal || parseInt(record.reorder_level) || parseInt(record.reorderLevel) || 0;
+              inventoryData.location = locationVal || record.location || '';
+              inventoryData.upc = upcVal || record.upc || record.barcode || '';
+              inventoryData.supplier = supplierVal || record.supplier || '';
+              inventoryData.supplier_sku = supplierSkuVal || record.supplier_sku || record.supplierSKU || '';
 
               if (existing) {
                 await inventoryAPI.update(existing.id, inventoryData);
