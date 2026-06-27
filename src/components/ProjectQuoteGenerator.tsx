@@ -141,15 +141,7 @@ export function ProjectQuoteGenerator({
       return;
     }
 
-    // ✅ VALIDATION: Check if materials are enriched (have SKUs and pricing)
-    if (!useManualAmount) {
-      const unenrichedMaterials = materials.filter(m => !m.sku || !m.itemId || m.unitPrice === 0 || m.cost === 0);
-      if (unenrichedMaterials.length > 0) {
-        // Materials not enriched - cannot create quote
-        showAlert('error', 'Please wait for pricing to load before creating a quote. If pricing does not appear, check that Project Wizard Defaults are configured in Admin Settings.');
-        return;
-      }
-    }
+    // If materials are not fully matched to inventory, they can still be quoted with available fallback pricing.
 
     try {
       setIsSaving(true);
