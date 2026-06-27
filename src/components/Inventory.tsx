@@ -397,25 +397,69 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
     let finalName = rawName;
     let finalDescription = parsedDescription;
     
+    const cleanNameLower = finalName ? finalName.trim().toLowerCase() : '';
+    const genericCategoryKeywords = [
+      'accessories for',
+      'pipes, fittings',
+      'hooks, squares',
+      'insulating materials',
+      'paint types',
+      'lawn, garden',
+      'lawn equipment',
+      'gutters',
+      'tree, plant',
+      'electric heating',
+      'tools accesso',
+      'repair parts',
+      'electric acc.',
+      'coverings',
+      'cables and accesso',
+      'furniture, bbq',
+      'electrical appliances',
+      'wall and floor',
+      'portable electric',
+      'chains, steel',
+      'motorized lawn',
+      'building materials',
+      'fasteners',
+      'hand tools',
+      'power tools',
+      'plumbing',
+      'lighting',
+      'seasonal',
+      'hardware',
+      'outlets,boxes',
+      'fuses,outlets',
+      'ventilation',
+      'heating and cooling',
+      'home decor',
+      'outdoor living',
+      'building product',
+      'tools & hardware',
+      'electrical & lighting',
+      'paint & decor'
+    ];
+
+    const hasGenericKeyword = genericCategoryKeywords.some(keyword => cleanNameLower.includes(keyword));
+
     const isGenericOrEmpty = !finalName || 
       finalName.trim() === '' || 
       finalName.trim().toUpperCase() === 'UNDEFINED' ||
       (dbItem.category && finalName.trim().toLowerCase() === dbItem.category.trim().toLowerCase()) ||
-      finalName.trim().toLowerCase().includes('accessories for') ||
-      finalName.trim().toLowerCase().includes('pipes, fittings') ||
-      finalName.trim().toLowerCase().includes('hooks, squares') ||
-      finalName.trim().toLowerCase().includes('insulating materials');
+      hasGenericKeyword;
 
     if (isGenericOrEmpty && parsedDescription && parsedDescription.trim() !== '') {
       finalName = parsedDescription;
       finalDescription = rawName || '';
     }
 
+    const currentCategory = getCaseInsensitive(dbItem, 'category', '');
+
     return {
       id: dbItem.id,
       name: finalName,
       sku: getCaseInsensitive(dbItem, 'sku', ''),
-      category: getCaseInsensitive(dbItem, 'category', ''),
+      category: currentCategory || (isGenericOrEmpty && rawName ? rawName.trim() : 'Uncategorized'),
       description: finalDescription,
       unitOfMeasure: dbUnitOfMeasure,
       quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : dbQuantity,

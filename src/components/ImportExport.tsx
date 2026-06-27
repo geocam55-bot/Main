@@ -1275,6 +1275,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         else if (/upc|barcode/i.test(header)) key = "upc";
         else if (/suppliersku|supplier_sku/i.test(header)) key = "supplierSKU";
         else if (/supplier|vendor/i.test(header)) key = "supplier";
+        else if (/min_stock|minstock|minimum_stock/i.test(header)) key = "minStock";
+        else if (/max_stock|maxstock|maximum_stock/i.test(header)) key = "maxStock";
+        else if (/lead_time_days|leadtimedays|leadtime|lead_time/i.test(header)) key = "leadTimeDays";
         else if (/departmentcode|department_code/i.test(header)) key = "departmentCode";
         else if (/imageurl|image_url|photo|image/i.test(header)) key = "imageUrl";
         else if (/email/i.test(header)) key = "email";

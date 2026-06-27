@@ -114,6 +114,9 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
               let upcVal = '';
               let supplierVal = '';
               let supplierSkuVal = '';
+              let minStockVal = 0;
+              let maxStockVal = 0;
+              let leadTimeDaysVal = 0;
 
               for (const [k, v] of Object.entries(record)) {
                 if (v === undefined || v === null) continue;
@@ -134,6 +137,12 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
                   supplierVal = cleanVal;
                 } else if (lk === 'suppliersku' || lk === 'supplier_sku') {
                   supplierSkuVal = cleanVal;
+                } else if (lk === 'minstock' || lk === 'minimumstock' || lk === 'min_stock') {
+                  minStockVal = parseInt(cleanVal) || 0;
+                } else if (lk === 'maxstock' || lk === 'maximumstock' || lk === 'max_stock') {
+                  maxStockVal = parseInt(cleanVal) || 0;
+                } else if (lk === 'leadtime' || lk === 'leadtimedays' || lk === 'lead_time' || lk === 'lead_time_days') {
+                  leadTimeDaysVal = parseInt(cleanVal) || 0;
                 }
               }
 
@@ -156,6 +165,9 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
               inventoryData.upc = upcVal || record.upc || record.barcode || '';
               inventoryData.supplier = supplierVal || record.supplier || '';
               inventoryData.supplier_sku = supplierSkuVal || record.supplier_sku || record.supplierSKU || '';
+              inventoryData.min_stock = minStockVal || parseInt(record.min_stock) || parseInt(record.minStock) || 0;
+              inventoryData.max_stock = maxStockVal || parseInt(record.max_stock) || parseInt(record.maxStock) || 0;
+              inventoryData.lead_time_days = leadTimeDaysVal || parseInt(record.lead_time_days) || parseInt(record.leadTimeDays) || 0;
 
               if (existing) {
                 await inventoryAPI.update(existing.id, inventoryData);

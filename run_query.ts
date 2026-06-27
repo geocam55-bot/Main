@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function run() {
   const sql = process.argv[2] || "SELECT policyname, tablename, cmd, qual, with_check FROM pg_policies WHERE tablename = 'inventory'";
   console.log('Running SQL:', sql);
-  const { data, error } = await supabase.rpc('execute_sql_query', { 
+  const { data, error } = await supabase.rpc('query_sql', { 
     sql_text: sql
   });
   if (error) {
