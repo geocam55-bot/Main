@@ -1798,9 +1798,15 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         }
       }
     } catch (e: any) {
-      console.error(`Failed to load drive files for [${drive}]:`, e);
+      const isAuthError = drive === "onedrive" && (e.message?.includes("IDX14100") || e.message?.toLowerCase().includes("jwt") || e.message?.toLowerCase().includes("dots") || e.message?.toLowerCase().includes("unauthorized") || e.message?.toLowerCase().includes("token") || e.message?.toLowerCase().includes("expired"));
+      
+      if (isAuthError) {
+        console.warn(`OneDrive token expired or invalid (IDX14100/JWT):`, e.message || e);
+      } else {
+        console.error(`Failed to load drive files for [${drive}]:`, e);
+      }
+
       if (drive === "onedrive" && msAccounts.length > 0) {
-        const isAuthError = e.message?.includes("IDX14100") || e.message?.toLowerCase().includes("jwt") || e.message?.toLowerCase().includes("dots") || e.message?.toLowerCase().includes("unauthorized") || e.message?.toLowerCase().includes("token") || e.message?.toLowerCase().includes("expired");
         if (isAuthError) {
           toast.error(`Your Microsoft OneDrive login session has expired or is invalid.`, {
             id: "onedrive-auth-expired",

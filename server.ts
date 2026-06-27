@@ -1334,7 +1334,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         } else {
           const fallbackCols: Record<string, string[]> = {
             contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags", "ptd_sales", "ptd_gp_percent", "ytd_sales", "ytd_gp_percent", "lyr_sales", "lyr_gp_percent"],
-            inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"],
+            inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_order", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "department_code", "reorder_level", "upc", "supplier", "supplier_sku", "min_stock", "max_stock", "lead_time_days", "notes", "tags", "price_levels"],
             opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
           };
           (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
