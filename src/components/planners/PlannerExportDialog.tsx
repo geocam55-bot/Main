@@ -25,6 +25,7 @@ interface PlannerExportDialogProps {
   materials: any[];
   totalCost: number;
   defaultDesignName?: string;
+  trigger?: (onClick: () => void) => React.ReactNode;
 }
 
 type BrowserWindowWithFileSystem = Window & typeof globalThis & {
@@ -42,6 +43,7 @@ export function PlannerExportDialog({
   materials,
   totalCost,
   defaultDesignName,
+  trigger,
 }: PlannerExportDialogProps) {
   const [open, setOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'xml' | 'custom'>('csv');
@@ -155,14 +157,18 @@ export function PlannerExportDialog({
 
   return (
     <>
-      <Button
-        variant="outline"
-        className="flex items-center gap-2"
-        onClick={() => setOpen(true)}
-      >
-        <FileDown className="h-4 w-4" />
-        Export Design
-      </Button>
+      {trigger ? (
+        trigger(() => setOpen(true))
+      ) : (
+        <Button
+          variant="outline"
+          className="flex items-center gap-2"
+          onClick={() => setOpen(true)}
+        >
+          <FileDown className="h-4 w-4" />
+          Export Design
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl bg-background">

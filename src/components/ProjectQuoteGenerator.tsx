@@ -7,6 +7,7 @@ import { Textarea } from './ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { quotesAPI, settingsAPI } from '../utils/api';
 import { getGlobalTaxRate, getGlobalTaxRate2, getDefaultQuoteTerms, getPriceTierLabel, getActivePriceLevels, priceLevelToTier } from '../lib/global-settings';
 import type { User as AppUser } from '../App';
@@ -18,6 +19,8 @@ interface ProjectQuoteGeneratorProps {
   materials: any[];
   totalCost: number;
   projectData: any;
+  isModal?: boolean;
+  trigger?: (onClick: () => void) => React.ReactNode;
 }
 
 interface Contact {
@@ -34,7 +37,9 @@ export function ProjectQuoteGenerator({
   projectType, 
   materials, 
   totalCost,
-  projectData 
+  projectData,
+  isModal,
+  trigger
 }: ProjectQuoteGeneratorProps) {
   const getDefaultManualMode = () => materials.length === 0 || totalCost <= 0;
 
@@ -237,6 +242,236 @@ export function ProjectQuoteGenerator({
       setIsSaving(false);
     }
   };
+
+  if (isModal) {
+    return (
+      <>
+        {trigger && trigger(() => {
+          setUseManualAmount(getDefaultManualMode());
+          setManualAmount('');
+          setIsOpen(true);
+        })}
+
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <DialogContent className="max-w-2xl bg-background max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                <FileText className="w-5 h-5" />
+                Create Quote from {projectType.charAt(0).toUpperCase() + projectType.slice(1)} Plan
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              {alert && (
+                <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="py-2">
+                  {alert.type === 'success' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4" />
+                  )}
+                  <AlertDescription className="text-sm">{alert.message}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-3">
+                {/* Customer Selection */}
+                <div>
+                  <Label htmlFor="customer" className="flex items-center gap-1.5 text-sm mb-1.5">
+                    <User className="w-3.5 h-3.5" />
+                    Customer *
+                  </Label>
+                  <CustomerSelector
+                    organizationId={user.organizationId}
+                    selectedCustomer={selectedCustomer}
+                    onCustomerSelect={setSelectedCustomer}
+                    userId={user.id}
+                    showLabel={false}
+                  />
+                </div>
+                
+                {/* Customer Price Level Override */}
+                {selectedCustomer && (
+                  <div>
+                    <Label htmlFor="priceLevel" className="text-sm mb-1.5 block text-muted-foreground">
+                      Customer Pricing Tier (Override for Quote)
+                    </Label>
+                    <Select value={customerPriceLevel} onValueChange={setCustomerPriceLevel}>
+                      <SelectTrigger id="priceLevel" className="h-9 w-[200px]">
+                        <SelectValue placeholder="Select pricing tier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getActivePriceLevels().map((label, index) => (
+                          <SelectItem key={`tier-${index+1}`} value={label}>
+                            Tier {index+1} - {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Quote Title */}
+              <div>
+                <Label htmlFor="quoteTitle" className="text-sm mb-1.5 block">Quote Title *</Label>
+                <Input
+                  id="quoteTitle"
+                  value={quoteTitle}
+                  onChange={(e) => {
+                    setQuoteTitle(e.target.value);
+                    setIsTitleEdited(true);
+                  }}
+                  placeholder={`${projectType.charAt(0).toUpperCase() + projectType.slice(1)} Construction Quote`}
+                  className="h-9"
+                />
+              </div>
+
+              {/* Pricing Source */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="manualAmountMode"
+                    checked={useManualAmount}
+                    onChange={(e) => setUseManualAmount(e.target.checked)}
+                    className="w-4 h-4 rounded border-border"
+                  />
+                  <Label htmlFor="manualAmountMode" className="text-sm font-normal cursor-pointer">
+                    Enter subtotal manually (without inventory line items)
+                  </Label>
+                </div>
+
+                {useManualAmount ? (
+                  <div>
+                    <Label htmlFor="manualAmount" className="text-sm mb-1.5 block">Subtotal Amount *</Label>
+                    <Input
+                      id="manualAmount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={manualAmount}
+                      onChange={(e) => setManualAmount(e.target.value)}
+                      placeholder="4000.00"
+                      className="h-9"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="text-sm mb-1.5 block">Materials ({materials.length} items)</Label>
+                    <div className="h-9 flex items-center text-xs text-muted-foreground bg-muted rounded-md px-3 border">
+                      {materials.length > 0 ? (
+                        <span className="truncate">
+                          {materials.slice(0, 2).map(m => m.description || m.name || m.item || 'Material').join(', ')}
+                          {materials.length > 2 && ` +${materials.length - 2} more`}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">No materials</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Price Summary */}
+              {selectedCustomer && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-foreground">Subtotal:</span>
+                    <span className="text-foreground">${subtotalAmount.toFixed(2)}</span>
+                  </div>
+                  {taxRate > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Tax ({taxRate}%):</span>
+                      <span className="text-foreground">${taxAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {taxRate2 > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Tax 2 ({taxRate2}%):</span>
+                      <span className="text-foreground">${taxAmount2.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between border-t border-blue-300 pt-2">
+                    <span className="text-foreground font-medium">Total (incl. tax):</span>
+                    <span className="text-blue-900 font-semibold">${quoteTotalWithTax.toFixed(2)}</span>
+                  </div>
+                  {!useManualAmount && totalCost === 0 && (
+                    <div className="text-xs text-amber-600 pt-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      ⚠️ No pricing set. Configure Item Defaults in Organization Settings or use manual amount mode.
+                    </div>
+                  )}
+                  {useManualAmount && !hasValidManualAmount && (
+                    <div className="text-xs text-amber-700 pt-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      Enter a valid manual subtotal amount to continue.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quote Notes */}
+              <div>
+                <Label htmlFor="quoteNotes" className="text-sm mb-1.5 block">Notes (Optional)</Label>
+                <Textarea
+                  id="quoteNotes"
+                  value={quoteNotes}
+                  onChange={(e) => setQuoteNotes(e.target.value)}
+                  placeholder="Add any additional notes or terms..."
+                  rows={2}
+                  className="text-sm resize-none"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 py-2">
+                <input 
+                  type="checkbox" 
+                  id="createAsDeal" 
+                  checked={createAsDeal} 
+                  onChange={(e) => setCreateAsDeal(e.target.checked)} 
+                  className="w-4 h-4 rounded border-border"
+                />
+                <Label htmlFor="createAsDeal" className="text-sm font-normal cursor-pointer">
+                  Track as active Deal in Pipeline
+                </Label>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button 
+                  onClick={handleGenerateQuote}
+                  disabled={isSaving}
+                  className="flex-1 h-9"
+                  size="sm"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Create Quote
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIsOpen(false);
+                    setIsTitleEdited(false);
+                  }}
+                  variant="outline"
+                  disabled={isSaving}
+                  size="sm"
+                  className="h-9"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
 
   if (!isOpen) {
     return (

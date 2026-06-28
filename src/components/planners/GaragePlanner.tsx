@@ -13,13 +13,14 @@ import { calculateMaterials } from '../../utils/garageCalculations';
 import { enrichMaterialsWithT1Pricing } from '../../utils/enrichMaterialsWithPricing';
 import { getUserDefaults, extractConversionFactors, getOrgConversionFactors, extractOrgConversionFactors } from '../../utils/project-wizard-defaults-client';
 import { GarageConfig } from '../../types/garage';
-import { Ruler, Package, Printer, FileText, Box, Layers, Warehouse, Settings, LayoutTemplate, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Ruler, Package, Printer, FileText, Box, Layers, Warehouse, Settings, LayoutTemplate, PanelLeftClose, PanelLeftOpen, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner@2.0.3';
 import type { User } from '../../App';
 import { PermissionGate } from '../PermissionGate';
 import { PlannerWorkflowHelp } from './PlannerWorkflowHelp';
 import { PlannerExportDialog } from './PlannerExportDialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../ui/dropdown-menu';
 
 interface GaragePlannerProps {
   user: User;
@@ -351,13 +352,49 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
                 onSwitch3D={() => setViewMode('3d')}
                 onPrint={handlePrint}
               />
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
-              >
-                <Printer className="w-4 h-4" />
-                <span className="hidden sm:inline">Print Plan</span>
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white transition-colors text-sm sm:text-base print:hidden">
+                    <span>Actions</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-background border border-border rounded-lg shadow-md p-1">
+                  <DropdownMenuItem onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                    <Printer className="w-4 h-4 text-muted-foreground" />
+                    <span>Print Plan</span>
+                  </DropdownMenuItem>
+                  
+                  <PlannerExportDialog
+                    organizationId={user.organizationId || user.organization_id || ''}
+                    projectType="garage"
+                    materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
+                    totalCost={totalT1Price}
+                    defaultDesignName="garage-design"
+                    trigger={(onClick) => (
+                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                        <Printer className="w-4 h-4 text-muted-foreground" />
+                        <span>Export Design</span>
+                      </DropdownMenuItem>
+                    )}
+                  />
+
+                  <ProjectQuoteGenerator 
+                    user={user}
+                    projectType="garage"
+                    materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
+                    totalCost={totalT1Price}
+                    projectData={config}
+                    isModal={true}
+                    trigger={(onClick) => (
+                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <span>Create Quote for Contact</span>
+                      </DropdownMenuItem>
+                    )}
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -452,22 +489,7 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
                   </div>
                 ) : <div className="flex-1"></div>}
                 
-                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                  <PlannerExportDialog
-                    organizationId={user.organizationId || user.organization_id || ''}
-                    projectType="garage"
-                    materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
-                    totalCost={totalT1Price}
-                    defaultDesignName="garage-design"
-                  />
-                  <ProjectQuoteGenerator 
-                    user={user}
-                    projectType="garage"
-                    materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
-                    totalCost={totalT1Price}
-                    projectData={config}
-                  />
-                </div>
+                {/* Actions dropdown has been moved to top-right actions menu */}
               </div>
 
               <div className="mt-8 border-t pt-8">

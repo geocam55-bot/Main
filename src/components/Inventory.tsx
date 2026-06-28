@@ -114,9 +114,10 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
   const [scanResult, setScanResult] = useState<{ title: string; message: string; type: 'info' | 'success' | 'error'; action?: () => void } | null>(null);
   const [tableExists, setTableExists] = useState(true);
   
-  // ✅ Pagination state to prevent rendering all 14k+ items at once
+  // Pagination state to prevent rendering all 14k+ items at once
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50); // Made this state so user can change it
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   
   // 🔮 Advanced search features
   const [useAdvancedSearch, setUseAdvancedSearch] = useState(true);
@@ -590,6 +591,21 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       
       setItems(mappedItems);
       setTotalCount(count);
+
+      // Fetch distinct categories across the whole database for this organization
+      try {
+        const { data: categoryData, error: categoryError } = await supabase
+          .from('inventory')
+          .select('category')
+          .eq('organization_id', userOrgId);
+        
+        if (!categoryError && categoryData) {
+          const uniqueCats = Array.from(new Set(categoryData.map(item => item.category))).filter(Boolean) as string[];
+          setAvailableCategories(uniqueCats);
+        }
+      } catch (catErr) {
+        console.warn('Failed to fetch distinct categories:', catErr);
+      }
       setServerLowStockCount(serverLowStock || 0); // 📊 Store server-calculated low stock count
       setTableExists(true);
       setIsLoading(false);
@@ -909,7 +925,9 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
     }
   };
 
-  const categories = [...new Set(items.map(item => item.category))].filter(Boolean);
+  const categories = availableCategories.length > 0 
+    ? availableCategories 
+    : [...new Set(items.map(item => item.category))].filter(Boolean);
   
   // Server-side filtering now, so filteredItems = items
   // const filteredItems = items;

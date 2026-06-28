@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Ruler, Package, Brush, Trash2, UploadCloud, Undo, Maximize2, Square, Minus, DoorOpen, LayoutGrid, AlertCircle, MousePointer2, ZoomIn, ZoomOut, Save, FolderOpen, RotateCw, Check, Settings } from 'lucide-react';
+import { Ruler, Package, Brush, Trash2, UploadCloud, Undo, Maximize2, Square, Minus, DoorOpen, LayoutGrid, AlertCircle, MousePointer2, ZoomIn, ZoomOut, Save, FolderOpen, RotateCw, Check, Settings, ChevronDown, Printer, FileText, FileDown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -16,6 +16,7 @@ import { createClient } from '../../utils/supabase/client';
 import { PlannerDefaults } from '../PlannerDefaults';
 import { PlannerExportDialog } from './PlannerExportDialog';
 import { Monitor, Smartphone } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../ui/dropdown-menu';
 
 interface InteriorFinishingPlannerProps {
   user: User;
@@ -1009,7 +1010,7 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
         </div>
 
         <div className="bg-background border-b border-border print:hidden sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
             <nav className="flex gap-8">
               <button
                 onClick={() => setActiveTab('digitizer')}
@@ -1036,6 +1037,51 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
                 <Settings className="w-4 h-4" /> Defaults
               </button>
             </nav>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white transition-colors text-sm sm:text-base print:hidden">
+                    <span>Actions</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-background border border-border rounded-lg shadow-md p-1">
+                  <DropdownMenuItem onClick={() => window.print()} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                    <Printer className="w-4 h-4 text-muted-foreground" />
+                    <span>Print Plan</span>
+                  </DropdownMenuItem>
+                  
+                  <PlannerExportDialog
+                    organizationId={user.organizationId || user.organization_id || ''}
+                    projectType="interior"
+                    materials={materials}
+                    totalCost={totalCost}
+                    defaultDesignName="interior-finishing-design"
+                    trigger={(onClick) => (
+                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                        <Printer className="w-4 h-4 text-muted-foreground" />
+                        <span>Export Design</span>
+                      </DropdownMenuItem>
+                    )}
+                  />
+
+                  <ProjectQuoteGenerator 
+                    user={user}
+                    projectType="interior"
+                    materials={materials}
+                    totalCost={totalCost}
+                    projectData={currentConfig}
+                    isModal={true}
+                    trigger={(onClick) => (
+                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <span>Create Quote for Contact</span>
+                      </DropdownMenuItem>
+                    )}
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 
@@ -1524,22 +1570,7 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
                       </div>
                     </div>
                     
-                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                      <PlannerExportDialog
-                        organizationId={user.organizationId || user.organization_id || ''}
-                        projectType="interior"
-                        materials={materials}
-                        totalCost={totalCost}
-                        defaultDesignName="interior-finishing-design"
-                      />
-                      <ProjectQuoteGenerator 
-                        user={user}
-                        projectType="interior"
-                        materials={materials}
-                        totalCost={totalCost}
-                        projectData={currentConfig}
-                      />
-                    </div>
+                    {/* Actions dropdown has been moved to top-right actions menu */}
                   </div>
 
                   <div className="mt-8 border-t pt-8">

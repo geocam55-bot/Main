@@ -35,13 +35,16 @@ import {
   Save,
   Printer,
   LayoutTemplate,
-  FileTerminal
+  FileTerminal,
+  ChevronDown,
+  FileText
 } from 'lucide-react';
 import type { User } from '../../App';
 import { toast } from 'sonner@2.0.3';
 import { ChefHat } from 'lucide-react';
 import { PlannerWorkflowHelp } from '../planners/PlannerWorkflowHelp';
 import { PlannerExportDialog } from '../planners/PlannerExportDialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../ui/dropdown-menu';
 import { 
   BaseCabinetIcon, 
   WallCabinetIcon, 
@@ -523,14 +526,50 @@ export function KitchenPlannerV2({ user }: KitchenPlannerV2Props) {
               onSwitch3D={() => setConfig((prev) => ({ ...prev, viewMode: '3D' }))}
               onPrint={handlePrintPlan}
             />
-            {/* Print Plan Button */}
-            <Button 
-              className="bg-red-600 hover:bg-red-700 text-white print:hidden"
-              onClick={handlePrintPlan}
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Print Plan
-            </Button>
+            {/* Actions dropdown menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white transition-colors text-sm sm:text-base print:hidden">
+                  <span>Actions</span>
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-background border border-border rounded-lg shadow-md p-1">
+                <DropdownMenuItem onClick={handlePrintPlan} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                  <Printer className="w-4 h-4 text-muted-foreground" />
+                  <span>Print Plan</span>
+                </DropdownMenuItem>
+                
+                <PlannerExportDialog
+                  organizationId={user.organizationId || ''}
+                  projectType="kitchen"
+                  materials={flatMaterials}
+                  totalCost={totalPrice}
+                  defaultDesignName="kitchen-design"
+                  trigger={(onClick) => (
+                    <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                      <Printer className="w-4 h-4 text-muted-foreground" />
+                      <span>Export Design</span>
+                    </DropdownMenuItem>
+                  )}
+                />
+
+                <ProjectQuoteGenerator 
+                  user={user}
+                  projectType="kitchen"
+                  materials={flatMaterials}
+                  totalCost={totalPrice}
+                  projectData={config}
+                  isModal={true}
+                  trigger={(onClick) => (
+                    <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span>Create Quote for Contact</span>
+                    </DropdownMenuItem>
+                  )}
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -788,22 +827,7 @@ export function KitchenPlannerV2({ user }: KitchenPlannerV2Props) {
             <div className="max-w-6xl mx-auto">
               <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6">
                 <h2 className="text-2xl font-semibold">Materials & Cost Breakdown</h2>
-                <div className="flex flex-wrap items-center gap-3">
-                  <PlannerExportDialog
-                    organizationId={user.organizationId}
-                    projectType="kitchen"
-                    materials={flatMaterials}
-                    totalCost={totalPrice}
-                    defaultDesignName="kitchen-design"
-                  />
-                  <ProjectQuoteGenerator 
-                    user={user}
-                    projectType="kitchen"
-                    materials={flatMaterials}
-                    totalCost={totalPrice}
-                    projectData={config}
-                  />
-                </div>
+                {/* Actions dropdown has been moved to top-right actions menu */}
               </div>
 
               <div className="mb-6">
