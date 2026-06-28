@@ -46,7 +46,7 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
 
   return (
     <div
-      className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden"
+      className="relative min-h-screen flex flex-col items-center justify-start overflow-hidden"
       style={{
         background: environmentBg
           ? `url(${environmentBg}) center / cover no-repeat`
@@ -69,19 +69,40 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
       )}
 
       {/* Content */}
-      <div className="relative z-20 w-full max-w-5xl mx-auto px-6 py-12">
-        {/* Back button */}
-        <motion.button
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-          onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm font-medium transition-all duration-200 hover:gap-3 mb-10 group"
-          style={{ color: '#475569', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
-          Back to home
-        </motion.button>
+      <div className="relative z-20 w-full max-w-5xl mx-auto px-6 pt-6 sm:pt-10 pb-12">
+        {/* Top Header Row with Back button and Logo on the same line */}
+        <div className="grid grid-cols-3 items-center w-full mb-8 sm:mb-10">
+          {/* Back button (Left column) */}
+          <div className="flex justify-start">
+            <motion.button
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+              onClick={onBack}
+              className="inline-flex items-center gap-2 text-sm font-medium transition-all duration-200 hover:gap-3 group"
+              style={{ color: '#475569', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
+              Back to home
+            </motion.button>
+          </div>
+
+          {/* Logo (Center column) */}
+          <div className="flex justify-center">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Logo size="md" />
+            </motion.div>
+          </div>
+
+          {/* Placeholder (Right column to balance the centering) */}
+          <div className="flex justify-end invisible sm:visible">
+            {/* Empty space */}
+          </div>
+        </div>
 
         {/* Header */}
         <motion.div
@@ -90,9 +111,6 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
           transition={{ duration: 0.4, delay: 0.05 }}
           className="text-center mb-10"
         >
-          <div className="flex justify-center mb-4">
-            <Logo size="md" />
-          </div>
           <h1
             style={{
               fontSize: 32,
