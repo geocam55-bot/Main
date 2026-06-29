@@ -3,9 +3,24 @@ import { generateInventoryKeywords } from './inventory-keywords';
 /**
  * HELPER FUNCTIONS
  */
+function normalizeDimensionText(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/(\d+)\s*x\s*(\d+)/g, '$1x$2') // collapse spaces around x
+    .replace(/['"]/g, '') // remove quotes
+    .replace(/(\d+)\s*[-\s]\s*(\d+)/g, '$1x$2') // convert 2-6 or 2 6 to 2x6
+    .replace(/\s+/g, ' '); // normalize whitespace
+}
+
 function extractSearchTerms(query: string): string[] {
   // Remove price-related phrases before extracting terms
   let cleanedQuery = query.toLowerCase();
+
+  // Normalize length representations (e.g. "8 ft" or "8'" -> "8ft")
+  cleanedQuery = cleanedQuery.replace(/(\d+)\s*[-]?\s*(?:ft|feet|foot|'|ft\.)/gi, '$1ft');
+
+  // Collapse spaces around "x" in dimensions (e.g. "2 x 6" -> "2x6")
+  cleanedQuery = cleanedQuery.replace(/(\d+)\s*x\s*(\d+)/gi, '$1x$2');
   
   // Remove price patterns and their values
   const pricePatterns = [
@@ -15,7 +30,7 @@ function extractSearchTerms(query: string): string[] {
     /over\s+\$?\d+(?:\.\d{2})?/gi,
     /more\s+than\s+\$?\d+(?:\.\d{2})?/gi,
     /above\s+\$?\d+(?:\.\d{2})?/gi,
-    /\$?\d+(?:\.\d{2})?\s*-\s*\$?\d+(?:\.\d{2})?/gi,
+    /\$\d+(?:\.\d{2})?\s*-\s*\$?\d+(?:\.\d{2})?/gi,
     /\$\d+(?:\.\d{2})?/gi, // Remove standalone prices like "$40"
   ];
   
@@ -72,10 +87,39 @@ function termMatches(allFieldsText: string, term: string): boolean {
     return true;
   }
   
+  // Dimension-aware matching (e.g. 2X6"X10' -> 2x6x10)
+  const normalizedFields = normalizeDimensionText(allFieldsText);
+  const normalizedTerm = normalizeDimensionText(term);
+  const normalizedStemmed = normalizeDimensionText(stemmedTerm);
+  if (normalizedFields.includes(normalizedTerm) || normalizedFields.includes(normalizedStemmed)) {
+    return true;
+  }
+  
+  // Length-aware matching: e.g., "8ft", "8'", "8-ft"
+  const lengthMatch = term.match(/^(\d+)(?:'|ft|-ft)$/);
+  if (lengthMatch) {
+    const len = lengthMatch[1];
+    const lengthTokens = [
+      `(${len}')`,
+      `${len}'`,
+      `${len}ft`,
+      `${len} ft`,
+      `${len}-ft`,
+    ];
+    if (lengthTokens.some(token => allFieldsText.includes(token))) {
+      return true;
+    }
+  }
+
   // Check synonyms
   const synonyms = RONA_SYNONYMS[term] || RONA_SYNONYMS[stemmedTerm] || [];
   for (const syn of synonyms) {
-    if (allFieldsText.includes(syn) || allFieldsText.includes(stem(syn))) {
+    const normalizedSyn = normalizeDimensionText(syn);
+    if (
+      allFieldsText.includes(syn) || 
+      allFieldsText.includes(stem(syn)) ||
+      normalizedFields.includes(normalizedSyn)
+    ) {
       return true;
     }
   }
@@ -94,7 +138,7 @@ function parseQueryIntent(query: string): QueryIntent[] {
     { regex: /over\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'greater' as const },
     { regex: /more\s+than\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'greater' as const },
     { regex: /above\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'greater' as const },
-    { regex: /\$?(\d+(?:\.\d{2})?)\s*-\s*\$?(\d+(?:\.\d{2})?)/i, operator: 'between' as const },
+    { regex: /\$(\d+(?:\.\d{2})?)\s*-\s*\$?(\d+(?:\.\d{2})?)/i, operator: 'between' as const },
   ];
   
   for (const pattern of pricePatterns) {
@@ -467,6 +511,17 @@ export function advancedSearch<T extends SearchableItem>(
         bestMatchType = 'exact';
         continue;
       }
+
+      // Exact match with dimension normalization (e.g. "2x6 10'" matches "2X6\"X10'")
+      const normalizedQuery = normalizeDimensionText(queryLower);
+      const normalizedField = normalizeDimensionText(fieldValue);
+      if (normalizedField === normalizedQuery && normalizedQuery !== queryLower) {
+        totalScore += weight * 9.8;
+        matchCount++;
+        matchedFields.push(field);
+        bestMatchType = 'exact';
+        continue;
+      }
       
       // Stemmed exact match (e.g., "hammers" matches "hammer")
       const stemmedQuery = stem(queryLower);
@@ -482,6 +537,17 @@ export function advancedSearch<T extends SearchableItem>(
       // Contains exact query
       if (fieldValue.includes(queryLower)) {
         totalScore += weight * 8;
+        matchCount++;
+        matchedFields.push(field);
+        if (bestMatchType !== 'exact') {
+          bestMatchType = 'partial';
+        }
+        continue;
+      }
+
+      // Contains normalized query (e.g. "2x6" in "2X6\"X10'")
+      if (normalizedQuery.length >= 2 && normalizedField.includes(normalizedQuery)) {
+        totalScore += weight * 7.8;
         matchCount++;
         matchedFields.push(field);
         if (bestMatchType !== 'exact') {
@@ -618,10 +684,23 @@ export function advancedSearch<T extends SearchableItem>(
       // Enhanced individual search term matching with fuzzy support
       for (const { original, stemmed } of stemmedSearchTerms) {
         const synonyms = RONA_SYNONYMS[original] || RONA_SYNONYMS[stemmed] || [];
-        const hasSynonymMatch = synonyms.some(syn => fieldValue.includes(syn) || fieldValue.includes(stem(syn)));
+        const hasSynonymMatch = synonyms.some(syn => {
+          const normalizedSyn = normalizeDimensionText(syn);
+          return fieldValue.includes(syn) || fieldValue.includes(stem(syn)) || normalizedField.includes(normalizedSyn);
+        });
+
+        const normalizedOriginal = normalizeDimensionText(original);
+        const normalizedStemmed = normalizeDimensionText(stemmed);
+        const hasNormalizedMatch = normalizedField.includes(normalizedOriginal) || normalizedField.includes(normalizedStemmed);
 
         if (fieldValue.includes(original)) {
           totalScore += weight * 3;
+          matchCount++;
+          if (!matchedFields.includes(field)) {
+            matchedFields.push(field);
+          }
+        } else if (hasNormalizedMatch) {
+          totalScore += weight * 2.9; // Almost as good as direct includes
           matchCount++;
           if (!matchedFields.includes(field)) {
             matchedFields.push(field);
@@ -777,7 +856,9 @@ export function advancedSearch<T extends SearchableItem>(
 export function highlightMatches(text: string, query: string): string {
   if (!query) return text;
   
-  const regex = new RegExp(`(${query})`, 'gi');
+  // Escape special regex characters in the query to prevent crashes
+  const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const regex = new RegExp(`(${escapedQuery})`, 'gi');
   return text.replace(regex, '<mark>$1</mark>');
 }
 
@@ -799,22 +880,23 @@ export function getSearchSuggestions<T extends SearchableItem>(
   for (const item of items) {
     if (suggestions.size >= maxSuggestions) break;
     
+    const normalizedTags = normalizeTagList(item.tags);
     const generatedKeywords = generateInventoryKeywords({
       productName: item.name,
       productDescription: item.description,
       category: item.category,
       sku: item.sku,
       supplierName: item.supplier,
-      existingTags: item.tags,
+      existingTags: normalizedTags,
     });
 
-    if (item.name.toLowerCase().startsWith(queryLower)) {
+    if (item.name && item.name.toLowerCase().startsWith(queryLower)) {
       suggestions.add(item.name);
-    } else if (item.sku.toLowerCase().startsWith(queryLower)) {
+    } else if (item.sku && item.sku.toLowerCase().startsWith(queryLower)) {
       suggestions.add(item.sku);
-    } else if ((item as any).item_number?.toLowerCase().startsWith(queryLower)) {
+    } else if ((item as any).item_number && (item as any).item_number.toLowerCase().startsWith(queryLower)) {
       suggestions.add((item as any).item_number);
-    } else if (item.category.toLowerCase().startsWith(queryLower)) {
+    } else if (item.category && item.category.toLowerCase().startsWith(queryLower)) {
       suggestions.add(item.category);
     } else {
       const keywordMatch = generatedKeywords.all.find((kw) => kw.startsWith(queryLower));

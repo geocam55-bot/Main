@@ -367,6 +367,9 @@ export async function enrichMaterialsWithT1Pricing(
       if (!inventoryItem) {
         const categoryKey = material.category.toLowerCase();
         let inventoryItemId = resolveOverride(categoryKey);
+        if (inventoryItemId && !inventoryMapById.has(inventoryItemId)) {
+          inventoryItemId = undefined;
+        }
         matchedDefaultKey = inventoryItemId ? categoryKey : undefined;
         
         // If no direct category match, try smart matching based on description
@@ -382,23 +385,27 @@ export async function enrichMaterialsWithT1Pricing(
             if (material.lumberLength) {
               const lengthKey = `${baseKey} (${material.lumberLength}')`;
               const lengthMatch = resolveOverride(lengthKey);
-              if (lengthMatch) {
+              if (lengthMatch && inventoryMapById.has(lengthMatch)) {
                 matchedDefaultKey = lengthKey;
                 return lengthMatch;
               }
             }
             const genericMatch = resolveOverride(baseKey);
-            if (genericMatch) {
+            if (genericMatch && inventoryMapById.has(genericMatch)) {
               matchedDefaultKey = baseKey;
+              return genericMatch;
             }
-            return genericMatch;
+            return undefined;
           };
 
           // Helper to match and track the key
           const tryMatch = (key: string): string | undefined => {
             const match = resolveOverride(key);
-            if (match) matchedDefaultKey = key;
-            return match;
+            if (match && inventoryMapById.has(match)) {
+              matchedDefaultKey = key;
+              return match;
+            }
+            return undefined;
           };
 
           // Smart matching for deck materials

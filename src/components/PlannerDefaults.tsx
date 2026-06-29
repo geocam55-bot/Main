@@ -15,7 +15,9 @@ import {
   getOrgConversionFactors,
   ProjectWizardDefault,
   InventoryItem,
+  upsertProjectWizardDefault,
 } from '../utils/project-wizard-defaults-client';
+import { parseDefaultsKey, findBestMatchingItem } from './ProjectWizardSettings';
 import { InventoryCombobox } from './InventoryCombobox';
 import { PlannerDefaultsQuickHelp } from './PlannerDefaultsQuickHelp';
 import { STANDARD_LUMBER_LENGTHS } from '../utils/lumberLengths';
@@ -516,6 +518,82 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
         // Background: loaded all inventory items
         if (allItems.length > 0) {
           setInventoryItems((prev) => mergeInventoryItemsById(prev, allItems));
+
+          // Auto-heal orphaned references in both orgDefaults and userDefaults!
+          const itemIdsSet = new Set(allItems.map((i) => i.id));
+
+          // 1. Heal Org Defaults
+          const healedOrg: Record<string, string> = { ...orgDefaultsMap };
+          const healedOrgList: { key: string; val: string }[] = [];
+          Object.entries(orgDefaultsMap).forEach(([key, val]) => {
+            if (val && val !== 'none' && !itemIdsSet.has(val)) {
+              const parsed = parseDefaultsKey(key);
+              if (parsed) {
+                const bestMatch = findBestMatchingItem(parsed.plannerType, parsed.materialType, parsed.category, allItems);
+                if (bestMatch) {
+                  healedOrg[key] = bestMatch.id;
+                  healedOrgList.push({ key, val: bestMatch.id });
+                }
+              }
+            }
+          });
+
+          if (healedOrgList.length > 0) {
+            setOrgDefaults(healedOrg);
+            // Save healed org-level defaults to database in background
+            const toUpsert: ProjectWizardDefault[] = healedOrgList
+              .map(({ key, val }) => {
+                const parsed = parseDefaultsKey(key);
+                if (!parsed) return null;
+                return {
+                  organization_id: organizationId,
+                  planner_type: parsed.plannerType as any,
+                  material_type: parsed.materialType || 'default',
+                  material_category: parsed.category,
+                  inventory_item_id: val,
+                };
+              })
+              .filter((config): config is ProjectWizardDefault => config !== null);
+
+            if (toUpsert.length > 0) {
+              Promise.all(toUpsert.map((config) => upsertProjectWizardDefault(config)))
+                .then(() => {
+                  console.log(`[auto-heal-org] Persisted ${toUpsert.length} healed defaults to the database.`);
+                })
+                .catch((err) => {
+                  console.error('[auto-heal-org] Error persisting healed defaults:', err);
+                });
+            }
+          }
+
+          // 2. Heal User Defaults (merged from userDefaultsMap and draftDefaultsMap)
+          const mergedUserDefaultKeys = { ...userDefaultsMap, ...draftDefaultsMap };
+          const healedUser: Record<string, string> = { ...mergedUserDefaultKeys };
+          const healedUserList: { key: string; val: string }[] = [];
+          Object.entries(mergedUserDefaultKeys).forEach(([key, val]) => {
+            if (val && val !== 'none' && !itemIdsSet.has(val) && !key.endsWith('-cf')) {
+              const parsed = parseDefaultsKey(key);
+              if (parsed) {
+                const bestMatch = findBestMatchingItem(parsed.plannerType, parsed.materialType, parsed.category, allItems);
+                if (bestMatch) {
+                  healedUser[key] = bestMatch.id;
+                  healedUserList.push({ key, val: bestMatch.id });
+                }
+              }
+            }
+          });
+
+          if (healedUserList.length > 0) {
+            setUserDefaults(healedUser);
+            // Save healed user-level defaults to database in background
+            saveUserDefaults(userId, organizationId, healedUser)
+              .then(() => {
+                console.log('[auto-heal-user] Saved healed user defaults.');
+              })
+              .catch((err) => {
+                console.error('[auto-heal-user] Error saving healed user defaults:', err);
+              });
+          }
         }
       }, 100);
 

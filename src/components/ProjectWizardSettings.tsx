@@ -4,7 +4,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Loader2, Save, RefreshCw, Hammer, Home, Warehouse, Building2, Info, Brush } from 'lucide-react';
+import { Loader2, Save, RefreshCw, Hammer, Home, Warehouse, Building2, Info, Brush, Sparkles } from 'lucide-react';
 import {
   getProjectWizardDefaults,
   getProjectWizardDefaultsRaw,
@@ -424,11 +424,138 @@ const isLumberGroup = (groupName: string): boolean => {
   return false;
 };
 
+export const findBestMatchingItem = (
+  plannerType: string,
+  materialType: string,
+  category: string,
+  items: InventoryItem[]
+): InventoryItem | null => {
+  const normCategory = category.toLowerCase();
+  const normMaterial = materialType.toLowerCase();
+  
+  let materialFilteredItems = items;
+  if (normMaterial === 'treated') {
+    materialFilteredItems = items.filter(i => {
+      const text = `${i.name || ''} ${i.description || ''}`.toLowerCase();
+      return text.includes('treated') || text.includes('pt ') || text.includes('brown');
+    });
+  } else if (normMaterial === 'cedar') {
+    materialFilteredItems = items.filter(i => {
+      const text = `${i.name || ''} ${i.description || ''}`.toLowerCase();
+      return text.includes('cedar');
+    });
+  } else if (normMaterial === 'spruce') {
+    materialFilteredItems = items.filter(i => {
+      const text = `${i.name || ''} ${i.description || ''}`.toLowerCase();
+      return text.includes('spruce') || text.includes('spf');
+    });
+  } else if (normMaterial === 'composite') {
+    materialFilteredItems = items.filter(i => {
+      const text = `${i.name || ''} ${i.description || ''}`.toLowerCase();
+      return text.includes('composite') || text.includes('fiberdeck');
+    });
+  } else if (normMaterial === 'aluminum') {
+    materialFilteredItems = items.filter(i => {
+      const text = `${i.name || ''} ${i.description || ''}`.toLowerCase();
+      return text.includes('aluminum');
+    });
+  } else if (normMaterial.startsWith('aluminum-')) {
+    const color = normMaterial.split('-')[1];
+    materialFilteredItems = items.filter(i => {
+      const text = `${i.name || ''} ${i.description || ''}`.toLowerCase();
+      return text.includes('aluminum') && text.includes(color);
+    });
+  }
+
+  if (materialFilteredItems.length === 0) {
+    materialFilteredItems = items;
+  }
+
+  // Pass 1: Strict keyword matches
+  for (const i of materialFilteredItems) {
+    const name = (i.name || '').toLowerCase();
+    const desc = (i.description || '').toLowerCase();
+    const sku = (i.sku || '').toLowerCase();
+    const text = `${name} ${desc} ${sku}`;
+
+    if (normCategory === 'ledger board') {
+      if (text.includes('ledger')) return i;
+    } else if (normCategory === 'joists') {
+      if (text.includes('joist') && !text.includes('hanger') && !text.includes('rim') && !text.includes('ledger')) return i;
+    } else if (normCategory === 'rim joists') {
+      if (text.includes('rim joist') || text.includes('rim joists') || (text.includes('rim') && text.includes('joist'))) return i;
+    } else if (normCategory === 'beams') {
+      if (text.includes('beam')) return i;
+    } else if (normCategory === 'posts') {
+      if (text.includes('post') && !text.includes('railing') && !text.includes('anchor') && !text.includes('cap') && !text.includes('base')) return i;
+    } else if (normCategory === 'stair stringers') {
+      if (text.includes('stringer')) return i;
+    } else if (normCategory === 'decking boards') {
+      if (text.includes('decking') || text.includes('deck board') || text.includes('5/4x6')) return i;
+    } else if (normCategory === 'stair treads') {
+      if (text.includes('stair') && text.includes('tread')) return i;
+    } else if (normCategory === 'ledger flashing') {
+      if (text.includes('flashing')) return i;
+    } else if (normCategory === 'formtube') {
+      if (text.includes('formtube') || text.includes('sonotube')) return i;
+    } else if (normCategory === 'joist hangers') {
+      if (text.includes('hanger') || text.includes('joist hanger')) return i;
+    } else if (normCategory === 'post anchors') {
+      if (text.includes('anchor') || text.includes('post anchor')) return i;
+    } else if (normCategory === 'concrete mix') {
+      if (text.includes('concrete') || text.includes('cement')) return i;
+    } else if (normCategory === 'structural screws') {
+      if (text.includes('structural screw') || text.includes('structural screws')) return i;
+    } else if (normCategory === 'deck screws') {
+      if (text.includes('deck screw') || text.includes('deck screws')) return i;
+    } else if (normCategory === 'lag screws') {
+      if (text.includes('lag screw') || text.includes('lag screws') || text.includes('lag bolt')) return i;
+    }
+  }
+
+  // Pass 2: Dimensional matches (e.g., 2x8 for joists/beams/ledger, 6x6/4x4 for posts, 2x12 for stringers/treads)
+  for (const i of materialFilteredItems) {
+    const name = (i.name || '').toLowerCase();
+    const desc = (i.description || '').toLowerCase();
+    const sku = (i.sku || '').toLowerCase();
+    const text = `${name} ${desc} ${sku}`;
+
+    if (normCategory === 'ledger board') {
+      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) return i;
+    } else if (normCategory === 'joists') {
+      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) return i;
+    } else if (normCategory === 'rim joists') {
+      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) return i;
+    } else if (normCategory === 'beams') {
+      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('3x8') || text.includes('2x6')) return i;
+    } else if (normCategory === 'posts') {
+      if (text.includes('6x6') || text.includes('4x4') || text.includes('d4s')) return i;
+    } else if (normCategory === 'stair stringers') {
+      if (text.includes('2x12') || text.includes('2x10')) return i;
+    } else if (normCategory === 'decking boards') {
+      if (text.includes('5/4x6') || text.includes('5/4 x 6') || text.includes('decking') || text.includes('deck board') || text.includes('2x6')) return i;
+    } else if (normCategory === 'stair treads') {
+      if (text.includes('stair') || text.includes('tread') || text.includes('2x12') || text.includes('step')) return i;
+    }
+  }
+
+  // Pass 3: Fallback containing the category name
+  for (const i of materialFilteredItems) {
+    const text = `${i.name || ''} ${i.description || ''}`.toLowerCase();
+    if (text.includes(normCategory)) {
+      return i;
+    }
+  }
+
+  return null;
+};
+
 export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [defaults, setDefaults] = useState<Record<string, string>>({});
+  const [healedKeys, setHealedKeys] = useState<Set<string>>(new Set());
   const [loadedDefaults, setLoadedDefaults] = useState<ProjectWizardDefault[]>([]);
   const [orgCFs, setOrgCFs] = useState<Record<string, string>>({});
   const [selectedDeckType, setSelectedDeckType] = useState<'spruce' | 'treated' | 'composite' | 'cedar' | 'aluminum'>('treated');
@@ -633,6 +760,57 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
       setTimeout(async () => {
         const allItems = await getInventoryItemsForDropdown(organizationId);
         setInventoryItems(allItems);
+
+        // Auto-heal orphaned defaults
+        if (allItems.length > 0) {
+          const itemIdsSet = new Set(allItems.map(i => i.id));
+          const healed: Record<string, string> = { ...defaultsMap };
+          const healedKeysList: string[] = [];
+
+          Object.entries(defaultsMap).forEach(([key, val]) => {
+            if (val && val !== 'none' && !itemIdsSet.has(val)) {
+              // Found orphaned default! Try to match.
+              const parsed = parseDefaultsKey(key);
+              if (parsed) {
+                const bestMatch = findBestMatchingItem(parsed.plannerType, parsed.materialType, parsed.category, allItems);
+                if (bestMatch) {
+                  healed[key] = bestMatch.id;
+                  healedKeysList.push(key);
+                }
+              }
+            }
+          });
+
+          if (healedKeysList.length > 0) {
+            setDefaults(healed);
+            setHealedKeys(new Set(healedKeysList));
+
+            // Auto-persist healed references to database in background
+            const toUpsert: ProjectWizardDefault[] = healedKeysList
+              .map((key) => {
+                const parsed = parseDefaultsKey(key);
+                if (!parsed) return null;
+                return {
+                  organization_id: organizationId,
+                  planner_type: parsed.plannerType as 'deck' | 'garage' | 'shed' | 'roof' | 'finishing',
+                  material_type: getCanonicalMaterialType(parsed.plannerType, parsed.materialType || 'default'),
+                  material_category: getCanonicalMaterialCategory(parsed.plannerType, parsed.materialType || 'default', parsed.category),
+                  inventory_item_id: healed[key],
+                };
+              })
+              .filter((config): config is ProjectWizardDefault => config !== null);
+
+            if (toUpsert.length > 0) {
+              Promise.all(toUpsert.map((config) => upsertProjectWizardDefault(config)))
+                .then(() => {
+                  console.log(`[auto-heal] Persisted ${toUpsert.length} healed defaults to the database.`);
+                })
+                .catch((err) => {
+                  console.error('[auto-heal] Error persisting healed defaults:', err);
+                });
+            }
+          }
+        }
       }, 100); // Small delay to let UI render first
       
       // Step 4: Load organization conversion factors from KV
@@ -1107,6 +1285,28 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
             </div>
           )}
 
+          {healedKeys.size > 0 && (
+            <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 text-sm text-purple-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="font-semibold flex items-center gap-1.5 text-purple-950">
+                  <Sparkles className="h-4 w-4 text-purple-600 animate-pulse" />
+                  Orphaned references automatically healed!
+                </div>
+                <div className="text-purple-700 leading-relaxed text-xs sm:text-sm">
+                  We detected {healedKeys.size} obsolete default inventory items (e.g., from a past database import or seed) that no longer exist. We have matched them to appropriate active items in your current inventory. Please review the selections below and click <span className="font-semibold">Save Configuration</span> to persist these updates.
+                </div>
+              </div>
+              <Button 
+                onClick={handleSave} 
+                disabled={saving}
+                size="sm"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-medium border-0 shadow-sm shrink-0"
+              >
+                {saving ? 'Saving...' : 'Save Configuration Now'}
+              </Button>
+            </div>
+          )}
+
           {/* Deck Planner Settings */}
           <div className="space-y-4 border-2 border-purple-200 rounded-lg p-6 bg-purple-50" ref={deckRef} data-planner-section="deck">
             <h3 className="text-lg font-semibold text-purple-900 flex items-center gap-2">
@@ -1136,7 +1336,12 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                         const cfValue = showCF ? getOrgCF('deck', effectiveMaterialType, uniqueCategory) : 1;
                         return (
                           <div key={category} className="space-y-2">
-                            <Label htmlFor={`deck-${selectedDeckType}-${category}`} className="text-foreground">{category}</Label>
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor={`deck-${selectedDeckType}-${category}`} className="text-foreground">{category}</Label>
+                              {healedKeys.has(makeDefaultsKey('deck', effectiveMaterialType, uniqueCategory)) && (
+                                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5"><Sparkles className="h-2.5 w-2.5 animate-pulse" /> Auto-healed</span>
+                              )}
+                            </div>
                             <InventoryCombobox
                               id={`deck-${selectedDeckType}-${category}`}
                               items={inventoryItems}
@@ -1207,7 +1412,12 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                         const cfValue = showCF ? (getOrgCF('garage', garageMaterialType, category) || SYSTEM_CF_SUGGESTIONS[category] || 1) : 1;
                         return (
                           <div key={category} className="space-y-2">
-                            <Label htmlFor={`garage-${selectedGarageType}-${category}`} className="text-foreground">{category}</Label>
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor={`garage-${selectedGarageType}-${category}`} className="text-foreground">{category}</Label>
+                              {healedKeys.has(makeDefaultsKey('garage', garageMaterialType, category)) && (
+                                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5"><Sparkles className="h-2.5 w-2.5 animate-pulse" /> Auto-healed</span>
+                              )}
+                            </div>
                             <InventoryCombobox
                               id={`garage-${selectedGarageType}-${category}`}
                               items={inventoryItems}
@@ -1280,7 +1490,12 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                         const cfValue = showCF ? getOrgCF('shed', shedMaterialType, category) : 1;
                         return (
                           <div key={category} className="space-y-2">
-                            <Label htmlFor={`shed-${selectedShedType}-${category}`} className="text-foreground">{category}</Label>
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor={`shed-${selectedShedType}-${category}`} className="text-foreground">{category}</Label>
+                              {healedKeys.has(makeDefaultsKey('shed', shedMaterialType, category)) && (
+                                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5"><Sparkles className="h-2.5 w-2.5 animate-pulse" /> Auto-healed</span>
+                              )}
+                            </div>
                             <InventoryCombobox
                               id={`shed-${selectedShedType}-${category}`}
                               items={inventoryItems}
@@ -1351,7 +1566,12 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                         const cfValue = showCF ? getOrgCF('roof', roofMaterialType, category) : 1;
                         return (
                           <div key={category} className="space-y-2">
-                            <Label htmlFor={`roof-${selectedRoofType}-${category}`} className="text-foreground">{category}</Label>
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor={`roof-${selectedRoofType}-${category}`} className="text-foreground">{category}</Label>
+                              {healedKeys.has(makeDefaultsKey('roof', roofMaterialType, category)) && (
+                                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5"><Sparkles className="h-2.5 w-2.5 animate-pulse" /> Auto-healed</span>
+                              )}
+                            </div>
                             <InventoryCombobox
                               id={`roof-${selectedRoofType}-${category}`}
                               items={inventoryItems}
@@ -1422,7 +1642,12 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                         const cfValue = showCF ? getOrgCF('finishing', selectedFinishingType, category) : 1;
                         return (
                           <div key={category} className="space-y-2">
-                            <Label htmlFor={`finishing-${selectedFinishingType}-${category}`} className="text-foreground">{category}</Label>
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor={`finishing-${selectedFinishingType}-${category}`} className="text-foreground">{category}</Label>
+                              {healedKeys.has(makeDefaultsKey('finishing', selectedFinishingType, category)) && (
+                                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5"><Sparkles className="h-2.5 w-2.5 animate-pulse" /> Auto-healed</span>
+                              )}
+                            </div>
                             <InventoryCombobox
                               id={`finishing-${selectedFinishingType}-${category}`}
                               items={inventoryItems}
