@@ -258,7 +258,7 @@ const SYSTEM_CF_SUGGESTIONS: Record<string, number> = {
   'Vinyl or Aluminum Fascia': 1 / 12,
   'Flashing': 1 / 10,
   'Furring Strip': 1 / 8,
-  'Formtube': 4 / 12,                  // Sold in 12' lengths, 4' needed per footing (CF = 4/12)
+  'Formtube': 3 / 12,                  // Sold in 12' lengths, 3' needed per footing (CF = 3/12)
 };
 
 // Define material categories for each planner type - organized by category sections

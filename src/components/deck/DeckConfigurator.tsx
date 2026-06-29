@@ -342,18 +342,18 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
 
             <div>
               <label className="block text-foreground text-xs font-medium mb-1">
-                Concrete Formtube Diameter (4' depth)
+                Concrete Formtube Diameter (3' depth)
               </label>
               <select
                 value={config.formtubeSize || '8"'}
                 onChange={(e) => updateConfig({ formtubeSize: e.target.value as any })}
                 className="w-full px-3 py-1.5 text-xs border border-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-background text-foreground"
               >
-                <option value="8&quot;">8" Cardboard Tube (~3 bags of concrete per post)</option>
-                <option value="10&quot;">10" Cardboard Tube (~4 bags of concrete per post)</option>
-                <option value="12&quot;">12" Cardboard Tube (~6 bags of concrete per post)</option>
-                <option value="14&quot;">14" Cardboard Tube (~7 bags of concrete per post)</option>
-                <option value="16&quot;">16" Cardboard Tube (~9 bags of concrete per post)</option>
+                <option value="8&quot;">8" Cardboard Tube (~1.8 bags of concrete per post)</option>
+                <option value="10&quot;">10" Cardboard Tube (~3 bags of concrete per post)</option>
+                <option value="12&quot;">12" Cardboard Tube (~4 bags of concrete per post)</option>
+                <option value="14&quot;">14" Cardboard Tube (~5.4 bags of concrete per post)</option>
+                <option value="16&quot;">16" Cardboard Tube (~7 bags of concrete per post)</option>
               </select>
             </div>
           </div>
@@ -568,7 +568,7 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
               </div>
               <div className="flex justify-between">
                 <span>Formtube & Depth:</span>
-                <span className="font-medium text-foreground">{config.formtubeSize || '8"'} @ 4' Deep</span>
+                <span className="font-medium text-foreground">{config.formtubeSize || '8"'} @ 3' Deep</span>
               </div>
             </div>
           </div>
