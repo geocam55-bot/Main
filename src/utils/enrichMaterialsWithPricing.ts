@@ -182,7 +182,7 @@ const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: strin
   }
 
   // 4. Is it a Framing item?
-  if (cat === 'framing' || desc.includes('ledger') || desc.includes('joist') || desc.includes('beam') || desc.includes('post') || desc.includes('stringer')) {
+  if (cat === 'framing' || desc.includes('ledger') || desc.includes('joist') || desc.includes('beam') || desc.includes('post') || desc.includes('stringer') || desc.includes('blocking') || desc.includes('block')) {
     if (desc.includes('cedar')) return 'cedar';
     if (desc.includes('spruce')) return 'spruce';
     if (desc.includes('treated') || desc.includes('pressure treated')) return 'treated';
@@ -470,6 +470,8 @@ export async function enrichMaterialsWithT1Pricing(
             inventoryItemId = tryMatch('railing brackets');
           } else if (description.includes('stringer')) {
             inventoryItemId = tryLengthFirst('stair stringers');
+          } else if (description.includes('blocking') || description.includes('block')) {
+            inventoryItemId = tryLengthFirst('blocking');
           } else if (description.includes('stair') && description.includes('tread')) {
             inventoryItemId = tryMatch('stair treads');
           } else if (description.includes('deck screw')) {

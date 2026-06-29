@@ -123,6 +123,24 @@ function termMatches(allFieldsText: string, term: string): boolean {
       return true;
     }
   }
+
+  // Fuzzy match on individual words (only for terms with length >= 3)
+  if (term.length >= 3) {
+    const words = allFieldsText.split(/\s+/);
+    for (const word of words) {
+      if (word.length >= 3) {
+        const fuzzyScore = advancedFuzzyMatch(word, term);
+        if (fuzzyScore >= 0.7) {
+          return true;
+        }
+        const stemFuzzyScore = advancedFuzzyMatch(stem(word), stemmedTerm);
+        if (stemFuzzyScore >= 0.7) {
+          return true;
+        }
+      }
+    }
+  }
+
   return false;
 }
 

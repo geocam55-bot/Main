@@ -295,6 +295,58 @@ export function calculateMaterials(config: DeckConfig): DeckMaterials {
       lumberLength: length,
     });
   });
+
+  // ---- Blocking ----
+  const blockLength = config.joistSpacing - 1.5;
+  const numberOfBays = numberOfJoists - 1;
+  let blockingRows = 0;
+  if (joistSpan >= 8 && joistSpan <= 14) {
+    blockingRows = 1;
+  } else if (joistSpan > 14) {
+    blockingRows = 2;
+  }
+  
+  // Calculate railing posts
+  let stairRailingLengthForBlocking = 0;
+  if (config.railingStyle !== 'None' && config.hasStairs && config.stairRailing !== false) {
+    const stairHeight = config.height;
+    const numberOfSteps = Math.ceil(stairHeight / 0.58);
+    const totalRun = numberOfSteps * (11/12);
+    const slopeLength = Math.sqrt(Math.pow(stairHeight, 2) + Math.pow(totalRun, 2));
+    stairRailingLengthForBlocking = slopeLength * 2;
+  }
+  
+  let deckPostCountForBlocking = 0;
+  let stairPostCountForBlocking = 0;
+  if (config.railingStyle !== 'None') {
+    if (config.railingStyle === 'Aluminum') {
+      deckPostCountForBlocking = railingLength > 0 ? Math.max(2, Math.ceil(railingLength / 6) + 1) : 0;
+      stairPostCountForBlocking = stairRailingLengthForBlocking > 0 ? 2 : 0;
+    } else {
+      deckPostCountForBlocking = railingLength > 0 ? Math.ceil(railingLength / 6) : 0;
+      stairPostCountForBlocking = stairRailingLengthForBlocking > 0 ? 2 : 0;
+    }
+  }
+  const railingPostCountForBlocking = deckPostCountForBlocking + stairPostCountForBlocking;
+  const railingBlocks = railingPostCountForBlocking * 2;
+  
+  const totalBlocks = (numberOfBays * blockingRows) + railingBlocks;
+  
+  if (totalBlocks > 0) {
+    const blockingBoardLength = 10; // 10' boards
+    const boardLengthInches = blockingBoardLength * 12;
+    const blocksPerBoard = Math.floor(boardLengthInches / blockLength);
+    const blockingQuantity = Math.ceil(totalBlocks / blocksPerBoard);
+    
+    framing.push({
+      category: 'Framing',
+      description: `Pressure Treated Blocking (${blockingBoardLength}')`,
+      quantity: blockingQuantity,
+      unit: 'pcs',
+      notes: `Provides frame rigidity & rail post support. Individual block length: ${blockLength}\". Total blocks: ${totalBlocks} (${numberOfBays} bays × ${blockingRows} rows + ${railingBlocks} railing blocks).`,
+      lumberLength: blockingBoardLength,
+    });
+  }
   
   // ---- Posts ----
   // Post height = deck height + 1' (buried portion / connection)
