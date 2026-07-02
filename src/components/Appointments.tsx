@@ -344,7 +344,7 @@ export function Appointments({ user }: AppointmentsProps) {
 
   const loadContacts = async () => {
     try {
-      const response = await contactsAPI.getAll();
+      const response = await contactsAPI.getAll('team');
       setContacts(response.contacts || []);
       setContactsLoaded(true);
       const nameMap: Record<string, string> = {};

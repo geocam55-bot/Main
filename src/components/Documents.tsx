@@ -132,7 +132,7 @@ export function Documents({ user }: DocumentsProps) {
 
   const loadContacts = async () => {
     try {
-      const response = await contactsAPI.getAll();
+      const response = await contactsAPI.getAll('team');
       setContacts(response.contacts || []);
     } catch (error) {
       // Error loading contacts

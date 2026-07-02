@@ -59,7 +59,7 @@ export function CustomerSelector({
   const loadCustomers = async () => {
     setIsLoading(true);
     try {
-      const { contacts } = await contactsAPI.getAll('personal');
+      const { contacts } = await contactsAPI.getAll('team');
 
       const normalizedCustomers = (contacts || [])
         .filter((contact: any) => {

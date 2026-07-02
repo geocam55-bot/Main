@@ -65,7 +65,7 @@ export function Notes({ user }: NotesProps) {
       setIsLoading(true);
       const [{ notes: notesData }, { contacts: contactsData }] = await Promise.all([
         notesAPI.getAll(),
-        contactsAPI.getAll()
+        contactsAPI.getAll('team')
       ]);
       
       setContacts(contactsData || []);

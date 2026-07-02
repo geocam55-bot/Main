@@ -388,6 +388,19 @@ export async function getAllContactsClient(filterByAccountOwner?: string, scope:
   try {
     const supabase = createClient();
     
+    // First check user role to bypass server endpoint for designer (since edge function might not be updated)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      try {
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (profile && profile.role === 'designer') {
+          return await getAllContactsClientDirect(scope);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    
     const headers = await getServerHeaders();
 
     // Skip server call if no user token — it will 401 anyway
