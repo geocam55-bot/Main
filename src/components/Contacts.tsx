@@ -101,7 +101,7 @@ export function Contacts({ user }: ContactsProps) {
 
   // Scope state – default to 'team' if user is elevated, else 'personal'
   const [currentScope, setCurrentScope] = useState<'personal' | 'team'>(
-    ['admin', 'manager', 'director', 'marketing', 'super_admin'].includes(user.role) ? 'team' : 'personal'
+    ['admin', 'manager', 'director', 'marketing', 'designer', 'super_admin'].includes(user.role) ? 'team' : 'personal'
   );
   
   // Tags state

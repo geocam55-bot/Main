@@ -233,7 +233,7 @@ export function contactsAPI(app: Hono) {
         // Team scope: role-based filtering (admin/manager see all org data)
         if (userRole === 'super_admin') {
           // super_admin sees everything — no filter
-        } else if (['admin', 'manager', 'director', 'marketing'].includes(userRole)) {
+        } else if (['admin', 'manager', 'director', 'marketing', 'designer'].includes(userRole)) {
           // Elevated roles see all contacts in their organization
           query = query.eq('organization_id', userOrgId);
         } else {

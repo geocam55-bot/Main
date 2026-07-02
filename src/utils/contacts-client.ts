@@ -510,7 +510,7 @@ async function getAllContactsClientDirect(scope: 'personal' | 'team' = 'personal
       // Team scope: role-based filtering
       if (userRole === 'super_admin') {
         // no filter
-      } else if (['admin', 'manager', 'director', 'marketing'].includes(userRole)) {
+      } else if (['admin', 'manager', 'director', 'marketing', 'designer'].includes(userRole)) {
         query = query.eq('organization_id', userOrgId);
       } else {
         if (hasAccountOwnerCol && userEmail) {
