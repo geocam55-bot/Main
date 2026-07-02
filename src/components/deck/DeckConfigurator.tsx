@@ -323,7 +323,7 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
                     type="button"
                     onClick={() => {
                       const nextConfig: Partial<DeckConfig> = { postSize: size };
-                      if (size === '6x6' && (!config.formtubeSize || config.formtubeSize === '8"')) {
+                      if (size === '6x6' && (!config.formtubeSize || config.formtubeSize === '8"' || config.formtubeSize === '6"')) {
                         nextConfig.formtubeSize = '8"';
                       }
                       updateConfig(nextConfig);
@@ -346,9 +346,17 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
               </label>
               <select
                 value={config.formtubeSize || '8"'}
-                onChange={(e) => updateConfig({ formtubeSize: e.target.value as any })}
+                onChange={(e) => {
+                  const size = e.target.value as any;
+                  const nextConfig: Partial<DeckConfig> = { formtubeSize: size };
+                  if (size === '6"' && config.postSize === '6x6') {
+                    nextConfig.postSize = '4x4';
+                  }
+                  updateConfig(nextConfig);
+                }}
                 className="w-full px-3 py-1.5 text-xs border border-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-background text-foreground"
               >
+                <option value="6&quot;">6" Cardboard Tube (~1 bag of concrete per post)</option>
                 <option value="8&quot;">8" Cardboard Tube (~1.8 bags of concrete per post)</option>
                 <option value="10&quot;">10" Cardboard Tube (~3 bags of concrete per post)</option>
                 <option value="12&quot;">12" Cardboard Tube (~4 bags of concrete per post)</option>

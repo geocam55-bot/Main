@@ -1,4 +1,4 @@
-import { useState, useEffect, useDeferredValue, useRef } from 'react';
+import { useState, useEffect, useDeferredValue, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -557,6 +557,20 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
             'CREATE INDEX IF NOT EXISTS idx_inventory_name_trgm ON public.inventory USING gin(name gin_trgm_ops);',
             'CREATE INDEX IF NOT EXISTS idx_inventory_description_trgm ON public.inventory USING gin(description gin_trgm_ops);',
             'CREATE INDEX IF NOT EXISTS idx_inventory_sku_trgm ON public.inventory USING gin(sku gin_trgm_ops);',
+            `DROP FUNCTION IF EXISTS public.get_distinct_categories(uuid);`,
+            `CREATE OR REPLACE FUNCTION public.get_distinct_categories(org_id text)
+             RETURNS TABLE(category text)
+             LANGUAGE plpgsql
+             SECURITY DEFINER
+             AS $func$
+             BEGIN
+               RETURN QUERY
+               SELECT DISTINCT i.category::text
+               FROM public.inventory i
+               WHERE i.organization_id = org_id AND i.category IS NOT NULL AND i.category != '';
+             END;
+             $func$;`,
+            'GRANT EXECUTE ON FUNCTION public.get_distinct_categories(text) TO anon, authenticated, service_role;',
             'ANALYZE public.inventory;'
           ];
           for (const idxSql of performanceIndexes) {
@@ -592,19 +606,52 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       setItems(mappedItems);
       setTotalCount(count);
 
-      // Fetch distinct categories across the whole database for this organization
+      // Fetch distinct categories across the whole database for this organization via server API
       try {
-        const { data: categoryData, error: categoryError } = await supabase
-          .from('inventory')
-          .select('category')
-          .eq('organization_id', userOrgId);
+        const headers = await getServerHeaders();
+        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/categories`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ organizationId: userOrgId })
+        });
         
-        if (!categoryError && categoryData) {
-          const uniqueCats = Array.from(new Set(categoryData.map(item => item.category))).filter(Boolean) as string[];
-          setAvailableCategories(uniqueCats);
+        if (response.ok) {
+          const catResult = await response.json();
+          if (catResult && catResult.matched !== false && Array.isArray(catResult.categories)) {
+            setAvailableCategories(catResult.categories);
+          } else {
+            throw new Error('API returned unmatched route fallback or invalid categories payload');
+          }
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
       } catch (catErr) {
-        console.warn('Failed to fetch distinct categories:', catErr);
+        console.warn('Failed to fetch categories via server API, trying local RPC/select fallback:', catErr);
+        // Fetch distinct categories across the whole database for this organization
+        try {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: userOrgId });
+          
+          if (!rpcError && rpcData) {
+            // rpcData can be an array of objects like { category: "appliances" } or strings
+            const uniqueCats = rpcData.map((row: any) => typeof row === 'object' ? row.category : row).filter(Boolean);
+            const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+            setAvailableCategories(sorted);
+          } else {
+            // Fallback if RPC fails or is not found
+            const { data: categoryData, error: categoryError } = await supabase
+              .from('inventory')
+              .select('category')
+              .eq('organization_id', userOrgId);
+            
+            if (!categoryError && categoryData) {
+              const uniqueCats = categoryData.map(item => item.category).filter(Boolean) as string[];
+              const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+              setAvailableCategories(sorted);
+            }
+          }
+        } catch (innerErr) {
+          console.warn('All distinct category fetches failed:', innerErr);
+        }
       }
       setServerLowStockCount(serverLowStock || 0); // 📊 Store server-calculated low stock count
       setTableExists(true);
@@ -626,8 +673,8 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       if (currentPage === 1 && count > 0) {
       }
       
-      // 🕵️‍♂️ Auto-detect lost inventory if list is empty
-      if (count === 0 && currentPage === 1) {
+      // 🕵️‍♂️ Auto-detect lost inventory if list is empty (only when no search or filters are applied)
+      if (count === 0 && currentPage === 1 && !debouncedSearchQuery && categoryFilter === 'all' && statusFilter === 'all') {
         try {
           const headers = await getServerHeaders();
           // Use the CORRECT endpoint: /inventory-diagnostic/run
@@ -641,21 +688,26 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
             const diagData = await diagRes.json();
             
             const nullCount = diagData.counts?.withNullOrg || 0;
-            const otherCount = diagData.counts?.inOtherOrgs || 0;
             
-            if (nullCount > 0 || otherCount > 0) {
+            if (nullCount > 0) {
               setLostInventory({
-                total: nullCount + otherCount,
+                total: nullCount,
                 nullOrg: nullCount,
-                otherOrgs: otherCount,
+                otherOrgs: 0,
                 found: true
               });
             } else {
+              setLostInventory(null);
             }
           } else {
+            setLostInventory(null);
           }
         } catch (err) {
+          setLostInventory(null);
         }
+      } else {
+        // Clear automatic diagnostic state if there are search terms, filters, or items exist
+        setLostInventory(null);
       }
       
     } catch (error: any) {
@@ -925,9 +977,26 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
     }
   };
 
-  const categories = availableCategories.length > 0 
-    ? availableCategories 
-    : [...new Set(items.map(item => item.category))].filter(Boolean);
+  const categories = useMemo(() => {
+    const rawList = availableCategories.length > 0 
+      ? availableCategories 
+      : items.map(item => item.category);
+      
+    const seen = new Set<string>();
+    const result: string[] = [];
+    
+    for (const cat of rawList) {
+      if (!cat) continue;
+      const clean = cat.trim();
+      const lower = clean.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        result.push(clean);
+      }
+    }
+    
+    return result.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [availableCategories, items]);
   
   // Server-side filtering now, so filteredItems = items
   // const filteredItems = items;

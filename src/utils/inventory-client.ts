@@ -333,6 +333,8 @@ export async function searchInventoryClient(filters?: {
       const orClause = buildInventoryOrSearchClause(expandedTerms);
       if (orClause) {
         query = query.or(orClause);
+      } else {
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000');
       }
     }
 

@@ -486,7 +486,7 @@ publicApi.get(`${PREFIX}/api/v1/inventory`, async (c) => {
       .range(offset, offset + limit - 1);
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
+      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%,category.ilike.%${search}%,supplier.ilike.%${search}%`);
     }
     if (category) {
       query = query.eq('category', category);

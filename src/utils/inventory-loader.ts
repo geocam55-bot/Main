@@ -1,5 +1,5 @@
 import { createClient } from './supabase/client';
-import { buildInventoryOrSearchClause, expandInventorySearchTerms } from './inventory-keywords';
+import { buildInventoryOrSearchClause, expandInventorySearchTerms, STOP_WORDS } from './inventory-keywords';
 
 const supabase = createClient();
 
@@ -105,22 +105,41 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
       
       // Apply text search if there are search terms
       if (searchTerms) {
-        const tokens = searchTerms.split(/\s+/).filter(token => token.length >= 2);
-        if (tokens.length === 0 && searchTerms.length > 0) {
+        const tokens = searchTerms.split(/\s+/)
+          .map(token => token.trim().toLowerCase())
+          .filter(token => token.length >= 2 && !STOP_WORDS.has(token));
+        
+        const uniqueExpandedTerms = new Set<string>();
+        
+        if (tokens.length === 0 && searchTerms.trim().length > 0) {
           // Fallback for short search query
-          const expandedTerms = expandInventorySearchTerms(searchTerms);
-          const orClause = buildInventoryOrSearchClause(expandedTerms);
-          if (orClause) {
-            query = query.or(orClause);
+          const cleanQuery = searchTerms.trim().toLowerCase();
+          if (!STOP_WORDS.has(cleanQuery)) {
+            const expandedTerms = expandInventorySearchTerms(cleanQuery);
+            for (const term of expandedTerms) {
+              if (!STOP_WORDS.has(term)) {
+                uniqueExpandedTerms.add(term);
+              }
+            }
           }
         } else {
           for (const token of tokens) {
             const expandedTerms = expandInventorySearchTerms(token);
-            const orClause = buildInventoryOrSearchClause(expandedTerms);
-            if (orClause) {
-              query = query.or(orClause);
+            for (const term of expandedTerms) {
+              if (!STOP_WORDS.has(term)) {
+                uniqueExpandedTerms.add(term);
+              }
             }
           }
+        }
+        
+        const orClause = buildInventoryOrSearchClause(Array.from(uniqueExpandedTerms));
+        if (orClause) {
+          query = query.or(orClause);
+        } else {
+          // If we had search terms but they were all stop words, don't return everything.
+          // Filter for an impossible ID to return 0 results.
+          query = query.eq('id', '00000000-0000-0000-0000-000000000000');
         }
       }
       
@@ -173,21 +192,40 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
     if (searchQuery && searchQuery.trim()) {
       const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
       if (searchTerms) {
-        const tokens = searchTerms.split(/\s+/).filter(token => token.length >= 2);
-        if (tokens.length === 0 && searchTerms.length > 0) {
-          const expandedTerms = expandInventorySearchTerms(searchTerms);
-          const orClause = buildInventoryOrSearchClause(expandedTerms);
-          if (orClause) {
-            lowStockQuery = lowStockQuery.or(orClause);
+        const tokens = searchTerms.split(/\s+/)
+          .map(token => token.trim().toLowerCase())
+          .filter(token => token.length >= 2 && !STOP_WORDS.has(token));
+        
+        const uniqueExpandedTerms = new Set<string>();
+        
+        if (tokens.length === 0 && searchTerms.trim().length > 0) {
+          const cleanQuery = searchTerms.trim().toLowerCase();
+          if (!STOP_WORDS.has(cleanQuery)) {
+            const expandedTerms = expandInventorySearchTerms(cleanQuery);
+            for (const term of expandedTerms) {
+              if (!STOP_WORDS.has(term)) {
+                uniqueExpandedTerms.add(term);
+              }
+            }
           }
         } else {
           for (const token of tokens) {
             const expandedTerms = expandInventorySearchTerms(token);
-            const orClause = buildInventoryOrSearchClause(expandedTerms);
-            if (orClause) {
-              lowStockQuery = lowStockQuery.or(orClause);
+            for (const term of expandedTerms) {
+              if (!STOP_WORDS.has(term)) {
+                uniqueExpandedTerms.add(term);
+              }
             }
           }
+        }
+        
+        const orClause = buildInventoryOrSearchClause(Array.from(uniqueExpandedTerms));
+        if (orClause) {
+          lowStockQuery = lowStockQuery.or(orClause);
+        } else {
+          // If we had search terms but they were all stop words, don't return everything.
+          // Filter for an impossible ID to return 0 results.
+          lowStockQuery = lowStockQuery.eq('id', '00000000-0000-0000-0000-000000000000');
         }
       }
       if (priceFilter) {

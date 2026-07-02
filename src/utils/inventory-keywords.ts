@@ -18,7 +18,7 @@ export interface GeneratedInventoryKeywords {
   all: string[];
 }
 
-const STOP_WORDS = new Set([
+export const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with',
 ]);
 
@@ -248,12 +248,12 @@ export function expandInventorySearchTerms(query: string): string[] {
   }
 
   return Array.from(expanded)
-    .filter((t) => t.length >= 2)
+    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t))
     .slice(0, 16);
 }
 
 export function buildInventoryOrSearchClause(terms: string[]): string {
-  const fields = ['name', 'sku', 'description', 'category'];
+  const fields = ['name', 'sku', 'description', 'category', 'supplier'];
   const clauses: string[] = [];
 
   for (const term of terms) {

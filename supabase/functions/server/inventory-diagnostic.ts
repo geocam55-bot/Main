@@ -247,6 +247,103 @@ export function inventoryDiagnostic(app: Hono) {
     }
   });
 
+  // ── DISTINCT INVENTORY CATEGORIES ────────────────────
+  app.post('/make-server-8405be07/inventory-diagnostic/categories', async (c) => {
+    console.log('🔍 Categories endpoint hit');
+
+    try {
+      const accessToken = extractUserToken(c);
+      if (!accessToken) {
+        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
+      }
+
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
+
+      // Verify the user
+      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+      if (authError || !user) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+
+      // Try parsing request body to see if organizationId is explicitly passed
+      let orgId: string | null = null;
+      try {
+        const body = await c.req.json();
+        orgId = body.organizationId;
+      } catch {
+        // No body
+      }
+
+      // If orgId not in body, resolve via profiles table
+      if (!orgId) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single();
+        if (profile) {
+          orgId = profile.organization_id;
+        }
+      }
+
+      if (!orgId) {
+        return c.json({ categories: [] });
+      }
+
+      // 1. Try running get_distinct_categories RPC
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: orgId });
+        if (!rpcError && rpcData) {
+          const uniqueCats = rpcData.map((row: any) => typeof row === 'object' ? row.category : row).filter(Boolean);
+          // Case-insensitive distinct sort
+          const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+          return c.json({ categories: sorted });
+        } else if (rpcError) {
+          console.warn('Backend categories RPC error:', rpcError.message);
+        }
+      } catch (rpcErr: any) {
+        console.warn('Backend categories RPC exception:', rpcErr.message);
+      }
+
+      // 2. Fallback: Fast multi-page parallel fetch (highly parallelized to scan up to 25,000 items instantly)
+      const categoriesSet = new Set<string>();
+      const pageSize = 1000;
+      const pagesToFetch = 25; // scans up to 25,000 items in parallel!
+
+      const promises = Array.from({ length: pagesToFetch }).map((_, i) => 
+        supabase
+          .from('inventory')
+          .select('category')
+          .eq('organization_id', orgId)
+          .range(i * pageSize, (i + 1) * pageSize - 1)
+      );
+
+      const results = await Promise.all(promises);
+      results.forEach(res => {
+        if (res.data) {
+          res.data.forEach((item: any) => {
+            if (item.category) {
+              const trimmed = item.category.trim();
+              if (trimmed !== '') {
+                categoriesSet.add(trimmed);
+              }
+            }
+          });
+        }
+      });
+
+      const sorted = Array.from(categoriesSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      return c.json({ categories: sorted });
+
+    } catch (error: any) {
+      console.error('❌ Categories fetch error:', error);
+      return c.json({ error: 'Internal server error', message: error.message }, 500);
+    }
+  });
+
   // Run diagnostic - bypasses RLS to see ALL inventory items
   app.post('/make-server-8405be07/inventory-diagnostic/run', async (c) => {
     console.log('🔍 Inventory diagnostic endpoint hit');
@@ -290,7 +387,7 @@ export function inventoryDiagnostic(app: Hono) {
       // Approach 1: Try profiles table
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email, organization_id, full_name, role')
+        .select('id, email, organization_id, name, role')
         .eq('id', user.id)
         .single();
 

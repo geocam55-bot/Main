@@ -537,7 +537,7 @@ publicApi.get(`${PREFIX}/api/v1/users`, async (c) => {
 
     const { data, error } = await auth.supabase
       .from('profiles')
-      .select('id, email, name, full_name, role, status, created_at, updated_at, avatar_url')
+      .select('id, email, name, role, status, created_at, updated_at, avatar_url')
       .eq('organization_id', auth.orgId)
       .order('name', { ascending: true });
 
