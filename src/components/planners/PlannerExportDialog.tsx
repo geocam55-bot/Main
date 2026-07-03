@@ -26,6 +26,8 @@ interface PlannerExportDialogProps {
   totalCost: number;
   defaultDesignName?: string;
   trigger?: (onClick: () => void) => React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 type BrowserWindowWithFileSystem = Window & typeof globalThis & {
@@ -44,8 +46,13 @@ export function PlannerExportDialog({
   totalCost,
   defaultDesignName,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: PlannerExportDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
+
   const [exportFormat, setExportFormat] = useState<'csv' | 'xml' | 'custom'>('csv');
   const [customTemplateId, setCustomTemplateId] = useState('');
   const [exportTemplates, setExportTemplates] = useState<CustomExportTemplate[]>([]);

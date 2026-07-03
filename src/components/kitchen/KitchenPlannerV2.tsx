@@ -283,6 +283,7 @@ export function KitchenPlannerV2({ user }: KitchenPlannerV2Props) {
   const [selectedCabinet, setSelectedCabinet] = useState<PlacedCabinet | null>(null);
   const [activeCategory, setActiveCategory] = useState<ItemCategory>('cabinets');
   const [showSidebar, setShowSidebar] = useState(true);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<MainTab>('design');
   const [loadedDesignInfo, setLoadedDesignInfo] = useState<{
@@ -540,19 +541,16 @@ export function KitchenPlannerV2({ user }: KitchenPlannerV2Props) {
                   <span>Print Plan</span>
                 </DropdownMenuItem>
                 
-                <PlannerExportDialog
-                  organizationId={user.organizationId || ''}
-                  projectType="kitchen"
-                  materials={flatMaterials}
-                  totalCost={totalPrice}
-                  defaultDesignName="kitchen-design"
-                  trigger={(onClick) => (
-                    <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
-                      <Printer className="w-4 h-4 text-muted-foreground" />
-                      <span>Export Design</span>
-                    </DropdownMenuItem>
-                  )}
-                />
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setIsExportDialogOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors"
+                >
+                  <Printer className="w-4 h-4 text-muted-foreground" />
+                  <span>Export Design</span>
+                </DropdownMenuItem>
 
                 <ProjectQuoteGenerator 
                   user={user}
@@ -562,7 +560,13 @@ export function KitchenPlannerV2({ user }: KitchenPlannerV2Props) {
                   projectData={config}
                   isModal={true}
                   trigger={(onClick) => (
-                    <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        onClick();
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors"
+                    >
                       <FileText className="w-4 h-4 text-muted-foreground" />
                       <span>Create Quote for Contact</span>
                     </DropdownMenuItem>
@@ -570,6 +574,16 @@ export function KitchenPlannerV2({ user }: KitchenPlannerV2Props) {
                 />
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <PlannerExportDialog
+              organizationId={user.organizationId || ''}
+              projectType="kitchen"
+              materials={flatMaterials}
+              totalCost={totalPrice}
+              defaultDesignName="kitchen-design"
+              open={isExportDialogOpen}
+              onOpenChange={setIsExportDialogOpen}
+            />
           </div>
         </div>
       </div>

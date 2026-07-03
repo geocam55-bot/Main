@@ -43,6 +43,7 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
   const [activeTab, setActiveTab] = useState<'digitizer' | 'materials' | 'defaults'>('digitizer');
   const [loading, setLoading] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
 
   // --- PDF Modal State ---
   const [showPdfModal, setShowPdfModal] = useState(false);
@@ -1051,19 +1052,16 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
                     <span>Print Plan</span>
                   </DropdownMenuItem>
                   
-                  <PlannerExportDialog
-                    organizationId={user.organizationId || user.organization_id || ''}
-                    projectType="interior"
-                    materials={materials}
-                    totalCost={totalCost}
-                    defaultDesignName="interior-finishing-design"
-                    trigger={(onClick) => (
-                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
-                        <Printer className="w-4 h-4 text-muted-foreground" />
-                        <span>Export Design</span>
-                      </DropdownMenuItem>
-                    )}
-                  />
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setIsExportDialogOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors"
+                  >
+                    <Printer className="w-4 h-4 text-muted-foreground" />
+                    <span>Export Design</span>
+                  </DropdownMenuItem>
 
                   <ProjectQuoteGenerator 
                     user={user}
@@ -1073,7 +1071,13 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
                     projectData={currentConfig}
                     isModal={true}
                     trigger={(onClick) => (
-                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          onClick();
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors"
+                      >
                         <FileText className="w-4 h-4 text-muted-foreground" />
                         <span>Create Quote for Contact</span>
                       </DropdownMenuItem>
@@ -1081,6 +1085,16 @@ export function InteriorFinishingPlanner({ user }: InteriorFinishingPlannerProps
                   />
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              <PlannerExportDialog
+                organizationId={user.organizationId || user.organization_id || ''}
+                projectType="interior"
+                materials={materials}
+                totalCost={totalCost}
+                defaultDesignName="interior-finishing-design"
+                open={isExportDialogOpen}
+                onOpenChange={setIsExportDialogOpen}
+              />
             </div>
           </div>
         </div>

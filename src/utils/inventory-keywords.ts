@@ -249,7 +249,7 @@ export function expandInventorySearchTerms(query: string): string[] {
 
   return Array.from(expanded)
     .filter((t) => t.length >= 2 && !STOP_WORDS.has(t))
-    .slice(0, 16);
+    .slice(0, 4);
 }
 
 export function buildInventoryOrSearchClause(terms: string[]): string {
@@ -276,7 +276,9 @@ export function buildInventoryAndSearchClause(query: string): string {
     const expanded = expandInventorySearchTerms(token);
     const subClauses: string[] = [];
     for (const term of expanded) {
-      for (const field of fields) {
+      const isExactToken = term === sanitizeSearchToken(token);
+      const activeFields = isExactToken ? fields : ['name', 'sku'];
+      for (const field of activeFields) {
         subClauses.push(`${field}.ilike.%${term}%`);
       }
     }

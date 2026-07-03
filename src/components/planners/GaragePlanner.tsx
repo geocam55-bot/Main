@@ -84,6 +84,7 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
   const [activeTab, setActiveTab] = useState<'design' | 'materials' | 'templates' | 'saved' | 'defaults'>('design');
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [enrichedMaterials, setEnrichedMaterials] = useState<any[]>([]);
   const [totalT1Price, setTotalT1Price] = useState<number>(0);
   const [defaultsVersion, setDefaultsVersion] = useState(0);
@@ -365,19 +366,16 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
                     <span>Print Plan</span>
                   </DropdownMenuItem>
                   
-                  <PlannerExportDialog
-                    organizationId={user.organizationId || user.organization_id || ''}
-                    projectType="garage"
-                    materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
-                    totalCost={totalT1Price}
-                    defaultDesignName="garage-design"
-                    trigger={(onClick) => (
-                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
-                        <Printer className="w-4 h-4 text-muted-foreground" />
-                        <span>Export Design</span>
-                      </DropdownMenuItem>
-                    )}
-                  />
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setIsExportDialogOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors"
+                  >
+                    <Printer className="w-4 h-4 text-muted-foreground" />
+                    <span>Export Design</span>
+                  </DropdownMenuItem>
 
                   <ProjectQuoteGenerator 
                     user={user}
@@ -387,7 +385,13 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
                     projectData={config}
                     isModal={true}
                     trigger={(onClick) => (
-                      <DropdownMenuItem onClick={onClick} className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors">
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          onClick();
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent rounded-md cursor-pointer transition-colors"
+                      >
                         <FileText className="w-4 h-4 text-muted-foreground" />
                         <span>Create Quote for Contact</span>
                       </DropdownMenuItem>
@@ -395,6 +399,16 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
                   />
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              <PlannerExportDialog
+                organizationId={user.organizationId || user.organization_id || ''}
+                projectType="garage"
+                materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
+                totalCost={totalT1Price}
+                defaultDesignName="garage-design"
+                open={isExportDialogOpen}
+                onOpenChange={setIsExportDialogOpen}
+              />
             </div>
           </div>
         </div>

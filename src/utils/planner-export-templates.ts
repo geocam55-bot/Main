@@ -125,16 +125,27 @@ export async function loadPlannerExportTemplates(organizationId: string): Promis
     return normalizedTemplates.filter((template) => template?.enabled !== false);
   };
 
-  if (!normalizedOrganizationId) {
-    return normalizePlannerTemplates(localTemplates);
+  const orgIdsToFetch = Array.from(new Set([
+    normalizedOrganizationId,
+    'org_001',
+    ''
+  ].filter((id): id is string => typeof id === 'string')));
+
+  let allServerTemplates: CustomExportTemplate[] = [];
+
+  for (const orgId of orgIdsToFetch) {
+    try {
+      const settings = await settingsAPI.getOrganizationSettings(orgId);
+      if (settings?.export_templates) {
+        const serverTemplates = coerceTemplateArray(settings.export_templates);
+        if (serverTemplates.length > 0) {
+          allServerTemplates = mergeTemplates(allServerTemplates, serverTemplates);
+        }
+      }
+    } catch {
+      // Ignore individual org fetch errors
+    }
   }
 
-  try {
-    const settings = await settingsAPI.getOrganizationSettings(normalizedOrganizationId);
-    const serverTemplates = coerceTemplateArray(settings?.export_templates);
-
-    return normalizePlannerTemplates(mergeTemplates(serverTemplates, localTemplates));
-  } catch {
-    return normalizePlannerTemplates(localTemplates);
-  }
+  return normalizePlannerTemplates(mergeTemplates(allServerTemplates, localTemplates));
 }
