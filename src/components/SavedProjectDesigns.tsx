@@ -234,6 +234,7 @@ export function SavedProjectDesigns({
       const quantity = item.quantity ?? item.qty ?? '';
       const unitPrice = item.unit_price ?? item.unitPrice ?? item.price ?? '';
       const lineTotal = item.total ?? item.line_total ?? (Number(quantity || 0) * Number(unitPrice || 0));
+      const unit = item.unit_of_measure || item.unitOfMeasure || item.unit || item.uom || '';
 
       return {
         ...designMeta,
@@ -243,6 +244,9 @@ export function SavedProjectDesigns({
         quantity,
         unit_price: unitPrice,
         line_total: Number.isFinite(lineTotal) ? lineTotal : '',
+        unit_of_measure: unit,
+        unit,
+        units: unit,
       };
     });
   };

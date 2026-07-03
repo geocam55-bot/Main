@@ -82,6 +82,7 @@ const EXPORT_FIELD_KEY_OPTIONS = [
   { value: 'sku', label: 'SKU (Inventory)' },
   { value: 'itemName', label: 'Item Name (Quote Line Item)' },
   { value: 'itemId', label: 'Item ID (Inventory)' },
+  { value: 'unit_of_measure', label: 'Units (Inventory)' },
   { value: 'unitPrice', label: 'Unit Price (Quote Line Item)' },
   { value: 'lineTotal', label: 'Line Total (Quote Line Item)' },
   { value: 'price_tier', label: 'Price Tier' },
@@ -718,6 +719,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
         sku: 'SKU-001',
         itemName: 'Composite Deck Board',
         itemId: 'inv-001',
+        unit_of_measure: 'EA',
         unitPrice: '35.50',
         lineTotal: '852.00',
       },
@@ -1817,15 +1819,19 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                                           <Label className="text-xs">Field Key</Label>
                                           <Select
                                             value={
-                                              (field.key || '') && EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)
-                                                ? field.key
-                                                : '__custom__'
+                                              field.source === 'text'
+                                                ? '__constant__'
+                                                : (field.key || '') && EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)
+                                                  ? field.key
+                                                  : '__custom__'
                                             }
                                             onValueChange={(value) => {
-                                              if (value === '__custom__') {
-                                                updateDetailFieldRow(index, { key: field.key || '' });
+                                              if (value === '__constant__') {
+                                                updateDetailFieldRow(index, { source: 'text', key: '__constant__', text: field.text || '' });
+                                              } else if (value === '__custom__') {
+                                                updateDetailFieldRow(index, { source: 'field', key: field.key === '__constant__' ? '' : (field.key || '') });
                                               } else {
-                                                updateDetailFieldRow(index, { key: value });
+                                                updateDetailFieldRow(index, { source: 'field', key: value });
                                               }
                                             }}
                                           >
@@ -1839,15 +1845,25 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                                                 </SelectItem>
                                               ))}
                                               <SelectItem value="__custom__">Custom Field Key</SelectItem>
+                                              <SelectItem value="__constant__">Constant / Static Text</SelectItem>
                                             </SelectContent>
                                           </Select>
-                                          {(!field.key || !EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)) && (
+                                          {field.source === 'text' ? (
                                             <Input
                                               className="mt-2"
-                                              value={field.key || ''}
-                                              onChange={(e) => updateDetailFieldRow(index, { key: e.target.value })}
-                                              placeholder="custom_field_name"
+                                              value={field.text || ''}
+                                              onChange={(e) => updateDetailFieldRow(index, { text: e.target.value })}
+                                              placeholder="Constant value (e.g. D)"
                                             />
+                                          ) : (
+                                            (!field.key || !EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)) && (
+                                              <Input
+                                                className="mt-2"
+                                                value={field.key || ''}
+                                                onChange={(e) => updateDetailFieldRow(index, { key: e.target.value })}
+                                                placeholder="custom_field_name"
+                                              />
+                                            )
                                           )}
                                         </div>
                                         <div className="md:col-span-2 space-y-1">

@@ -63,6 +63,7 @@ export function buildPlannerExportRows(design: PlannerSavedDesignLike, projectTy
       : (lineTotalRaw ?? '');
     const materialName = item.name || item.material || item.description || item.itemName || '';
     const itemId = item.itemId || item.id || item.sku || '';
+    const unit = item.unit_of_measure || item.unitOfMeasure || item.unit || item.uom || '';
 
     return {
       ...designMeta,
@@ -79,6 +80,9 @@ export function buildPlannerExportRows(design: PlannerSavedDesignLike, projectTy
       unitPrice,
       line_total: normalizedLineTotal,
       lineTotal: normalizedLineTotal,
+      unit_of_measure: unit,
+      unit,
+      units: unit,
     };
   });
 }
