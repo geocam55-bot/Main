@@ -1,5 +1,5 @@
 import { createClient } from './supabase/client';
-import { buildInventoryOrSearchClause, expandInventorySearchTerms, STOP_WORDS } from './inventory-keywords';
+import { buildInventoryOrSearchClause, buildInventoryAndSearchClause, expandInventorySearchTerms, STOP_WORDS } from './inventory-keywords';
 
 const supabase = createClient();
 
@@ -10,6 +10,7 @@ export interface LoadInventoryOptions {
   searchQuery?: string;
   categoryFilter?: string;
   statusFilter?: string;
+  useAdvancedSearch?: boolean;
 }
 
 export interface LoadInventoryResult {
@@ -20,6 +21,7 @@ export interface LoadInventoryResult {
   activeCount?: number; // Count of active items in filtered results
   lowStockCount?: number; // Count of items with quantity <= 0
   outOfStockCount?: number; // Count of items with quantity = 0
+  aiExplanation?: string;
 }
 
 /**
@@ -85,175 +87,173 @@ function stem(word: string): string {
  */
 export async function loadInventoryPage(options: LoadInventoryOptions): Promise<LoadInventoryResult> {
   const startTime = performance.now();
-  const { organizationId, currentPage, itemsPerPage, searchQuery, categoryFilter, statusFilter } = options;
+  const { organizationId, currentPage, itemsPerPage, searchQuery, categoryFilter, statusFilter, useAdvancedSearch } = options;
   
   try {
     // Calculate pagination range
     const from = (currentPage - 1) * itemsPerPage;
     const to = from + itemsPerPage - 1;
     
-    // Build query with server-side filtering
-    // ✅ Use select('*') to avoid errors when optional columns (price_tier_*, department_code, unit_of_measure) haven't been added yet
+    // Build queries
     let query = supabase
       .from('inventory')
       .select('*', { count: 'exact' })
       .eq('organization_id', organizationId);
-    
-    // ⚡ Enhanced server-side search with natural language support
-    if (searchQuery && searchQuery.trim()) {
-      const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
-      
-      // Apply text search if there are search terms
-      if (searchTerms) {
-        const tokens = searchTerms.split(/\s+/)
-          .map(token => token.trim().toLowerCase())
-          .filter(token => token.length >= 2 && !STOP_WORDS.has(token));
-        
-        const uniqueExpandedTerms = new Set<string>();
-        
-        if (tokens.length === 0 && searchTerms.trim().length > 0) {
-          // Fallback for short search query
-          const cleanQuery = searchTerms.trim().toLowerCase();
-          if (!STOP_WORDS.has(cleanQuery)) {
-            const expandedTerms = expandInventorySearchTerms(cleanQuery);
-            for (const term of expandedTerms) {
-              if (!STOP_WORDS.has(term)) {
-                uniqueExpandedTerms.add(term);
-              }
-            }
-          }
-        } else {
-          for (const token of tokens) {
-            const expandedTerms = expandInventorySearchTerms(token);
-            for (const term of expandedTerms) {
-              if (!STOP_WORDS.has(term)) {
-                uniqueExpandedTerms.add(term);
-              }
-            }
-          }
-        }
-        
-        const orClause = buildInventoryOrSearchClause(Array.from(uniqueExpandedTerms));
-        if (orClause) {
-          query = query.or(orClause);
-        } else {
-          // If we had search terms but they were all stop words, don't return everything.
-          // Filter for an impossible ID to return 0 results.
-          query = query.eq('id', '00000000-0000-0000-0000-000000000000');
-        }
-      }
-      
-      // Apply price filter if present
-      // ✅ FIX: Convert dollar value to cents since unit_price is stored in cents
-      if (priceFilter) {
-        const priceInCents = Math.round(priceFilter.value * 100);
-        
-        if (priceFilter.operator === 'lt') {
-          query = query.lt('unit_price', priceInCents);
-        } else if (priceFilter.operator === 'gt') {
-          query = query.gt('unit_price', priceInCents);
-        } else if (priceFilter.operator === 'lte') {
-          query = query.lte('unit_price', priceInCents);
-        } else if (priceFilter.operator === 'gte') {
-          query = query.gte('unit_price', priceInCents);
-        }
-      }
-    }
-    
-    // ⚡ Server-side category filtering
-    if (categoryFilter && categoryFilter !== 'all') {
-      query = query.eq('category', categoryFilter);
-    }
-    
-    // Apply sorting and pagination
-    query = query
-      .order('name', { ascending: true })
-      .range(from, to);
-    
-    const { data, error, count } = await query;
-    
-    if (error) {
-      throw new Error(`Database error: ${error.message} (Code: ${error.code || 'unknown'})`);
-    }
 
-    // 📊 Calculate total value for ALL filtered results (not just current page)
-    // ✅ Note: totalValue is currently not rendered or consumed anywhere in the app,
-    // so we bypass this extremely heavy loop on 10k+ rows to ensure sub-second loads and searches.
-    let totalValue = 0;
-
-    // 📊 Get low stock count (quantity <= 0) using count-only query (very fast, no data returned)
     let lowStockQuery = supabase
       .from('inventory')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .lte('quantity', 0);
 
-    // Apply same filters
+    let aiExplanation = '';
+
+    // If search is active, parse and apply filters
     if (searchQuery && searchQuery.trim()) {
-      const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
-      if (searchTerms) {
-        const tokens = searchTerms.split(/\s+/)
-          .map(token => token.trim().toLowerCase())
-          .filter(token => token.length >= 2 && !STOP_WORDS.has(token));
-        
-        const uniqueExpandedTerms = new Set<string>();
-        
-        if (tokens.length === 0 && searchTerms.trim().length > 0) {
-          const cleanQuery = searchTerms.trim().toLowerCase();
-          if (!STOP_WORDS.has(cleanQuery)) {
-            const expandedTerms = expandInventorySearchTerms(cleanQuery);
-            for (const term of expandedTerms) {
-              if (!STOP_WORDS.has(term)) {
-                uniqueExpandedTerms.add(term);
-              }
+      let parsedParams: any = null;
+
+      if (useAdvancedSearch) {
+        try {
+          const res = await fetch('/api/search/conversational', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ query: searchQuery })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.parsed) {
+              parsedParams = data.parsed;
+              aiExplanation = parsedParams.explanation || '';
             }
           }
-        } else {
-          for (const token of tokens) {
-            const expandedTerms = expandInventorySearchTerms(token);
-            for (const term of expandedTerms) {
-              if (!STOP_WORDS.has(term)) {
-                uniqueExpandedTerms.add(term);
-              }
+        } catch (fetchErr) {
+          console.error("Failed to fetch conversational search from backend:", fetchErr);
+        }
+      }
+
+      // Helper function to apply a parsed filter set to a given query builder
+      const applyFilters = (q: any, isLowStockCheck: boolean) => {
+        if (parsedParams) {
+          // 1. Search terms
+          if (parsedParams.searchTerms && parsedParams.searchTerms.trim()) {
+            const andClause = buildInventoryAndSearchClause(parsedParams.searchTerms);
+            if (andClause) {
+              q = q.or(andClause);
+            } else {
+              q = q.eq('id', '00000000-0000-0000-0000-000000000000');
             }
           }
-        }
-        
-        const orClause = buildInventoryOrSearchClause(Array.from(uniqueExpandedTerms));
-        if (orClause) {
-          lowStockQuery = lowStockQuery.or(orClause);
+
+          // 2. Category (if present in conversational search)
+          if (parsedParams.category) {
+            q = q.eq('category', parsedParams.category);
+          }
+
+          // 3. Price Filter
+          if (parsedParams.priceFilter) {
+            const priceInCents = Math.round(parsedParams.priceFilter.value * 100);
+            if (parsedParams.priceFilter.operator === 'lt') {
+              q = q.lt('unit_price', priceInCents);
+            } else if (parsedParams.priceFilter.operator === 'gt') {
+              q = q.gt('unit_price', priceInCents);
+            } else if (parsedParams.priceFilter.operator === 'lte') {
+              q = q.lte('unit_price', priceInCents);
+            } else if (parsedParams.priceFilter.operator === 'gte') {
+              q = q.gte('unit_price', priceInCents);
+            } else if (parsedParams.priceFilter.operator === 'eq') {
+              q = q.eq('unit_price', priceInCents);
+            }
+          }
+
+          // 4. Quantity Filter (skip lte 0 constraints on lowStockCheck to avoid logic conflicts)
+          if (parsedParams.quantityFilter && !isLowStockCheck) {
+            if (parsedParams.quantityFilter.operator === 'lt') {
+              q = q.lt('quantity', parsedParams.quantityFilter.value);
+            } else if (parsedParams.quantityFilter.operator === 'gt') {
+              q = q.gt('quantity', parsedParams.quantityFilter.value);
+            } else if (parsedParams.quantityFilter.operator === 'lte') {
+              q = q.lte('quantity', parsedParams.quantityFilter.value);
+            } else if (parsedParams.quantityFilter.operator === 'gte') {
+              q = q.gte('quantity', parsedParams.quantityFilter.value);
+            } else if (parsedParams.quantityFilter.operator === 'eq') {
+              q = q.eq('quantity', parsedParams.quantityFilter.value);
+            }
+          }
+
+          // 5. Supplier
+          if (parsedParams.supplier) {
+            q = q.ilike('supplier', `%${parsedParams.supplier}%`);
+          }
+
+          // 6. Location
+          if (parsedParams.location) {
+            q = q.ilike('location', `%${parsedParams.location}%`);
+          }
+
+          // 7. Status
+          if (parsedParams.status) {
+            q = q.eq('status', parsedParams.status);
+          }
         } else {
-          // If we had search terms but they were all stop words, don't return everything.
-          // Filter for an impossible ID to return 0 results.
-          lowStockQuery = lowStockQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+          // Standard regex-based/basic parsing
+          const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
+          
+          if (searchTerms) {
+            const andClause = buildInventoryAndSearchClause(searchTerms);
+            if (andClause) {
+              q = q.or(andClause);
+            } else {
+              q = q.eq('id', '00000000-0000-0000-0000-000000000000');
+            }
+          }
+
+          if (priceFilter) {
+            const priceInCents = Math.round(priceFilter.value * 100);
+            if (priceFilter.operator === 'lt') q = q.lt('unit_price', priceInCents);
+            else if (priceFilter.operator === 'gt') q = q.gt('unit_price', priceInCents);
+            else if (priceFilter.operator === 'lte') q = q.lte('unit_price', priceInCents);
+            else if (priceFilter.operator === 'gte') q = q.gte('unit_price', priceInCents);
+          }
         }
-      }
-      if (priceFilter) {
-        const priceInCents = Math.round(priceFilter.value * 100);
-        if (priceFilter.operator === 'lt') lowStockQuery = lowStockQuery.lt('unit_price', priceInCents);
-        else if (priceFilter.operator === 'gt') lowStockQuery = lowStockQuery.gt('unit_price', priceInCents);
-        else if (priceFilter.operator === 'lte') lowStockQuery = lowStockQuery.lte('unit_price', priceInCents);
-        else if (priceFilter.operator === 'gte') lowStockQuery = lowStockQuery.gte('unit_price', priceInCents);
-      }
+        return q;
+      };
+
+      query = applyFilters(query, false);
+      lowStockQuery = applyFilters(lowStockQuery, true);
     }
+
+    // Apply UI Category filtering (if not overridden/supplied by AI or as fallback)
     if (categoryFilter && categoryFilter !== 'all') {
+      query = query.eq('category', categoryFilter);
       lowStockQuery = lowStockQuery.eq('category', categoryFilter);
+    }
+
+    // Apply sorting and pagination to the main query
+    query = query
+      .order('name', { ascending: true })
+      .range(from, to);
+
+    const { data, error, count } = await query;
+    if (error) {
+      throw new Error(`Database error: ${error.message} (Code: ${error.code || 'unknown'})`);
     }
 
     const { count: lowStockCount } = await lowStockQuery;
 
     const endTime = performance.now();
     const loadTime = endTime - startTime;
-    
+
     return {
       items: data || [],
       totalCount: count || 0,
-      totalValue,
+      totalValue: 0,
       lowStockCount: lowStockCount || 0,
       loadTime,
+      aiExplanation
     };
   } catch (error) {
-    const endTime = performance.now();
     throw error;
   }
 }

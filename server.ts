@@ -10,6 +10,7 @@ const XLSX: any = XLSXModule.default || XLSXModule;
 import os from 'os';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { GoogleGenAI, Type } from "@google/genai";
 
 const projectId = "usorqldwroecyxucmtuw";
 const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
@@ -2460,6 +2461,221 @@ async function startServer() {
 
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  // --- CONVERSATIONAL SEARCH ENDPOINT WITH GEMINI INTEGRATION ---
+  let aiClient: GoogleGenAI | null = null;
+  function getGeminiClient(): GoogleGenAI | null {
+    if (aiClient) return aiClient;
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      console.warn("[Conversational Search] GEMINI_API_KEY is not set. Falling back to rule-based parser.");
+      return null;
+    }
+    try {
+      aiClient = new GoogleGenAI({
+        apiKey: key,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+      return aiClient;
+    } catch (err) {
+      console.error("[Conversational Search] Failed to initialize GoogleGenAI client:", err);
+      return null;
+    }
+  }
+
+  function fallbackParser(query: string) {
+    const queryLower = query.toLowerCase().trim();
+    let cleanQuery = queryLower;
+    
+    // 1. Extract price
+    let priceFilter: any = null;
+    const pricePatterns = [
+      { regex: /under\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'lt' },
+      { regex: /less\s+than\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'lt' },
+      { regex: /below\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'lt' },
+      { regex: /over\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'gt' },
+      { regex: /more\s+than\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'gt' },
+      { regex: /above\s+\$?(\d+(?:\.\d{2})?)/i, operator: 'gt' },
+    ];
+    for (const pattern of pricePatterns) {
+      const match = cleanQuery.match(pattern.regex);
+      if (match) {
+        priceFilter = {
+          operator: pattern.operator,
+          value: parseFloat(match[1])
+        };
+        cleanQuery = cleanQuery.replace(pattern.regex, ' ');
+        break;
+      }
+    }
+
+    // 2. Extract quantity/stock status
+    let quantityFilter: any = null;
+    let status: string | null = null;
+    if (cleanQuery.includes('out of stock') || cleanQuery.includes('unavailable')) {
+      quantityFilter = { operator: 'eq', value: 0 };
+      cleanQuery = cleanQuery.replace(/(out of stock|unavailable)/gi, ' ');
+    } else if (cleanQuery.includes('in stock') || cleanQuery.includes('available')) {
+      quantityFilter = { operator: 'gt', value: 0 };
+      status = 'active';
+      cleanQuery = cleanQuery.replace(/(in stock|available)/gi, ' ');
+    } else if (cleanQuery.includes('low stock')) {
+      quantityFilter = { operator: 'lte', value: 10 };
+      cleanQuery = cleanQuery.replace(/low stock/gi, ' ');
+    }
+
+    // 3. Extract categories
+    const categories = ['Timber', 'Fasteners', 'Planks', 'Hardware', 'Tools', 'Paint', 'Decking'];
+    let matchedCategory: string | null = null;
+    for (const cat of categories) {
+      const reg = new RegExp(`\\b${cat}\\b`, 'i');
+      if (cleanQuery.match(reg)) {
+        matchedCategory = cat;
+        cleanQuery = cleanQuery.replace(reg, ' ');
+        break;
+      }
+    }
+
+    // 4. Clean search terms
+    const fluffWords = [
+      'show me', 'please', 'find me', 'i want', 'can you show', 'list', 'do you have',
+      'search for', 'who supplies', 'where is', 'is there', 'any', 'some', 'the', 'a', 'an', 'thanks'
+    ];
+    for (const word of fluffWords) {
+      const reg = new RegExp(`\\b${word}\\b`, 'gi');
+      cleanQuery = cleanQuery.replace(reg, ' ');
+    }
+    
+    // Clean extra spaces
+    const searchTerms = cleanQuery.replace(/\s+/g, ' ').trim();
+
+    // Create explanation
+    let explanation = "Searching for items";
+    if (searchTerms) explanation += ` matching "${searchTerms}"`;
+    if (matchedCategory) explanation += ` in category ${matchedCategory}`;
+    if (priceFilter) {
+      explanation += ` priced ${priceFilter.operator === 'lt' ? 'under' : 'above'} $${priceFilter.value}`;
+    }
+    if (quantityFilter) {
+      if (quantityFilter.operator === 'eq' && quantityFilter.value === 0) {
+        explanation += ` (out of stock)`;
+      } else if (quantityFilter.operator === 'gt' && quantityFilter.value === 0) {
+        explanation += ` (in stock)`;
+      } else if (quantityFilter.operator === 'lte') {
+        explanation += ` (low stock)`;
+      }
+    }
+
+    return {
+      searchTerms: searchTerms || query,
+      category: matchedCategory,
+      priceFilter,
+      quantityFilter,
+      supplier: null,
+      location: null,
+      status,
+      explanation
+    };
+  }
+
+  app.post('/api/search/conversational', async (req, res) => {
+    const { query } = req.body;
+    if (!query || !query.trim()) {
+      return res.json({ success: true, parsed: fallbackParser('') });
+    }
+
+    const client = getGeminiClient();
+    if (!client) {
+      console.log("[Conversational Search] Using rule-based fallback parser.");
+      return res.json({ success: true, parsed: fallbackParser(query) });
+    }
+
+    try {
+      const prompt = `Analyze the following conversational search query for an inventory management system: "${query}".
+
+Extract structured search parameters. Standard categories include: Timber, Fasteners, Planks, Hardware, Tools, Paint, Decking.
+Return a JSON object matching the requested schema.
+
+If a field is not specified or implied by the query, make it null.
+Examples:
+Query: "tools under $50"
+Result:
+{
+  "searchTerms": "tools",
+  "priceFilter": { "operator": "lt", "value": 50 },
+  "explanation": "Searching for items in tools with price under $50"
+}
+
+Query: "red paint in stock"
+Result:
+{
+  "searchTerms": "red paint",
+  "status": "active",
+  "quantityFilter": { "operator": "gt", "value": 0 },
+  "explanation": "Searching for active red paint items currently in stock"
+}
+
+Query: "what planks does acme corp supply that are out of stock?"
+Result:
+{
+  "searchTerms": "planks",
+  "category": "Planks",
+  "supplier": "Acme Corp",
+  "quantityFilter": { "operator": "eq", "value": 0 },
+  "explanation": "Searching for planks supplied by Acme Corp that are out of stock"
+}
+`;
+
+      const response = await client.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              searchTerms: { type: Type.STRING },
+              category: { type: Type.STRING },
+              priceFilter: {
+                type: Type.OBJECT,
+                properties: {
+                  operator: { type: Type.STRING },
+                  value: { type: Type.NUMBER }
+                }
+              },
+              quantityFilter: {
+                type: Type.OBJECT,
+                properties: {
+                  operator: { type: Type.STRING },
+                  value: { type: Type.NUMBER }
+                }
+              },
+              supplier: { type: Type.STRING },
+              location: { type: Type.STRING },
+              status: { type: Type.STRING },
+              explanation: { type: Type.STRING }
+            },
+            required: ['searchTerms', 'explanation']
+          }
+        }
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("Empty response from Gemini API");
+      }
+
+      const parsed = JSON.parse(text.trim());
+      res.json({ success: true, parsed });
+    } catch (err: any) {
+      console.error("[Conversational Search] Gemini error, using fallback parser:", err.message || err);
+      res.json({ success: true, parsed: fallbackParser(query) });
+    }
   });
 
   // --- AUTOMATIC CREDENTIAL SYNCING TO SUPABASE FOR PRODUCTION ---

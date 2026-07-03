@@ -201,6 +201,24 @@ export function Bids({ user }: BidsProps) {
       
       if (settingsData) {
         setOrgSettings(settingsData);
+        // Sync to localStorage as backup/cache so all components are unified
+        const userOrgId = user.organizationId || user.organization_id || '';
+        if (userOrgId) {
+          const mappedSettings = {
+            taxRate: settingsData.tax_rate || 0,
+            taxRate2: settingsData.tax_rate_2 || 0,
+            defaultPriceLevel: settingsData.default_price_level || 'Retail',
+            quoteTerms: settingsData.quote_terms || '',
+            priceTierLabels: settingsData.price_tier_labels || {
+              t1: 'Retail',
+              t2: 'VIP',
+              t3: 'VIP B',
+              t4: 'VIP A',
+              t5: '0'
+            }
+          };
+          localStorage.setItem(`global_settings_${userOrgId}`, JSON.stringify(mappedSettings));
+        }
       }
 
       const dbQuotes = quotesResponse.quotes || [];

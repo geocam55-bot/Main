@@ -264,3 +264,32 @@ export function buildInventoryOrSearchClause(terms: string[]): string {
 
   return clauses.join(',');
 }
+
+export function buildInventoryAndSearchClause(query: string): string {
+  const tokens = safeSplit(query);
+  if (tokens.length === 0) return '';
+
+  const fields = ['name', 'sku', 'description', 'category', 'supplier'];
+  const orClauses: string[] = [];
+
+  for (const token of tokens) {
+    const expanded = expandInventorySearchTerms(token);
+    const subClauses: string[] = [];
+    for (const term of expanded) {
+      for (const field of fields) {
+        subClauses.push(`${field}.ilike.%${term}%`);
+      }
+    }
+    if (subClauses.length > 0) {
+      orClauses.push(`or(${subClauses.join(',')})`);
+    }
+  }
+
+  if (orClauses.length === 0) return '';
+  if (orClauses.length === 1) {
+    const rawInner = orClauses[0].slice(3, -1); // remove "or(" and ")"
+    return rawInner;
+  }
+  return `and(${orClauses.join(',')})`;
+}
+

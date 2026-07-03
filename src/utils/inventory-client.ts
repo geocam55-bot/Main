@@ -1,7 +1,7 @@
 import { createClient } from './supabase/client';
 import { ensureUserProfile } from './ensure-profile';
 import { isTierActive } from '../lib/global-settings';
-import { buildInventoryOrSearchClause, expandInventorySearchTerms } from './inventory-keywords';
+import { buildInventoryOrSearchClause, buildInventoryAndSearchClause, expandInventorySearchTerms } from './inventory-keywords';
 import { generateInventoryKeywords } from './inventory-keywords';
 
 // ✅ Use select('*') to avoid errors when optional columns (price_tier_*, department_code, unit_of_measure) haven't been added yet.
@@ -329,10 +329,9 @@ export async function searchInventoryClient(filters?: {
     // Apply search filter - use ILIKE for case-insensitive pattern matching
     // This uses the trigram indexes we created
     if (filters?.search && filters.search.trim()) {
-      const expandedTerms = expandInventorySearchTerms(filters.search.trim());
-      const orClause = buildInventoryOrSearchClause(expandedTerms);
-      if (orClause) {
-        query = query.or(orClause);
+      const andClause = buildInventoryAndSearchClause(filters.search.trim());
+      if (andClause) {
+        query = query.or(andClause);
       } else {
         query = query.eq('id', '00000000-0000-0000-0000-000000000000');
       }

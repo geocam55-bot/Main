@@ -52,6 +52,7 @@ import { InventoryIndexFixer } from './InventoryIndexFixer';
 import { loadInventoryPage } from '../utils/inventory-loader';
 import { showOptimizationInstructions } from '../utils/show-optimization-instructions';
 import { getPriceTierLabel, isTierActive, getActiveTierNumbers } from '../lib/global-settings';
+import { settingsAPI } from '../utils/api';
 import { InventoryDiagnostic } from './InventoryDiagnostic';
 // import { ImportExport } from './ImportExport';
 
@@ -121,6 +122,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
   
   // 🔮 Advanced search features
   const [useAdvancedSearch, setUseAdvancedSearch] = useState(true);
+  const [aiExplanation, setAiExplanation] = useState<string>('');
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   
@@ -195,6 +197,39 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
   
   // ✅ Use deferred value to prevent search input from blocking during large renders
   const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  // Sync price tier settings from database on mount to keep unified with the rest of the CRM/App
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  useEffect(() => {
+    const fetchOrgSettings = async () => {
+      try {
+        const userOrgId = user.organizationId || user.organization_id || 'org_001';
+        if (userOrgId) {
+          const settings = await settingsAPI.getOrganizationSettings(userOrgId);
+          if (settings) {
+            const mappedSettings = {
+              taxRate: settings.tax_rate || 0,
+              taxRate2: settings.tax_rate_2 || 0,
+              defaultPriceLevel: settings.default_price_level || 'Retail',
+              quoteTerms: settings.quote_terms || '',
+              priceTierLabels: settings.price_tier_labels || {
+                t1: 'Retail',
+                t2: 'VIP',
+                t3: 'VIP B',
+                t4: 'VIP A',
+                t5: '0'
+              }
+            };
+            localStorage.setItem(`global_settings_${userOrgId}`, JSON.stringify(mappedSettings));
+            setSettingsLoaded(true);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load organization settings in Inventory:', err);
+      }
+    };
+    fetchOrgSettings();
+  }, [user.organizationId, user.organization_id]);
 
   // Get access token once on mount (not on every filter/page change)
   useEffect(() => {
@@ -591,14 +626,18 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
       setOrganizationId(userOrgId);
       
       // ⚡ Use the optimized loader with proper pagination
-      const { items: loadedItems, totalCount: count, loadTime, lowStockCount: serverLowStock } = await loadInventoryPage({
+      const result = await loadInventoryPage({
         organizationId: userOrgId,
         currentPage,
         itemsPerPage,
         searchQuery: debouncedSearchQuery, // Use debounced search for server-side filtering
         categoryFilter,
-        statusFilter
+        statusFilter,
+        useAdvancedSearch
       });
+      
+      const { items: loadedItems, totalCount: count, lowStockCount: serverLowStock, aiExplanation: responseExplanation, loadTime } = result;
+      setAiExplanation(responseExplanation || '');
       
       // Map the loaded items
       const mappedItems = loadedItems.map(mapInventoryItem);
@@ -1729,7 +1768,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                 <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-md overflow-hidden">
                   <p className="text-sm text-purple-900 break-words">
                     <Sparkles className="h-4 w-4 inline mr-1 shrink-0 align-text-bottom" />
-                    <strong>AI Search Active:</strong> Using fuzzy matching, semantic understanding, and natural language processing
+                    <strong>AI Assistant:</strong> {aiExplanation || "Using fuzzy matching, semantic understanding, and natural language processing..."}
                   </p>
                   <p className="text-xs text-purple-700 mt-1 break-words">
                     Try: "tools under $50" • "red paint" • "low stock items" • "screws or bolts" • "cheap materials"
