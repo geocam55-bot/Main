@@ -78,6 +78,7 @@ const EXPORT_FIELD_KEY_OPTIONS = [
   { value: 'design_name', label: 'Design Name' },
   { value: 'project_type', label: 'Project Type' },
   { value: 'material_name', label: 'Material Name' },
+  { value: 'description', label: 'Description (Inventory)' },
   { value: 'quantity', label: 'Quantity' },
   { value: 'sku', label: 'SKU (Inventory)' },
   { value: 'itemName', label: 'Item Name (Quote Line Item)' },
@@ -718,6 +719,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
         design_name: 'Sample Design',
         project_type: 'deck',
         material_name: 'Composite Board',
+        description: 'Premium composite material for outdoor decking.',
         quantity: 24,
         sku: 'SKU-001',
         itemName: 'Composite Deck Board',
@@ -1820,108 +1822,138 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                                   </div>
                                   <div className="space-y-2">
                                     {(newExportTemplate.detail_fields || []).map((field, index) => (
-                                      <div key={`${field.key}-${index}`} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end p-2 border rounded-md">
-                                        <div className="md:col-span-3 space-y-1">
-                                          <Label className="text-xs">Field Key</Label>
-                                          <Select
-                                            value={
-                                              field.source === 'text'
-                                                ? '__constant__'
-                                                : (field.key || '') && EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)
-                                                  ? field.key
-                                                  : '__custom__'
-                                            }
-                                            onValueChange={(value) => {
-                                              if (value === '__constant__') {
-                                                updateDetailFieldRow(index, { source: 'text', key: '__constant__', text: field.text || '' });
-                                              } else if (value === '__custom__') {
-                                                updateDetailFieldRow(index, { source: 'field', key: field.key === '__constant__' ? '' : (field.key || '') });
-                                              } else {
-                                                updateDetailFieldRow(index, { source: 'field', key: value });
+                                      <div key={`${field.key}-${index}`} className="p-3 border rounded-md space-y-3 bg-muted/10">
+                                        <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                                          <div className="md:col-span-3 space-y-1">
+                                            <Label className="text-xs">Field Key</Label>
+                                            <Select
+                                              value={
+                                                field.source === 'text'
+                                                  ? '__constant__'
+                                                  : (field.key || '') && EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)
+                                                    ? field.key
+                                                    : '__custom__'
                                               }
-                                            }}
-                                          >
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Select field key" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {EXPORT_FIELD_KEY_OPTIONS.map((opt) => (
-                                                <SelectItem key={opt.value} value={opt.value}>
-                                                  {opt.label}
-                                                </SelectItem>
-                                              ))}
-                                              <SelectItem value="__custom__">Custom Field Key</SelectItem>
-                                              <SelectItem value="__constant__">Constant / Static Text</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                          {field.source === 'text' ? (
-                                            <Input
-                                              className="mt-2"
-                                              value={field.text || ''}
-                                              onChange={(e) => updateDetailFieldRow(index, { text: e.target.value })}
-                                              placeholder="Constant value (e.g. D)"
-                                            />
-                                          ) : (
-                                            (!field.key || !EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)) && (
+                                              onValueChange={(value) => {
+                                                if (value === '__constant__') {
+                                                  updateDetailFieldRow(index, { source: 'text', key: '__constant__', text: field.text || '' });
+                                                } else if (value === '__custom__') {
+                                                  updateDetailFieldRow(index, { source: 'field', key: field.key === '__constant__' ? '' : (field.key || '') });
+                                                } else {
+                                                  updateDetailFieldRow(index, { source: 'field', key: value });
+                                                }
+                                              }}
+                                            >
+                                              <SelectTrigger>
+                                                <SelectValue placeholder="Select field key" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {EXPORT_FIELD_KEY_OPTIONS.map((opt) => (
+                                                  <SelectItem key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                  </SelectItem>
+                                                ))}
+                                                <SelectItem value="__custom__">Custom Field Key</SelectItem>
+                                                <SelectItem value="__constant__">Constant / Static Text</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                            {field.source === 'text' ? (
                                               <Input
                                                 className="mt-2"
-                                                value={field.key || ''}
-                                                onChange={(e) => updateDetailFieldRow(index, { key: e.target.value })}
-                                                placeholder="custom_field_name"
+                                                value={field.text || ''}
+                                                onChange={(e) => updateDetailFieldRow(index, { text: e.target.value })}
+                                                placeholder="Constant value (e.g. D)"
                                               />
-                                            )
+                                            ) : (
+                                              (!field.key || !EXPORT_FIELD_KEY_OPTIONS.some((opt) => opt.value === field.key)) && (
+                                                <Input
+                                                  className="mt-2"
+                                                  value={field.key || ''}
+                                                  onChange={(e) => updateDetailFieldRow(index, { key: e.target.value })}
+                                                  placeholder="custom_field_name"
+                                                />
+                                              )
+                                            )}
+                                          </div>
+                                          <div className="md:col-span-2 space-y-1">
+                                            <Label className="text-xs">Label</Label>
+                                            <Input
+                                              value={field.label || ''}
+                                              onChange={(e) => updateDetailFieldRow(index, { label: e.target.value })}
+                                              placeholder="Quote #"
+                                            />
+                                          </div>
+                                          <div className="md:col-span-2 space-y-1">
+                                            <Label className="text-xs">Start</Label>
+                                            <Input
+                                              type="number"
+                                              value={field.start || 1}
+                                              onChange={(e) => updateDetailFieldRow(index, { start: parseInt(e.target.value, 10) || 1 })}
+                                              disabled={newExportTemplate.layout_mode !== 'fixed'}
+                                            />
+                                          </div>
+                                          <div className="md:col-span-2 space-y-1">
+                                            <Label className="text-xs">Length</Label>
+                                            <Input
+                                              type="number"
+                                              value={field.length || 10}
+                                              onChange={(e) => updateDetailFieldRow(index, { length: parseInt(e.target.value, 10) || 1 })}
+                                              disabled={newExportTemplate.layout_mode !== 'fixed'}
+                                            />
+                                          </div>
+                                          <div className="md:col-span-2 space-y-1">
+                                            <Label className="text-xs">Align</Label>
+                                            <Select
+                                              value={field.align || 'left'}
+                                              onValueChange={(value: 'left' | 'right') => updateDetailFieldRow(index, { align: value })}
+                                            >
+                                              <SelectTrigger>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="left">Left</SelectItem>
+                                                <SelectItem value="right">Right</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                          <div className="md:col-span-1 flex justify-end">
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() => removeDetailFieldRow(index)}
+                                            >
+                                              <Trash2 className="h-4 w-4 text-red-600" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                        {/* Row for extra settings like Zero Fill */}
+                                        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-dashed border-muted text-xs text-muted-foreground">
+                                          <div className="flex items-center gap-2">
+                                            <input
+                                              type="checkbox"
+                                              id={`zero_fill-${index}`}
+                                              checked={!!field.zero_fill}
+                                              onChange={(e) => updateDetailFieldRow(index, { zero_fill: e.target.checked })}
+                                              className="rounded border-gray-300 h-4 w-4 text-primary focus:ring-primary cursor-pointer"
+                                            />
+                                            <Label htmlFor={`zero_fill-${index}`} className="text-xs font-medium cursor-pointer text-foreground">
+                                              Zero-fill numeric values
+                                            </Label>
+                                          </div>
+                                          {field.zero_fill && (
+                                            <div className="flex items-center gap-2">
+                                              <Label className="text-xs">Digits / Width:</Label>
+                                              <Input
+                                                type="number"
+                                                className="h-7 w-16 text-xs px-2 py-0"
+                                                min={1}
+                                                max={20}
+                                                value={field.zero_fill_width ?? 5}
+                                                onChange={(e) => updateDetailFieldRow(index, { zero_fill_width: parseInt(e.target.value, 10) || 5 })}
+                                              />
+                                            </div>
                                           )}
-                                        </div>
-                                        <div className="md:col-span-2 space-y-1">
-                                          <Label className="text-xs">Label</Label>
-                                          <Input
-                                            value={field.label || ''}
-                                            onChange={(e) => updateDetailFieldRow(index, { label: e.target.value })}
-                                            placeholder="Quote #"
-                                          />
-                                        </div>
-                                        <div className="md:col-span-2 space-y-1">
-                                          <Label className="text-xs">Start</Label>
-                                          <Input
-                                            type="number"
-                                            value={field.start || 1}
-                                            onChange={(e) => updateDetailFieldRow(index, { start: parseInt(e.target.value, 10) || 1 })}
-                                            disabled={newExportTemplate.layout_mode !== 'fixed'}
-                                          />
-                                        </div>
-                                        <div className="md:col-span-2 space-y-1">
-                                          <Label className="text-xs">Length</Label>
-                                          <Input
-                                            type="number"
-                                            value={field.length || 10}
-                                            onChange={(e) => updateDetailFieldRow(index, { length: parseInt(e.target.value, 10) || 1 })}
-                                            disabled={newExportTemplate.layout_mode !== 'fixed'}
-                                          />
-                                        </div>
-                                        <div className="md:col-span-2 space-y-1">
-                                          <Label className="text-xs">Align</Label>
-                                          <Select
-                                            value={field.align || 'left'}
-                                            onValueChange={(value: 'left' | 'right') => updateDetailFieldRow(index, { align: value })}
-                                          >
-                                            <SelectTrigger>
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="left">Left</SelectItem>
-                                              <SelectItem value="right">Right</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-                                        <div className="md:col-span-1 flex justify-end">
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => removeDetailFieldRow(index)}
-                                          >
-                                            <Trash2 className="h-4 w-4 text-red-600" />
-                                          </Button>
                                         </div>
                                       </div>
                                     ))}

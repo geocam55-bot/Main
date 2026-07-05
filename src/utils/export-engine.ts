@@ -10,6 +10,8 @@ export interface CustomExportField {
   length?: number;
   align?: 'left' | 'right';
   pad_char?: string;
+  zero_fill?: boolean;
+  zero_fill_width?: number;
 }
 
 export interface CustomExportTemplate {
@@ -97,7 +99,37 @@ export function buildCustomText(rows: Record<string, unknown>[], template: Custo
     if ((field.source || 'field') === 'text') {
       return String(field.text ?? '');
     }
-    return String(row[field.key] ?? '');
+    let val = String(row[field.key] ?? '');
+    const loweredKey = field.key.toLowerCase();
+
+    // 1) Units from Inventory: 2 characters, capitalized
+    if (['unit', 'units', 'uom', 'unit_of_measure'].includes(loweredKey)) {
+      val = val.trim().toUpperCase();
+      if (val.length > 2) {
+        val = val.slice(0, 2);
+      } else {
+        val = val.padEnd(2, ' ');
+      }
+    }
+
+    // 2) Zero-filled number field
+    if (field.zero_fill) {
+      const width = Math.max(1, field.zero_fill_width ?? 5);
+      const floatVal = parseFloat(val);
+      if (!isNaN(floatVal)) {
+        if (Number.isInteger(floatVal)) {
+          val = String(Math.round(floatVal)).padStart(width, '0');
+        } else {
+          const parts = String(val).split('.');
+          parts[0] = parts[0].padStart(width, '0');
+          val = parts.join('.');
+        }
+      } else {
+        val = val.padStart(width, '0');
+      }
+    }
+
+    return val;
   };
 
   const getFieldHeader = (field: CustomExportField): string => {

@@ -68,6 +68,7 @@ export function buildPlannerExportRows(design: PlannerSavedDesignLike, projectTy
     return {
       ...designMeta,
       material_name: materialName,
+      description: item.description || '',
       itemName: materialName,
       item_name: materialName,
       sku: item.sku || '',

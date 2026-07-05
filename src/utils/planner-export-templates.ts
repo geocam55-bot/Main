@@ -1,10 +1,14 @@
 import { settingsAPI } from './api';
 import { filterTemplatesByModule, type CustomExportTemplate } from './export-engine';
 
-function normalizeOrganizationId(organizationId: string): string {
-  const raw = (organizationId || '').trim();
-  if (!raw || raw === 'undefined' || raw === 'null') {
-    return localStorage.getItem('currentOrgId') || '';
+function normalizeOrganizationId(organizationId?: string): string {
+  const raw = String(organizationId || '').trim();
+  if (!raw || raw === 'undefined' || raw === 'null' || raw === '[object Object]') {
+    const cached = (localStorage.getItem('currentOrgId') || '').trim();
+    if (cached && cached !== 'undefined' && cached !== 'null' && cached !== '[object Object]') {
+      return cached;
+    }
+    return '';
   }
   return raw;
 }
@@ -34,11 +38,27 @@ function coerceTemplateArray(value: unknown): CustomExportTemplate[] {
   if (Array.isArray(value)) return value as CustomExportTemplate[];
 
   if (typeof value === 'string') {
+    let cleaned = value.trim();
+    // Handle double stringified values
+    if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+      try {
+        const unescaped = JSON.parse(cleaned);
+        if (typeof unescaped === 'string') {
+          cleaned = unescaped.trim();
+        } else if (Array.isArray(unescaped)) {
+          return unescaped as CustomExportTemplate[];
+        }
+      } catch (_) {}
+    }
+
     try {
-      const parsed = JSON.parse(value);
+      const parsed = JSON.parse(cleaned);
       if (Array.isArray(parsed)) return parsed as CustomExportTemplate[];
       if (parsed && typeof parsed === 'object' && Array.isArray((parsed as any).exportTemplates)) {
         return (parsed as any).exportTemplates as CustomExportTemplate[];
+      }
+      if (parsed && typeof parsed === 'object' && Array.isArray((parsed as any).export_templates)) {
+        return (parsed as any).export_templates as CustomExportTemplate[];
       }
     } catch {
       return [];
@@ -54,7 +74,7 @@ function coerceTemplateArray(value: unknown): CustomExportTemplate[] {
   return [];
 }
 
-function getLocalExportTemplates(organizationId: string): CustomExportTemplate[] {
+function getLocalExportTemplates(organizationId?: string): CustomExportTemplate[] {
   const collected = new Map<string, CustomExportTemplate>();
 
   const collectTemplatesFromStorageValue = (stored: string | null) => {
@@ -75,12 +95,25 @@ function getLocalExportTemplates(organizationId: string): CustomExportTemplate[]
   };
 
   try {
-    const orgId = localStorage.getItem('currentOrgId') || organizationId;
-    collectTemplatesFromStorageValue(localStorage.getItem(`global_settings_${orgId}`));
+    let orgId = localStorage.getItem('currentOrgId') || organizationId;
+    orgId = String(orgId || '').trim();
+    if (orgId === 'undefined' || orgId === 'null' || orgId === '[object Object]') {
+      orgId = '';
+    }
+
+    if (orgId) {
+      collectTemplatesFromStorageValue(localStorage.getItem(`global_settings_${orgId}`));
+    }
 
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
-      if (!key || !key.startsWith('global_settings_') || key === `global_settings_${orgId}`) {
+      if (!key || !key.startsWith('global_settings_')) {
+        continue;
+      }
+      if (orgId && key === `global_settings_${orgId}`) {
+        continue;
+      }
+      if (key.includes('_undefined') || key.includes('_null') || key.includes('_[object Object]')) {
         continue;
       }
 
@@ -110,7 +143,7 @@ function mergeTemplates(
   return Array.from(merged.values());
 }
 
-export async function loadPlannerExportTemplates(organizationId: string): Promise<CustomExportTemplate[]> {
+export async function loadPlannerExportTemplates(organizationId?: string): Promise<CustomExportTemplate[]> {
   const normalizedOrganizationId = normalizeOrganizationId(organizationId);
   const localTemplates = getLocalExportTemplates(normalizedOrganizationId);
 
@@ -127,24 +160,34 @@ export async function loadPlannerExportTemplates(organizationId: string): Promis
 
   const orgIdsToFetch = Array.from(new Set([
     normalizedOrganizationId,
+    localStorage.getItem('currentOrgId'),
     'org_001',
-    ''
-  ].filter((id): id is string => typeof id === 'string')));
+  ].map((id) => String(id || '').trim())
+   .filter((id) => id !== '' && id !== 'undefined' && id !== 'null' && id !== '[object Object]')));
 
   let allServerTemplates: CustomExportTemplate[] = [];
 
-  for (const orgId of orgIdsToFetch) {
-    try {
-      const settings = await settingsAPI.getOrganizationSettings(orgId);
-      if (settings?.export_templates) {
-        const serverTemplates = coerceTemplateArray(settings.export_templates);
-        if (serverTemplates.length > 0) {
-          allServerTemplates = mergeTemplates(allServerTemplates, serverTemplates);
+  try {
+    const fetchPromises = orgIdsToFetch.map(async (orgId) => {
+      try {
+        const settings = await settingsAPI.getOrganizationSettings(orgId);
+        if (settings?.export_templates) {
+          return coerceTemplateArray(settings.export_templates);
         }
+      } catch (err) {
+        console.warn(`[loadPlannerExportTemplates] Error fetching settings for org ${orgId}:`, err);
       }
-    } catch {
-      // Ignore individual org fetch errors
+      return [];
+    });
+
+    const results = await Promise.all(fetchPromises);
+    for (const serverTemplates of results) {
+      if (serverTemplates.length > 0) {
+        allServerTemplates = mergeTemplates(allServerTemplates, serverTemplates);
+      }
     }
+  } catch (err) {
+    console.error('[loadPlannerExportTemplates] Failed parallel load of templates:', err);
   }
 
   return normalizePlannerTemplates(mergeTemplates(allServerTemplates, localTemplates));

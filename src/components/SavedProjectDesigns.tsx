@@ -239,6 +239,7 @@ export function SavedProjectDesigns({
       return {
         ...designMeta,
         material_name: item.name || item.material || item.description || '',
+        description: item.description || '',
         sku: item.sku || '',
         category: item.category || '',
         quantity,

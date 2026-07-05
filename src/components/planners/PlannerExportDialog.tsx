@@ -75,16 +75,23 @@ export function PlannerExportDialog({
     const loadTemplates = async () => {
       setIsLoadingTemplates(true);
       try {
-        const templates = await loadPlannerExportTemplates(organizationId);
+        const resolvedOrgId = organizationId || localStorage.getItem('currentOrgId') || '';
+        const templates = await loadPlannerExportTemplates(resolvedOrgId);
         if (!cancelled) {
           setExportTemplates(templates);
           if (templates.length > 0) {
-            setCustomTemplateId((current) => current || templates[0].id);
+            setCustomTemplateId((current) => {
+              const exists = templates.some((t) => t.id === current);
+              return exists ? current : templates[0].id;
+            });
+          } else {
+            setCustomTemplateId('');
           }
         }
       } catch {
         if (!cancelled) {
           setExportTemplates([]);
+          setCustomTemplateId('');
         }
       } finally {
         if (!cancelled) {
