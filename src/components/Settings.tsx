@@ -735,7 +735,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
         design_name: 'Sample Design',
         project_type: 'deck',
         material_name: 'Composite Board',
-        description: 'Premium composite material for outdoor decking.',
+        description: 'COMPOSITE DECK BOARD 5/4 X 6 X 12',
         quantity: 24,
         sku: 'SKU-001',
         itemName: 'Composite Deck Board',

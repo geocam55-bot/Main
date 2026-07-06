@@ -32,6 +32,7 @@ interface InventoryItemWithPricing {
   unit_price: number; // stored in cents
   cost: number; // stored in cents
   sku?: string;
+  description?: string;
 }
 
 function isUuid(value: string): boolean {
@@ -273,7 +274,7 @@ export async function enrichMaterialsWithT1Pricing(
     // Get unique valid inventory item IDs.
     const inventoryItemIds = Array.from(new Set(defaultsByMaterialAndCategory.values())).filter(isUuid);
     
-    let inventoryItems: Array<{ id: string; name: string; unit_price: number; cost: number; sku?: string }> = [];
+    let inventoryItems: Array<{ id: string; name: string; unit_price: number; cost: number; sku?: string; description?: string }> = [];
     if (inventoryItemIds.length > 0) {
       // Fetch defaults-mapped inventory in chunks to avoid large id.in(...) filters.
       const idChunks = chunkArray(inventoryItemIds, 50);
@@ -281,7 +282,7 @@ export async function enrichMaterialsWithT1Pricing(
       for (const idChunk of idChunks) {
         const { data, error } = await supabase
           .from('inventory')
-          .select('id, name, unit_price, cost, sku')
+          .select('id, name, unit_price, cost, sku, description')
           .in('id', idChunk)
           .eq('organization_id', organizationId);
 
@@ -296,7 +297,7 @@ export async function enrichMaterialsWithT1Pricing(
     if (inventoryItems.length === 0 && defaultsByMaterialAndCategory.size > 0) {
       const { data } = await supabase
         .from('inventory')
-        .select('id, name, unit_price, cost, sku')
+        .select('id, name, unit_price, cost, sku, description')
         .eq('organization_id', organizationId)
         .limit(2500);
 
@@ -319,6 +320,7 @@ export async function enrichMaterialsWithT1Pricing(
         unit_price: item.unit_price || 0,
         cost: item.cost || 0,
         sku: item.sku,
+        description: item.description || '',
       };
       inventoryMapById.set(item.id, inventoryItem);
       if (item.sku) {
@@ -678,6 +680,7 @@ export async function enrichMaterialsWithT1Pricing(
           unitPrice: t1Price,
           cost: costPrice,
           totalCost: total,
+          description: inventoryItem.description || material.description,
           ...(hasCF ? {
             conversionFactor: cf,
             convertedQuantity: convertedQty,
