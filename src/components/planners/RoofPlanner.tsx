@@ -176,7 +176,7 @@ export function RoofPlanner({ user }: RoofPlannerProps) {
     // Create a map of enriched materials by description for quick lookup
     const enrichedMap = new Map();
     enrichedMaterials.forEach(item => {
-      enrichedMap.set(item.description, item);
+      enrichedMap.set(item.originalDescription || item.description, item);
     });
 
     // Merge pricing data into original structure

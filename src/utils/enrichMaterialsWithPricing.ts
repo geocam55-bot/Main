@@ -680,7 +680,8 @@ export async function enrichMaterialsWithT1Pricing(
           unitPrice: t1Price,
           cost: costPrice,
           totalCost: total,
-          description: inventoryItem.description || material.description,
+          originalDescription: material.description,
+          description: inventoryItem.description,
           ...(hasCF ? {
             conversionFactor: cf,
             convertedQuantity: convertedQty,

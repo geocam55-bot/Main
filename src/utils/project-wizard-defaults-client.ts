@@ -276,15 +276,20 @@ export async function saveUserDefaults(userId: string, organizationId: string, d
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[project-wizard-defaults] Failed to sync user defaults to server. Status:', response.status, 'Error Body:', errorText);
-      // Error saving user defaults
-      return false;
+      console.warn('[project-wizard-defaults] Failed to sync user defaults to server. Status:', response.status, 'Error Body:', errorText);
+      // Still saved to local cache successfully, so we can return true for local resilience
+      return true;
     }
 
     // User defaults saved successfully
     return true;
   } catch (error: any) {
-    console.error('[project-wizard-defaults] Unexpected error inside saveUserDefaults:', error?.message || error);
+    const errMsg = error?.message || String(error);
+    if (errMsg.includes('Failed to fetch') || errMsg.includes('fetch') || errMsg.includes('NetworkError')) {
+      console.warn('[project-wizard-defaults] saveUserDefaults network offline or unreachable, saved locally:', errMsg);
+      return true;
+    }
+    console.error('[project-wizard-defaults] Unexpected error inside saveUserDefaults:', errMsg);
     // Unexpected error saving user defaults
     return false;
   }
@@ -295,16 +300,28 @@ export async function saveUserDefaults(userId: string, organizationId: string, d
  */
 export async function deleteUserDefaults(userId: string, organizationId: string): Promise<boolean> {
   // Deleting user defaults
+  let safeOrgId = 'default-org';
+  let effectiveUserId = userId;
   
   try {
-    const effectiveUserId = await resolveEffectiveUserId(userId);
+    effectiveUserId = await resolveEffectiveUserId(userId);
     const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : await resolveOrganizationId(userId);
-    const safeOrgId = resolvedOrgId || 'default-org';
-    const token = await getUserAccessToken();
+    safeOrgId = resolvedOrgId || 'default-org';
 
+    // Clear local storage first so user has immediate local feedback
+    try {
+      localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, effectiveUserId));
+      if (effectiveUserId !== userId) {
+        localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, userId));
+      }
+    } catch (lsErr) {
+      // ignore cache cleanup errors
+    }
+
+    const token = await getUserAccessToken();
     if (!token) {
-      // No session, cannot delete user defaults
-      return false;
+      // No session, cannot delete user defaults on server, but already deleted locally
+      return true;
     }
 
     const response = await fetch(
@@ -317,24 +334,19 @@ export async function deleteUserDefaults(userId: string, organizationId: string)
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[project-wizard-defaults] Failed to delete user defaults. Status:', response.status, 'Error Body:', errorText);
-      // Error deleting user defaults
-      return false;
+      console.warn('[project-wizard-defaults] Server failed to delete user defaults. Status:', response.status, 'Error Body:', errorText);
+      // We still return true because local storage has been successfully cleared
+      return true;
     }
 
-    // User defaults deleted successfully
-    try {
-      localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, effectiveUserId));
-      if (effectiveUserId !== userId) {
-        localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, userId));
-      }
-    } catch {
-      // ignore cache cleanup errors
-    }
     return true;
   } catch (error: any) {
-    console.error('[project-wizard-defaults] Unexpected error inside deleteUserDefaults:', error?.message || error);
-    // Unexpected error deleting user defaults
+    const errMsg = error?.message || String(error);
+    if (errMsg.includes('Failed to fetch') || errMsg.includes('fetch') || errMsg.includes('NetworkError')) {
+      console.warn('[project-wizard-defaults] deleteUserDefaults network offline or unreachable, but cleared locally:', errMsg);
+      return true;
+    }
+    console.error('[project-wizard-defaults] Unexpected error inside deleteUserDefaults:', errMsg);
     return false;
   }
 }

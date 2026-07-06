@@ -201,7 +201,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     // Create a map of enriched materials by description for quick lookup
     const enrichedMap = new Map();
     enrichedMaterials.forEach(item => {
-      enrichedMap.set(item.description, item);
+      enrichedMap.set(item.originalDescription || item.description, item);
     });
 
     // Merge pricing data into original structure
@@ -527,7 +527,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
             organizationId={user.organizationId || user.organization_id || ''}
             userId={user.id}
             plannerType="deck"
-            materialTypes={[config.deckingType.toLowerCase()]}
+            materialTypes={['spruce', 'treated', 'cedar', 'composite']}
             initialMaterialType={defaultsUiMaterialType}
             initialRailingType={config.railingStyle || 'Treated'}
             initialAluminumColor={(config.aluminumRailingColor || 'White').toLowerCase()}

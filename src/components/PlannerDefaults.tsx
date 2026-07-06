@@ -530,6 +530,8 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
           // 1. Heal Org Defaults
           const healedOrg: Record<string, string> = { ...orgDefaultsMap };
           const healedOrgList: { key: string; val: string }[] = [];
+          
+          // First, heal any orphaned org defaults
           Object.entries(orgDefaultsMap).forEach(([key, val]) => {
             if (val && val !== 'none' && !itemIdsSet.has(val)) {
               const parsed = parseDefaultsKey(key);
@@ -541,6 +543,24 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                 }
               }
             }
+          });
+
+          // Second, auto-populate any completely missing categories in orgDefaults from PLANNER_CATEGORIES
+          const currentPlannerCategories = PLANNER_CATEGORIES[plannerType] || {};
+          Object.entries(currentPlannerCategories).forEach(([matType, sections]) => {
+            Object.entries(sections).forEach(([sectionName, categories]) => {
+              categories.forEach((category) => {
+                const uniqueCategory = uniquifyCategory(sectionName, category);
+                const key = makeDefaultsKey(plannerType, matType, uniqueCategory);
+                if (!healedOrg[key] || healedOrg[key] === 'none') {
+                  const bestMatch = findBestMatchingItem(plannerType, matType, uniqueCategory, allItems);
+                  if (bestMatch) {
+                    healedOrg[key] = bestMatch.id;
+                    healedOrgList.push({ key, val: bestMatch.id });
+                  }
+                }
+              });
+            });
           });
 
           if (healedOrgList.length > 0) {
@@ -563,10 +583,10 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
             if (toUpsert.length > 0) {
               Promise.all(toUpsert.map((config) => upsertProjectWizardDefault(config)))
                 .then(() => {
-                  console.log(`[auto-heal-org] Persisted ${toUpsert.length} healed defaults to the database.`);
+                  console.log(`[auto-heal-org] Persisted ${toUpsert.length} healed/populated defaults to the database.`);
                 })
                 .catch((err) => {
-                  console.error('[auto-heal-org] Error persisting healed defaults:', err);
+                  console.error('[auto-heal-org] Error persisting healed/populated defaults:', err);
                 });
             }
           }
