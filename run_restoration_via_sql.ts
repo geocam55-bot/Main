@@ -114,8 +114,8 @@ async function main() {
     'stair treads': '39595063', // STAIR STEP PT BROWN 2X12X48"
     'stair stringers': '39595063', // STAIR STEP PT BROWN 2X12X48"
     'ledger flashing': 'MMS449752', // RUBBER FLASHING 2 MIL 12X150FT
-    'railing top rail': '51206843', // PT HANDRAIL BROWN COLON.2X4X96
-    'railing bottom rail': '51206843',
+    'railing top rail': '84895026', // PT BROWN 2x6x8
+    'railing bottom rail': '84895026',
     'railing posts': '84895043', // PT BROWN 4X4"X8'
     'railing balusters': '51206852', // PT BALUSTER BROWN 2X2X42
   };

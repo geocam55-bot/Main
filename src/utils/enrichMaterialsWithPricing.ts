@@ -379,6 +379,7 @@ export async function enrichMaterialsWithT1Pricing(
         // If no direct category match, try smart matching based on description
         if (!inventoryItemId) {
           const description = material.description.toLowerCase();
+          const isAluminum = itemMaterialType.startsWith('aluminum');
           
           // -----------------------------------------------------------------
           // Length-aware matching: if the material specifies a lumberLength,
@@ -450,8 +451,14 @@ export async function enrichMaterialsWithT1Pricing(
             inventoryItemId = tryMatch("spindles/pickets - stair");
           } else if (description.toLowerCase().includes('aluminum stair posts') || description.toLowerCase().includes('stair post')) {
             inventoryItemId = tryMatch('posts - stair');
-          } else if (description.toLowerCase().includes('aluminum posts') || description.toLowerCase().includes('railing post')) {
+          } else if (isAluminum && (description.toLowerCase().includes('aluminum posts') || description.toLowerCase().includes('railing post'))) {
             inventoryItemId = tryMatch('posts - inline');
+          } else if (!isAluminum && (description.toLowerCase().includes('railing post') || description.toLowerCase().includes('railing posts'))) {
+            inventoryItemId = tryMatch('railing posts');
+          } else if (!isAluminum && description.toLowerCase().includes('top rail')) {
+            inventoryItemId = tryMatch('railing top rail');
+          } else if (!isAluminum && description.toLowerCase().includes('bottom rail')) {
+            inventoryItemId = tryMatch('railing bottom rail');
           } else if (description.includes('tempered glass panel')) {
             inventoryItemId = tryMatch(description);
           } else if (description.includes('post base plate cover')) {

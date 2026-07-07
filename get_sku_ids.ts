@@ -66,8 +66,8 @@ async function main() {
     "deck-treated-joist hangers": "35945339",
     "deck-treated-railing posts": "84895043", // 4x4x8 PT Brown
     "deck-treated-ledger flashing": "MMS449748",
-    "deck-treated-railing top rail": "84895027", // 2x6x10
-    "deck-treated-railing bottom rail": "84895027", // 2x6x10
+    "deck-treated-railing top rail": "84895026", // PT BROWN 2x6x8
+    "deck-treated-railing bottom rail": "84895026", // PT BROWN 2x6x8
     "deck-treated-railing balusters": "51206852" // Baluster
   };
 
