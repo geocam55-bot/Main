@@ -100,6 +100,28 @@ export function buildCustomText(rows: Record<string, unknown>[], template: Custo
       return String(field.text ?? '');
     }
     let val = String(row[field.key] ?? '');
+
+    // Strip any HTML comment metadata (e.g. <!--metadata:{...}-->) from field values
+    if (val.includes('<!--metadata:')) {
+      const markerStart = "<!--metadata:";
+      const markerEnd = "-->";
+      const startIndex = val.lastIndexOf(markerStart);
+      if (startIndex !== -1) {
+        const endIndex = val.indexOf(markerEnd, startIndex + markerStart.length);
+        if (endIndex !== -1) {
+          const before = val.substring(0, startIndex);
+          const after = val.substring(endIndex + markerEnd.length);
+          val = (before + after).trim();
+        } else {
+          // If the comment is truncated, strip from the marker onwards
+          val = val.substring(0, startIndex).trim();
+        }
+      }
+    }
+
+    // Replace newlines and extra spaces to keep the text row strictly on a single line
+    val = val.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+
     const loweredKey = field.key.toLowerCase();
 
     // 1) Units from Inventory: 2 characters, capitalized
