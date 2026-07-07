@@ -41,12 +41,13 @@ import {
   Sun,
   Moon,
   Database,
+  Printer,
 } from 'lucide-react';
 import type { User } from '../App';
 import { tenantsAPI, settingsAPI } from '../utils/api';
 import { createClient } from '../utils/supabase/client';
 import { DEFAULT_PRICE_TIER_LABELS, type PriceTierLabels, getPriceTierLabel, getActivePriceLevels, AVAILABLE_MODULES } from '../lib/global-settings';
-import { buildCustomText, type CustomExportField, type CustomExportTemplate } from '../utils/export-engine';
+import { buildCustomText, downloadTextFile, type CustomExportField, type CustomExportTemplate } from '../utils/export-engine';
 
 // Utility: wrap a promise with a timeout to prevent infinite hangs
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -396,6 +397,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     include_column_headers: true,
   });
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [isPrintingId, setIsPrintingId] = useState<string | null>(null);
 
   // Load settings from Supabase on mount
   useEffect(() => {
@@ -751,6 +753,131 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     }
 
     return '';
+  };
+
+  const handlePrintTemplate = async (template: CustomExportTemplate) => {
+    setIsPrintingId(template.id);
+    try {
+      const supabase = createClient();
+      let orgId = user.organizationId;
+      
+      if (!orgId) {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', authUser.id)
+            .single();
+          if (profile?.organization_id) {
+            orgId = profile.organization_id;
+          }
+        }
+      }
+
+      let fetchedRows: any[] = [];
+      if (orgId) {
+        const { data: inventoryData, error } = await supabase
+          .from('inventory')
+          .select('*')
+          .eq('organization_id', orgId)
+          .limit(10);
+        
+        if (!error && inventoryData && inventoryData.length > 0) {
+          fetchedRows = inventoryData.map((item, idx) => {
+            const rawPrice = item.unit_price || item.price || 0;
+            const price = typeof rawPrice === 'number' ? rawPrice / 100 : 0;
+            const qty = item.quantity || item.quantity_on_hand || (10 + idx * 5);
+            return {
+              quote_number: 'Q-SAMPLE-PRNT',
+              title: 'Sample Printed Quote',
+              contact_name: 'Sample Contractor',
+              contact_email: 'contractor@sample.com',
+              total: '2450.00',
+              status: 'approved',
+              design_name: 'Sample Deck Layout',
+              project_type: 'deck',
+              material_name: item.name || item.item_name || 'Item ' + idx,
+              itemName: item.name || item.item_name || 'Item ' + idx,
+              description: item.description || item.desc || item.name || 'Sample Description',
+              quantity: qty,
+              sku: item.sku || `SKU-${1000 + idx}`,
+              itemId: item.id || `inv-${1000 + idx}`,
+              unit_of_measure: item.unit_of_measure || item.uom || 'EA',
+              unitPrice: price.toFixed(2),
+              unit_price: price,
+              lineTotal: (qty * price).toFixed(2),
+              line_total: qty * price,
+              price_tier: 'Price Level 1',
+              category: item.category || 'GENERAL',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+          });
+        }
+      }
+
+      // Pad to exactly 10 if there are fewer items
+      if (fetchedRows.length < 10) {
+        const baseItems = [
+          { sku: '21016DFL', name: '2X10-16 DOUGLAS FIR LBR', desc: '2 X 10 X 16 PREMIUM STUDS', category: 'LUMBER', uom: 'EA', price: 14.50 },
+          { sku: '2612DFL', name: '2X6-12 DOUGLAS FIR LBR', desc: '2 X 6 X 12 CONSTRUCTION STUDS', category: 'LUMBER', uom: 'EA', price: 8.75 },
+          { sku: '12DRYW', name: '1/2 SHEETROCK DRYWALL 4X8', desc: '1/2IN X 4FT X 8FT STANDARD WALLBOARD', category: 'DRYWALL', uom: 'EA', price: 12.99 },
+          { sku: 'N8HDG', name: '8D HOT GALV COMMON NAIL 50#', desc: '8D HARDWARE GALVANIZED NAILS', category: 'FASTENERS', uom: 'BOX', price: 89.00 },
+          { sku: 'DEW20D', name: 'DEWALT 20V MAX DRILL DRIVER', desc: 'CORDLESS 1/2-INCH COMPACT DRILL KIT', category: 'TOOLS', uom: 'EA', price: 129.00 },
+          { sku: '2416DFL', name: '2X4-16 DOUGLAS FIR LBR', desc: '2 X 4 X 16 PREMIUM STUDS', category: 'LUMBER', uom: 'EA', price: 5.80 },
+          { sku: '448DFL', name: '4X4-8 DOUGLAS FIR POST', desc: '4 X 4 X 8 PRESSURE TREATED GROUND CONTACT', category: 'LUMBER', uom: 'EA', price: 18.25 },
+          { sku: 'TAPCON', name: '3/16 X 2-1/4 CONCRETE SCREW', desc: 'TAPCON FLAT HEAD CONCRETE ANCHORS 75PK', category: 'FASTENERS', uom: 'BOX', price: 19.95 },
+          { sku: 'MILHACK', name: 'MILWAUKEE HACKZALL RECIP SAW', desc: 'M18 18V LITHIUM-ION CORDLESS SAWZALL', category: 'TOOLS', uom: 'EA', price: 119.00 },
+          { sku: 'PLY34', name: '3/4 PLYWOOD SHEATHING 4X8', desc: '3/4IN CDX EXPOSURE 1 PLYWOOD SHEETS', category: 'LUMBER', uom: 'EA', price: 42.50 },
+        ];
+
+        while (fetchedRows.length < 10) {
+          const idx = fetchedRows.length;
+          const item = baseItems[idx % baseItems.length];
+          fetchedRows.push({
+            quote_number: 'Q-SAMPLE-PRNT',
+            title: 'Sample Printed Quote',
+            contact_name: 'Sample Contractor',
+            contact_email: 'contractor@sample.com',
+            total: '2450.00',
+            status: 'approved',
+            design_name: 'Sample Deck Layout',
+            project_type: 'deck',
+            material_name: item.name,
+            itemName: item.name,
+            description: item.desc,
+            quantity: 10 + idx * 5,
+            sku: item.sku,
+            itemId: `inv-${1000 + idx}`,
+            unit_of_measure: item.uom,
+            unitPrice: item.price.toFixed(2),
+            unit_price: item.price,
+            lineTotal: ((10 + idx * 5) * item.price).toFixed(2),
+            line_total: (10 + idx * 5) * item.price,
+            price_tier: 'Price Level 1',
+            category: item.category,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+
+      const fileContent = buildCustomText(fetchedRows, template);
+      const ext = template.file_extension || 'txt';
+      const filename = `${template.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_print_sample.${ext}`;
+      const isEagle = (template.name || '').toLowerCase().includes('eagle') || 
+                      (template.description || '').toLowerCase().includes('eagle');
+      const mimeType = isEagle || ext === 'txt' ? 'text/plain;charset=utf-8' : 'text/csv;charset=utf-8';
+
+      downloadTextFile(fileContent, filename, mimeType);
+      toast.success(`Printed sample with 10 SKUs using template "${template.name}"`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to print template sample: ' + (err.message || err));
+    } finally {
+      setIsPrintingId(null);
+    }
   };
 
   const removeExportTemplate = (templateId: string) => {
@@ -2011,6 +2138,17 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handlePrintTemplate(template)}
+                                        disabled={isPrintingId === template.id}
+                                        className="flex items-center gap-1.5"
+                                      >
+                                        <Printer className="h-3.5 w-3.5" />
+                                        Print
+                                      </Button>
                                       <Button
                                         type="button"
                                         variant="outline"
