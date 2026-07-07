@@ -33,6 +33,7 @@ interface InventoryItemWithPricing {
   cost: number; // stored in cents
   sku?: string;
   description?: string;
+  unit_of_measure?: string;
 }
 
 function isUuid(value: string): boolean {
@@ -274,7 +275,7 @@ export async function enrichMaterialsWithT1Pricing(
     // Get unique valid inventory item IDs.
     const inventoryItemIds = Array.from(new Set(defaultsByMaterialAndCategory.values())).filter(isUuid);
     
-    let inventoryItems: Array<{ id: string; name: string; unit_price: number; cost: number; sku?: string; description?: string }> = [];
+    let inventoryItems: Array<{ id: string; name: string; unit_price: number; cost: number; sku?: string; description?: string; unit_of_measure?: string }> = [];
     if (inventoryItemIds.length > 0) {
       // Fetch defaults-mapped inventory in chunks to avoid large id.in(...) filters.
       const idChunks = chunkArray(inventoryItemIds, 50);
@@ -282,7 +283,7 @@ export async function enrichMaterialsWithT1Pricing(
       for (const idChunk of idChunks) {
         const { data, error } = await supabase
           .from('inventory')
-          .select('id, name, unit_price, cost, sku, description')
+          .select('id, name, unit_price, cost, sku, description, unit_of_measure')
           .in('id', idChunk)
           .eq('organization_id', organizationId);
 
@@ -297,7 +298,7 @@ export async function enrichMaterialsWithT1Pricing(
     if (inventoryItems.length === 0 && defaultsByMaterialAndCategory.size > 0) {
       const { data } = await supabase
         .from('inventory')
-        .select('id, name, unit_price, cost, sku, description')
+        .select('id, name, unit_price, cost, sku, description, unit_of_measure')
         .eq('organization_id', organizationId)
         .limit(2500);
 
@@ -321,6 +322,7 @@ export async function enrichMaterialsWithT1Pricing(
         cost: item.cost || 0,
         sku: item.sku,
         description: item.description || '',
+        unit_of_measure: item.unit_of_measure || undefined,
       };
       inventoryMapById.set(item.id, inventoryItem);
       if (item.sku) {
@@ -672,6 +674,7 @@ export async function enrichMaterialsWithT1Pricing(
         
         totalT1Price += total;
         
+        const matchedUnitOfMeasure = inventoryItem.unit_of_measure || material.unit || 'ea';
         return {
           ...material,
           itemId: inventoryItem.id, // Use the inventory item's ID
@@ -682,6 +685,9 @@ export async function enrichMaterialsWithT1Pricing(
           totalCost: total,
           originalDescription: material.description,
           description: inventoryItem.description,
+          unit_of_measure: matchedUnitOfMeasure,
+          unitOfMeasure: matchedUnitOfMeasure,
+          unit: matchedUnitOfMeasure,
           ...(hasCF ? {
             conversionFactor: cf,
             convertedQuantity: convertedQty,

@@ -99,7 +99,24 @@ export function buildCustomText(rows: Record<string, unknown>[], template: Custo
     if ((field.source || 'field') === 'text') {
       return String(field.text ?? '');
     }
-    let val = String(row[field.key] ?? '');
+    let val = '';
+    const lookupKey = field.key;
+    if (['unit', 'units', 'uom', 'unit_of_measure'].includes(lookupKey.toLowerCase())) {
+      const possibleKeys = ['unit_of_measure', 'unitOfMeasure', 'unit_of_measure_val', 'unit', 'units', 'uom'];
+      let foundVal: unknown = undefined;
+      for (const k of possibleKeys) {
+        if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+          foundVal = row[k];
+          break;
+        }
+      }
+      if (foundVal === undefined) {
+        foundVal = row['unit_of_measure'] ?? row['unit'] ?? row['units'] ?? row['uom'] ?? '';
+      }
+      val = String(foundVal ?? '');
+    } else {
+      val = String(row[lookupKey] ?? '');
+    }
 
     // Strip any HTML comment metadata (e.g. <!--metadata:{...}-->) from field values
     if (val.includes('<!--metadata:')) {
