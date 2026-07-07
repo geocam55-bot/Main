@@ -1,6 +1,7 @@
 import { createClient } from './supabase/client';
 import { projectId, publicAnonKey } from './supabase/info';
 import { getServerHeaders, getUserAccessToken } from './server-headers';
+import { HARDCODED_DEFAULTS_BY_SKU } from './default-skus-fallback';
 
 export interface ProjectWizardDefault {
   id?: string;
@@ -131,6 +132,92 @@ function writePlannerDefaultsToLocalStorage(organizationId: string, userId: stri
 }
 
 /**
+ * Merges loaded database defaults with hardcoded defaults as fallbacks.
+ * This guarantees the planner has functional defaults even on a fresh/empty database organization.
+ */
+export async function mergeWithHardcodedFallbacks(
+  organizationId: string,
+  dbDefaults: ProjectWizardDefault[]
+): Promise<ProjectWizardDefault[]> {
+  try {
+    const existingKeys = new Set(
+      dbDefaults.map(d =>
+        `${(d.planner_type || 'deck').toLowerCase()}::${(d.material_type || 'default').toLowerCase()}::${(d.material_category || '').toLowerCase()}`
+      )
+    );
+
+    const missingKeys: Array<{ category: string; sku: string }> = [];
+    Object.entries(HARDCODED_DEFAULTS_BY_SKU).forEach(([categoryKey, sku]) => {
+      let materialCategory = categoryKey;
+      if (categoryKey === 'beams') materialCategory = 'Beams';
+      else if (categoryKey === 'joists') materialCategory = 'Joists';
+      else if (categoryKey === 'rim joists') materialCategory = 'Rim Joists';
+      else if (categoryKey === 'ledger board') materialCategory = 'Ledger Board';
+      else if (categoryKey === 'posts') materialCategory = 'Posts';
+      else if (categoryKey === 'decking boards') materialCategory = 'Decking Boards';
+      else if (categoryKey === 'railing posts') materialCategory = 'Railing Posts';
+      else if (categoryKey === 'railing top rail') materialCategory = 'Railing Top Rail';
+      else if (categoryKey === 'railing bottom rail') materialCategory = 'Railing Bottom Rail';
+      else if (categoryKey === 'railing balusters') materialCategory = 'Railing Balusters';
+      else if (categoryKey === 'stair treads') materialCategory = 'Stair Treads';
+      else if (categoryKey === 'stair stringers') materialCategory = 'Stair Stringers';
+      else if (categoryKey === 'concrete mix') materialCategory = 'Concrete Mix';
+      else if (categoryKey === 'deck screws') materialCategory = 'Deck Screws';
+      else if (categoryKey === 'lag screws') materialCategory = 'Lag Screws';
+      else if (categoryKey === 'structural screws') materialCategory = 'Structural Screws';
+      else if (categoryKey === 'joist hangers') materialCategory = 'Joist Hangers';
+      else if (categoryKey === 'post anchors') materialCategory = 'Post Anchors';
+      else if (categoryKey === 'ledger flashing') materialCategory = 'Ledger Flashing';
+
+      const lookupKey = `deck::treated::${materialCategory.toLowerCase()}`;
+      if (!existingKeys.has(lookupKey)) {
+        missingKeys.push({ category: materialCategory, sku });
+      }
+    });
+
+    if (missingKeys.length === 0) {
+      return dbDefaults;
+    }
+
+    const skusToQuery = missingKeys.map(k => k.sku);
+    const supabase = createClient();
+    const { data: items, error } = await supabase
+      .from('inventory')
+      .select('id, sku')
+      .eq('organization_id', organizationId)
+      .in('sku', skusToQuery);
+
+    if (error || !items || items.length === 0) {
+      return dbDefaults;
+    }
+
+    const skuToId = new Map<string, string>();
+    items.forEach(it => {
+      if (it.sku) skuToId.set(it.sku.toLowerCase(), it.id);
+    });
+
+    const merged = [...dbDefaults];
+    missingKeys.forEach(m => {
+      const itemId = skuToId.get(m.sku.toLowerCase());
+      if (itemId) {
+        merged.push({
+          organization_id: organizationId,
+          planner_type: 'deck',
+          material_type: 'treated',
+          material_category: m.category,
+          inventory_item_id: itemId,
+        });
+      }
+    });
+
+    return merged;
+  } catch (err) {
+    console.error('Error merging hardcoded fallbacks:', err);
+    return dbDefaults;
+  }
+}
+
+/**
  * Get all project wizard defaults for an organization (organization-level only)
  * Routes through the Edge Function server to bypass RLS.
  * @param organizationId - The organization ID
@@ -150,17 +237,20 @@ export async function getProjectWizardDefaults(organizationId: string): Promise<
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      // Server error fetching defaults
-      return [];
+      // Server error fetching defaults - return hardcoded fallback if possible
+      const fallback = await mergeWithHardcodedFallbacks(organizationId, []);
+      return dedupeDefaultsByNewest(fallback);
     }
 
     const result = await response.json();
     const rawDefaults = result.defaults || [];
+    const merged = await mergeWithHardcodedFallbacks(organizationId, rawDefaults);
     // Guard against legacy duplicate rows; newest row wins per logical key.
-    return dedupeDefaultsByNewest(rawDefaults);
+    return dedupeDefaultsByNewest(merged);
   } catch (error) {
-    // Unexpected error fetching defaults
-    return [];
+    // Unexpected error fetching defaults - try hardcoded fallback
+    const fallback = await mergeWithHardcodedFallbacks(organizationId, []);
+    return dedupeDefaultsByNewest(fallback);
   }
 }
 
@@ -180,14 +270,14 @@ export async function getProjectWizardDefaultsRaw(organizationId: string): Promi
     );
 
     if (!response.ok) {
-      return [];
+      return mergeWithHardcodedFallbacks(organizationId, []);
     }
 
     const result = await response.json();
     const rawDefaults = result.defaults || [];
-    return Array.isArray(rawDefaults) ? rawDefaults : [];
+    return mergeWithHardcodedFallbacks(organizationId, Array.isArray(rawDefaults) ? rawDefaults : []);
   } catch {
-    return [];
+    return mergeWithHardcodedFallbacks(organizationId, []);
   }
 }
 

@@ -1,5 +1,6 @@
 import { createClient } from './supabase/client';
 import { getProjectWizardDefaults, getUserDefaults } from './project-wizard-defaults-client';
+import { HARDCODED_DEFAULTS_BY_SKU } from './default-skus-fallback';
 
 interface MaterialItem {
   category: string;
@@ -293,9 +294,28 @@ export async function enrichMaterialsWithT1Pricing(
       }
     }
 
+    // Always fetch hardcoded fallback SKUs as well to make sure pricing is resolved for unconfigured defaults
+    const fallbackSkus = Array.from(new Set(Object.values(HARDCODED_DEFAULTS_BY_SKU)));
+    const skuChunks = chunkArray(fallbackSkus, 50);
+    for (const skuChunk of skuChunks) {
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('id, name, unit_price, cost, sku, description, unit_of_measure')
+        .in('sku', skuChunk)
+        .eq('organization_id', organizationId);
+
+      if (!error && data) {
+        data.forEach(item => {
+          if (!inventoryItems.some(existing => existing.id === item.id)) {
+            inventoryItems.push(item);
+          }
+        });
+      }
+    }
+
     // Fallback: only attempt description-based matching when at least one default exists.
     // If defaults are completely wiped, keep pricing empty instead of re-populating via fuzzy matches.
-    if (inventoryItems.length === 0 && defaultsByMaterialAndCategory.size > 0) {
+    if (inventoryItems.length === 0 && (defaultsByMaterialAndCategory.size > 0 || fallbackSkus.length > 0)) {
       const { data } = await supabase
         .from('inventory')
         .select('id, name, unit_price, cost, sku, description, unit_of_measure')
@@ -364,7 +384,19 @@ export async function enrichMaterialsWithT1Pricing(
         if (matched) return matched;
 
         // Check fallback map
-        return fallbackDefaultsByCategory.get(baseKey);
+        const dbFallback = fallbackDefaultsByCategory.get(baseKey);
+        if (dbFallback) return dbFallback;
+
+        // Try hardcoded defaults by SKU as final fallback
+        const isTreatedOrDefault = itemMaterialType === 'treated' || itemMaterialType === 'default';
+        if (isTreatedOrDefault) {
+          const fallbackSku = HARDCODED_DEFAULTS_BY_SKU[baseKey];
+          if (fallbackSku) {
+            const resolvedItem = inventoryMapBySku.get(fallbackSku.toLowerCase());
+            if (resolvedItem) return resolvedItem.id;
+          }
+        }
+        return undefined;
       };
 
       // STRATEGY 2: Match by category using Project Wizard Defaults
