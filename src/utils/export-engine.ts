@@ -95,7 +95,62 @@ export function buildCustomText(rows: Record<string, unknown>[], template: Custo
   const layoutMode = template.layout_mode || templateWithLegacyFields.layoutMode || 'delimited';
   const includeColumnHeaders = template.include_column_headers ?? templateWithLegacyFields.includeColumnHeaders;
 
+  const isEagle = (template.name || '').toLowerCase().includes('eagle') || 
+                  (template.description || '').toLowerCase().includes('eagle');
+
+  let processedRows = rows;
+  if (isEagle && rows.length > 0) {
+    // Inject category header rows for Eagle export
+    const groupedRows: Record<string, unknown>[] = [];
+    const designMeta = { ...rows[0] };
+    let lastCategory = '';
+    
+    for (const row of rows) {
+      if (row.is_category_row) {
+        groupedRows.push(row);
+        continue;
+      }
+      
+      const category = String(row.category || '').trim();
+      if (category && category.toLowerCase() !== lastCategory.toLowerCase()) {
+        lastCategory = category;
+        groupedRows.push({
+          ...designMeta,
+          sku: '',
+          material_name: category.toUpperCase(),
+          itemName: category.toUpperCase(),
+          item_name: category.toUpperCase(),
+          description: category.toUpperCase(),
+          quantity: '',
+          qty: '',
+          unit_price: '',
+          unitPrice: '',
+          line_total: '',
+          lineTotal: '',
+          unit_of_measure: '',
+          unit: '',
+          units: '',
+          is_category_row: true,
+        });
+      }
+      groupedRows.push(row);
+    }
+    processedRows = groupedRows;
+  }
+
   const getFieldValue = (row: Record<string, unknown>, field: CustomExportField): string => {
+    const isCategoryRow = !!row.is_category_row;
+    if (isCategoryRow) {
+      if ((field.source || 'field') === 'text') {
+        return String(field.text ?? '');
+      }
+      const isDescField = ['description', 'material_name', 'item_name', 'itemname'].includes(field.key.toLowerCase());
+      if (isDescField) {
+        return String(row.description || row.material_name || row.item_name || '');
+      }
+      return '';
+    }
+
     if ((field.source || 'field') === 'text') {
       return String(field.text ?? '');
     }
@@ -178,29 +233,41 @@ export function buildCustomText(rows: Record<string, unknown>[], template: Custo
   };
 
   if (!detailFields.length) {
-    return [...headerLines, ...rows.map(() => '')].join('\n');
+    return [...headerLines, ...processedRows.map(() => '')].join('\n');
   }
 
   if (layoutMode === 'delimited') {
     const delimiter = template.delimiter || '|';
     const includeHeaders = includeColumnHeaders !== false;
-    const output: string[] = [...headerLines];
+    const output: string[] = isEagle ? [] : [...headerLines];
 
-    if (includeHeaders) {
+    if (isEagle) {
+      let headerLine = 'H'.padEnd(384, ' ') + 'E';
+      headerLine = headerLine.padEnd(495, ' ');
+      output.push(headerLine);
+    } else if (includeHeaders) {
       output.push(detailFields.map((field) => getFieldHeader(field)).join(delimiter));
     }
 
-    for (const row of rows) {
+    for (const row of processedRows) {
       output.push(detailFields.map((field) => getFieldValue(row, field)).join(delimiter));
     }
 
-    return output.join('\n');
+    return output.join(isEagle ? '\r\n' : '\n');
   }
 
   detailFields.sort((a, b) => (a.start || 1) - (b.start || 1));
-  const output: string[] = [...headerLines];
+  const output: string[] = [];
 
-  for (const row of rows) {
+  if (isEagle) {
+    let headerLine = 'H'.padEnd(384, ' ') + 'E';
+    headerLine = headerLine.padEnd(495, ' ');
+    output.push(headerLine);
+  } else {
+    output.push(...headerLines);
+  }
+
+  for (const row of processedRows) {
     let line = '';
     for (const field of detailFields) {
       const start = Math.max(1, field.start || 1);
@@ -219,10 +286,19 @@ export function buildCustomText(rows: Record<string, unknown>[], template: Custo
       const suffix = line.length > suffixStart ? line.slice(suffixStart) : '';
       line = `${prefix}${formatted}${suffix}`;
     }
+
+    if (isEagle) {
+      if (line.length < 481) {
+        line = line.padEnd(481, ' ');
+      } else if (line.length > 481) {
+        line = line.slice(0, 481);
+      }
+    }
+
     output.push(line);
   }
 
-  return output.join('\n');
+  return output.join(isEagle ? '\r\n' : '\n');
 }
 
 export function downloadTextFile(content: string, filename: string, mimeType: string): void {
