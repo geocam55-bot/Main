@@ -357,24 +357,7 @@ export async function searchInventoryClient(filters?: {
 }
 
 function injectMetadataIntoDescription(cleanData: any, itemData: any) {
-  const metadata: any = {};
-  
-  // Collect any missing database columns from itemData
-  const imageUrl = itemData.image_url !== undefined ? itemData.image_url : itemData.imageUrl;
-  if (imageUrl !== undefined) {
-    metadata.imageUrl = imageUrl;
-  }
-  if (itemData.location !== undefined) {
-    metadata.location = itemData.location;
-  }
-  if (itemData.status !== undefined) {
-    metadata.status = itemData.status;
-  }
-  if (cleanData.quantity !== undefined) {
-    metadata.quantityOnHand = cleanData.quantity;
-  }
-
-  // Parse any existing metadata in base description so we don't wipe it out
+  // Parse and strip any existing metadata in base description so we don't save polluted description fields to DB
   const rawDescription = cleanData.description || '';
   let baseDescription = rawDescription;
   
@@ -384,20 +367,11 @@ function injectMetadataIntoDescription(cleanData: any, itemData: any) {
   if (startIndex !== -1) {
     const endIndex = rawDescription.indexOf(markerEnd, startIndex + markerStart.length);
     if (endIndex !== -1) {
-      const jsonStr = rawDescription.substring(startIndex + markerStart.length, endIndex);
-      try {
-        const parsedMetadata = JSON.parse(jsonStr);
-        Object.assign(metadata, parsedMetadata);
-        baseDescription = rawDescription.substring(0, startIndex).trim();
-      } catch (e) {
-        // Fallback
-      }
+      baseDescription = rawDescription.substring(0, startIndex).trim();
     }
   }
 
-  if (Object.keys(metadata).length > 0) {
-    cleanData.description = `${baseDescription}\n\n<!--metadata:${JSON.stringify(metadata)}-->`.trim();
-  }
+  cleanData.description = baseDescription;
 }
 
 // Helper to dynamically align payload keys to match exact casing of columns present in the database table

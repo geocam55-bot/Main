@@ -1628,16 +1628,37 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
             if (mappedRec.price_tier_5 === undefined || mappedRec.price_tier_5 === 0) mappedRec.price_tier_5 = t1;
             if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
 
-            const metadataObj: any = {};
-            if (mappedRec.image_url) metadataObj.imageUrl = mappedRec.image_url;
-            if (mappedRec.location) metadataObj.location = mappedRec.location;
-            if (mappedRec.status) metadataObj.status = mappedRec.status;
-            if (mappedRec.quantity) metadataObj.quantityOnHand = mappedRec.quantity;
-
-            if (Object.keys(metadataObj).length > 0) {
-              const baseDesc = mappedRec.description || '';
-              mappedRec.description = `${baseDesc}\n\n<!--metadata:${JSON.stringify(metadataObj)}-->`.trim();
+            // Strip any pre-existing <!--metadata:...--> tags from the description field
+            // to ensure it only contains the clean description. Extract their properties to individual columns if not already populated.
+            let rawDesc = mappedRec.description || '';
+            const markerStart = "<!--metadata:";
+            const markerEnd = "-->";
+            const startIndex = rawDesc.lastIndexOf(markerStart);
+            if (startIndex !== -1) {
+              const endIndex = rawDesc.indexOf(markerEnd, startIndex + markerStart.length);
+              if (endIndex !== -1) {
+                const jsonStr = rawDesc.substring(startIndex + markerStart.length, endIndex);
+                try {
+                  const parsedMetadata = JSON.parse(jsonStr);
+                  if (parsedMetadata.imageUrl && !mappedRec.image_url) {
+                    mappedRec.image_url = parsedMetadata.imageUrl;
+                  }
+                  if (parsedMetadata.location && !mappedRec.location) {
+                    mappedRec.location = parsedMetadata.location;
+                  }
+                  if (parsedMetadata.status && !mappedRec.status) {
+                    mappedRec.status = parsedMetadata.status;
+                  }
+                  if (parsedMetadata.quantityOnHand && mappedRec.quantity === undefined) {
+                    mappedRec.quantity = parsedMetadata.quantityOnHand;
+                  }
+                } catch (e) {
+                  // Ignore JSON parsing errors
+                }
+                rawDesc = rawDesc.substring(0, startIndex).trim();
+              }
             }
+            mappedRec.description = rawDesc;
           }
 
           // Clean non-columns based on fallback schema references
