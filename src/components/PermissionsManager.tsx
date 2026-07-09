@@ -70,6 +70,7 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole>('standard_user');
   const [permissions, setPermissions] = useState<Record<string, SpacePermission>>({});
   const [originalPermissions, setOriginalPermissions] = useState<Record<string, SpacePermission>>({});
+  const [allCachedPermissions, setAllCachedPermissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -154,6 +155,7 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
         if (response.ok) {
           const json = await response.json();
           if (Array.isArray(json.permissions) && json.permissions.length > 0) {
+            setAllCachedPermissions(json.permissions);
             const nextPermissions = buildPermissionsByRole(json.permissions, role);
             setPermissions(nextPermissions);
             setOriginalPermissions(JSON.parse(JSON.stringify(nextPermissions)));
@@ -167,8 +169,7 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
       // Fall back to table data if KV has not been initialized yet.
       const { data, error } = await supabase
         .from('permissions')
-        .select('*')
-        .eq('role', role);
+        .select('*');
 
       if (error) {
         if (error.code === 'PGRST205' || error.code === '42P01') {
@@ -179,6 +180,7 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
         throw error;
       }
 
+      setAllCachedPermissions(data || []);
       const nextPermissions = buildPermissionsByRole(data, role);
 
       setPermissions(nextPermissions);
@@ -252,6 +254,8 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
         ...ALL_SPACES.flatMap((space) => space.modules),
       ]));
 
+      const orgId = localStorage.getItem('currentOrgId') || 'org_001';
+
       const insertData = Object.values(permissions)
         .filter((permission) => trackedModules.includes(permission.module))
         .map((permission) => ({
@@ -281,22 +285,23 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
       // If this fails, users may still see stale access checks, so surface it clearly.
       let kvSynced = false;
       try {
-        const { data: allPerms } = await supabase.from('permissions').select('*');
-        if (allPerms && allPerms.length > 0) {
-          const orgId = localStorage.getItem('currentOrgId');
+        const mergedPerms = allCachedPermissions.filter((p) => p.role !== selectedRole).concat(insertData);
+        if (mergedPerms.length > 0) {
+          const orgId = localStorage.getItem('currentOrgId') || 'org_001';
           const headers = await getServerHeaders();
-          if (orgId && headers['X-User-Token']) {
+          if (headers['X-User-Token']) {
             const response = await fetch(`${SERVER_BASE}/permissions`, {
               method: 'PUT',
               headers: { ...headers, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ permissions: allPerms, organization_id: orgId }),
+              body: JSON.stringify({ permissions: mergedPerms, organization_id: orgId }),
             });
             kvSynced = response.ok;
 
             if (response.ok) {
-              const normalizedForOrg = normalizePermissionRecords(allPerms as any[]);
+              const normalizedForOrg = normalizePermissionRecords(mergedPerms as any[]);
               localStorage.setItem(`permissions_${orgId}`, JSON.stringify(normalizedForOrg));
               refreshPermissionsFromStorage();
+              setAllCachedPermissions(mergedPerms);
             }
           }
         }
