@@ -828,7 +828,9 @@ export function AppContent() {
           onSelectInventorySpace={() => { window.location.href = '/inventory.html'; }}
           onSelectITSpace={() => { window.location.href = '/it.html'; }}
           onSelectMessagingSpace={() => { setCurrentView('messages'); }}
-          onBack={() => setCurrentView('main-panels')}
+          onBack={async () => {
+            await handleLogout();
+          }}
         />
 
         {/* Enforce temp-password change before users enter any space */}

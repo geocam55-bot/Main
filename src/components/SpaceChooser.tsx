@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Wand2, Building2, ChevronRight, TrendingUp, BarChart3, Package, Monitor, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Wand2, Building2, ChevronRight, TrendingUp, BarChart3, Package, Monitor, MessageSquare, LogOut } from 'lucide-react';
 import { Logo } from './Logo';
 import { TrialCountdown } from './TrialCountdown';
-import { canAccessSpace, canView } from '../utils/permissions';
+import { canAccessSpace, canView, onPermissionsChanged } from '../utils/permissions';
 import type { UserRole } from '../App';
 
 /* ── Asset imports (shared with LandingPage) ── */
@@ -31,6 +31,11 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
   const [hoveredCard, setHoveredCard] = useState<'sales' | 'design' | 'marketing' | 'insights' | 'inventory' | 'it' | 'messaging' | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [mobileNotice, setMobileNotice] = useState<string | null>(null);
+  const [, setPermissionVersion] = useState(0);
+
+  useEffect(() => {
+    return onPermissionsChanged(() => setPermissionVersion(v => v + 1));
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -85,8 +90,8 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
               className="inline-flex items-center gap-2 text-sm font-medium transition-all duration-200 hover:gap-3 group"
               style={{ color: '#475569', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
             >
-              <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
-              Back to home
+              <LogOut className="h-4 w-4 transition-transform" />
+              Exit ProSpaces CRM
             </motion.button>
           </div>
 
