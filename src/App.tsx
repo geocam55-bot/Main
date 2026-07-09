@@ -820,6 +820,7 @@ export function AppContent() {
       <ErrorBoundary>
         <Toaster />
         <SpaceChooser
+          userRole={user.role}
           onSelectSalesSpace={() => setCurrentView('main-panels')}
           onSelectDesignSpace={() => { window.location.href = '/project-wizards.html'; }}
           onSelectMarketingSpace={() => { window.location.href = '/marketing.html'; }}

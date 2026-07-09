@@ -3,6 +3,8 @@ import { motion } from 'motion/react';
 import { ArrowLeft, Wand2, Building2, ChevronRight, TrendingUp, BarChart3, Package, Monitor, MessageSquare } from 'lucide-react';
 import { Logo } from './Logo';
 import { TrialCountdown } from './TrialCountdown';
+import { canAccessSpace, canView } from '../utils/permissions';
+import type { UserRole } from '../App';
 
 /* ── Asset imports (shared with LandingPage) ── */
 import grainOverlay from '../assets/landing/backgrounds/grain-overlay.svg';
@@ -14,6 +16,7 @@ try {
 } catch { /* no-op */ }
 
 interface SpaceChooserProps {
+  userRole: UserRole;
   onSelectSalesSpace: () => void;
   onSelectDesignSpace: () => void;
   onSelectMarketingSpace: () => void;
@@ -24,7 +27,7 @@ interface SpaceChooserProps {
   onBack: () => void;
 }
 
-export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelectMarketingSpace, onSelectInsightsSpace, onSelectInventorySpace, onSelectITSpace, onSelectMessagingSpace, onBack }: SpaceChooserProps) {
+export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace, onSelectMarketingSpace, onSelectInsightsSpace, onSelectInventorySpace, onSelectITSpace, onSelectMessagingSpace, onBack }: SpaceChooserProps) {
   const [hoveredCard, setHoveredCard] = useState<'sales' | 'design' | 'marketing' | 'insights' | 'inventory' | 'it' | 'messaging' | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [mobileNotice, setMobileNotice] = useState<string | null>(null);
@@ -139,6 +142,7 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
         {/* Space cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Sales Space → CRM */}
+          {canAccessSpace('sales', userRole, 'view') && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -203,8 +207,10 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
               </div>
             </div>
           </motion.button>
+          )}
 
           {/* Design Space → Project Wizards */}
+          {canAccessSpace('design', userRole, 'view') && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -269,8 +275,10 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
               </div>
             </div>
           </motion.button>
+          )}
 
           {/* Marketing Space */}
+          {canAccessSpace('marketing', userRole, 'view') && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -335,8 +343,10 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
               </div>
             </div>
           </motion.button>
+          )}
 
           {/* Insights Space → Reports */}
+          {canAccessSpace('insights', userRole, 'view') && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -401,8 +411,10 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
               </div>
             </div>
           </motion.button>
+          )}
 
           {/* Inventory Space */}
+          {canAccessSpace('inventory', userRole, 'view') && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -467,8 +479,10 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
               </div>
             </div>
           </motion.button>
+          )}
 
           {/* IT Space */}
+          {canAccessSpace('it', userRole, 'view') && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -533,8 +547,10 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
               </div>
             </div>
           </motion.button>
+          )}
 
           {/* Messaging Space */}
+          {canView('messages', userRole) && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -599,6 +615,7 @@ export function SpaceChooser({ onSelectSalesSpace, onSelectDesignSpace, onSelect
               </div>
             </div>
           </motion.button>
+          )}
         </div>
 
         {/* Footer */}

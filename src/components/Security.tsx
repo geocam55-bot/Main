@@ -539,7 +539,9 @@ export function Security({ user }: SecurityProps) {
                         </div>
 
                         <div className="space-y-4">
-                          {space.modules.map((module) => {
+                          {space.modules
+                            .filter((module) => getSharedSpacesForModule(module)[0].id === space.id)
+                            .map((module) => {
                             const sharedSpaces = getSharedSpacesForModule(module);
 
                             return (
