@@ -56,6 +56,7 @@ export const HARDCODED_DEFAULTS_BY_SKU: Record<string, string> = {
   "post anchors": "35945278",
   "stair treads": "39595063",
   "stair stringers": "39595063",
+  "stair risers": "39595063",
   "ledger flashing": "MMS449752",
 
   // Railing

@@ -224,7 +224,7 @@ const aluminumDeckCategories = {
   'Framing - Beams by Length': lumberLengthEntries('Beams'),
   'Framing - Posts by Length': lumberLengthEntries('Posts'),
   'Framing - Blocking by Length': lumberLengthEntries('Blocking'),
-  'Decking': ['Decking Boards', 'Stair Treads'],
+  'Decking': ['Decking Boards', 'Stair Treads', 'Stair Risers'],
   'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
   'Railing': ["6'", "8'", "10'", "12'"],
   'Spindles/Pickets': ["6'", "8'", "10'", "12'", "Stair"],
@@ -285,7 +285,7 @@ const PLANNER_CATEGORIES = {
       'Framing - Beams by Length': lumberLengthEntries('Beams'),
       'Framing - Posts by Length': lumberLengthEntries('Posts'),
       'Framing - Blocking by Length': lumberLengthEntries('Blocking'),
-      'Decking': ['Decking Boards', 'Stair Treads'],
+      'Decking': ['Decking Boards', 'Stair Treads', 'Stair Risers'],
       'Decking Boards by Length': lumberLengthEntries('Decking Boards'),
       'Railing': ['Railing Posts', 'Railing Top Rail', 'Railing Bottom Rail', 'Railing Balusters'],
       'Hardware': ['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Railing Brackets', 'Post Anchors', 'Concrete Mix', 'Structural Screws', 'Deck Screws'],
@@ -499,6 +499,8 @@ export const findBestMatchingItem = (
       if (text.includes('decking') || text.includes('deck board') || text.includes('5/4x6')) return i;
     } else if (normCategory === 'stair treads') {
       if (text.includes('stair') && text.includes('tread')) return i;
+    } else if (normCategory === 'stair risers') {
+      if (text.includes('riser') || text.includes('stair riser')) return i;
     } else if (normCategory === 'ledger flashing') {
       if (text.includes('flashing')) return i;
     } else if (normCategory === 'formtube') {
@@ -541,6 +543,8 @@ export const findBestMatchingItem = (
       if (text.includes('5/4x6') || text.includes('5/4 x 6') || text.includes('decking') || text.includes('deck board') || text.includes('2x6')) return i;
     } else if (normCategory === 'stair treads') {
       if (text.includes('stair') || text.includes('tread') || text.includes('2x12') || text.includes('step')) return i;
+    } else if (normCategory === 'stair risers') {
+      if (text.includes('1x8') || text.includes('1 x 8') || text.includes('1"x8"') || text.includes('1" x 8"')) return i;
     }
   }
 

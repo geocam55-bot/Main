@@ -46,7 +46,7 @@ const PLANNER_CONFIGS: Record<PlannerType, { name: string; materialTypes: string
   deck: {
     name: 'Deck Planner',
     materialTypes: ['spruce', 'treated', 'cedar', 'composite'],
-    categories: ['Joists', 'Posts', 'Beams', 'Blocking', 'Ledger Board', 'Rim Joists', 'Stair Stringers', 'Stair Treads']
+    categories: ['Joists', 'Posts', 'Beams', 'Blocking', 'Ledger Board', 'Rim Joists', 'Stair Stringers', 'Stair Treads', 'Stair Risers']
   },
   garage: {
     name: 'Garage Planner',

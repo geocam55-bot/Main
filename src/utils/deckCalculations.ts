@@ -609,6 +609,14 @@ export function calculateMaterials(config: DeckConfig): DeckMaterials {
       unit: 'pcs',
       notes: 'Two boards per tread',
     });
+    
+    decking.push({
+      category: 'Stairs',
+      description: 'Stair Risers',
+      quantity: numberOfSteps,
+      unit: 'pcs',
+      notes: '1" x 8" riser per step',
+    });
   }
   
   // HARDWARE
@@ -693,14 +701,14 @@ export function calculateMaterials(config: DeckConfig): DeckMaterials {
   const ptSizeForHardware = config.postSize || '4x4';
   const tubeSize = config.formtubeSize || '8"';
   
-  // Calculate bags based on Formtube size (3' depth, 80lb bags)
-  let concreteBagsPerFooting = 1.8; // 8" default
-  if (tubeSize === '6"') concreteBagsPerFooting = 1.0;
-  else if (tubeSize === '8"') concreteBagsPerFooting = 1.8;
-  else if (tubeSize === '10"') concreteBagsPerFooting = 3.0;
-  else if (tubeSize === '12"') concreteBagsPerFooting = 4.0;
-  else if (tubeSize === '14"') concreteBagsPerFooting = 5.4;
-  else if (tubeSize === '16"') concreteBagsPerFooting = 7.0;
+  // Calculate bags based on Formtube size (4' depth, 80lb bags)
+  let concreteBagsPerFooting = 8.0; // 8" default
+  if (tubeSize === '6"') concreteBagsPerFooting = 6.0;
+  else if (tubeSize === '8"') concreteBagsPerFooting = 8.0;
+  else if (tubeSize === '10"') concreteBagsPerFooting = 10.0;
+  else if (tubeSize === '12"') concreteBagsPerFooting = 12.0;
+  else if (tubeSize === '14"') concreteBagsPerFooting = 14.0;
+  else if (tubeSize === '16"') concreteBagsPerFooting = 16.0;
 
   hardware.push({
     category: 'Hardware',
@@ -713,10 +721,10 @@ export function calculateMaterials(config: DeckConfig): DeckMaterials {
   // Adding Formtubes as requested
   hardware.push({
     category: 'Hardware',
-    description: `${tubeSize} × 3' Formtube`,
+    description: `${tubeSize} × 4' Formtube`,
     quantity: postCount,
     unit: 'pcs',
-    notes: `Formtube cardboard casing for pouring 3' deep concrete footings`,
+    notes: `Formtube cardboard casing for pouring 4' deep concrete footings`,
   });
 
   hardware.push({
@@ -724,7 +732,7 @@ export function calculateMaterials(config: DeckConfig): DeckMaterials {
     description: 'Concrete Mix (80lb)',
     quantity: Math.ceil(postCount * concreteBagsPerFooting),
     unit: 'bags',
-    notes: `For pouring concrete footings (3' deep, using ${tubeSize} Formtubes with ~${concreteBagsPerFooting} bags per footing)`,
+    notes: `For pouring concrete footings (4' deep, using ${tubeSize} Formtubes with ~${concreteBagsPerFooting} bags per footing)`,
   });
   
   if (config.railingStyle === 'Aluminum') {

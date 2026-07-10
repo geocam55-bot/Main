@@ -63,6 +63,7 @@ function getDescriptionSearchTerms(description: string): string[] {
   if (d.includes('decking') || d.includes('deck board')) return ['deck', 'board'];
   if (d.includes('stair stringer') || d.includes('stringer')) return ['stringer'];
   if (d.includes('stair tread') || (d.includes('stair') && d.includes('tread'))) return ['stair', 'tread'];
+  if (d.includes('stair riser') || d.includes('riser')) return ['riser'];
   if (d.includes('railing post')) return ['railing', 'post'];
   if (d.includes('top rail')) return ['top', 'rail'];
   if (d.includes('bottom rail')) return ['bottom', 'rail'];
@@ -172,7 +173,7 @@ const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: strin
   }
 
   // 3. Is it a Decking item?
-  if (cat === 'decking' || desc.includes('deck board') || desc.includes('decking') || desc.includes('tread')) {
+  if (cat === 'decking' || desc.includes('deck board') || desc.includes('decking') || desc.includes('tread') || desc.includes('riser')) {
     if (desc.includes('composite')) return 'composite';
     if (desc.includes('cedar')) return 'cedar';
     if (desc.includes('spruce')) return 'spruce';
@@ -517,6 +518,8 @@ export async function enrichMaterialsWithT1Pricing(
             inventoryItemId = tryLengthFirst('blocking');
           } else if (description.includes('stair') && description.includes('tread')) {
             inventoryItemId = tryMatch('stair treads');
+          } else if (description.toLowerCase().includes('riser')) {
+            inventoryItemId = tryMatch('stair risers');
           } else if (description.includes('deck screw')) {
             inventoryItemId = tryMatch('deck screws');
           } else if (description.includes('structural screw')) {

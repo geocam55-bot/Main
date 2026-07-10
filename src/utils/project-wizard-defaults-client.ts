@@ -161,6 +161,7 @@ export async function mergeWithHardcodedFallbacks(
       else if (categoryKey === 'railing balusters') materialCategory = 'Railing Balusters';
       else if (categoryKey === 'stair treads') materialCategory = 'Stair Treads';
       else if (categoryKey === 'stair stringers') materialCategory = 'Stair Stringers';
+      else if (categoryKey === 'stair risers') materialCategory = 'Stair Risers';
       else if (categoryKey === 'concrete mix') materialCategory = 'Concrete Mix';
       else if (categoryKey === 'deck screws') materialCategory = 'Deck Screws';
       else if (categoryKey === 'lag screws') materialCategory = 'Lag Screws';
