@@ -1,0 +1,30 @@
+[
+  {
+    "id": "task-demo-1",
+    "name": "Unattended Nightly Contacts Backup",
+    "description": "Automatically exports all active contacts from the CRM system into a CSV spreadsheet saved on the Local Drive.",
+    "status": "active",
+    "recurrence": "daily",
+    "triggerDetail": {
+      "time": "02:00",
+      "intervalDays": 1
+    },
+    "action": {
+      "type": "export",
+      "module": "contacts",
+      "fileStorage": "local",
+      "fileName": "nightly_contacts_backup.csv",
+      "format": "csv"
+    },
+    "settings": {
+      "stopIfRunningHours": 1,
+      "retryCount": 3,
+      "retryIntervalMinutes": 5
+    },
+    "lastRunTime": null,
+    "lastRunResult": null,
+    "nextRunTime": "2026-07-11T02:00:00.000Z",
+    "createdAt": "2026-07-10T10:23:01.578Z",
+    "creator": "System Administrator"
+  }
+]

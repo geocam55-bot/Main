@@ -583,6 +583,37 @@ export function AppContent() {
           manager_id: null,
           needs_password_change: false,
         };
+
+        // Proactively insert fallback profile into database profiles table to restore RLS functionality
+        try {
+          let dbOrgId: string | null = null;
+          if (profile.organization_id) {
+            const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (uuidPattern.test(profile.organization_id)) {
+              dbOrgId = profile.organization_id;
+            } else {
+              const { data: defaultOrg } = await supabase
+                .from('organizations')
+                .select('id')
+                .eq('name', 'ProSpaces CRM')
+                .maybeSingle();
+              if (defaultOrg) {
+                dbOrgId = defaultOrg.id;
+                profile.organization_id = dbOrgId;
+              }
+            }
+          }
+          await supabase.from('profiles').insert({
+            id: profile.id,
+            email: profile.email,
+            name: profile.name,
+            role: profile.role,
+            organization_id: dbOrgId,
+            status: 'active'
+          });
+        } catch (dbErr) {
+          console.error('Proactive profile insert failed:', dbErr);
+        }
       }
 
       if (profile) {
