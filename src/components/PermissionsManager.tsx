@@ -107,6 +107,7 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
   const loadPermissions = async (role: UserRole) => {
     setIsLoading(true);
     setTableNotFound(false);
+    console.log('[PermissionsManager] loadPermissions called for role:', role);
 
     const buildPermissionsByRole = (records: any[] | null | undefined, targetRole: UserRole) => {
       const normalized = normalizePermissionRecords((records || []) as any[]);
@@ -147,14 +148,17 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
       // First try KV (same source used at runtime by initializePermissions)
       const orgId = localStorage.getItem('currentOrgId');
       const headers = await getServerHeaders();
+      console.log('[PermissionsManager] Attempting KV load. orgId:', orgId, 'hasToken:', !!headers['X-User-Token']);
       if (orgId && headers['X-User-Token']) {
         const response = await fetch(`${SERVER_BASE}/permissions?organization_id=${encodeURIComponent(orgId)}`, {
           headers,
         });
 
+        console.log('[PermissionsManager] KV load response status:', response.status);
         if (response.ok) {
           const json = await response.json();
-          if (Array.isArray(json.permissions) && json.permissions.length > 0) {
+          if (json && Array.isArray(json.permissions) && json.permissions.length > 0) {
+            console.log('[PermissionsManager] KV load successful. Loaded', json.permissions.length, 'records.');
             setAllCachedPermissions(json.permissions);
             const nextPermissions = buildPermissionsByRole(json.permissions, role);
             setPermissions(nextPermissions);
@@ -162,16 +166,20 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
             setTableNotFound(false);
             setIsLoading(false);
             return;
+          } else {
+            console.log('[PermissionsManager] KV load returned empty or invalid permissions array.');
           }
         }
       }
 
       // Fall back to table data if KV has not been initialized yet.
+      console.log('[PermissionsManager] Falling back to DB permissions table...');
       const { data, error } = await supabase
         .from('permissions')
         .select('*');
 
       if (error) {
+        console.error('[PermissionsManager] DB permissions query failed:', error);
         if (error.code === 'PGRST205' || error.code === '42P01') {
           setTableNotFound(true);
           setIsLoading(false);
@@ -180,13 +188,15 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
         throw error;
       }
 
+      console.log('[PermissionsManager] DB query returned:', data?.length, 'records.');
       setAllCachedPermissions(data || []);
       const nextPermissions = buildPermissionsByRole(data, role);
 
       setPermissions(nextPermissions);
       setOriginalPermissions(JSON.parse(JSON.stringify(nextPermissions)));
       setTableNotFound(false);
-    } catch {
+    } catch (err) {
+      console.error('[PermissionsManager] Unexpected error loading permissions:', err);
       toast.error('Failed to load hierarchical access settings');
     } finally {
       setIsLoading(false);
@@ -247,6 +257,7 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
 
   const savePermissions = async () => {
     setIsSaving(true);
+    console.log('[PermissionsManager] Starting savePermissions for role:', selectedRole);
 
     try {
       const trackedModules = Array.from(new Set([
@@ -255,6 +266,7 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
       ]));
 
       const orgId = localStorage.getItem('currentOrgId') || 'org_001';
+      console.log('[PermissionsManager] orgId:', orgId, 'trackedModules count:', trackedModules.length);
 
       const insertData = Object.values(permissions)
         .filter((permission) => trackedModules.includes(permission.module))
@@ -267,45 +279,67 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
           delete: permission.delete,
         }));
 
+      console.log('[PermissionsManager] Constructed insertData payload:', JSON.stringify(insertData, null, 2));
+
+      console.log('[PermissionsManager] Executing DB DELETE for role:', selectedRole);
       const { error: deleteError } = await supabase
         .from('permissions')
         .delete()
         .eq('role', selectedRole)
         .in('module', trackedModules);
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error('[PermissionsManager] DB DELETE failed:', deleteError);
+        throw deleteError;
+      }
+      console.log('[PermissionsManager] DB DELETE succeeded.');
 
+      console.log('[PermissionsManager] Executing DB INSERT with payload:', insertData);
       const { error: insertError } = await supabase
         .from('permissions')
         .insert(insertData);
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error('[PermissionsManager] DB INSERT failed:', insertError);
+        throw insertError;
+      }
+      console.log('[PermissionsManager] DB INSERT succeeded.');
 
       // Sync all roles' permissions to the KV store so initializePermissions picks them up.
       // If this fails, users may still see stale access checks, so surface it clearly.
       let kvSynced = false;
       try {
         const mergedPerms = allCachedPermissions.filter((p) => p.role !== selectedRole).concat(insertData);
+        console.log('[PermissionsManager] Syncing to KV. Total merged permissions count:', mergedPerms.length);
         if (mergedPerms.length > 0) {
           const orgId = localStorage.getItem('currentOrgId') || 'org_001';
           const headers = await getServerHeaders();
           if (headers['X-User-Token']) {
+            console.log('[PermissionsManager] PUT to KV endpoint:', `${SERVER_BASE}/permissions`);
             const response = await fetch(`${SERVER_BASE}/permissions`, {
               method: 'PUT',
               headers: { ...headers, 'Content-Type': 'application/json' },
               body: JSON.stringify({ permissions: mergedPerms, organization_id: orgId }),
             });
             kvSynced = response.ok;
+            console.log('[PermissionsManager] PUT to KV status:', response.status, 'ok:', response.ok);
 
             if (response.ok) {
               const normalizedForOrg = normalizePermissionRecords(mergedPerms as any[]);
+              console.log('[PermissionsManager] Updating localStorage permissions_' + orgId + ' with:', normalizedForOrg.length, 'records.');
               localStorage.setItem(`permissions_${orgId}`, JSON.stringify(normalizedForOrg));
               refreshPermissionsFromStorage();
               setAllCachedPermissions(mergedPerms);
+            } else {
+              const errBody = await response.text();
+              console.error('[PermissionsManager] PUT to KV failed with body:', errBody);
             }
+          } else {
+            console.warn('[PermissionsManager] Skipping KV sync: X-User-Token is missing from headers');
           }
         }
-      } catch {
+      } catch (kvErr) {
+        console.error('[PermissionsManager] Unexpected error during KV sync:', kvErr);
         kvSynced = false;
       }
 
@@ -316,7 +350,8 @@ export function PermissionsManager({ userRole }: PermissionsManagerProps) {
       } else {
         toast.error('Permissions were saved in the table, but server sync failed. Users may still see outdated access until sync succeeds.');
       }
-    } catch {
+    } catch (err) {
+      console.error('[PermissionsManager] Fatal error in savePermissions:', err);
       toast.error('Failed to save hierarchical access');
     } finally {
       setIsSaving(false);

@@ -217,7 +217,7 @@ CREATE POLICY "authenticated_users_read_permissions" ON public.permissions
   TO authenticated
   USING (true);
 
--- Allow super_admins to manage permissions
+-- Allow super_admins and admins to manage permissions
 CREATE POLICY "superadmins_manage_permissions" ON public.permissions
   FOR ALL
   TO authenticated
@@ -225,14 +225,14 @@ CREATE POLICY "superadmins_manage_permissions" ON public.permissions
     EXISTS (
       SELECT 1 FROM public.profiles
       WHERE id = auth.uid()
-      AND role = 'super_admin'
+      AND role IN ('super_admin', 'admin')
     )
   )
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM public.profiles
       WHERE id = auth.uid()
-      AND role = 'super_admin'
+      AND role IN ('super_admin', 'admin')
     )
   );
 

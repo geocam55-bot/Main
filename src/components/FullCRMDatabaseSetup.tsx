@@ -147,8 +147,8 @@ CREATE POLICY "authenticated_users_read_permissions" ON public.permissions
 
 CREATE POLICY "superadmins_manage_permissions" ON public.permissions
   FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'super_admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'super_admin'));
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin')))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin')));
 
 -- ============================================================================
 -- PART 5: CREATE CONTACTS TABLE

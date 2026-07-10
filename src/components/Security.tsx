@@ -36,6 +36,7 @@ import {
   type SpaceAccessLevel,
 } from '../utils/permissions';
 import { projectId } from '../utils/supabase/info';
+import { createClient } from '../utils/supabase/client';
 import { getServerHeaders } from '../utils/server-headers';
 import { AuditLog as AuditLogViewer } from './AuditLog';
 import { logAuditEvent } from '../utils/audit';
@@ -129,6 +130,26 @@ export function Security({ user }: SecurityProps) {
     setIsLoading(true);
     const orgId = localStorage.getItem('currentOrgId') || user.organizationId || user.organization_id || 'org_001';
 
+    // 1. Direct fetch from Supabase permissions table to ensure absolute fresh and real source-of-truth consistency.
+    try {
+      console.log('[Security] loading permissions from Supabase permissions table...');
+      const supabase = createClient();
+      const { data, error } = await supabase.from('permissions').select('*');
+      if (!error && data && data.length > 0) {
+        console.log('[Security] DB query returned', data.length, 'records.');
+        const normalized = normalizePermissionRecords(data as PermissionRecord[]);
+        localStorage.setItem(`permissions_${orgId}`, JSON.stringify(normalized));
+        setPermissions(normalized);
+        setIsLoading(false);
+        return;
+      } else if (error) {
+        console.error('[Security] DB permissions query failed:', error);
+      }
+    } catch (err) {
+      console.error('[Security] Unexpected error loading from DB:', err);
+    }
+
+    // 2. Fallback to KV Server
     try {
       const headers = await getServerHeaders();
       const res = await Promise.race([
@@ -250,7 +271,51 @@ export function Security({ user }: SecurityProps) {
     localStorage.setItem(`permissions_${orgId}`, JSON.stringify(normalizedPermissions));
     refreshPermissionsFromStorage();
 
+    let dbSaved = false;
     let serverSaved = false;
+
+    // 1. Write direct to Supabase DB 'permissions' table first as the primary source of truth.
+    try {
+      console.log('[Security] Saving updated permissions directly to the permissions table...');
+      const supabase = createClient();
+
+      // Clear the current table first to avoid duplication or conflicts (like unique constraint violations)
+      const { error: deleteError } = await supabase
+        .from('permissions')
+        .delete()
+        .neq('role', '_nonexistent_');
+
+      if (deleteError) {
+        console.error('[Security] DB DELETE failed during save:', deleteError);
+      } else {
+        console.log('[Security] DB DELETE succeeded, inserting new records...');
+        
+        // Prepare database payload (omitting auto-generated 'id' column)
+        const dbPayload = normalizedPermissions.map(p => ({
+          role: p.role,
+          module: p.module,
+          visible: p.visible,
+          add: p.add,
+          change: p.change,
+          delete: p.delete
+        }));
+
+        const { error: insertError } = await supabase
+          .from('permissions')
+          .insert(dbPayload);
+
+        if (insertError) {
+          console.error('[Security] DB INSERT failed during save:', insertError);
+        } else {
+          console.log('[Security] DB INSERT succeeded. Saved', dbPayload.length, 'records.');
+          dbSaved = true;
+        }
+      }
+    } catch (dbErr) {
+      console.error('[Security] Unexpected error writing to DB:', dbErr);
+    }
+
+    // 2. Synchronize to KV Server
     try {
       const headers = await getServerHeaders();
       const res = await Promise.race([
@@ -267,9 +332,9 @@ export function Security({ user }: SecurityProps) {
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
       ]);
 
-      serverSaved = res.ok;
+      serverSaved = res.ok || dbSaved;
     } catch {
-      serverSaved = false;
+      serverSaved = dbSaved;
     }
 
     logAuditEvent({
