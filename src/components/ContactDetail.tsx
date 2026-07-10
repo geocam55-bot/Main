@@ -228,6 +228,7 @@ export function ContactDetail({
   const [isAddBidDialogOpen, setIsAddBidDialogOpen] = useState(false);
   const [isEditBidDialogOpen, setIsEditBidDialogOpen] = useState(false);
   const [editingBid, setEditingBid] = useState<Bid | null>(null);
+  const [highlightOverview, setHighlightOverview] = useState(false);
 
   // Organization settings (loaded from server, like Bids.tsx)
   const [orgSettings, setOrgSettings] = useState<{
@@ -1275,6 +1276,12 @@ export function ContactDetail({
 
   const scrollToSection = (sectionId: string) => {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (sectionId === 'contact-overview') {
+      setHighlightOverview(true);
+      setTimeout(() => {
+        setHighlightOverview(false);
+      }, 3000);
+    }
   };
 
   const loadEmailAccounts = async () => {
@@ -1451,14 +1458,68 @@ export function ContactDetail({
 
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-[15px] text-slate-600 sm:px-6 lg:px-8">
             <span className="mr-1 font-semibold text-slate-900">Quick Jumps:</span>
-            <a href="#contact-activity" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800">Activity</a>
-            <a href="#contact-overview" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800">Contact Info</a>
+            <a
+              href="#contact-activity"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('contact-activity');
+              }}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+            >
+              Activity
+            </a>
+            <a
+              href="#contact-overview"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('contact-overview');
+              }}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+            >
+              Contact Info
+            </a>
             {hasFinancialData && (
-              <a href="#contact-financials" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800">Financials</a>
+              <a
+                href="#contact-financials"
+                onClick={(e) => {
+                  e.preventDefault();
+                  scrollToSection('contact-financials');
+                }}
+                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+              >
+                Financials
+              </a>
             )}
-            <a href="#contact-project-managers" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800">Project Managers</a>
-            <a href="#contact-deals" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800">Deals</a>
-            <a href="#contact-documents" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800">Documents</a>
+            <a
+              href="#contact-project-managers"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('contact-project-managers');
+              }}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+            >
+              Project Managers
+            </a>
+            <a
+              href="#contact-deals"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('contact-deals');
+              }}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+            >
+              Deals
+            </a>
+            <a
+              href="#contact-documents"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('contact-documents');
+              }}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+            >
+              Documents
+            </a>
           </div>
         </div>
 
@@ -1554,81 +1615,126 @@ export function ContactDetail({
           </div>
         </div>
 
-        <div id="contact-overview" className="scroll-mt-24 rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 shadow-sm sm:p-5 xl:sticky xl:top-4 xl:self-start">
+        <div id="contact-overview" className={`scroll-mt-24 rounded-[24px] border p-4 shadow-sm sm:p-5 xl:sticky xl:top-4 xl:self-start transition-all duration-500 ${
+          highlightOverview
+            ? 'border-cyan-500 bg-cyan-50/50 ring-4 ring-cyan-100 shadow-lg scale-[1.01]'
+            : 'border-slate-200 bg-slate-50/70'
+        }`}>
+          <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              <span className="text-xl">👤</span> Contact Info
+            </h3>
+            <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full uppercase tracking-wider">Profile</span>
+          </div>
+
           <div className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
             <div>
               <p className="mb-2 text-[14px] font-semibold text-slate-700">Name</p>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-slate-800">{displayName}</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-slate-800 font-medium">{displayName}</div>
+            </div>
+            <div>
+              <p className="mb-2 text-[14px] font-semibold text-slate-700">Company</p>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-slate-800">{contact.company || '—'}</div>
             </div>
             <div>
               <p className="mb-2 text-[14px] font-semibold text-slate-700">Email</p>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-blue-600">{displayEmail}</div>
-            </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Activity Timeline</p>
-              <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                {Array.from({ length: 18 }).map((_, index) => {
-                  const activity = activityFeed[index];
-                  const color = !activity
-                    ? 'bg-slate-200'
-                    : activity.kind === 'appointment'
-                      ? 'bg-sky-400'
-                      : activity.kind === 'note'
-                        ? 'bg-pink-500'
-                        : activity.kind === 'deal'
-                          ? 'bg-emerald-400'
-                          : 'bg-cyan-400';
-
-                  return <span key={index} className={`h-8 w-2.5 rounded-full ${color} opacity-90`} />;
-                })}
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Accounts</p>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-slate-800">{displayCompany}</div>
-            </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Deals</p>
-              <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                {bids.length > 0 ? (
-                  bids.slice(0, 2).map((bid) => (
-                    <Badge key={bid.id} className="bg-cyan-100 text-slate-700 hover:bg-cyan-100">
-                      {bid.title}
-                    </Badge>
-                  ))
-                ) : (
-                  <span className="text-[15px] text-slate-500">No deals yet</span>
-                )}
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Deals value</p>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-[17px] font-medium text-slate-800">{formatMoney(totalDealValue)}</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-blue-600 break-all select-all">{displayEmail}</div>
             </div>
             <div>
               <p className="mb-2 text-[14px] font-semibold text-slate-700">Phone</p>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-blue-600">{contact.phone || '—'}</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-blue-600 select-all">{contact.phone || '—'}</div>
             </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Title</p>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-[15px] text-slate-800">{displayTitle}</div>
-            </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Price Level</p>
-              <div className="rounded-xl bg-violet-100 px-4 py-3 text-center text-[15px] font-medium text-violet-700">
-                {displayPriceLevel}
+
+            <div className="border-t border-slate-100 my-4 pt-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Address & Location</h4>
+              
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1.5 text-[13px] font-medium text-slate-600">Street Address</p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[15px] text-slate-800">{contact.address || '—'}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="mb-1.5 text-[13px] font-medium text-slate-600">City</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[15px] text-slate-800">{contact.city || '—'}</div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-[13px] font-medium text-slate-600">State / Province</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[15px] text-slate-800">{contact.province || '—'}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[13px] font-medium text-slate-600">Postal Code</p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[15px] text-slate-800">{contact.postalCode || '—'}</div>
+                </div>
               </div>
             </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Status</p>
-              <div className={`rounded-xl px-4 py-3 text-center text-[15px] font-medium ${contact.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : contact.status === 'Inactive' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-700'}`}>
-                {normalizeDisplayText(contact.status || 'Prospect')}
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-[14px] font-semibold text-slate-700">Comments</p>
-              <div className="min-h-[96px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-slate-700">
-                {contact.notes || 'No comments added yet.'}
+
+            <div className="border-t border-slate-100 my-4 pt-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">CRM Metadata</h4>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-2 text-[14px] font-semibold text-slate-700">Activity Timeline</p>
+                  <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                    {Array.from({ length: 18 }).map((_, index) => {
+                      const activity = activityFeed[index];
+                      const color = !activity
+                        ? 'bg-slate-200'
+                        : activity.kind === 'appointment'
+                          ? 'bg-sky-400'
+                          : activity.kind === 'note'
+                            ? 'bg-pink-500'
+                            : activity.kind === 'deal'
+                              ? 'bg-emerald-400'
+                              : 'bg-cyan-400';
+
+                      return <span key={index} className={`h-8 w-2.5 rounded-full ${color} opacity-90`} />;
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-[14px] font-semibold text-slate-700">Deals</p>
+                  <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    {bids.length > 0 ? (
+                      bids.slice(0, 2).map((bid) => (
+                        <Badge key={bid.id} className="bg-cyan-100 text-slate-700 hover:bg-cyan-100">
+                          {bid.title}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-[15px] text-slate-500">No deals yet</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-[14px] font-semibold text-slate-700">Deals Value</p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-[17px] font-medium text-slate-800">{formatMoney(totalDealValue)}</div>
+                </div>
+                <div>
+                  <p className="mb-2 text-[14px] font-semibold text-slate-700">Title / Role</p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-[15px] text-slate-800">{displayTitle}</div>
+                </div>
+                <div>
+                  <p className="mb-2 text-[14px] font-semibold text-slate-700">Price Level</p>
+                  <div className="rounded-xl bg-violet-100 px-4 py-3 text-center text-[15px] font-medium text-violet-700">
+                    {displayPriceLevel}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-[14px] font-semibold text-slate-700">Status</p>
+                  <div className={`rounded-xl px-4 py-3 text-center text-[15px] font-medium ${contact.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : contact.status === 'Inactive' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {normalizeDisplayText(contact.status || 'Prospect')}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-[14px] font-semibold text-slate-700">Comments</p>
+                  <div className="min-h-[96px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-slate-700">
+                    {contact.notes || 'No comments added yet.'}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
