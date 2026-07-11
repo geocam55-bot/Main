@@ -23,6 +23,15 @@ function TemplateMiniMap({ config }: { config: DeckConfig }) {
   } else if (config.shape === 'u-shape') {
     boundW = w;
     boundL = l + (config.uShapeDepth || 0) * scale;
+  } else if (config.shape === 'custom' && config.customPoints && config.customPoints.length > 0) {
+    let maxX = 0;
+    let maxY = 0;
+    config.customPoints.forEach(p => {
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    });
+    boundW = maxX * scale;
+    boundL = maxY * scale;
   }
   
   const padding = 20;
@@ -30,12 +39,19 @@ function TemplateMiniMap({ config }: { config: DeckConfig }) {
   const detachedOffset = config.isDetached ? 15 : 0;
   
   const renderDeckPaths = () => {
+    if (config.shape === 'custom' && config.customPoints && config.customPoints.length > 0) {
+      const pointsStr = config.customPoints
+        .map(p => `${p.x * scale},${p.y * scale}`)
+        .join(' L ');
+      return (
+        <path d={`M ${pointsStr} Z`} fill="#f6e8d5" stroke="#854d0e" strokeWidth="2" />
+      );
+    }
     if (config.shape === 'l-shape') {
       const lw = (config.lShapeWidth || 0) * scale;
       const ll = (config.lShapeLength || 0) * scale;
-      // Assume bottom-right position as standard
       return (
-        <path d={`M 0 0 L ${w} 0 L ${w} ${Math.max(0, l - ll)} L ${w + lw} ${Math.max(0, l - ll)} L ${w + lw} ${l} L 0 ${l} Z`} fill="#e2e8f0" stroke="#64748b" strokeWidth="2" />
+        <path d={`M 0 0 L ${w} 0 L ${w} ${Math.max(0, l - ll)} L ${w + lw} ${Math.max(0, l - ll)} L ${w + lw} ${l} L 0 ${l} Z`} fill="#f6e8d5" stroke="#854d0e" strokeWidth="2" />
       );
     }
     if (config.shape === 'u-shape') {
@@ -43,30 +59,45 @@ function TemplateMiniMap({ config }: { config: DeckConfig }) {
       const rw = (config.uShapeRightWidth || 0) * scale;
       const d = (config.uShapeDepth || 0) * scale;
       return (
-        <path d={`M 0 0 L ${w} 0 L ${w} ${l+d} L ${w - rw} ${l+d} L ${w - rw} ${l} L ${lw} ${l} L ${lw} ${l+d} L 0 ${l+d} Z`} fill="#e2e8f0" stroke="#64748b" strokeWidth="2" />
+        <path d={`M 0 0 L ${w} 0 L ${w} ${l+d} L ${w - rw} ${l+d} L ${w - rw} ${l} L ${lw} ${l} L ${lw} ${l+d} L 0 ${l+d} Z`} fill="#f6e8d5" stroke="#854d0e" strokeWidth="2" />
       );
     }
     // Rectangle
-    return <rect x={0} y={0} width={w} height={l} fill="#e2e8f0" stroke="#64748b" strokeWidth="2" />;
+    return <rect x={0} y={0} width={w} height={l} fill="#f6e8d5" stroke="#854d0e" strokeWidth="2" />;
   };
 
   return (
-    <div className="h-40 w-full bg-muted flex items-center justify-center p-4 border-b border-border">
+    <div className="h-44 w-full bg-stone-100 flex items-center justify-center p-4 border-b border-stone-200">
       <svg 
-        viewBox={`-${padding} -${padding} ${boundW + padding * 2} ${boundL + stairExtension + detachedOffset + padding * 2}`} 
-        className="w-full h-full max-w-full max-h-full drop-shadow-sm" 
+         viewBox={`-${padding} -${padding} ${boundW + padding * 2} ${boundL + stairExtension + detachedOffset + padding * 2}`} 
+        className="w-full h-full max-w-full max-h-full drop-shadow-md" 
         style={{ overflow: 'visible' }}
       >
         {/* House Wall Representation (skip if detached) */}
         {!config.isDetached && (
           <g>
             <rect x={-padding} y={-8} width={boundW + padding*2} height={8} fill="#94a3b8" />
-            <line x1={-padding} y1={0} x2={boundW + padding*2} y2={0} stroke="#475569" strokeWidth="1" />
+            <line x1={-padding} y1={0} x2={boundW + padding*2} y2={0} stroke="#475569" strokeWidth="1.5" />
           </g>
         )}
         
         <g transform={`translate(0, ${detachedOffset})`}>
           {renderDeckPaths()}
+          
+          {/* Deck Board lines in mini-map */}
+          <g opacity="0.15">
+            {Array.from({ length: 30 }).map((_, i) => (
+              <line 
+                key={i} 
+                x1={0} 
+                y1={i * 4} 
+                x2={boundW} 
+                y2={i * 4} 
+                stroke="#451a03" 
+                strokeWidth="1" 
+              />
+            ))}
+          </g>
           
           {/* Stairs */}
           {config.hasStairs && config.stairSide === 'front' && (
@@ -76,23 +107,43 @@ function TemplateMiniMap({ config }: { config: DeckConfig }) {
               <line x1={0} y1={6} x2={(config.stairWidth || 4) * scale} y2={6} stroke="#64748b" strokeWidth="0.5" opacity="0.6" />
             </g>
           )}
+          {config.hasStairs && config.stairSide === 'right' && (
+            <g transform={`translate(${boundW}, ${boundL / 2 - (config.stairWidth || 4) * (scale / 2)})`}>
+              <rect x={0} y={0} width={10} height={(config.stairWidth || 4) * scale} fill="#f1f5f9" stroke="#64748b" strokeWidth="1" />
+              <line x1={3} y1={0} x2={3} y2={(config.stairWidth || 4) * scale} stroke="#64748b" strokeWidth="0.5" opacity="0.6" />
+              <line x1={6} y1={0} x2={6} y2={(config.stairWidth || 4) * scale} stroke="#64748b" strokeWidth="0.5" opacity="0.6" />
+            </g>
+          )}
+          {config.hasStairs && config.stairSide === 'left' && (
+            <g transform={`translate(-10, ${boundL / 2 - (config.stairWidth || 4) * (scale / 2)})`}>
+              <rect x={0} y={0} width={10} height={(config.stairWidth || 4) * scale} fill="#f1f5f9" stroke="#64748b" strokeWidth="1" />
+              <line x1={3} y1={0} x2={3} y2={(config.stairWidth || 4) * scale} stroke="#64748b" strokeWidth="0.5" opacity="0.6" />
+              <line x1={6} y1={0} x2={6} y2={(config.stairWidth || 4) * scale} stroke="#64748b" strokeWidth="0.5" opacity="0.6" />
+            </g>
+          )}
         </g>
       </svg>
     </div>
   );
 }
 
-const templates: Array<{ name: string; description: string; config: DeckConfig }> = [
+const templates: Array<{ id: string; name: string; description: string; config: DeckConfig }> = [
   {
-    name: 'Rectangular',
-    description: '12\' × 16\' standard attached deck',
+    id: '01',
+    name: 'L-Shape Double Tier & Stairs',
+    description: '16\' × 12\' multi-level premium composite deck with integrated corner stairs.',
     config: {
       width: 16,
       length: 12,
-      shape: 'rectangle',
-      height: 2,
-      hasStairs: false,
-      railingSides: ['front', 'left', 'right'],
+      shape: 'l-shape',
+      height: 2.5,
+      lShapeWidth: 8,
+      lShapeLength: 10,
+      lShapePosition: 'bottom-right',
+      hasStairs: true,
+      stairSide: 'front',
+      stairWidth: 4,
+      railingSides: ['front', 'left', 'right', 'back'],
       deckingPattern: 'perpendicular',
       joistSpacing: 16,
       unit: 'feet',
@@ -100,71 +151,202 @@ const templates: Array<{ name: string; description: string; config: DeckConfig }
     },
   },
   {
-    name: 'L-Shaped',
-    description: 'Wraparound or extended section',
+    id: '02',
+    name: 'Classic Attached Side Steps',
+    description: '16\' × 12\' standard pressure-treated pine deck with beautiful side landing steps.',
     config: {
-      width: 12,
-      length: 16,
-      shape: 'l-shape',
+      width: 16,
+      length: 12,
+      shape: 'rectangle',
       height: 2,
-      lShapeWidth: 8,
-      lShapeLength: 10,
-      lShapePosition: 'bottom-right',
-      hasStairs: false,
-      railingSides: ['front', 'left', 'right', 'back'],
-      deckingPattern: 'parallel',
+      hasStairs: true,
+      stairSide: 'right',
+      stairWidth: 4,
+      railingSides: ['front', 'left', 'right'],
+      deckingPattern: 'perpendicular',
       joistSpacing: 16,
       unit: 'feet',
       deckingType: 'Treated',
     },
   },
   {
-    name: 'U-Shaped',
-    description: 'Surrounds a feature or bump-out',
+    id: '03',
+    name: 'Hex-cut Angled Corner Deck',
+    description: '16\' × 16\' modern cedar deck featuring clean 45-degree corner cutouts.',
     config: {
-      width: 20,
-      length: 12,
-      shape: 'u-shape',
+      width: 16,
+      length: 16,
+      shape: 'custom',
       height: 2,
-      uShapeLeftWidth: 6,
-      uShapeRightWidth: 6,
-      uShapeDepth: 8,
-      hasStairs: false,
+      customPoints: [
+        { x: 0, y: 0 },
+        { x: 16, y: 0 },
+        { x: 16, y: 10 },
+        { x: 10, y: 16 },
+        { x: 0, y: 16 }
+      ],
+      hasStairs: true,
+      stairSide: 'front',
+      stairWidth: 4,
       railingSides: ['front', 'left', 'right'],
-      deckingPattern: 'perpendicular',
+      deckingPattern: 'diagonal',
       joistSpacing: 16,
       unit: 'feet',
       deckingType: 'Cedar',
     },
   },
   {
-    name: 'Detached',
-    description: 'Freestanding island deck',
+    id: '04',
+    name: 'Wide Front Wrap Steps Deck',
+    description: '18\' × 12\' low-profile entertaining deck featuring extra-wide cascading stairs.',
     config: {
-      width: 14,
-      length: 14,
+      width: 18,
+      length: 12,
       shape: 'rectangle',
       height: 1.5,
-      isDetached: true,
-      hasStairs: false,
+      hasStairs: true,
+      stairSide: 'front',
+      stairWidth: 12,
+      railingSides: ['left', 'right'],
+      deckingPattern: 'parallel',
+      joistSpacing: 16,
+      unit: 'feet',
+      deckingType: 'Composite',
+    },
+  },
+  {
+    id: '05',
+    name: 'Large L-Shape Premium Wrap',
+    description: '20\' × 12\' wrap deck with dynamic lounging space and left-exit stairs.',
+    config: {
+      width: 20,
+      length: 12,
+      shape: 'l-shape',
+      height: 3,
+      lShapeWidth: 10,
+      lShapeLength: 14,
+      lShapePosition: 'bottom-left',
+      hasStairs: true,
+      stairSide: 'left',
+      stairWidth: 4,
       railingSides: ['front', 'left', 'right', 'back'],
       deckingPattern: 'diagonal',
+      joistSpacing: 16,
+      unit: 'feet',
+      deckingType: 'Treated',
+    },
+  },
+  {
+    id: '06',
+    name: 'High Elevation Straight Stairs',
+    description: '14\' × 10\' second-tier balcony deck with long-run structural staircase.',
+    config: {
+      width: 14,
+      length: 10,
+      shape: 'rectangle',
+      height: 8,
+      hasStairs: true,
+      stairSide: 'front',
+      stairWidth: 4,
+      railingSides: ['front', 'left', 'right'],
+      deckingPattern: 'perpendicular',
       joistSpacing: 16,
       unit: 'feet',
       deckingType: 'Spruce',
     },
   },
   {
-    name: 'Ground Level',
-    description: '14\' × 14\' low profile without rails',
+    id: '07',
+    name: 'Compact Side-Projection Steps',
+    description: '12\' × 12\' compact cozy deck with high structural safety rails.',
     config: {
-      width: 14,
-      length: 14,
+      width: 12,
+      length: 12,
       shape: 'rectangle',
-      height: 0.5,
-      isDetached: false,
-      hasStairs: false,
-      railingSides: [],
+      height: 2,
+      hasStairs: true,
+      stairSide: 'left',
+      stairWidth: 4,
+      railingSides: ['front', 'right'],
+      deckingPattern: 'perpendicular',
+      joistSpacing: 16,
+      unit: 'feet',
+      deckingType: 'Treated',
+    },
+  },
+  {
+    id: '08',
+    name: 'Split-Level Multi-Zone Deck',
+    description: '20\' × 16\' split-level layout with dual entertainment zones.',
+    config: {
+      width: 20,
+      length: 16,
+      shape: 'custom',
+      height: 3,
+      customPoints: [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 8 },
+        { x: 14, y: 8 },
+        { x: 14, y: 16 },
+        { x: 0, y: 16 }
+      ],
+      hasStairs: true,
+      stairSide: 'front',
+      stairWidth: 4,
+      railingSides: ['front', 'left', 'right'],
+      deckingPattern: 'diagonal',
+      joistSpacing: 16,
+      unit: 'feet',
+      deckingType: 'Composite',
+    },
+  },
+  {
+    id: '09',
+    name: 'Angled Front Edge Deck',
+    description: '16\' × 12\' architectural cedar deck with clean front 45-degree angle.',
+    config: {
+      width: 16,
+      length: 12,
+      shape: 'custom',
+      height: 2,
+      customPoints: [
+        { x: 0, y: 0 },
+        { x: 16, y: 0 },
+        { x: 16, y: 8 },
+        { x: 8, y: 12 },
+        { x: 0, y: 12 }
+      ],
+      hasStairs: true,
+      stairSide: 'front',
+      stairWidth: 4,
+      railingSides: ['front', 'left', 'right'],
+      deckingPattern: 'parallel',
+      joistSpacing: 16,
+      unit: 'feet',
+      deckingType: 'Cedar',
+    },
+  },
+  {
+    id: '10',
+    name: 'Angled Corner Wrap Deck',
+    description: '18\' × 18\' multi-angle custom composite wrap deck with right steps.',
+    config: {
+      width: 18,
+      length: 18,
+      shape: 'custom',
+      height: 2.5,
+      customPoints: [
+        { x: 0, y: 0 },
+        { x: 18, y: 0 },
+        { x: 18, y: 12 },
+        { x: 12, y: 18 },
+        { x: 0, y: 18 }
+      ],
+      hasStairs: true,
+      stairSide: 'right',
+      stairWidth: 4,
+      railingSides: ['front', 'left', 'right'],
       deckingPattern: 'diagonal',
       joistSpacing: 16,
       unit: 'feet',
@@ -195,56 +377,71 @@ export function DeckTemplates({ onLoadTemplate, currentConfig }: DeckTemplatesPr
     );
   };
 
+  const [selectedTemplateIdx, setSelectedTemplateIdx] = React.useState<number | null>(null);
+
   return (
-    <div className="bg-background rounded-lg shadow-sm border border-border p-6">
+    <div className="bg-[#4a4a4a] text-white rounded-lg shadow-lg border border-neutral-700 p-6">
       <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+        <div className="p-2 bg-orange-600 text-white rounded-lg">
           <LayoutTemplate className="w-5 h-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Sample Designs</h2>
-          <p className="text-sm text-muted-foreground">Start with a pre-configured layout</p>
+          <h2 className="text-lg font-semibold text-white">Select a Template</h2>
+          <p className="text-sm text-neutral-300">Choose an architectural deck layout below and click Continue</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {templates.map((template, idx) => {
-          const isSelected = isTemplateSelected(template);
-          
-          return (
-            <div
-              key={idx}
-              onClick={() => onLoadTemplate(template.config)}
-              className={`
-                relative group rounded-xl border-2 transition-all duration-200 overflow-hidden cursor-pointer flex flex-col
-                ${isSelected
-                  ? 'border-purple-600 bg-purple-50 shadow-md'
-                  : 'border-border bg-background hover:border-purple-300 hover:bg-muted'
-                }
-              `}
-            >
-              <TemplateMiniMap config={template.config} />
-              
-              <div className="p-4 flex-1 flex flex-col">
-                <h3 className={`font-medium mb-1 ${isSelected ? 'text-purple-900' : 'text-foreground'}`}>
-                  {template.name}
-                </h3>
-                <p className={`text-sm flex-1 ${isSelected ? 'text-purple-700' : 'text-muted-foreground'}`}>
-                  {template.description}
-                </p>
+      <div className="bg-white p-6 rounded-lg border border-neutral-600 shadow-inner">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {templates.map((template, idx) => {
+            const isSelected = selectedTemplateIdx === idx || isTemplateSelected(template);
+            
+            return (
+              <div
+                key={idx}
+                onClick={() => setSelectedTemplateIdx(idx)}
+                className={`
+                  relative group rounded-lg border-2 transition-all duration-200 overflow-hidden cursor-pointer flex flex-col bg-white
+                  ${isSelected
+                    ? 'border-orange-500 ring-2 ring-orange-500/20 shadow-md'
+                    : 'border-neutral-200 hover:border-orange-300'
+                  }
+                `}
+              >
+                <TemplateMiniMap config={template.config} />
                 
-                {isSelected && (
-                  <div className="absolute top-3 right-3">
-                    <span className="flex h-3 w-3 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-600"></span>
-                    </span>
-                  </div>
-                )}
+                {/* Number Bar at Bottom */}
+                <div className={`p-2 text-center font-bold text-sm select-none transition-colors ${
+                  isSelected ? 'bg-orange-500 text-white' : 'bg-[#404040] text-[#cccccc]'
+                }`}>
+                  {template.id}
+                </div>
+                
+                {/* Tooltip or hover title */}
+                <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity p-2 flex flex-col justify-end text-xs text-white pointer-events-none">
+                  <span className="font-semibold">{template.name}</span>
+                  <span className="text-[10px] text-neutral-300 line-clamp-2 mt-1">{template.description}</span>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex justify-end mt-6">
+        <button
+          onClick={() => {
+            if (selectedTemplateIdx !== null) {
+              onLoadTemplate(templates[selectedTemplateIdx].config);
+            } else {
+              // Load default active one if they click without selecting
+              onLoadTemplate(templates[0].config);
+            }
+          }}
+          className="px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg shadow-md transition-all active:scale-[0.98]"
+        >
+          Continue
+        </button>
       </div>
     </div>
   );

@@ -747,6 +747,7 @@ export async function enrichMaterialsWithT1Pricing(
       totalT1Price,
     };
   } catch (error) {
+    console.error('[enrichMaterialsWithT1Pricing] Error enriching materials:', error);
     return { materials, totalT1Price: 0 };
   }
 }

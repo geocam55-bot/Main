@@ -30,7 +30,17 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
     let totalWidth = config.width;
     let totalLength = config.length;
 
-    if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
+    if (config.shape === 'custom' && config.customPoints && config.customPoints.length > 0) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      config.customPoints.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      totalWidth = Math.max(4, maxX - minX);
+      totalLength = Math.max(4, maxY - minY);
+    } else if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
       totalWidth = config.width + config.lShapeWidth;
       totalLength = Math.max(config.length, config.lShapeLength);
     } else if (config.shape === 'u-shape') {
@@ -47,7 +57,10 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
     let baseX = centerX - scaledWidth / 2;
     let baseY = centerY - scaledLength / 2;
 
-    if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
+    if (config.shape === 'custom' && config.customPoints && config.customPoints.length > 0) {
+      baseX = centerX - (totalWidth * scale) / 2;
+      baseY = centerY - (totalLength * scale) / 2;
+    } else if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
       if (config.lShapePosition === 'top-left' || config.lShapePosition === 'bottom-left') {
         baseX = centerX - scaledWidth / 2;
       }
@@ -57,7 +70,12 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
     }
 
     const rects: { part: 'main' | 'l-shape' | 'u-left' | 'u-right', x: number, y: number, w: number, h: number, lenFeet: number, widthFeet: number }[] = [];
-    rects.push({ part: 'main', x: baseX, y: baseY, w: scaledWidth, h: scaledLength, lenFeet: config.length, widthFeet: config.width });
+    
+    if (config.shape === 'custom' && config.customPoints && config.customPoints.length > 0) {
+      rects.push({ part: 'main', x: baseX, y: baseY, w: totalWidth * scale, h: totalLength * scale, lenFeet: totalLength, widthFeet: totalWidth });
+    } else {
+      rects.push({ part: 'main', x: baseX, y: baseY, w: scaledWidth, h: scaledLength, lenFeet: config.length, widthFeet: config.width });
+    }
 
     if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
       const lw = config.lShapeWidth * scale;
@@ -315,8 +333,147 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
       }
     };
 
+    const drawCustomDeckSection = () => {
+      if (!config.customPoints || config.customPoints.length < 3) return;
+      
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      config.customPoints.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      const totalWidthFeet = maxX - minX;
+      const totalLengthFeet = maxY - minY;
+      
+      const ptsPx = config.customPoints.map(p => ({
+        x: baseX + (p.x - minX) * scale,
+        y: baseY + (p.y - minY) * scale
+      }));
+
+      // 1. Draw outer border
+      ctx.save();
+      ctx.fillStyle = '#8f9390';
+      ctx.strokeStyle = '#5a5d5a';
+      ctx.lineWidth = 4;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ptsPx[0].x, ptsPx[0].y);
+      for (let i = 1; i < ptsPx.length; i++) {
+        ctx.lineTo(ptsPx[i].x, ptsPx[i].y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 2. Clip and Draw Wood boards
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(ptsPx[0].x, ptsPx[0].y);
+      for (let i = 1; i < ptsPx.length; i++) {
+        ctx.lineTo(ptsPx[i].x, ptsPx[i].y);
+      }
+      ctx.closePath();
+      ctx.clip();
+
+      ctx.fillStyle = '#a69f94';
+      ctx.fillRect(baseX - 100, baseY - 100, totalWidthFeet * scale + 200, totalLengthFeet * scale + 200);
+
+      ctx.strokeStyle = '#5a544b';
+      ctx.lineWidth = 0.5;
+      const boardSpacing = 6;
+      for (let by = baseY - 100; by < baseY + totalLengthFeet * scale + 100; by += boardSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(baseX - 100, by);
+        ctx.lineTo(baseX + totalWidthFeet * scale + 100, by);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 3. Draw posts at corners
+      const postSize = 10;
+      const drawCornerPost = (px: number, py: number) => {
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 2;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(px - postSize / 2, py - postSize / 2, postSize, postSize);
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px - postSize / 2, py - postSize / 2, postSize, postSize);
+        
+        ctx.beginPath();
+        ctx.arc(px, py, 2, 0, Math.PI * 2);
+        ctx.stroke();
+      };
+      ptsPx.forEach(pt => drawCornerPost(pt.x, pt.y));
+
+      // 4. Draw dimension label for each edge
+      ptsPx.forEach((p1, idx) => {
+        const p2 = ptsPx[(idx + 1) % ptsPx.length];
+        
+        const pt1Feet = config.customPoints![idx];
+        const pt2Feet = config.customPoints![(idx + 1) % ptsPx.length];
+        const distFeet = Math.sqrt((pt1Feet.x - pt2Feet.x)**2 + (pt1Feet.y - pt2Feet.y)**2);
+        
+        if (distFeet < 0.5) return;
+
+        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        const normalAngle = angle + Math.PI / 2;
+        const offsetPx = 25;
+        
+        const dimX1 = p1.x + Math.cos(normalAngle) * offsetPx;
+        const dimY1 = p1.y + Math.sin(normalAngle) * offsetPx;
+        const dimX2 = p2.x + Math.cos(normalAngle) * offsetPx;
+        const dimY2 = p2.y + Math.sin(normalAngle) * offsetPx;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(dimX1, dimY1);
+        ctx.moveTo(p2.x, p2.y);
+        ctx.lineTo(dimX2, dimY2);
+        ctx.stroke();
+        
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.beginPath();
+        ctx.moveTo(dimX1, dimY1);
+        ctx.lineTo(dimX2, dimY2);
+        ctx.stroke();
+
+        const drawArrowhead = (x: number, y: number, a: number) => {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(a);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(-6, -3);
+          ctx.lineTo(-6, 3);
+          ctx.fill();
+          ctx.restore();
+        };
+        drawArrowhead(dimX1, dimY1, angle + Math.PI);
+        drawArrowhead(dimX2, dimY2, angle);
+
+        const labelText = formatDim(distFeet);
+        const midDimX = (dimX1 + dimX2) / 2;
+        const midDimY = (dimY1 + dimY2) / 2;
+        
+        ctx.restore();
+        drawPillBadge(midDimX, midDimY, labelText, 'pencil', false);
+      });
+    };
+
     // 2. Draw Deck Shape
-    if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
+    if (config.shape === 'custom') {
+      drawCustomDeckSection();
+    } else if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
       const lShapePixelWidth = config.lShapeWidth * scale;
       const lShapePixelLength = config.lShapeLength * scale;
       
@@ -432,79 +589,93 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
     // 3. Draw External Dimension Lines & Pills
     const dimOffset = 30;
 
-    if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
-      const lShapePixelWidth = config.lShapeWidth * scale;
-      const lShapePixelLength = config.lShapeLength * scale;
+    if (config.shape !== 'custom') {
+      if (config.shape === 'l-shape' && config.lShapeWidth && config.lShapeLength) {
+        const lShapePixelWidth = config.lShapeWidth * scale;
+        const lShapePixelLength = config.lShapeLength * scale;
 
-      if (config.lShapePosition === 'top-left' || !config.lShapePosition) {
-        // Main Width
+        if (config.lShapePosition === 'top-left' || !config.lShapePosition) {
+          // Main Width
+          drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
+          // L-Shape Width
+          drawStyledDimLine(baseX - lShapePixelWidth, baseY - dimOffset, baseX, baseY - dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
+          // L-Shape Length
+          drawStyledDimLine(baseX - lShapePixelWidth - dimOffset, baseY, baseX - lShapePixelWidth - dimOffset, baseY + lShapePixelLength, formatDim(config.lShapeLength), true, 'lShapeLength');
+          // Main Length
+          drawStyledDimLine(baseX + scaledWidth + dimOffset, baseY, baseX + scaledWidth + dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
+        } else if (config.lShapePosition === 'bottom-left') {
+          // Main Width
+          drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
+          // L-Shape Width
+          drawStyledDimLine(baseX - lShapePixelWidth, baseY + scaledLength + dimOffset, baseX, baseY + scaledLength + dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
+          // L-Shape Length
+          drawStyledDimLine(baseX - lShapePixelWidth - dimOffset, baseY + scaledLength - lShapePixelLength, baseX - lShapePixelWidth - dimOffset, baseY + scaledLength, formatDim(config.lShapeLength), true, 'lShapeLength');
+          // Main Length
+          drawStyledDimLine(baseX + scaledWidth + dimOffset, baseY, baseX + scaledWidth + dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
+        } else if (config.lShapePosition === 'top-right') {
+          // Main Width
+          drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
+          // L-Shape Width
+          drawStyledDimLine(baseX + scaledWidth, baseY - dimOffset, baseX + scaledWidth + lShapePixelWidth, baseY - dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
+          // L-Shape Length
+          drawStyledDimLine(baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY, baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY + lShapePixelLength, formatDim(config.lShapeLength), true, 'lShapeLength');
+          // Main Length
+          drawStyledDimLine(baseX - dimOffset, baseY, baseX - dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
+        } else if (config.lShapePosition === 'bottom-right') {
+          // Main Width
+          drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
+          // L-Shape Width
+          drawStyledDimLine(baseX + scaledWidth, baseY + scaledLength + dimOffset, baseX + scaledWidth + lShapePixelWidth, baseY + scaledLength + dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
+          // L-Shape Length
+          drawStyledDimLine(baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY + scaledLength - lShapePixelLength, baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY + scaledLength, formatDim(config.lShapeLength), true, 'lShapeLength');
+          // Main Length
+          drawStyledDimLine(baseX - dimOffset, baseY, baseX - dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
+        }
+
+      } else if (config.shape === 'u-shape') {
+        const uLeft = (config.uShapeLeftWidth || 6) * scale;
+        const uRight = (config.uShapeRightWidth || 6) * scale;
+        const uDepth = (config.uShapeDepth || 8) * scale;
+        
+        // Top Dimension (Main Width)
         drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
-        // L-Shape Width
-        drawStyledDimLine(baseX - lShapePixelWidth, baseY - dimOffset, baseX, baseY - dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
-        // L-Shape Length
-        drawStyledDimLine(baseX - lShapePixelWidth - dimOffset, baseY, baseX - lShapePixelWidth - dimOffset, baseY + lShapePixelLength, formatDim(config.lShapeLength), true, 'lShapeLength');
+        
+        // Bottom Left Width
+        drawStyledDimLine(baseX, baseY + scaledLength + uDepth + dimOffset, baseX + uLeft, baseY + scaledLength + uDepth + dimOffset, formatDim(config.uShapeLeftWidth || 6), false, 'uShapeLeftWidth');
+        // Bottom Right Width
+        drawStyledDimLine(baseX + scaledWidth - uRight, baseY + scaledLength + uDepth + dimOffset, baseX + scaledWidth, baseY + scaledLength + uDepth + dimOffset, formatDim(config.uShapeRightWidth || 6), false, 'uShapeRightWidth');
+        
+        // Depth
+        drawStyledDimLine(baseX - dimOffset, baseY + scaledLength, baseX - dimOffset, baseY + scaledLength + uDepth, formatDim(config.uShapeDepth || 8), true, 'uShapeDepth');
+        
         // Main Length
         drawStyledDimLine(baseX + scaledWidth + dimOffset, baseY, baseX + scaledWidth + dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
-      } else if (config.lShapePosition === 'bottom-left') {
-        // Main Width
+      } else {
+        // Top Dimension (Width)
         drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
-        // L-Shape Width
-        drawStyledDimLine(baseX - lShapePixelWidth, baseY + scaledLength + dimOffset, baseX, baseY + scaledLength + dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
-        // L-Shape Length
-        drawStyledDimLine(baseX - lShapePixelWidth - dimOffset, baseY + scaledLength - lShapePixelLength, baseX - lShapePixelWidth - dimOffset, baseY + scaledLength, formatDim(config.lShapeLength), true, 'lShapeLength');
-        // Main Length
+        // Bottom Dimension (Width)
+        drawStyledDimLine(baseX, baseY + scaledLength + dimOffset, baseX + scaledWidth, baseY + scaledLength + dimOffset, formatDim(config.width), false, 'width');
+        // Left Dimension (Length)
+        drawStyledDimLine(baseX - dimOffset, baseY, baseX - dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
+        // Right Dimension (Length)
         drawStyledDimLine(baseX + scaledWidth + dimOffset, baseY, baseX + scaledWidth + dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
-      } else if (config.lShapePosition === 'top-right') {
-        // Main Width
-        drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
-        // L-Shape Width
-        drawStyledDimLine(baseX + scaledWidth, baseY - dimOffset, baseX + scaledWidth + lShapePixelWidth, baseY - dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
-        // L-Shape Length
-        drawStyledDimLine(baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY, baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY + lShapePixelLength, formatDim(config.lShapeLength), true, 'lShapeLength');
-        // Main Length
-        drawStyledDimLine(baseX - dimOffset, baseY, baseX - dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
-      } else if (config.lShapePosition === 'bottom-right') {
-        // Main Width
-        drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
-        // L-Shape Width
-        drawStyledDimLine(baseX + scaledWidth, baseY + scaledLength + dimOffset, baseX + scaledWidth + lShapePixelWidth, baseY + scaledLength + dimOffset, formatDim(config.lShapeWidth), false, 'lShapeWidth');
-        // L-Shape Length
-        drawStyledDimLine(baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY + scaledLength - lShapePixelLength, baseX + scaledWidth + lShapePixelWidth + dimOffset, baseY + scaledLength, formatDim(config.lShapeLength), true, 'lShapeLength');
-        // Main Length
-        drawStyledDimLine(baseX - dimOffset, baseY, baseX - dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
       }
 
-    } else if (config.shape === 'u-shape') {
-      const uLeft = (config.uShapeLeftWidth || 6) * scale;
-      const uRight = (config.uShapeRightWidth || 6) * scale;
-      const uDepth = (config.uShapeDepth || 8) * scale;
-      
-      // Top Dimension (Main Width)
-      drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
-      
-      // Bottom Left Width
-      drawStyledDimLine(baseX, baseY + scaledLength + uDepth + dimOffset, baseX + uLeft, baseY + scaledLength + uDepth + dimOffset, formatDim(config.uShapeLeftWidth || 6), false, 'uShapeLeftWidth');
-      // Bottom Right Width
-      drawStyledDimLine(baseX + scaledWidth - uRight, baseY + scaledLength + uDepth + dimOffset, baseX + scaledWidth, baseY + scaledLength + uDepth + dimOffset, formatDim(config.uShapeRightWidth || 6), false, 'uShapeRightWidth');
-      
-      // Depth
-      drawStyledDimLine(baseX - dimOffset, baseY + scaledLength, baseX - dimOffset, baseY + scaledLength + uDepth, formatDim(config.uShapeDepth || 8), true, 'uShapeDepth');
-      
-      // Main Length
-      drawStyledDimLine(baseX + scaledWidth + dimOffset, baseY, baseX + scaledWidth + dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
+      // Center Height Pill
+      drawPillBadge(baseX + scaledWidth / 2, baseY + scaledLength / 2, `Height ${config.height}' 0"`, 'height', false, 'height');
     } else {
-      // Top Dimension (Width)
-      drawStyledDimLine(baseX, baseY - dimOffset, baseX + scaledWidth, baseY - dimOffset, formatDim(config.width), false, 'width');
-      // Bottom Dimension (Width)
-      drawStyledDimLine(baseX, baseY + scaledLength + dimOffset, baseX + scaledWidth, baseY + scaledLength + dimOffset, formatDim(config.width), false, 'width');
-      // Left Dimension (Length)
-      drawStyledDimLine(baseX - dimOffset, baseY, baseX - dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
-      // Right Dimension (Length)
-      drawStyledDimLine(baseX + scaledWidth + dimOffset, baseY, baseX + scaledWidth + dimOffset, baseY + scaledLength, formatDim(config.length), true, 'length');
+      // Draw height pill in custom section center
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      config.customPoints?.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      const totalWidthFeet = maxX - minX;
+      const totalLengthFeet = maxY - minY;
+      drawPillBadge(baseX + (totalWidthFeet * scale) / 2, baseY + (totalLengthFeet * scale) / 2, `Height ${config.height}' 0"`, 'height', false, 'height');
     }
-
-    // Center Height Pill
-    drawPillBadge(baseX + scaledWidth / 2, baseY + scaledLength / 2, `Height ${config.height}' 0"`, 'height', false, 'height');
   };
 
   const drawFrontElevation = () => {

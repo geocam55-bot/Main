@@ -345,6 +345,9 @@ const PLANNER_CATEGORIES: Record<string, Record<string, Record<string, string[]>
 export function PlannerDefaults({ organizationId, userId, plannerType, materialTypes, initialMaterialType, initialRailingType, initialAluminumColor, onDefaultsSaved }: PlannerDefaultsProps) {
   const draftStorageKey = `planner_defaults_draft_${organizationId}_${userId}_${plannerType}`;
   const hasInitializedDefaults = useRef(false);
+  const lastInitialMaterialTypeRef = useRef(initialMaterialType);
+  const lastInitialRailingTypeRef = useRef(initialRailingType);
+  const lastInitialAluminumColorRef = useRef(initialAluminumColor);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -391,23 +394,27 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
     if (!materialTypes || materialTypes.length === 0) return;
     const normalizedInitial = initialMaterialType?.toLowerCase();
     if (!normalizedInitial || !materialTypes.includes(normalizedInitial)) return;
-    if (selectedMaterialType !== normalizedInitial) {
+    
+    if (lastInitialMaterialTypeRef.current !== initialMaterialType) {
+      lastInitialMaterialTypeRef.current = initialMaterialType;
       setSelectedMaterialType(normalizedInitial);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMaterialType, materialTypes]);
 
   useEffect(() => {
-    const normalized = (initialRailingType || 'Treated').toLowerCase();
-    if (selectedRailingType !== normalized) {
+    if (lastInitialRailingTypeRef.current !== initialRailingType) {
+      lastInitialRailingTypeRef.current = initialRailingType;
+      const normalized = (initialRailingType || 'Treated').toLowerCase();
       setSelectedRailingType(normalized);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialRailingType]);
 
   useEffect(() => {
-    const normalized = (initialAluminumColor || 'white').toLowerCase();
-    if (selectedAluminumColor !== normalized) {
+    if (lastInitialAluminumColorRef.current !== initialAluminumColor) {
+      lastInitialAluminumColorRef.current = initialAluminumColor;
+      const normalized = (initialAluminumColor || 'white').toLowerCase();
       setSelectedAluminumColor(normalized);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

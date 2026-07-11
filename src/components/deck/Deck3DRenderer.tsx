@@ -20,6 +20,7 @@ import {
   LineSegments,
   CanvasTexture,
   BufferGeometry,
+  BufferAttribute,
   CylinderGeometry
 } from '../../utils/three';
 import { 
@@ -49,6 +50,168 @@ function addEdgeOutline(scene: Scene, geometry: BufferGeometry, mesh: Mesh, colo
   wireframe.rotation.y = mesh.rotation.y;
   wireframe.rotation.z = mesh.rotation.z;
   scene.add(wireframe);
+}
+
+function triangulate(points: { x: number; y: number }[]): number[][] {
+  const triangles: number[][] = [];
+  const n = points.length;
+  if (n < 3) return triangles;
+
+  const indices = Array.from({ length: n }, (_, i) => i);
+
+  function isPointInTriangle(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }): boolean {
+    const v0 = { x: c.x - a.x, y: c.y - a.y };
+    const v1 = { x: b.x - a.x, y: b.y - a.y };
+    const v2 = { x: p.x - a.x, y: p.y - a.y };
+
+    const dot00 = v0.x * v0.x + v0.y * v0.y;
+    const dot01 = v0.x * v1.x + v0.y * v1.y;
+    const dot02 = v0.x * v2.x + v0.y * v2.y;
+    const dot11 = v1.x * v1.x + v1.y * v1.y;
+    const dot12 = v1.x * v2.x + v1.y * v2.y;
+
+    const invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+    const u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    const v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+    return (u >= 0) && (v >= 0) && (u + v < 1);
+  }
+
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % n];
+    area += p1.x * p2.y - p2.x * p1.y;
+  }
+  const isCCW = area > 0;
+
+  const workingIndices = [...indices];
+  let limit = workingIndices.length * 2;
+  while (workingIndices.length > 3 && limit > 0) {
+    limit--;
+    let earFound = false;
+
+    for (let i = 0; i < workingIndices.length; i++) {
+      const prevIdx = workingIndices[(i - 1 + workingIndices.length) % workingIndices.length];
+      const currIdx = workingIndices[i];
+      const nextIdx = workingIndices[(i + 1) % workingIndices.length];
+
+      const a = points[prevIdx];
+      const b = points[currIdx];
+      const c = points[nextIdx];
+
+      const crossProduct = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+      const isConvex = isCCW ? (crossProduct > 0) : (crossProduct < 0);
+
+      if (!isConvex) continue;
+
+      let isEar = true;
+      for (let j = 0; j < workingIndices.length; j++) {
+        const testIdx = workingIndices[j];
+        if (testIdx === prevIdx || testIdx === currIdx || testIdx === nextIdx) continue;
+        if (isPointInTriangle(points[testIdx], a, b, c)) {
+          isEar = false;
+          break;
+        }
+      }
+
+      if (isEar) {
+        triangles.push([prevIdx, currIdx, nextIdx]);
+        workingIndices.splice(i, 1);
+        earFound = true;
+        break;
+      }
+    }
+
+    if (!earFound) {
+      break;
+    }
+  }
+
+  if (workingIndices.length === 3) {
+    triangles.push([workingIndices[0], workingIndices[1], workingIndices[2]]);
+  } else if (workingIndices.length > 3) {
+    const first = workingIndices[0];
+    for (let i = 1; i < workingIndices.length - 1; i++) {
+      triangles.push([first, workingIndices[i], workingIndices[i + 1]]);
+    }
+  }
+
+  return triangles;
+}
+
+function createExtrudedPolygonGeometry(points: { x: number; y: number }[], yBottom: number, yTop: number): BufferGeometry {
+  const geom = new BufferGeometry();
+  const n = points.length;
+  if (n < 3) return geom;
+
+  const triangles = triangulate(points);
+
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  let vertexCount = 0;
+  function addVertex(x: number, y: number, z: number, u: number, v: number) {
+    positions.push(x, y, z);
+    uvs.push(u, v);
+    return vertexCount++;
+  }
+
+  const topIndices: number[] = [];
+  for (let i = 0; i < n; i++) {
+    topIndices.push(addVertex(points[i].x, yTop, points[i].y, points[i].x, points[i].y));
+  }
+  for (const tri of triangles) {
+    indices.push(topIndices[tri[0]], topIndices[tri[1]], topIndices[tri[2]]);
+  }
+
+  const bottomIndices: number[] = [];
+  for (let i = 0; i < n; i++) {
+    bottomIndices.push(addVertex(points[i].x, yBottom, points[i].y, points[i].x, points[i].y));
+  }
+  for (const tri of triangles) {
+    indices.push(bottomIndices[tri[2]], bottomIndices[tri[1]], bottomIndices[tri[0]]);
+  }
+
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    const p1 = points[i];
+    const p2 = points[next];
+
+    const u1 = 0;
+    const u2 = Math.sqrt((p2.x - p1.x)**2 + (p2.y - p1.y)**2);
+    const v1 = 0;
+    const v2 = yTop - yBottom;
+
+    const iA = addVertex(p1.x, yBottom, p1.y, u1, v1);
+    const iB = addVertex(p2.x, yBottom, p2.y, u2, v1);
+    const iC = addVertex(p2.x, yTop, p2.y, u2, v2);
+    const iD = addVertex(p1.x, yTop, p1.y, u1, v2);
+
+    indices.push(iA, iB, iC);
+    indices.push(iA, iC, iD);
+  }
+
+  geom.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+  geom.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+
+  return geom;
+}
+
+function getDistanceToSegment(x: number, z: number, p1: { x: number, y: number }, p2: { x: number, y: number }): number {
+  const dx = p2.x - p1.x;
+  const dz = p2.y - p1.y;
+  if (dx === 0 && dz === 0) {
+    return Math.sqrt((x - p1.x) ** 2 + (z - p1.y) ** 2);
+  }
+  let t = ((x - p1.x) * dx + (z - p1.y) * dz) / (dx * dx + dz * dz);
+  t = Math.max(0, Math.min(1, t));
+  const closestX = p1.x + t * dx;
+  const closestY = p1.y + t * dz;
+  return Math.sqrt((x - closestX) ** 2 + (z - closestY) ** 2);
 }
 
 export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>(({ config, onRenderComplete }, ref) => {
@@ -158,6 +321,38 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
     const deckLength = config.length * scale;
     const deckHeight = (config.height || 2) * scale;
 
+    // Custom shape points conversion
+    const isCustom = config.shape === 'custom' && config.customPoints && config.customPoints.length >= 3;
+    const centeredPts: { x: number, y: number }[] = [];
+    let customMinX = 0, customMaxX = 0, customMinZ = 0, customMaxZ = 0, customWidth = 0;
+    
+    if (isCustom && config.customPoints) {
+      const ptsMeters = config.customPoints.map(p => ({
+        x: p.x * scale,
+        y: p.y * scale
+      }));
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      ptsMeters.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      ptsMeters.forEach(p => {
+        centeredPts.push({
+          x: p.x - centerX,
+          y: p.y - centerY
+        });
+      });
+      customMinX = minX - centerX;
+      customMaxX = maxX - centerX;
+      customMinZ = minY - centerY;
+      customMaxZ = maxY - centerY;
+      customWidth = customMaxX - customMinX;
+    }
+
     // BC Building Code specifications
     const foundationAboveGrade = 0.152; // 152mm (6") above grade per code
     const postStandoff = 0.025; // 25mm (1") standoff above foundation
@@ -205,8 +400,11 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
     if (!config.isDetached) {
       const wallHeight = 3.0; // 3 meters tall wall
       const wallThickness = 0.2; // 200mm thick wall
-      const wallWidth = isLShape ? Math.max(deckWidth, deckWidth + lShapeWidth) : deckWidth;
+      const wallWidth = isCustom ? customWidth : (isLShape ? Math.max(deckWidth, deckWidth + lShapeWidth) : deckWidth);
       
+      const wallZ = isCustom ? customMinZ - wallThickness/2 : -deckLength/2 - wallThickness/2;
+      const trimZ = isCustom ? customMinZ - wallThickness - 0.025 : -deckLength/2 - wallThickness - 0.025;
+
       const wallGeometry = new BoxGeometry(wallWidth * 1.5, wallHeight, wallThickness);
       const wallMaterial = new MeshStandardMaterial({ 
         color: 0xd4c5b0, // Beige/tan house color
@@ -215,7 +413,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         map: sidingTex
       });
       const wall = new Mesh(wallGeometry, wallMaterial);
-      wall.position.set(0, -deckHeight + wallHeight/2, -deckLength/2 - wallThickness/2);
+      wall.position.set(0, -deckHeight + wallHeight/2, wallZ);
       wall.castShadow = true;
       wall.receiveShadow = true;
       scene.add(wall);
@@ -230,7 +428,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
       // Horizontal trim board at deck level
       const trimGeometry = new BoxGeometry(wallWidth * 1.5, 0.15, 0.05);
       const deckLevelTrim = new Mesh(trimGeometry, trimMaterial);
-      deckLevelTrim.position.set(0, 0, -deckLength/2 - wallThickness - 0.025);
+      deckLevelTrim.position.set(0, 0, trimZ);
       deckLevelTrim.castShadow = true;
       scene.add(deckLevelTrim);
 
@@ -245,7 +443,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         new BoxGeometry(wallWidth * 1.5, foundationH, wallThickness + 0.3), 
         foundationMat
       );
-      wallFoundation.position.set(0, -deckHeight + foundationH / 2, -deckLength/2 - wallThickness/2);
+      wallFoundation.position.set(0, -deckHeight + foundationH / 2, wallZ);
       wallFoundation.receiveShadow = true;
       scene.add(wallFoundation);
 
@@ -266,33 +464,33 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
           new BoxGeometry(winW, winH, 0.04), 
           windowGlassMat
         );
-        winGlass.position.set(wx, -deckHeight + wallHeight * 0.55, -deckLength/2 - wallThickness + 0.02);
+        winGlass.position.set(wx, -deckHeight + wallHeight * 0.55, wallZ - wallThickness/2 + 0.02);
         scene.add(winGlass);
         // Window frame
         const fTop = new Mesh(
           new BoxGeometry(winW + 0.08, 0.04, 0.06), 
           winFrameMat
         );
-        fTop.position.set(wx, -deckHeight + wallHeight * 0.55 + winH / 2 + 0.02, -deckLength/2 - wallThickness + 0.02);
+        fTop.position.set(wx, -deckHeight + wallHeight * 0.55 + winH / 2 + 0.02, wallZ - wallThickness/2 + 0.02);
         scene.add(fTop);
         const fBot = new Mesh(
           new BoxGeometry(winW + 0.1, 0.05, 0.07), 
           winFrameMat
         );
-        fBot.position.set(wx, -deckHeight + wallHeight * 0.55 - winH / 2 - 0.02, -deckLength/2 - wallThickness + 0.02);
+        fBot.position.set(wx, -deckHeight + wallHeight * 0.55 - winH / 2 - 0.02, wallZ - wallThickness/2 + 0.02);
         scene.add(fBot);
         // Mullion cross
         const mullV = new Mesh(
           new BoxGeometry(0.025, winH, 0.05), 
           winFrameMat
         );
-        mullV.position.set(wx, -deckHeight + wallHeight * 0.55, -deckLength/2 - wallThickness + 0.03);
+        mullV.position.set(wx, -deckHeight + wallHeight * 0.55, wallZ - wallThickness/2 + 0.03);
         scene.add(mullV);
         const mullH = new Mesh(
           new BoxGeometry(winW, 0.025, 0.05), 
           winFrameMat
         );
-        mullH.position.set(wx, -deckHeight + wallHeight * 0.55, -deckLength/2 - wallThickness + 0.03);
+        mullH.position.set(wx, -deckHeight + wallHeight * 0.55, wallZ - wallThickness/2 + 0.03);
         scene.add(mullH);
       }
 
@@ -303,7 +501,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         new BoxGeometry(slidingDoorW, slidingDoorH, 0.06), 
         doorMat
       );
-      slidingDoor.position.set(0, -deckHeight + slidingDoorH / 2 + foundationH, -deckLength/2 - wallThickness + 0.03);
+      slidingDoor.position.set(0, -deckHeight + slidingDoorH / 2 + foundationH, wallZ - wallThickness/2 + 0.03);
       scene.add(slidingDoor);
       // Door frame
       const dFrameMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
@@ -311,16 +509,16 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         new BoxGeometry(slidingDoorW + 0.12, 0.06, 0.08), 
         dFrameMat
       );
-      dFrameTop.position.set(0, -deckHeight + slidingDoorH + foundationH + 0.03, -deckLength/2 - wallThickness + 0.03);
+      dFrameTop.position.set(0, -deckHeight + slidingDoorH + foundationH + 0.03, wallZ - wallThickness/2 + 0.03);
       scene.add(dFrameTop);
 
       // Corner trim boards
       const trimH = wallHeight + foundationH;
       const wallCorners = [
-        [-wallWidth * 0.75, -deckLength/2 - wallThickness/2 - 0.15],
-        [wallWidth * 0.75, -deckLength/2 - wallThickness/2 - 0.15],
-        [-wallWidth * 0.75, -deckLength/2 - wallThickness/2 + 0.15],
-        [wallWidth * 0.75, -deckLength/2 - wallThickness/2 + 0.15]
+        [-wallWidth * 0.75, wallZ - 0.15],
+        [wallWidth * 0.75, wallZ - 0.15],
+        [-wallWidth * 0.75, wallZ + 0.15],
+        [wallWidth * 0.75, wallZ + 0.15]
       ];
       for (const [cx, cz] of wallCorners) {
         const hTrim = new Mesh(
@@ -340,8 +538,20 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
       map: woodTex
     });
 
-    // Create deck surfaces (main + L-shape extension if applicable)
-    if (isLShape) {
+    // Create deck surfaces (main + L-shape extension + CUSTOM if applicable)
+    if (isCustom && centeredPts.length >= 3) {
+      const customDeckGeometry = createExtrudedPolygonGeometry(centeredPts, 0, 0.15);
+      const customDeck = new Mesh(customDeckGeometry, deckMaterial);
+      customDeck.castShadow = true;
+      customDeck.receiveShadow = true;
+      scene.add(customDeck);
+
+      // Add edges/outlines
+      const edgesMaterial = new LineBasicMaterial({ color: 0x5a4a3a, linewidth: 2 });
+      const customDeckEdges = new EdgesGeometry(customDeckGeometry);
+      const customDeckLines = new LineSegments(customDeckEdges, edgesMaterial);
+      scene.add(customDeckLines);
+    } else if (isLShape) {
       // Main deck section
       const mainDeckGeometry = new BoxGeometry(deckWidth, 0.15, deckLength);
       const mainDeck = new Mesh(mainDeckGeometry, deckMaterial);
@@ -452,75 +662,116 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
       map: boardWoodTex
     });
 
-    // Main deck boards
-    const numBoards = Math.floor(deckLength / (deckBoardWidth + deckingSpacing));
-    for (let i = 0; i < numBoards; i++) {
-      const boardGeometry = new BoxGeometry(deckWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
-      const board = new Mesh(boardGeometry, boardMaterial);
-      board.position.set(
-        0, 
-        0.165,
-        -deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2
-      );
-      scene.add(board);
-    }
+    if (isCustom && centeredPts.length >= 3) {
+      // Generate custom deck boards spaced along Z axis (from customMinZ to customMaxZ)
+      const numBoards = Math.floor((customMaxZ - customMinZ) / (deckBoardWidth + deckingSpacing));
+      for (let i = 0; i < numBoards; i++) {
+        const boardZ = customMinZ + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth / 2;
 
-    // L-shape extension boards
-    if (isLShape) {
-      const numLBoards = Math.floor(lShapeLength / (deckBoardWidth + deckingSpacing));
-      for (let i = 0; i < numLBoards; i++) {
-        const boardGeometry = new BoxGeometry(lShapeWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
+        // Find intersections of the line Z = boardZ with the polygon edges
+        const intersections: number[] = [];
+        for (let j = 0; j < centeredPts.length; j++) {
+          const p1 = centeredPts[j];
+          const p2 = centeredPts[(j + 1) % centeredPts.length];
+
+          if ((p1.y <= boardZ && p2.y > boardZ) || (p2.y <= boardZ && p1.y > boardZ)) {
+            const t = (boardZ - p1.y) / (p2.y - p1.y);
+            const intersectX = p1.x + t * (p2.x - p1.x);
+            intersections.push(intersectX);
+          }
+        }
+
+        intersections.sort((a, b) => a - b);
+
+        for (let j = 0; j < intersections.length; j += 2) {
+          if (j + 1 >= intersections.length) break;
+          const xStart = intersections[j];
+          const xEnd = intersections[j + 1];
+          const boardLength = xEnd - xStart;
+
+          if (boardLength > 0.05) {
+            const boardGeometry = new BoxGeometry(boardLength * 0.98, 0.03, deckBoardWidth - deckingSpacing);
+            const board = new Mesh(boardGeometry, boardMaterial);
+            board.position.set(
+              (xStart + xEnd) / 2,
+              0.165,
+              boardZ
+            );
+            scene.add(board);
+          }
+        }
+      }
+    } else {
+      // Main deck boards
+      const numBoards = Math.floor(deckLength / (deckBoardWidth + deckingSpacing));
+      for (let i = 0; i < numBoards; i++) {
+        const boardGeometry = new BoxGeometry(deckWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
         const board = new Mesh(boardGeometry, boardMaterial);
-        
-        let boardX = 0, boardZ = 0;
-        switch (lShapePosition) {
-          case 'top-right':
-            boardX = deckWidth/2 + lShapeWidth/2;
-            boardZ = -deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
-            break;
-          case 'bottom-right':
-            boardX = deckWidth/2 + lShapeWidth/2;
-            boardZ = deckLength/2 - lShapeLength + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
-            break;
-          case 'bottom-left':
-            boardX = -deckWidth/2 - lShapeWidth/2;
-            boardZ = deckLength/2 - lShapeLength + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
-            break;
-          case 'top-left':
-          default:
-            boardX = -deckWidth/2 - lShapeWidth/2;
-            boardZ = -deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
-            break;
+        board.position.set(
+          0, 
+          0.165,
+          -deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2
+        );
+        scene.add(board);
+      }
+
+      // L-shape extension boards
+      if (isLShape) {
+        const numLBoards = Math.floor(lShapeLength / (deckBoardWidth + deckingSpacing));
+        for (let i = 0; i < numLBoards; i++) {
+          const boardGeometry = new BoxGeometry(lShapeWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
+          const board = new Mesh(boardGeometry, boardMaterial);
+          
+          let boardX = 0, boardZ = 0;
+          switch (lShapePosition) {
+            case 'top-right':
+              boardX = deckWidth/2 + lShapeWidth/2;
+              boardZ = -deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
+              break;
+            case 'bottom-right':
+              boardX = deckWidth/2 + lShapeWidth/2;
+              boardZ = deckLength/2 - lShapeLength + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
+              break;
+            case 'bottom-left':
+              boardX = -deckWidth/2 - lShapeWidth/2;
+              boardZ = deckLength/2 - lShapeLength + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
+              break;
+            case 'top-left':
+            default:
+              boardX = -deckWidth/2 - lShapeWidth/2;
+              boardZ = -deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2;
+              break;
+          }
+          
+          board.position.set(boardX, 0.165, boardZ);
+          scene.add(board);
+        }
+      } else if (isUShape) {
+        // Left arm boards
+        const numLeftBoards = Math.floor(uDepth / (deckBoardWidth + deckingSpacing));
+        for (let i = 0; i < numLeftBoards; i++) {
+          const boardGeometry = new BoxGeometry(uLeftWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
+          const board = new Mesh(boardGeometry, boardMaterial);
+          board.position.set(
+            -deckWidth/2 + uLeftWidth/2,
+            0.165,
+            deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2
+          );
+          scene.add(board);
         }
         
-        board.position.set(boardX, 0.165, boardZ);
-        scene.add(board);
-      }
-    } else if (isUShape) {
-      // Left arm boards
-      const numLeftBoards = Math.floor(uDepth / (deckBoardWidth + deckingSpacing));
-      for (let i = 0; i < numLeftBoards; i++) {
-        const boardGeometry = new BoxGeometry(uLeftWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
-        const board = new Mesh(boardGeometry, boardMaterial);
-        board.position.set(
-          -deckWidth/2 + uLeftWidth/2,
-          0.165,
-          deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2
-        );
-        scene.add(board);
-      }
-      
-      // Right arm boards
-      const numRightBoards = Math.floor(uDepth / (deckBoardWidth + deckingSpacing));
-      for (let i = 0; i < numRightBoards; i++) {
-        const boardGeometry = new BoxGeometry(uRightWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
-        const board = new Mesh(boardGeometry, boardMaterial);
-        board.position.set(
-          deckWidth/2 - uRightWidth/2,
-          0.165,
-          deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2
-        );
-        scene.add(board);
+        // Right arm boards
+        const numRightBoards = Math.floor(uDepth / (deckBoardWidth + deckingSpacing));
+        for (let i = 0; i < numRightBoards; i++) {
+          const boardGeometry = new BoxGeometry(uRightWidth * 0.98, 0.03, deckBoardWidth - deckingSpacing);
+          const board = new Mesh(boardGeometry, boardMaterial);
+          board.position.set(
+            deckWidth/2 - uRightWidth/2,
+            0.165,
+            deckLength/2 + i * (deckBoardWidth + deckingSpacing) + deckBoardWidth/2
+          );
+          scene.add(board);
+        }
       }
     }
 
@@ -556,7 +807,12 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
     // Calculate post positions based on shape
     let postPositions: number[][] = [];
     
-    if (isLShape) {
+    if (isCustom && centeredPts.length >= 3) {
+      // Place support posts at every custom drawn vertex corner
+      centeredPts.forEach(pt => {
+        postPositions.push([pt.x, 0, pt.y]);
+      });
+    } else if (isLShape) {
       // For L-shape, we need posts at corners of both rectangles
       // Main deck corners
       postPositions.push(
@@ -640,7 +896,108 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
     const getOuterPerimeterSegments = () => {
       const segments: Array<{x1: number, z1: number, x2: number, z2: number, side: string, part: 'main'|'l-shape'|'u-left'|'u-right', isConnection?: boolean}> = [];
       
-      if (isLShape) {
+      if (isCustom && centeredPts.length >= 3) {
+        // Calculate centroid
+        let sumX = 0, sumY = 0;
+        centeredPts.forEach(pt => { sumX += pt.x; sumY += pt.y; });
+        const centroidX = sumX / centeredPts.length;
+        const centroidY = sumY / centeredPts.length;
+
+        // Calculate target stair position if stairs are enabled
+        let targetX = 0;
+        let targetZ = 0;
+        let closestSegIdx = -1;
+        
+        if (config.hasStairs) {
+          const activeStairSide = config.stairSide || 'front';
+          const stairWidth = (config.stairWidth || 4) * scale;
+          const defaultOffsetMeters = ((activeStairSide === 'front' || activeStairSide === 'back' ? (customMaxX - customMinX) : (customMaxZ - customMinZ)) - stairWidth) / 2;
+          const stairOffsetMeters = config.stairOffset !== undefined ? config.stairOffset * scale : defaultOffsetMeters;
+
+          if (activeStairSide === 'front') {
+            targetX = customMinX + stairOffsetMeters + stairWidth / 2;
+            targetZ = customMaxZ;
+          } else if (activeStairSide === 'back') {
+            targetX = customMinX + stairOffsetMeters + stairWidth / 2;
+            targetZ = customMinZ;
+          } else if (activeStairSide === 'left') {
+            targetX = customMinX;
+            targetZ = customMinZ + stairOffsetMeters + stairWidth / 2;
+          } else if (activeStairSide === 'right') {
+            targetX = customMaxX;
+            targetZ = customMinZ + stairOffsetMeters + stairWidth / 2;
+          }
+
+          let minDistance = Infinity;
+          for (let j = 0; j < centeredPts.length; j++) {
+            const p1 = centeredPts[j];
+            const p2 = centeredPts[(j + 1) % centeredPts.length];
+            const dist = getDistanceToSegment(targetX, targetZ, p1, p2);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestSegIdx = j;
+            }
+          }
+        }
+
+        for (let j = 0; j < centeredPts.length; j++) {
+          const p1 = centeredPts[j];
+          const p2 = centeredPts[(j + 1) % centeredPts.length];
+          
+          // Compute outward normal
+          const midX = (p1.x + p2.x) / 2;
+          const midY = (p1.y + p2.y) / 2;
+          const vX = midX - centroidX;
+          const vY = midY - centroidY;
+          
+          let nX = -(p2.y - p1.y);
+          let nY = p2.x - p1.x;
+          if (nX * vX + nY * vY < 0) {
+            nX = -nX;
+            nY = -nY;
+          }
+          const nLen = Math.sqrt(nX * nX + nY * nY);
+          if (nLen > 0) {
+            nX /= nLen;
+            nY /= nLen;
+          }
+          
+          const frontScore = nY;
+          const backScore = -nY;
+          const leftScore = -nX;
+          const rightScore = nX;
+          const maxScore = Math.max(frontScore, backScore, leftScore, rightScore);
+          
+          let sideClass: 'front' | 'back' | 'left' | 'right' = 'front';
+          if (maxScore === backScore) sideClass = 'back';
+          else if (maxScore === leftScore) sideClass = 'left';
+          else if (maxScore === rightScore) sideClass = 'right';
+          
+          let sideName = sideClass as string;
+          if (config.hasStairs) {
+            const activeStairSide = config.stairSide || 'front';
+            if (j === closestSegIdx) {
+              sideName = activeStairSide;
+            } else if (sideClass === activeStairSide) {
+              sideName = sideClass + "-other";
+            }
+          }
+          
+          const isBackSide = sideName === 'back';
+          
+          // Only add back segments if isDetached is true
+          if (!isBackSide || config.isDetached) {
+            segments.push({
+              x1: p1.x,
+              z1: p1.y,
+              x2: p2.x,
+              z2: p2.y,
+              side: sideName,
+              part: 'main'
+            });
+          }
+        }
+      } else if (isLShape) {
         switch (lShapePosition) {
           case 'top-right':
             segments.push({ x1: deckWidth/2 + lShapeWidth, z1: -deckLength/2, x2: deckWidth/2 + lShapeWidth, z2: -deckLength/2 + lShapeLength, side: 'right', part: 'l-shape' });
@@ -787,13 +1144,43 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
             const segmentLength = Math.sqrt(segmentVector.x ** 2 + segmentVector.z ** 2);
             const unitVector = { x: segmentVector.x / segmentLength, z: segmentVector.z / segmentLength };
             
-            // Calculate center of segment for stair placement based on offset
-            const defaultOffsetMeters = (segmentLength - stairWidth) / 2;
-            const userOffsetMeters = config.stairOffset !== undefined ? config.stairOffset * scale : defaultOffsetMeters;
-            
-            // Clamp the offset to ensure stairs don't hang off the edge
-            const clampedOffset = Math.max(0, Math.min(userOffsetMeters, segmentLength - stairWidth));
-            const stairCenterDist = clampedOffset + stairWidth / 2;
+            // Calculate center of segment for stair placement based on offset and project if custom
+            let stairCenterDist = 0;
+            if (isCustom && centeredPts.length >= 3) {
+              const defaultOffsetMeters = ((activeStairSide === 'front' || activeStairSide === 'back' ? (customMaxX - customMinX) : (customMaxZ - customMinZ)) - stairWidth) / 2;
+              const stairOffsetMeters = config.stairOffset !== undefined ? config.stairOffset * scale : defaultOffsetMeters;
+              
+              let targetX = 0;
+              let targetZ = 0;
+              if (activeStairSide === 'front') {
+                targetX = customMinX + stairOffsetMeters + stairWidth / 2;
+                targetZ = customMaxZ;
+              } else if (activeStairSide === 'back') {
+                targetX = customMinX + stairOffsetMeters + stairWidth / 2;
+                targetZ = customMinZ;
+              } else if (activeStairSide === 'left') {
+                targetX = customMinX;
+                targetZ = customMinZ + stairOffsetMeters + stairWidth / 2;
+              } else if (activeStairSide === 'right') {
+                targetX = customMaxX;
+                targetZ = customMinZ + stairOffsetMeters + stairWidth / 2;
+              }
+
+              let t = 0.5;
+              if (segmentLength > 0.05) {
+                const dx = seg.x2 - seg.x1;
+                const dz = seg.z2 - seg.z1;
+                t = ((targetX - seg.x1) * dx + (targetZ - seg.z1) * dz) / (dx * dx + dz * dz);
+                t = Math.max(0, Math.min(1, t));
+              }
+              stairCenterDist = t * segmentLength;
+              stairCenterDist = Math.max(stairWidth / 2, Math.min(stairCenterDist, segmentLength - stairWidth / 2));
+            } else {
+              const defaultOffsetMeters = (segmentLength - stairWidth) / 2;
+              const userOffsetMeters = config.stairOffset !== undefined ? config.stairOffset * scale : defaultOffsetMeters;
+              const clampedOffset = Math.max(0, Math.min(userOffsetMeters, segmentLength - stairWidth));
+              stairCenterDist = clampedOffset + stairWidth / 2;
+            }
 
             const centerPt = { 
               x: seg.x1 + unitVector.x * stairCenterDist, 
@@ -822,24 +1209,24 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
               const topRailGeometry = new BoxGeometry(leftLength, 0.05, 0.05);
               const topRail = new Mesh(topRailGeometry, railingMaterial);
               topRail.position.set(leftCenterX, topRailY, leftCenterZ);
-              topRail.rotation.y = angle;
+              topRail.rotation.y = -angle;
               topRail.castShadow = true;
               scene.add(topRail);
               
               const bottomRail = new Mesh(topRailGeometry.clone(), railingMaterial);
               bottomRail.position.set(leftCenterX, bottomRailY, leftCenterZ);
-              bottomRail.rotation.y = angle;
+              bottomRail.rotation.y = -angle;
               scene.add(bottomRail);
 
               if (useGlassInfill) {
                 const panelLength = Math.max(leftLength - 0.12, 0.12);
                 const panelHeight = Math.max(balusterLength - 0.06, 0.12);
                 const glassPanel = new Mesh(
-                  new BoxGeometry(panelLength, panelHeight, 0.02),
-                  glassPanelMaterial
+                   new BoxGeometry(panelLength, panelHeight, 0.02),
+                   glassPanelMaterial
                 );
                 glassPanel.position.set(leftCenterX, balusterCenterY, leftCenterZ);
-                glassPanel.rotation.y = angle;
+                glassPanel.rotation.y = -angle;
                 scene.add(glassPanel);
               } else {
                 const balusterSpacing = 0.15;
@@ -880,24 +1267,24 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
               const topRailGeometry = new BoxGeometry(rightLength, 0.05, 0.05);
               const topRail = new Mesh(topRailGeometry, railingMaterial);
               topRail.position.set(rightCenterX, topRailY, rightCenterZ);
-              topRail.rotation.y = angle;
+              topRail.rotation.y = -angle;
               topRail.castShadow = true;
               scene.add(topRail);
               
               const bottomRail = new Mesh(topRailGeometry.clone(), railingMaterial);
               bottomRail.position.set(rightCenterX, bottomRailY, rightCenterZ);
-              bottomRail.rotation.y = angle;
+              bottomRail.rotation.y = -angle;
               scene.add(bottomRail);
 
               if (useGlassInfill) {
                 const panelLength = Math.max(rightLength - 0.12, 0.12);
                 const panelHeight = Math.max(balusterLength - 0.06, 0.12);
                 const glassPanel = new Mesh(
-                  new BoxGeometry(panelLength, panelHeight, 0.02),
-                  glassPanelMaterial
+                   new BoxGeometry(panelLength, panelHeight, 0.02),
+                   glassPanelMaterial
                 );
                 glassPanel.position.set(rightCenterX, balusterCenterY, rightCenterZ);
-                glassPanel.rotation.y = angle;
+                glassPanel.rotation.y = -angle;
                 scene.add(glassPanel);
               } else {
                 const balusterSpacing = 0.15;
@@ -935,14 +1322,14 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
             const topRailGeometry = new BoxGeometry(segLength, 0.05, 0.05);
             const topRail = new Mesh(topRailGeometry, railingMaterial);
             topRail.position.set(centerX, topRailY, centerZ);
-            topRail.rotation.y = angle;
+            topRail.rotation.y = -angle;
             topRail.castShadow = true;
             scene.add(topRail);
             
             // Bottom rail
             const bottomRail = new Mesh(topRailGeometry.clone(), railingMaterial);
             bottomRail.position.set(centerX, bottomRailY, centerZ);
-            bottomRail.rotation.y = angle;
+            bottomRail.rotation.y = -angle;
             scene.add(bottomRail);
 
             if (useGlassInfill) {
@@ -953,7 +1340,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
                 glassPanelMaterial
               );
               glassPanel.position.set(centerX, balusterCenterY, centerZ);
-              glassPanel.rotation.y = angle;
+              glassPanel.rotation.y = -angle;
               scene.add(glassPanel);
             } else {
               const balusterSpacing = 0.15;
@@ -1013,21 +1400,79 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         const segmentLength = Math.sqrt(segmentVector.x ** 2 + segmentVector.z ** 2);
         const unitVector = { x: segmentVector.x / segmentLength, z: segmentVector.z / segmentLength };
         
-        const defaultOffsetMeters = (segmentLength - stairWidth) / 2;
-        const userOffsetMeters = config.stairOffset !== undefined ? config.stairOffset * scale : defaultOffsetMeters;
-        const clampedOffset = Math.max(0, Math.min(userOffsetMeters, segmentLength - stairWidth));
-        
-        const stairCenterDist = clampedOffset + stairWidth / 2;
+        let stairCenterDist = 0;
+        if (isCustom && centeredPts.length >= 3) {
+          // Calculate target stair position
+          const activeStairSide = config.stairSide || 'front';
+          const defaultOffsetMeters = ((activeStairSide === 'front' || activeStairSide === 'back' ? (customMaxX - customMinX) : (customMaxZ - customMinZ)) - stairWidth) / 2;
+          const stairOffsetMeters = config.stairOffset !== undefined ? config.stairOffset * scale : defaultOffsetMeters;
+          
+          let targetX = 0;
+          let targetZ = 0;
+          if (activeStairSide === 'front') {
+            targetX = customMinX + stairOffsetMeters + stairWidth / 2;
+            targetZ = customMaxZ;
+          } else if (activeStairSide === 'back') {
+            targetX = customMinX + stairOffsetMeters + stairWidth / 2;
+            targetZ = customMinZ;
+          } else if (activeStairSide === 'left') {
+            targetX = customMinX;
+            targetZ = customMinZ + stairOffsetMeters + stairWidth / 2;
+          } else if (activeStairSide === 'right') {
+            targetX = customMaxX;
+            targetZ = customMinZ + stairOffsetMeters + stairWidth / 2;
+          }
+
+          let t = 0.5;
+          if (segmentLength > 0.05) {
+            const dx = stairSegment.x2 - stairSegment.x1;
+            const dz = stairSegment.z2 - stairSegment.z1;
+            t = ((targetX - stairSegment.x1) * dx + (targetZ - stairSegment.z1) * dz) / (dx * dx + dz * dz);
+            t = Math.max(0, Math.min(1, t));
+          }
+          stairCenterDist = t * segmentLength;
+          stairCenterDist = Math.max(stairWidth / 2, Math.min(stairCenterDist, segmentLength - stairWidth / 2));
+        } else {
+          const defaultOffsetMeters = (segmentLength - stairWidth) / 2;
+          const userOffsetMeters = config.stairOffset !== undefined ? config.stairOffset * scale : defaultOffsetMeters;
+          const clampedOffset = Math.max(0, Math.min(userOffsetMeters, segmentLength - stairWidth));
+          stairCenterDist = clampedOffset + stairWidth / 2;
+        }
 
         stairBaseX = stairSegment.x1 + unitVector.x * stairCenterDist;
         stairBaseZ = stairSegment.z1 + unitVector.z * stairCenterDist;
         
-        // Calculate outward normal and exact rotation
-        const dx = stairSegment.x2 - stairSegment.x1;
-        const dz = stairSegment.z2 - stairSegment.z1;
-        const len = Math.sqrt(dx*dx + dz*dz);
-        const nx = dz / len;
-        const nz = -dx / len;
+        // Calculate outward normal using centroid of the polygon if shape is custom
+        let nx = 0;
+        let nz = 0;
+        if (isCustom && centeredPts.length >= 3) {
+          const midX = (stairSegment.x1 + stairSegment.x2) / 2;
+          const midZ = (stairSegment.z1 + stairSegment.z2) / 2;
+          let sumX = 0, sumY = 0;
+          centeredPts.forEach(pt => { sumX += pt.x; sumY += pt.y; });
+          const centroidX = sumX / centeredPts.length;
+          const centroidZ = sumY / centeredPts.length;
+          const vX = midX - centroidX;
+          const vZ = midZ - centroidZ;
+          
+          nx = -(stairSegment.z2 - stairSegment.z1);
+          nz = stairSegment.x2 - stairSegment.x1;
+          if (nx * vX + nz * vZ < 0) {
+            nx = -nx;
+            nz = -nz;
+          }
+          const nLen = Math.sqrt(nx*nx + nz*nz);
+          if (nLen > 0) {
+            nx /= nLen;
+            nz /= nLen;
+          }
+        } else {
+          const dx = stairSegment.x2 - stairSegment.x1;
+          const dz = stairSegment.z2 - stairSegment.z1;
+          const len = Math.sqrt(dx*dx + dz*dz);
+          nx = dz / len;
+          nz = -dx / len;
+        }
         stairRotation = Math.atan2(nx, nz);
       } else {
         // Fallback if segment not found

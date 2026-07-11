@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DeckConfigurator } from '../deck/DeckConfigurator';
 import { DeckCanvas } from '../deck/DeckCanvas';
+import { DrawingCanvas } from '../deck/DrawingCanvas';
 import { Deck3DRenderer, Deck3DRendererRef } from '../deck/Deck3DRenderer';
 import { MaterialsList } from '../deck/MaterialsList';
 import { DeckTemplates } from '../deck/DeckTemplates';
@@ -14,7 +15,7 @@ import { calculateMaterials } from '../../utils/deckCalculations';
 import { enrichMaterialsWithT1Pricing } from '../../utils/enrichMaterialsWithPricing';
 import { getUserDefaults, extractConversionFactors, getOrgConversionFactors, extractOrgConversionFactors } from '../../utils/project-wizard-defaults-client';
 import { DeckConfig } from '../../types/deck';
-import { Ruler, Package, Printer, FileText, Box, Layers, Hammer, Settings, LayoutTemplate, PanelLeftClose, PanelLeftOpen, ChevronDown } from 'lucide-react';
+import { Ruler, Package, Printer, FileText, Box, Layers, Hammer, Settings, LayoutTemplate, PanelLeftClose, PanelLeftOpen, ChevronDown, Wand2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner@2.0.3';
 import type { User } from '../../App';
@@ -75,6 +76,8 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
   const [enrichedMaterials, setEnrichedMaterials] = useState<any[]>([]);
   const [totalT1Price, setTotalT1Price] = useState<number>(0);
   const [defaultsVersion, setDefaultsVersion] = useState(0);
+  const [showWizard, setShowWizard] = useState(true);
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [loadedDesignInfo, setLoadedDesignInfo] = useState<{
     name?: string;
     description?: string;
@@ -217,6 +220,8 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     setConfig(templateConfig);
     setLoadedDesignInfo({}); // Clear loaded design info when loading a template
     setActiveTab('design');
+    setShowWizard(false);
+    setIsDrawingMode(false);
     toast.success('Template loaded successfully!');
   };
 
@@ -229,6 +234,8 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     setConfig(loadedConfig);
     setLoadedDesignInfo(designInfo || {});
     setActiveTab('design');
+    setShowWizard(false);
+    setIsDrawingMode(false);
   };
 
   const handlePrint = () => {
@@ -394,72 +401,225 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
       {/* Content */}
       <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 print:hidden ${isSidebarOpen ? 'max-w-7xl' : 'max-w-[1600px] transition-all duration-300'}`}>
         {activeTab === 'design' && (
-          <div className="flex flex-col lg:flex-row gap-6">
-            {isSidebarOpen && (
-              <div className="w-full lg:w-1/3 shrink-0 space-y-6 print:hidden">
-                <DeckConfigurator config={config} onChange={setConfig} />
-              </div>
-            )}
-
-            <div className="flex-1 min-w-0 space-y-6 print:hidden">
-              <div className="bg-background rounded-lg shadow-sm border border-border p-6 print:shadow-none print:border-2 print:border-black">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                      className="p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg transition-colors print:hidden"
-                      title={isSidebarOpen ? "Collapse configurator" : "Expand configurator"}
-                    >
-                      {isSidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
-                    </button>
-                    <h2 className="text-foreground print:hidden m-0">Deck Plan & Elevation</h2>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setViewMode('2d')}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-sm ${
-                        viewMode === '2d'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-muted text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <Layers className="w-4 h-4" />
-                      2D
-                    </button>
-                    <button
-                      onClick={() => setViewMode('3d')}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-sm ${
-                        viewMode === '3d'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-muted text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <Box className="w-4 h-4" />
-                      3D
-                    </button>
-                  </div>
-                </div>
+          isDrawingMode ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  {viewMode === '2d' ? (
-                    <DeckCanvas config={config} onChange={setConfig} />
-                  ) : (
-                    <div className="h-[500px]">
-                      <Deck3DRenderer 
-                        key={`3d-${config.width}-${config.length}-${config.shape}-${config.lShapePosition}-${config.lShapeWidth}-${config.lShapeLength}-${config.hasStairs}-${config.stairSide}`} 
-                        config={config} 
-                        ref={deck3DRendererRef}
-                      />
+                  <h2 className="text-xl font-bold text-foreground">Interactive Drawing Workspace</h2>
+                  <p className="text-sm text-muted-foreground">Trace the perimeter of your custom deck shape on the grid below.</p>
+                </div>
+              </div>
+              <DrawingCanvas
+                initialHeight={config.height}
+                onCancel={() => {
+                  setIsDrawingMode(false);
+                  setShowWizard(true);
+                }}
+                onComplete={(points, height) => {
+                  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                  points.forEach(p => {
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                  });
+                  const computedWidth = maxX - minX;
+                  const computedLength = maxY - minY;
+                  
+                  setConfig(prev => ({
+                    ...prev,
+                    shape: 'custom',
+                    customPoints: points,
+                    width: computedWidth || 12,
+                    length: computedLength || 16,
+                    height: height
+                  }));
+                  setIsDrawingMode(false);
+                  setShowWizard(false);
+                }}
+              />
+            </div>
+          ) : showWizard ? (
+            <div className="space-y-8 max-w-5xl mx-auto">
+              {/* Wizard Header */}
+              <div className="text-center space-y-2 py-4">
+                <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full uppercase tracking-wider">Step 1: Layout Mode</span>
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">Create New Design</h1>
+                <p className="text-muted-foreground text-sm max-w-lg mx-auto">
+                  Draw a custom polygon deck shape, configure manual dimensions, or pick from our professional templates below.
+                </p>
+              </div>
+
+              {/* Layout Mode Selection Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Drawing Card */}
+                <div className="bg-card hover:bg-muted/30 border border-border rounded-xl p-6 flex flex-col justify-between shadow-sm hover:shadow-md transition-all">
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                      <Ruler className="w-6 h-6" />
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-bold text-foreground">Interactive Draw Deck</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Trace your layout on a white canvas gridsheet with live snapping and dimension guides. Best for custom, non-standard shapes.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-6">
+                    <Button 
+                      onClick={() => {
+                        setIsDrawingMode(true);
+                        setShowWizard(false);
+                      }} 
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white flex items-center justify-center gap-2"
+                    >
+                      <span>Draw Deck shape</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Manual Dimensions Card */}
+                <div className="bg-card border border-border rounded-xl p-6 flex flex-col justify-between shadow-sm transition-all">
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+                      <Package className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-bold text-foreground">Standard Dimensions Setup</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Manually set the width and length, and proceed directly to materials and elevations.
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground font-medium block mb-1">Width (feet)</label>
+                        <input
+                          type="number"
+                          value={config.width}
+                          onChange={(e) => setConfig(prev => ({ ...prev, width: Math.max(4, Number(e.target.value)) }))}
+                          className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground font-medium block mb-1">Length (feet)</label>
+                        <input
+                          type="number"
+                          value={config.length}
+                          onChange={(e) => setConfig(prev => ({ ...prev, length: Math.max(4, Number(e.target.value)) }))}
+                          className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-6">
+                    <Button 
+                      onClick={() => {
+                        setShowWizard(false);
+                        setIsDrawingMode(false);
+                      }} 
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                    >
+                      <span>Configure Deck Specs</span>
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-background rounded-lg shadow-sm border border-border p-6 print:shadow-none print:border-2 print:border-black print:break-before-page">
-                <h2 className="text-foreground mb-4">Materials Summary</h2>
-                <MaterialsList materials={materials} compact />
+              {/* Prebuilt Templates list inside the wizard */}
+              <div className="bg-muted/20 rounded-xl border border-border p-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-foreground">Load Standard Blueprint</h3>
+                  <p className="text-xs text-muted-foreground">Or, load any of our pre-calculated templates immediately to customize them.</p>
+                </div>
+                <DeckTemplates 
+                  onLoadTemplate={(loaded) => {
+                    handleLoadTemplate(loaded);
+                    setShowWizard(false);
+                    setIsDrawingMode(false);
+                  }} 
+                  currentConfig={config} 
+                />
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col lg:flex-row gap-6">
+              {isSidebarOpen && (
+                <div className="w-full lg:w-1/3 shrink-0 space-y-6 print:hidden">
+                  <div className="bg-card border border-border p-4 rounded-lg shadow-sm">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowWizard(true)}
+                      className="w-full border-dashed border-purple-300 hover:bg-purple-50 hover:text-purple-700 flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Wand2 className="w-4 h-4 text-purple-600" />
+                      <span>Start New Design Wizard</span>
+                    </Button>
+                  </div>
+                  <DeckConfigurator config={config} onChange={setConfig} />
+                </div>
+              )}
+  
+              <div className="flex-1 min-w-0 space-y-6 print:hidden">
+                <div className="bg-background rounded-lg shadow-sm border border-border p-6 print:shadow-none print:border-2 print:border-black">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                        className="p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg transition-colors print:hidden"
+                        title={isSidebarOpen ? "Collapse configurator" : "Expand configurator"}
+                      >
+                        {isSidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
+                      </button>
+                      <h2 className="text-foreground print:hidden m-0">Deck Plan & Elevation</h2>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setViewMode('2d')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-sm ${
+                          viewMode === '2d'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-muted text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <Layers className="w-4 h-4" />
+                        2D
+                      </button>
+                      <button
+                        onClick={() => setViewMode('3d')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-sm ${
+                          viewMode === '3d'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-muted text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <Box className="w-4 h-4" />
+                        3D
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    {viewMode === '2d' ? (
+                      <DeckCanvas config={config} onChange={setConfig} />
+                    ) : (
+                      <div className="h-[500px]">
+                        <Deck3DRenderer 
+                          key={`3d-${config.width}-${config.length}-${config.shape}-${config.lShapePosition}-${config.lShapeWidth}-${config.lShapeLength}-${config.hasStairs}-${config.stairSide}`} 
+                          config={config} 
+                          ref={deck3DRendererRef}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+  
+                <div className="bg-background rounded-lg shadow-sm border border-border p-6 print:shadow-none print:border-2 print:border-black print:break-before-page">
+                  <h2 className="text-foreground mb-4">Materials Summary</h2>
+                  <MaterialsList materials={materials} compact />
+                </div>
+              </div>
+            </div>
+          )
         )}
 
         {activeTab === 'materials' && (

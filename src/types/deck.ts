@@ -1,4 +1,4 @@
-export type DeckShape = 'rectangle' | 'l-shape' | 'u-shape';
+export type DeckShape = 'rectangle' | 'l-shape' | 'u-shape' | 'custom';
 export type DeckingSide = 'front' | 'back' | 'left' | 'right';
 export type DeckingPattern = 'perpendicular' | 'parallel' | 'diagonal';
 export type Unit = 'feet' | 'meters';
@@ -15,6 +15,9 @@ export interface DeckConfig {
   height: number; // deck height above ground
   isDetached?: boolean;
   
+  // Custom drawn shape points (in feet)
+  customPoints?: { x: number; y: number }[];
+
   // L-shape specific (if shape is 'l-shape')
   lShapeWidth?: number;
   lShapeLength?: number;

@@ -22,12 +22,29 @@ const DECKING_TYPE_KEYWORDS: Record<DeckingMaterialType, string[]> = {
 export function calculateDeckArea(config: DeckConfig): number {
   if (config.shape === 'rectangle') {
     return config.width * config.length;
-  } else {
+  } else if (config.shape === 'l-shape') {
     // L-shape: main rectangle + extension
     const mainArea = config.width * config.length;
     const extensionArea = (config.lShapeWidth || 4) * (config.lShapeLength || 4);
     return mainArea + extensionArea;
+  } else if (config.shape === 'u-shape') {
+    // U-shape: main rectangle + two extensions
+    const mainArea = config.width * config.length;
+    const leftArea = (config.uShapeLeftWidth || 6) * (config.uShapeDepth || 8);
+    const rightArea = (config.uShapeRightWidth || 6) * (config.uShapeDepth || 8);
+    return mainArea + leftArea + rightArea;
+  } else if (config.shape === 'custom' && config.customPoints && config.customPoints.length >= 3) {
+    // Shoelace formula for polygon area
+    let area = 0;
+    const n = config.customPoints.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      area += config.customPoints[i].x * config.customPoints[j].y;
+      area -= config.customPoints[j].x * config.customPoints[i].y;
+    }
+    return Math.abs(area / 2);
   }
+  return config.width * config.length;
 }
 
 /**
@@ -58,36 +75,41 @@ export function calculateRailingLength(config: DeckConfig): number {
     const lLength = config.lShapeLength || 4;
     const lPos = config.lShapePosition || 'top-left';
     
-    // Calculate outer perimeter segments based on L-shape position
-    // The "back" edge (house side, z = -mainLength/2 in 3D) is always excluded
-    // Interior edges where L meets main rectangle are also excluded
-    
-    switch (lPos) {
-      case 'top-right':
-        totalLength = 2 * mainLength + mainWidth + lWidth;
-        break;
-        
-      case 'bottom-right':
-        totalLength = 2 * mainLength + mainWidth + lWidth;
-        break;
-        
-      case 'bottom-left':
-        totalLength = 2 * mainLength + mainWidth + lWidth;
-        break;
-        
-      case 'top-left':
-      default:
-        totalLength = 2 * mainLength + mainWidth + lWidth;
-        break;
-    }
+    totalLength = 2 * mainLength + mainWidth + lWidth;
     
     // Subtract stairs if present (stairs can be on any outer edge)
     if (config.hasStairs) {
       totalLength -= (config.stairWidth || 4);
     }
+  } else if (config.shape === 'u-shape') {
+    const mainWidth = config.width;
+    const mainLength = config.length;
+    const leftW = config.uShapeLeftWidth || 6;
+    const rightW = config.uShapeRightWidth || 6;
+    const depth = config.uShapeDepth || 8;
+    totalLength = mainLength * 2 + mainWidth + leftW + rightW + depth * 2;
+
+    if (config.hasStairs) {
+      totalLength -= (config.stairWidth || 4);
+    }
+  } else if (config.shape === 'custom' && config.customPoints && config.customPoints.length >= 2) {
+    const n = config.customPoints.length;
+    let perimeter = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const dx = config.customPoints[i].x - config.customPoints[j].x;
+      const dy = config.customPoints[i].y - config.customPoints[j].y;
+      perimeter += Math.sqrt(dx * dx + dy * dy);
+    }
+    // Assume 75% of perimeter gets railing (excluding attached house side)
+    totalLength = perimeter * 0.75;
+
+    if (config.hasStairs) {
+      totalLength -= (config.stairWidth || 4);
+    }
   }
   
-  return totalLength;
+  return Math.max(0, totalLength);
 }
 
 const ALUMINUM_RAIL_LENGTHS_FT = [6, 8, 10, 12] as const;
@@ -216,9 +238,26 @@ function addConsolidatedPieces(
  * Standard lengths: 8', 10', 12', 14', 16'.
  * Spans exceeding 16' are covered by combining boards (e.g., 24' = 16' + 8').
  */
-export function calculateMaterials(config: DeckConfig): DeckMaterials {
-  const deckArea = calculateDeckArea(config);
-  const railingLength = calculateRailingLength(config);
+export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
+  const deckArea = calculateDeckArea(rawConfig);
+  const railingLength = calculateRailingLength(rawConfig);
+  
+  // Calculate effective bounding box for custom shapes
+  let width = rawConfig.width;
+  let length = rawConfig.length;
+  if (rawConfig.shape === 'custom' && rawConfig.customPoints && rawConfig.customPoints.length >= 3) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    rawConfig.customPoints.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    });
+    width = Math.max(4, Math.round(maxX - minX));
+    length = Math.max(4, Math.round(maxY - minY));
+  }
+
+  const config = { ...rawConfig, width, length };
   
   // FRAMING
   const framing: MaterialItem[] = [];
