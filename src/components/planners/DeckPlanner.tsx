@@ -204,7 +204,9 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     // Create a map of enriched materials by description for quick lookup
     const enrichedMap = new Map();
     enrichedMaterials.forEach(item => {
-      enrichedMap.set(item.originalDescription || item.description, item);
+      if (item) {
+        enrichedMap.set(item.originalDescription || item.description, item);
+      }
     });
 
     // Merge pricing data into original structure
@@ -217,7 +219,10 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
   };
 
   const handleLoadTemplate = (templateConfig: DeckConfig) => {
-    setConfig(templateConfig);
+    setConfig({
+      ...templateConfig,
+      deckingType: 'Treated',
+    });
     setLoadedDesignInfo({}); // Clear loaded design info when loading a template
     setActiveTab('design');
     setShowWizard(false);
@@ -364,7 +369,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
                   <ProjectQuoteGenerator 
                     user={user}
                     projectType="deck"
-                    materials={enrichedMaterials}
+                    materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
                     totalCost={totalT1Price}
                     projectData={config}
                     isModal={true}
@@ -615,7 +620,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
   
                 <div className="bg-background rounded-lg shadow-sm border border-border p-6 print:shadow-none print:border-2 print:border-black print:break-before-page">
                   <h2 className="text-foreground mb-4">Materials Summary</h2>
-                  <MaterialsList materials={materials} compact />
+                  <MaterialsList materials={getEnrichedMaterialsStructure()} compact />
                 </div>
               </div>
             </div>
@@ -646,7 +651,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
                   user={user}
                   projectType="deck"
                   currentConfig={config}
-                  materials={enrichedMaterials}
+                  materials={enrichedMaterials.length > 0 ? enrichedMaterials : flatMaterials}
                   totalCost={totalT1Price}
                   onLoadDesign={(savedConfig) => setConfig(savedConfig)}
                 />

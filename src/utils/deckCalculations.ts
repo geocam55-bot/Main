@@ -261,6 +261,11 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   
   // FRAMING
   const framing: MaterialItem[] = [];
+
+  const deckingMaterialType = config.deckingType || 'Treated';
+  const isSpruce = deckingMaterialType.toLowerCase() === 'spruce';
+  const isCedar = deckingMaterialType.toLowerCase() === 'cedar';
+  const framingPrefix = isSpruce ? 'Spruce' : isCedar ? 'Cedar' : 'Pressure Treated';
   
   // ---- Ledger Board ----
   // Spans the deck width, attaches to house
@@ -268,7 +273,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   ledgerCombo.forEach(({ length, count }) => {
     framing.push({
       category: 'Framing',
-      description: `Pressure Treated Ledger Board (${length}')`,
+      description: `${framingPrefix} Ledger Board (${length}')`,
       quantity: count,
       unit: 'pcs',
       notes: ledgerCombo.length > 1
@@ -288,7 +293,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   joistCombo.forEach(({ length, count }) => {
     framing.push({
       category: 'Framing',
-      description: `Pressure Treated Joists (${length}')`,
+      description: `${framingPrefix} Joists (${length}')`,
       quantity: numberOfJoists * count,
       unit: 'pcs',
       notes: joistCombo.length > 1
@@ -309,7 +314,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
     .forEach(([length, quantity]) => {
       framing.push({
         category: 'Framing',
-        description: `Pressure Treated Rim Joists (${length}')`,
+        description: `${framingPrefix} Rim Joists (${length}')`,
         quantity,
         unit: 'pcs',
         notes: 'Perimeter band boards',
@@ -325,7 +330,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   beamCombo.forEach(({ length, count }) => {
     framing.push({
       category: 'Framing',
-      description: `Pressure Treated Beams (${length}')`,
+      description: `${framingPrefix} Beams (${length}')`,
       quantity: beamCount * count,
       unit: 'pcs',
       notes: beamCombo.length > 1
@@ -379,7 +384,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
     
     framing.push({
       category: 'Framing',
-      description: `Pressure Treated Blocking (${blockingBoardLength}')`,
+      description: `${framingPrefix} Blocking (${blockingBoardLength}')`,
       quantity: blockingQuantity,
       unit: 'pcs',
       notes: `Provides frame rigidity & rail post support. Individual block length: ${blockLength}\". Total blocks: ${totalBlocks} (${numberOfBays} bays × ${blockingRows} rows + ${railingBlocks} railing blocks).`,
@@ -396,7 +401,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
 
   framing.push({
     category: 'Framing',
-    description: `${ptSize} Pressure Treated Posts (${postLumberLength}')`,
+    description: `${ptSize} ${framingPrefix} Posts (${postLumberLength}')`,
     quantity: postCount,
     unit: 'pcs',
     notes: 'Support posts with concrete footings',
@@ -406,8 +411,6 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   // DECKING
   const decking: MaterialItem[] = [];
   
-  const deckingMaterialType = config.deckingType || 'Treated';
-
   // Determine deck board span based on pattern/orientation
   const deckBoardSpan = getDeckBoardSpan(config.width, config.length, config.deckingPattern);
   const deckBoardCombo = getLumberCombination(deckBoardSpan);

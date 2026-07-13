@@ -435,7 +435,14 @@ export const findBestMatchingItem = (
   category: string,
   items: InventoryItem[]
 ): InventoryItem | null => {
-  const normCategory = category.toLowerCase();
+  // Extract base category name by removing any section prefixes like "Framing - " or "Hardware - "
+  let baseCategory = category;
+  if (category.includes(' - ')) {
+    const parts = category.split(' - ');
+    baseCategory = parts[parts.length - 1]; // Use the last part
+  }
+
+  const normCategory = baseCategory.toLowerCase();
   const normMaterial = materialType.toLowerCase();
   
   let materialFilteredItems = items;
@@ -483,23 +490,33 @@ export const findBestMatchingItem = (
     const sku = (i.sku || '').toLowerCase();
     const text = `${name} ${desc} ${sku}`;
 
-    if (normCategory === 'ledger board') {
-      if (text.includes('ledger')) return i;
-    } else if (normCategory === 'joists') {
-      if (text.includes('joist') && !text.includes('hanger') && !text.includes('rim') && !text.includes('ledger')) return i;
-    } else if (normCategory === 'rim joists') {
-      if (text.includes('rim joist') || text.includes('rim joists') || (text.includes('rim') && text.includes('joist'))) return i;
-    } else if (normCategory === 'beams') {
-      if (text.includes('beam')) return i;
-    } else if (normCategory === 'posts') {
-      if (text.includes('post') && !text.includes('railing') && !text.includes('anchor') && !text.includes('cap') && !text.includes('base')) return i;
-    } else if (normCategory === 'stair stringers') {
-      if (text.includes('stringer')) return i;
-    } else if (normCategory === 'decking boards') {
-      if (text.includes('decking') || text.includes('deck board') || text.includes('5/4x6')) return i;
-    } else if (normCategory === 'stair treads') {
+    // Helper to check if name/desc contains length
+    const verifyLength = (): boolean => {
+      const lengthMatch = normCategory.match(/\((\d+)'\)/);
+      if (lengthMatch) {
+        const len = lengthMatch[1];
+        return text.includes(`${len}'`) || text.includes(`${len}ft`) || text.includes(`${len} ft`) || text.includes(`${len}-ft`);
+      }
+      return true;
+    };
+
+    if (normCategory.startsWith('ledger board')) {
+      if (text.includes('ledger') && verifyLength()) return i;
+    } else if (normCategory.startsWith('joists')) {
+      if (text.includes('joist') && !text.includes('hanger') && !text.includes('rim') && !text.includes('ledger') && verifyLength()) return i;
+    } else if (normCategory.startsWith('rim joists')) {
+      if ((text.includes('rim joist') || text.includes('rim joists') || (text.includes('rim') && text.includes('joist'))) && verifyLength()) return i;
+    } else if (normCategory.startsWith('beams')) {
+      if (text.includes('beam') && verifyLength()) return i;
+    } else if (normCategory.startsWith('posts')) {
+      if (text.includes('post') && !text.includes('railing') && !text.includes('anchor') && !text.includes('cap') && !text.includes('base') && verifyLength()) return i;
+    } else if (normCategory.startsWith('stair stringers')) {
+      if (text.includes('stringer') && verifyLength()) return i;
+    } else if (normCategory.startsWith('decking boards')) {
+      if ((text.includes('decking') || text.includes('deck board') || text.includes('5/4x6') || text.includes('5/4 x 6')) && verifyLength()) return i;
+    } else if (normCategory.startsWith('stair treads')) {
       if (text.includes('stair') && text.includes('tread')) return i;
-    } else if (normCategory === 'stair risers') {
+    } else if (normCategory.startsWith('stair risers')) {
       if (text.includes('riser') || text.includes('stair riser')) return i;
     } else if (normCategory === 'ledger flashing') {
       if (text.includes('flashing')) return i;
@@ -527,24 +544,34 @@ export const findBestMatchingItem = (
     const sku = (i.sku || '').toLowerCase();
     const text = `${name} ${desc} ${sku}`;
 
-    if (normCategory === 'ledger board') {
-      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) return i;
-    } else if (normCategory === 'joists') {
-      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) return i;
-    } else if (normCategory === 'rim joists') {
-      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) return i;
-    } else if (normCategory === 'beams') {
-      if (text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('3x8') || text.includes('2x6')) return i;
-    } else if (normCategory === 'posts') {
-      if (text.includes('6x6') || text.includes('4x4') || text.includes('d4s')) return i;
-    } else if (normCategory === 'stair stringers') {
-      if (text.includes('2x12') || text.includes('2x10')) return i;
-    } else if (normCategory === 'decking boards') {
-      if (text.includes('5/4x6') || text.includes('5/4 x 6') || text.includes('decking') || text.includes('deck board') || text.includes('2x6')) return i;
-    } else if (normCategory === 'stair treads') {
-      if (text.includes('stair') || text.includes('tread') || text.includes('2x12') || text.includes('step')) return i;
-    } else if (normCategory === 'stair risers') {
-      if (text.includes('1x8') || text.includes('1 x 8') || text.includes('1"x8"') || text.includes('1" x 8"')) return i;
+    // Helper to check if name/desc contains length
+    const verifyLength = (): boolean => {
+      const lengthMatch = normCategory.match(/\((\d+)'\)/);
+      if (lengthMatch) {
+        const len = lengthMatch[1];
+        return text.includes(`${len}'`) || text.includes(`${len}ft`) || text.includes(`${len} ft`) || text.includes(`${len}-ft`);
+      }
+      return true;
+    };
+
+    if (normCategory.startsWith('ledger board')) {
+      if ((text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) && !text.includes('hanger') && !text.includes('flashing') && verifyLength()) return i;
+    } else if (normCategory.startsWith('joists')) {
+      if ((text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) && !text.includes('hanger') && !text.includes('rim') && !text.includes('ledger') && verifyLength()) return i;
+    } else if (normCategory.startsWith('rim joists')) {
+      if ((text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('2x6')) && !text.includes('hanger') && verifyLength()) return i;
+    } else if (normCategory.startsWith('beams')) {
+      if ((text.includes('2x8') || text.includes('2x10') || text.includes('2x12') || text.includes('3x8') || text.includes('2x6')) && !text.includes('hanger') && !text.includes('post') && !text.includes('anchor') && verifyLength()) return i;
+    } else if (normCategory.startsWith('posts')) {
+      if ((text.includes('6x6') || text.includes('4x4') || text.includes('d4s')) && !text.includes('anchor') && !text.includes('base') && !text.includes('cap') && verifyLength()) return i;
+    } else if (normCategory.startsWith('stair stringers')) {
+      if ((text.includes('2x12') || text.includes('2x10')) && verifyLength()) return i;
+    } else if (normCategory.startsWith('decking boards')) {
+      if ((text.includes('5/4x6') || text.includes('5/4 x 6') || text.includes('decking') || text.includes('deck board') || text.includes('2x6')) && verifyLength()) return i;
+    } else if (normCategory.startsWith('stair treads')) {
+      if ((text.includes('stair') || text.includes('tread') || text.includes('2x12') || text.includes('step')) && verifyLength()) return i;
+    } else if (normCategory.startsWith('stair risers')) {
+      if ((text.includes('1x8') || text.includes('1 x 8') || text.includes('1"x8"') || text.includes('1" x 8"')) && verifyLength()) return i;
     }
   }
 

@@ -131,7 +131,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
   {
     id: '01',
     name: 'L-Shape Double Tier & Stairs',
-    description: '16\' × 12\' multi-level premium composite deck with integrated corner stairs.',
+    description: '16\' × 12\' multi-level premium treated deck with integrated corner stairs.',
     config: {
       width: 16,
       length: 12,
@@ -147,7 +147,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       deckingPattern: 'perpendicular',
       joistSpacing: 16,
       unit: 'feet',
-      deckingType: 'Composite',
+      deckingType: 'Treated',
     },
   },
   {
@@ -172,7 +172,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
   {
     id: '03',
     name: 'Hex-cut Angled Corner Deck',
-    description: '16\' × 16\' modern cedar deck featuring clean 45-degree corner cutouts.',
+    description: '16\' × 16\' modern treated deck featuring clean 45-degree corner cutouts.',
     config: {
       width: 16,
       length: 16,
@@ -192,7 +192,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       deckingPattern: 'diagonal',
       joistSpacing: 16,
       unit: 'feet',
-      deckingType: 'Cedar',
+      deckingType: 'Treated',
     },
   },
   {
@@ -211,7 +211,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       deckingPattern: 'parallel',
       joistSpacing: 16,
       unit: 'feet',
-      deckingType: 'Composite',
+      deckingType: 'Treated',
     },
   },
   {
@@ -252,7 +252,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       deckingPattern: 'perpendicular',
       joistSpacing: 16,
       unit: 'feet',
-      deckingType: 'Spruce',
+      deckingType: 'Treated',
     },
   },
   {
@@ -298,13 +298,13 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       deckingPattern: 'diagonal',
       joistSpacing: 16,
       unit: 'feet',
-      deckingType: 'Composite',
+      deckingType: 'Treated',
     },
   },
   {
     id: '09',
     name: 'Angled Front Edge Deck',
-    description: '16\' × 12\' architectural cedar deck with clean front 45-degree angle.',
+    description: '16\' × 12\' architectural treated deck with clean front 45-degree angle.',
     config: {
       width: 16,
       length: 12,
@@ -324,13 +324,13 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       deckingPattern: 'parallel',
       joistSpacing: 16,
       unit: 'feet',
-      deckingType: 'Cedar',
+      deckingType: 'Treated',
     },
   },
   {
     id: '10',
     name: 'Angled Corner Wrap Deck',
-    description: '18\' × 18\' multi-angle custom composite wrap deck with right steps.',
+    description: '18\' × 18\' multi-angle custom treated wrap deck with right steps.',
     config: {
       width: 18,
       length: 18,
@@ -350,7 +350,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       deckingPattern: 'diagonal',
       joistSpacing: 16,
       unit: 'feet',
-      deckingType: 'Composite',
+      deckingType: 'Treated',
     },
   },
 ];

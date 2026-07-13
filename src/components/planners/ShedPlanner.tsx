@@ -478,7 +478,7 @@ export function ShedPlanner({ user }: ShedPlannerProps) {
 
               <div className="bg-background rounded-lg shadow-sm border border-border p-6 print:shadow-none print:border-2 print:border-black print:break-before-page">
                 <h2 className="text-foreground mb-4">Materials Summary</h2>
-                <ShedMaterialsList materials={materials} compact />
+                <ShedMaterialsList materials={getEnrichedMaterialsStructure()} compact />
               </div>
             </div>
           </div>
