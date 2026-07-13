@@ -1125,6 +1125,12 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
 
       // Draw railings for each segment
       railingSegments.forEach(seg => {
+        // Skip if railing side is not enabled in configuration
+        const sideToCheck = seg.side.endsWith('-other') ? seg.side.substring(0, seg.side.length - 6) : seg.side;
+        if (config.railingSides && !config.railingSides.includes(sideToCheck as any)) {
+          return;
+        }
+
         const segLength = Math.sqrt((seg.x2 - seg.x1) ** 2 + (seg.z2 - seg.z1) ** 2);
         const centerX = (seg.x1 + seg.x2) / 2;
         const centerZ = (seg.z1 + seg.z2) / 2;
