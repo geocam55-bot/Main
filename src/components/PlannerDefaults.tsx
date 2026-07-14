@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Loader2, Save, RefreshCw, Settings, Info } from 'lucide-react';
+import { Loader2, Save, RefreshCw, Settings, Info, ChevronDown } from 'lucide-react';
 import {
   getProjectWizardDefaults,
   getUserDefaults,
@@ -17,7 +17,7 @@ import {
   InventoryItem,
   upsertProjectWizardDefault,
 } from '../utils/project-wizard-defaults-client';
-import { parseDefaultsKey, findBestMatchingItem } from './ProjectWizardSettings';
+import { parseDefaultsKey, findBestMatchingItem, getEffectiveCategoryForSize } from './ProjectWizardSettings';
 import { InventoryCombobox } from './InventoryCombobox';
 import { PlannerDefaultsQuickHelp } from './PlannerDefaultsQuickHelp';
 import { STANDARD_LUMBER_LENGTHS } from '../utils/lumberLengths';
@@ -144,6 +144,17 @@ const uniquifyCategory = (categoryGroup: string, category: string): string => {
     return `${categoryGroup} - ${category}`;
   }
   return category;
+};
+
+const getLengthCategoryGroup = (category: string): string | null => {
+  if (category === 'Ledger Board') return 'Framing - Ledger Board by Length';
+  if (category === 'Joists') return 'Framing - Joists by Length';
+  if (category === 'Rim Joists') return 'Framing - Rim Joists by Length';
+  if (category === 'Beams') return 'Framing - Beams by Length';
+  if (category === 'Posts') return 'Framing - Posts by Length';
+  if (category === 'Blocking') return 'Framing - Blocking by Length';
+  if (category === 'Decking Boards') return 'Decking Boards by Length';
+  return null;
 };
 
 /** Industry-standard suggested conversion factors (ft per piece → CF = 1/length).
@@ -342,6 +353,81 @@ const PLANNER_CATEGORIES: Record<string, Record<string, Record<string, string[]>
   }
 };
 
+function LengthCollapsible({
+  label,
+  category,
+  matType,
+  inventoryItems,
+  getDefaultValue,
+  handleDefaultChange,
+  getOrgDefaultValue,
+  uniquifyCategory,
+  plannerType
+}: {
+  label: string;
+  category: string;
+  matType: string | null;
+  inventoryItems: any[];
+  getDefaultValue: any;
+  handleDefaultChange: any;
+  getOrgDefaultValue: any;
+  uniquifyCategory: any;
+  plannerType: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const lengthGroup = getLengthCategoryGroup(category);
+  if (!lengthGroup) return null;
+
+  const lengths = ["8'", "10'", "12'", "14'", "16'"];
+
+  return (
+    <div className="mt-2 pl-4 border-l-2 border-muted">
+      <Button
+        variant="ghost"
+        size="sm"
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-6 px-1"
+      >
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <span>Configure {label} by Length</span>
+      </Button>
+
+      {isOpen && (
+        <div className="mt-2 space-y-3 pl-2">
+          {lengths.map((len) => {
+            const displayCat = `${category} (${len})`;
+            const uniqueCat = `${lengthGroup} - ${len}`;
+            const currentValue = getDefaultValue(matType, uniqueCat);
+            const orgValue = getOrgDefaultValue(matType, uniqueCat);
+            const isCustomized = currentValue !== orgValue;
+            
+            return (
+              <div key={len} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                    {len} Length:
+                    {isCustomized && (
+                      <span className="text-[9px] bg-blue-100 text-blue-700 px-1 rounded font-semibold">Custom</span>
+                    )}
+                  </Label>
+                </div>
+                <InventoryCombobox
+                  id={`len-${plannerType}-${matType}-${category}-${len}`}
+                  items={inventoryItems}
+                  value={currentValue}
+                  onChange={(value) => handleDefaultChange(matType, uniqueCat, value)}
+                  placeholder={`Select ${len} item...`}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PlannerDefaults({ organizationId, userId, plannerType, materialTypes, initialMaterialType, initialRailingType, initialAluminumColor, onDefaultsSaved }: PlannerDefaultsProps) {
   const draftStorageKey = `planner_defaults_draft_${organizationId}_${userId}_${plannerType}`;
   const hasInitializedDefaults = useRef(false);
@@ -376,6 +462,118 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
   const [selectedAluminumColor, setSelectedAluminumColor] = useState<string>((initialAluminumColor || 'white').toLowerCase());
   // Local string state for CF inputs so users can clear & type freely (e.g. "0.04")
   const [cfEditValues, setCfEditValues] = useState<Record<string, string>>({});
+
+  // Derived modular select variables for deck planner
+  const deckFramingType = userDefaults['deck-default-framing-type'] || 'treated';
+  const deckDeckingType = userDefaults['deck-default-decking-type'] || 'treated';
+  const deckRailingType = userDefaults['deck-default-railing-type'] || 'treated';
+  const deckStairType = userDefaults['deck-default-stair-type'] || 'treated';
+
+  const deckFramingAccType = userDefaults['deck-default-framing-accessories-type'] || 'match';
+  const deckDeckingAccType = userDefaults['deck-default-decking-accessories-type'] || 'match';
+  const deckRailingAccType = userDefaults['deck-default-railing-accessories-type'] || 'match';
+  const deckStairAccType = userDefaults['deck-default-stair-accessories-type'] || 'match';
+
+  const deckGlobalFasteners = userDefaults['deck-global-fasteners'] || 'galvanized';
+  const deckGlobalPostSize = userDefaults['deck-global-post-size'] || '4x4';
+  const deckGlobalJoistSize = userDefaults['deck-global-joist-size'] || '2x8';
+  const deckGlobalDeckingSize = userDefaults['deck-global-decking-size'] || '5/4x6';
+  const deckGlobalRailingHeight = userDefaults['deck-global-railing-height'] || '36';
+  const deckGlobalStairWidth = userDefaults['deck-global-stair-width'] || '36';
+
+  const handleSettingChange = (key: string, value: string) => {
+    setUserDefaults((prev) => {
+      const updated = { ...prev, [key]: value };
+
+      // Auto-populate defaults for the selected material type or size
+      let categories: string[] = [];
+      let matType = '';
+
+      if (key === 'deck-default-framing-type') {
+        matType = value;
+        categories = ['Ledger Board', 'Joists', 'Rim Joists', 'Beams', 'Posts', 'Stair Stringers', 'Blocking'];
+      } else if (key === 'deck-global-joist-size') {
+        matType = deckFramingType;
+        categories = ['Ledger Board', 'Joists', 'Rim Joists', 'Beams', 'Stair Stringers', 'Blocking'];
+      } else if (key === 'deck-global-post-size') {
+        matType = deckFramingType;
+        categories = ['Posts'];
+      } else if (key === 'deck-default-decking-type') {
+        matType = value;
+        categories = ['Decking Boards', 'Stair Treads', 'Stair Risers'];
+      } else if (key === 'deck-global-decking-size') {
+        matType = deckDeckingType;
+        categories = ['Decking Boards', 'Stair Treads', 'Stair Risers'];
+      } else if (key === 'deck-default-stair-type') {
+        matType = value;
+        categories = ['Stair Treads', 'Stair Risers', 'Stair Stringers'];
+      } else if (key === 'deck-default-railing-type') {
+        matType = value;
+        if (value.startsWith('aluminum')) {
+          const alumRailing = ["6'", "8'", "10'", "12'"].map(c => `Railing - ${c}`);
+          const alumSpindles = ["6'", "8'", "10'", "12'", "Stair"].map(c => `Spindles/Pickets - ${c}`);
+          const alumPosts = ["Inline", "Corner", "End", "Stair", "Angle", "Gate"].map(c => `Posts - ${c}`);
+          const alumHardware = Array.from(ALUMINUM_ONLY_HARDWARE_CATEGORIES);
+          categories = [...alumRailing, ...alumSpindles, ...alumPosts, ...alumHardware];
+        } else {
+          categories = ['Railing Posts', 'Railing Top Rail', 'Railing Bottom Rail', 'Railing Balusters'];
+        }
+      }
+
+      if (categories.length > 0) {
+        categories.forEach((cat) => {
+          // Resolve effective category with size
+          const effectiveCat = getEffectiveCategoryForSize(cat, 'deck', updated);
+          const defaultsKey = makeDefaultsKey('deck', matType, effectiveCat);
+          if (!updated[defaultsKey] || updated[defaultsKey] === 'none') {
+            const bestMatch = findBestMatchingItem('deck', matType, effectiveCat, inventoryItems);
+            if (bestMatch) {
+              updated[defaultsKey] = bestMatch.id;
+            }
+          }
+
+          const lengthGroup = getLengthCategoryGroup(cat);
+          if (lengthGroup) {
+            ["8'", "10'", "12'", "14'", "16'"].forEach((len) => {
+              const uniqueCat = `${lengthGroup} - ${len}`;
+              const effectiveUniqueCat = getEffectiveCategoryForSize(uniqueCat, 'deck', updated);
+              const lenDefaultsKey = makeDefaultsKey('deck', matType, effectiveUniqueCat);
+              if (!updated[lenDefaultsKey] || updated[lenDefaultsKey] === 'none') {
+                const searchCat = `${cat} (${len})`;
+                const effectiveSearchCat = getEffectiveCategoryForSize(searchCat, 'deck', updated);
+                const bestMatch = findBestMatchingItem('deck', matType, effectiveSearchCat, inventoryItems);
+                if (bestMatch) {
+                  updated[lenDefaultsKey] = bestMatch.id;
+                }
+              }
+            });
+          }
+        });
+      }
+
+      return updated;
+    });
+  };
+
+  const getResolvedMaterialType = (section: 'framing' | 'decking' | 'railing' | 'stair', accessory: boolean = false): string => {
+    if (!accessory) {
+      if (section === 'framing') return deckFramingType;
+      if (section === 'decking') return deckDeckingType;
+      if (section === 'railing') return deckRailingType;
+      return deckStairType;
+    } else {
+      if (section === 'framing') {
+        return deckFramingAccType === 'match' ? deckFramingType : deckFramingAccType;
+      }
+      if (section === 'decking') {
+        return deckDeckingAccType === 'match' ? deckDeckingType : deckDeckingAccType;
+      }
+      if (section === 'railing') {
+        return deckRailingAccType === 'match' ? deckRailingType : deckRailingAccType;
+      }
+      return deckStairAccType === 'match' ? deckStairType : deckStairAccType;
+    }
+  };
 
   useEffect(() => {
     if (organizationId) {
@@ -665,7 +863,8 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
   }, [userDefaults, loading, draftStorageKey, onDefaultsSaved]);
 
   const handleDefaultChange = (materialType: string | null, category: string, itemId: string) => {
-    const key = makeDefaultsKey(plannerType, materialType, category);
+    const effectiveCat = getEffectiveCategoryForSize(category, plannerType, userDefaults);
+    const key = makeDefaultsKey(plannerType, materialType, effectiveCat);
     if (itemId === 'none') {
       setUserDefaults((prev) => {
         const { [key]: _, ...rest } = prev;
@@ -742,9 +941,10 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
   };
 
   const getDefaultValue = (materialType: string | null, category: string): string => {
-    const key = makeDefaultsKey(plannerType, materialType, category);
-    const aluminumFallbackKey = materialType?.startsWith('aluminum-') ? makeDefaultsKey(plannerType, 'aluminum', category) : null;
-    const fallbackKey = makeDefaultsKey(plannerType, 'default', category);
+    const effectiveCat = getEffectiveCategoryForSize(category, plannerType, userDefaults);
+    const key = makeDefaultsKey(plannerType, materialType, effectiveCat);
+    const aluminumFallbackKey = materialType?.startsWith('aluminum-') ? makeDefaultsKey(plannerType, 'aluminum', effectiveCat) : null;
+    const fallbackKey = makeDefaultsKey(plannerType, 'default', effectiveCat);
     // First check user defaults, then fall back to org defaults.
     // If the selected material type has no explicit value, inherit "default".
     return userDefaults[key]
@@ -757,20 +957,23 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
   };
 
   const getOrgDefaultValue = (materialType: string | null, category: string): string => {
-    const key = makeDefaultsKey(plannerType, materialType, category);
-    const aluminumFallbackKey = materialType?.startsWith('aluminum-') ? makeDefaultsKey(plannerType, 'aluminum', category) : null;
-    const fallbackKey = makeDefaultsKey(plannerType, 'default', category);
+    const effectiveCat = getEffectiveCategoryForSize(category, plannerType, userDefaults);
+    const key = makeDefaultsKey(plannerType, materialType, effectiveCat);
+    const aluminumFallbackKey = materialType?.startsWith('aluminum-') ? makeDefaultsKey(plannerType, 'aluminum', effectiveCat) : null;
+    const fallbackKey = makeDefaultsKey(plannerType, 'default', effectiveCat);
     return orgDefaults[key] || (aluminumFallbackKey ? orgDefaults[aluminumFallbackKey] : undefined) || orgDefaults[fallbackKey] || 'none';
   };
 
   // Conversion Factor helpers — stored in userDefaults with `-cf` suffix
   const getCFKey = (materialType: string | null, category: string): string => {
-    return `${makeDefaultsKey(plannerType, materialType, category)}-cf`;
+    const effectiveCat = getEffectiveCategoryForSize(category, plannerType, userDefaults);
+    return `${makeDefaultsKey(plannerType, materialType, effectiveCat)}-cf`;
   };
 
   // Org CF key format (no `-cf` suffix, matches ProjectWizardSettings format)
   const getOrgCFKey = (materialType: string | null, category: string): string => {
-    return makeDefaultsKey(plannerType, materialType, category);
+    const effectiveCat = getEffectiveCategoryForSize(category, plannerType, userDefaults);
+    return makeDefaultsKey(plannerType, materialType, effectiveCat);
   };
 
   /** Get the effective CF: user override > org default > 1 */
@@ -916,153 +1119,646 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
           </div>
         </CardHeader>
         <CardContent>
-          {materialTypes && materialTypes.length > 0 && (
-            <div className="mb-6">
-              <Label>{plannerType === 'garage' ? 'Siding Type' : plannerType === 'deck' ? 'Deck Material Type' : 'Material Type'}</Label>
-              <Select value={selectedMaterialType} onValueChange={setSelectedMaterialType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {materialTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {formatMaterialTypeLabel(type, plannerType)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {plannerType === 'deck' ? (
+            <div className="space-y-8">
+              {/* DECK PLANNER - DEFAULT MATERIALS */}
+              <div>
+                <h3 className="text-lg font-bold text-foreground border-b pb-2 mb-4">DECK PLANNER - DEFAULT MATERIALS</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Framing Material Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3 border-b border-border/40">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <CardTitle className="text-sm font-semibold text-foreground whitespace-nowrap">FRAMING MATERIAL</CardTitle>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Material:</span>
+                            <Select value={deckFramingType} onValueChange={(val) => handleSettingChange('deck-default-framing-type', val)}>
+                              <SelectTrigger className="h-8 w-[140px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="treated">Pressure Treated</SelectItem>
+                                <SelectItem value="spruce">Spruce</SelectItem>
+                                <SelectItem value="cedar">Cedar</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Size:</span>
+                            <Select value={deckGlobalJoistSize} onValueChange={(val) => handleSettingChange('deck-global-joist-size', val)}>
+                              <SelectTrigger className="h-8 w-[80px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="2x8">2x8</SelectItem>
+                                <SelectItem value="2x10">2x10</SelectItem>
+                                <SelectItem value="2x12">2x12</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-4">
+                      <div className="space-y-4">
+                        {['Ledger Board', 'Joists', 'Rim Joists', 'Beams', 'Posts', 'Stair Stringers', 'Blocking'].map((category) => {
+                          const matType = getResolvedMaterialType('framing');
+                          return (
+                            <div key={category} className="space-y-2">
+                              <Label className="text-xs font-medium text-foreground">{category}</Label>
+                              <InventoryCombobox
+                                id={`deck-framing-${category}`}
+                                items={inventoryItems}
+                                value={getDefaultValue(matType, category)}
+                                onChange={(value) => handleDefaultChange(matType, category, value)}
+                                placeholder={`Select ${category}...`}
+                              />
+                              <LengthCollapsible
+                                label={category}
+                                category={category}
+                                matType={matType}
+                                inventoryItems={inventoryItems}
+                                getDefaultValue={getDefaultValue}
+                                handleDefaultChange={handleDefaultChange}
+                                getOrgDefaultValue={getOrgDefaultValue}
+                                uniquifyCategory={uniquifyCategory}
+                                plannerType="deck"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
 
-          {plannerType === 'deck' && (
-            <div className="mb-6">
-              <Label>Railing Type</Label>
-              <Select value={selectedRailingType} onValueChange={setSelectedRailingType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="treated">Treated</SelectItem>
-                  <SelectItem value="aluminum">Aluminum</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+                  {/* Decking Material Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3 border-b border-border/40">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <CardTitle className="text-sm font-semibold text-foreground whitespace-nowrap">DECKING MATERIAL</CardTitle>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Decking Type:</span>
+                            <Select value={deckDeckingType} onValueChange={(val) => handleSettingChange('deck-default-decking-type', val)}>
+                              <SelectTrigger className="h-8 w-[140px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="treated">Pressure Treated</SelectItem>
+                                <SelectItem value="spruce">Spruce</SelectItem>
+                                <SelectItem value="cedar">Cedar</SelectItem>
+                                <SelectItem value="composite">Composite</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Size:</span>
+                            <Select value={deckGlobalDeckingSize} onValueChange={(val) => handleSettingChange('deck-global-decking-size', val)}>
+                              <SelectTrigger className="h-8 w-[80px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="5/4x6">5/4x6</SelectItem>
+                                <SelectItem value="2x6">2x6</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-4">
+                      <div className="space-y-4">
+                        {['Decking Boards', 'Stair Treads', 'Stair Risers'].map((category) => {
+                          const matType = getResolvedMaterialType('decking');
+                          return (
+                            <div key={category} className="space-y-2">
+                              <Label className="text-xs font-medium text-foreground">{category}</Label>
+                              <InventoryCombobox
+                                id={`deck-decking-${category}`}
+                                items={inventoryItems}
+                                value={getDefaultValue(matType, category)}
+                                onChange={(value) => handleDefaultChange(matType, category, value)}
+                                placeholder={`Select ${category}...`}
+                              />
+                              <LengthCollapsible
+                                label={category}
+                                category={category}
+                                matType={matType}
+                                inventoryItems={inventoryItems}
+                                getDefaultValue={getDefaultValue}
+                                handleDefaultChange={handleDefaultChange}
+                                getOrgDefaultValue={getOrgDefaultValue}
+                                uniquifyCategory={uniquifyCategory}
+                                plannerType="deck"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
 
-          {plannerType === 'deck' && selectedRailingType === 'aluminum' && (
-            <div className="mb-6">
-              <Label>Aluminum Color</Label>
-              <Select value={selectedAluminumColor} onValueChange={setSelectedAluminumColor}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="white">White</SelectItem>
-                  <SelectItem value="black">Black</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">Applies only to railing-related aluminum defaults, not framing or decking defaults.</p>
-            </div>
-          )}
+                  {/* Railing Material Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3 border-b border-border/40">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <CardTitle className="text-sm font-semibold text-foreground whitespace-nowrap">RAILING MATERIAL</CardTitle>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Railing Material:</span>
+                            <Select 
+                              value={deckRailingType.startsWith('aluminum') ? 'aluminum' : deckRailingType} 
+                              onValueChange={(val) => {
+                                if (val === 'aluminum') {
+                                  const currentColour = deckRailingType.startsWith('aluminum-') ? deckRailingType.split('-')[1] : 'black';
+                                  handleSettingChange('deck-default-railing-type', `aluminum-${currentColour}`);
+                                } else {
+                                  handleSettingChange('deck-default-railing-type', val);
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="h-8 w-[140px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="treated">Pressure Treated</SelectItem>
+                                <SelectItem value="spruce">Spruce</SelectItem>
+                                <SelectItem value="cedar">Cedar</SelectItem>
+                                <SelectItem value="aluminum">Aluminum</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
 
-          <div className="space-y-6">
-            {Object.entries(categories).map(([categoryGroup, items]) => {
-              const showCF = !isLumberGroup(categoryGroup);
-
-              return (
-                <div key={categoryGroup} className="space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <h3 className="font-semibold text-foreground">{categoryGroup}</h3>
-                    {showCF && (
-                      <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded flex items-center gap-1">
-                        <Info className="h-3 w-3" />
-                        Conversion Factor available
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {items.map((category) => {
-                      const baseMatType = selectedMaterialType === 'default' ? null : selectedMaterialType;
-                      const matType = getEffectiveMaterialType(baseMatType, categoryGroup, category);
-                      const uniqueCategory = uniquifyCategory(categoryGroup, category);
-                      const currentValue = getDefaultValue(matType, uniqueCategory);
-                      const orgValue = getOrgDefaultValue(matType, uniqueCategory);
-                      const isCustomized = currentValue !== orgValue;
-                      const cfValue = showCF ? getConversionFactor(matType, uniqueCategory) : 1;
-
-                      return (
-                        <div key={category} className="space-y-2">
-                          <Label htmlFor={`${plannerType}-${selectedMaterialType}-${category}`} className="flex items-center gap-2 text-foreground">
-                            {category}
-                            {isCustomized && (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Custom</span>
-                            )}
-                          </Label>
-                          <InventoryCombobox
-                            id={`${plannerType}-${selectedMaterialType}-${category}`}
-                            items={inventoryItems}
-                            value={currentValue}
-                            onChange={(value) => handleDefaultChange(matType, uniqueCategory, value)}
-                            placeholder="Select inventory item..."
-                          />
-                          {showCF && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Label className="text-xs text-muted-foreground whitespace-nowrap" htmlFor={`cf-${plannerType}-${selectedMaterialType}-${category}`}>
-                                CF:
-                              </Label>
-                              {(() => {
-                                const cfKey = getCFKey(matType, uniqueCategory);
-                                const editVal = cfEditValues[cfKey];
-                                const userHasCF = hasUserCF(matType, uniqueCategory);
-                                const orgCFVal = getOrgCF(matType, uniqueCategory);
-                                const isInherited = !userHasCF && orgCFVal !== 1;
-                                const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(cfValue));
-                                return (
-                                  <>
-                                    <Input
-                                      id={`cf-${plannerType}-${selectedMaterialType}-${category}`}
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={displayVal}
-                                      onChange={(e) => handleCFInputChange(matType, uniqueCategory, e.target.value)}
-                                      onBlur={() => handleCFInputBlur(matType, uniqueCategory)}
-                                      placeholder={orgCFVal !== 1 ? String(orgCFVal) : '1'}
-                                      className={`h-7 w-24 text-xs ${isInherited ? 'border-amber-300 bg-amber-50/50' : ''}`}
-                                      title="Conversion Factor: raw qty × CF = purchase qty. E.g., 25 screws/box → CF=0.04 (1÷25). Enter any decimal."
-                                    />
-                                    {cfValue !== 1 && editVal === undefined && (
-                                      <span className="text-xs text-amber-600 font-medium">
-                                        ×{cfValue}
-                                      </span>
-                                    )}
-                                    {isInherited && (
-                                      <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded" title="Inherited from organization settings">
-                                        Org
-                                      </span>
-                                    )}
-                                    {userHasCF && orgCFVal !== 1 && (
-                                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded" title={`Overrides org CF of ${orgCFVal}`}>
-                                        Override (org: {orgCFVal})
-                                      </span>
-                                    )}
-                                  </>
-                                );
-                              })()}
+                          {deckRailingType.startsWith('aluminum') && (
+                            <div className="flex items-center gap-1.5 animate-in fade-in duration-200">
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">Colours:</span>
+                              <Select 
+                                value={deckRailingType.startsWith('aluminum-') ? deckRailingType.split('-')[1] : 'black'} 
+                                onValueChange={(val) => {
+                                  handleSettingChange('deck-default-railing-type', `aluminum-${val}`);
+                                }}
+                              >
+                                <SelectTrigger className="h-8 w-[95px] text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="black">Black</SelectItem>
+                                  <SelectItem value="white">White</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           )}
-                          {isCustomized && orgValue !== 'none' && (
-                            <p className="text-xs text-muted-foreground">
-                              Org default: {inventoryItems.find(i => i.id === orgValue)?.name || 'Not set'}
-                            </p>
-                          )}
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-4">
+                      <div className="space-y-4">
+                        {deckRailingType.startsWith('aluminum-') ? (
+                          <>
+                            {/* Render aluminum categories */}
+                            {[['Railing', ["6'", "8'", "10'", "12'"]], ['Spindles/Pickets', ["6'", "8'", "10'", "12'", "Stair"]], ['Posts', ["Inline", "Corner", "End", "Stair", "Angle", "Gate"]]].map(([group, subcats]: any) => (
+                              <div key={group} className="space-y-3">
+                                <h4 className="text-xs font-semibold text-muted-foreground">{group}</h4>
+                                {subcats.map((subcat: string) => {
+                                  const uniqueCat = uniquifyCategory(group, subcat);
+                                  const matType = getResolvedMaterialType('railing');
+                                  return (
+                                    <div key={subcat} className="space-y-1.5 pl-2 border-l border-border">
+                                      <Label className="text-xs text-foreground">{subcat}</Label>
+                                      <InventoryCombobox
+                                        id={`deck-railing-${group}-${subcat}`}
+                                        items={inventoryItems}
+                                        value={getDefaultValue(matType, uniqueCat)}
+                                        onChange={(value) => handleDefaultChange(matType, uniqueCat, value)}
+                                        placeholder={`Select ${subcat}...`}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </>
+                        ) : (
+                          <>
+                            {/* Render wood categories */}
+                            {['Railing Posts', 'Railing Top Rail', 'Railing Bottom Rail', 'Railing Balusters'].map((category) => {
+                              const matType = getResolvedMaterialType('railing');
+                              return (
+                                <div key={category} className="space-y-2">
+                                  <Label className="text-xs font-medium text-foreground">{category}</Label>
+                                  <InventoryCombobox
+                                    id={`deck-railing-${category}`}
+                                    items={inventoryItems}
+                                    value={getDefaultValue(matType, category)}
+                                    onChange={(value) => handleDefaultChange(matType, category, value)}
+                                    placeholder={`Select ${category}...`}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Stair Material Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3 border-b border-border/40">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <CardTitle className="text-sm font-semibold text-foreground whitespace-nowrap">STAIR MATERIAL</CardTitle>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">Default Type:</span>
+                          <Select value={deckStairType} onValueChange={(val) => handleSettingChange('deck-default-stair-type', val)}>
+                            <SelectTrigger className="h-8 w-[150px] text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="treated">Pressure Treated</SelectItem>
+                              <SelectItem value="spruce">Spruce</SelectItem>
+                              <SelectItem value="cedar">Cedar</SelectItem>
+                              <SelectItem value="composite">Composite</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-4">
+                      <div className="space-y-4">
+                        {['Stair Treads', 'Stair Risers', 'Stair Stringers'].map((category) => {
+                          const matType = getResolvedMaterialType('stair');
+                          return (
+                            <div key={category} className="space-y-2">
+                              <Label className="text-xs font-medium text-foreground">{category}</Label>
+                              <InventoryCombobox
+                                id={`deck-stair-${category}`}
+                                items={inventoryItems}
+                                value={getDefaultValue(matType, category)}
+                                onChange={(value) => handleDefaultChange(matType, category, value)}
+                                placeholder={`Select ${category}...`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+
+              {/* ACCESSORIES SECTION */}
+              <div>
+                <h3 className="text-lg font-bold text-foreground border-b pb-2 mb-4">ACCESSORIES</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Framing Accessories Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                        <span>Framing Accessories</span>
+                        <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded uppercase">{deckFramingAccType}</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-muted-foreground">Material Selection</Label>
+                        <Select value={deckFramingAccType} onValueChange={(val) => handleSettingChange('deck-default-framing-accessories-type', val)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="match">Match Framing Material</SelectItem>
+                            <SelectItem value="treated">Pressure Treated</SelectItem>
+                            <SelectItem value="spruce">Spruce</SelectItem>
+                            <SelectItem value="cedar">Cedar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-4 pt-2 border-t border-border/40">
+                        {['Lag Screws', 'Ledger Flashing', 'Formtube', 'Joist Hangers', 'Post Anchors', 'Concrete Mix', 'Structural Screws'].map((category) => {
+                          const matType = getResolvedMaterialType('framing', true);
+                          return (
+                            <div key={category} className="space-y-2">
+                              <Label className="text-xs font-medium text-foreground">{category}</Label>
+                              <InventoryCombobox
+                                id={`deck-framing-acc-${category}`}
+                                items={inventoryItems}
+                                value={getDefaultValue(matType, category)}
+                                onChange={(value) => handleDefaultChange(matType, category, value)}
+                                placeholder={`Select ${category}...`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Decking Accessories Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                        <span>Decking Accessories</span>
+                        <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded uppercase">{deckDeckingAccType}</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-muted-foreground">Material Selection</Label>
+                        <Select value={deckDeckingAccType} onValueChange={(val) => handleSettingChange('deck-default-decking-accessories-type', val)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="match">Match Decking Material</SelectItem>
+                            <SelectItem value="treated">Pressure Treated</SelectItem>
+                            <SelectItem value="spruce">Spruce</SelectItem>
+                            <SelectItem value="cedar">Cedar</SelectItem>
+                            <SelectItem value="composite">Composite</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-4 pt-2 border-t border-border/40">
+                        {['Deck Screws', 'Deck Clips', 'Composite Screws', 'Composite Plugs'].map((category) => {
+                          const matType = getResolvedMaterialType('decking', true);
+                          return (
+                            <div key={category} className="space-y-2">
+                              <Label className="text-xs font-medium text-foreground">{category}</Label>
+                              <InventoryCombobox
+                                id={`deck-decking-acc-${category}`}
+                                items={inventoryItems}
+                                value={getDefaultValue(matType, category)}
+                                onChange={(value) => handleDefaultChange(matType, category, value)}
+                                placeholder={`Select ${category}...`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Railing Accessories Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                        <span>Railing Accessories</span>
+                        <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded uppercase">{deckRailingAccType}</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-muted-foreground">Material Selection</Label>
+                        <Select value={deckRailingAccType} onValueChange={(val) => handleSettingChange('deck-default-railing-accessories-type', val)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="match">Match Railing Material</SelectItem>
+                            <SelectItem value="treated">Pressure Treated</SelectItem>
+                            <SelectItem value="spruce">Spruce</SelectItem>
+                            <SelectItem value="cedar">Cedar</SelectItem>
+                            <SelectItem value="aluminum-black">Aluminum (Black)</SelectItem>
+                            <SelectItem value="aluminum-white">Aluminum (White)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-4 pt-2 border-t border-border/40">
+                        {['Railing Brackets', 'Post Base Plate Cover', 'Decorative Post Cap', 'Universal Angle Bracket (UAB)', 'Vinyl Insert for Glass (GVI)', 'Rubber Blocks for Glass (GRB-10)', 'Rail Support Legs (SRSL)', 'Self Drilling Screws'].map((category) => {
+                          const matType = getResolvedMaterialType('railing', true);
+                          return (
+                            <div key={category} className="space-y-2">
+                              <Label className="text-xs font-medium text-foreground">{category}</Label>
+                              <InventoryCombobox
+                                id={`deck-railing-acc-${category}`}
+                                items={inventoryItems}
+                                value={getDefaultValue(matType, category)}
+                                onChange={(value) => handleDefaultChange(matType, category, value)}
+                                placeholder={`Select ${category}...`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Stair Accessories Card */}
+                  <Card className="border border-border/80 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                        <span>Stair Accessories</span>
+                        <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded uppercase">{deckStairAccType}</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-muted-foreground">Material Selection</Label>
+                        <Select value={deckStairAccType} onValueChange={(val) => handleSettingChange('deck-default-stair-accessories-type', val)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="match">Match Stair Material</SelectItem>
+                            <SelectItem value="treated">Pressure Treated</SelectItem>
+                            <SelectItem value="spruce">Spruce</SelectItem>
+                            <SelectItem value="cedar">Cedar</SelectItem>
+                            <SelectItem value="composite">Composite</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-4 pt-2 border-t border-border/40">
+                        <p className="text-xs text-muted-foreground italic">Stair Accessories automatically inherit from stair material.</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* GLOBAL DEFAULTS SECTION */}
+              <div>
+                <h3 className="text-lg font-bold text-foreground border-b pb-2 mb-4">GLOBAL DEFAULTS</h3>
+                <Card className="border border-border/80 shadow-sm">
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-6">
+                    {/* Fasteners */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-foreground">Fasteners</Label>
+                      <Select value={deckGlobalFasteners} onValueChange={(val) => handleSettingChange('deck-global-fasteners', val)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="galvanized">Galvanized</SelectItem>
+                          <SelectItem value="stainless_steel">Stainless Steel</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Post Size */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-foreground">Post Size</Label>
+                      <Select value={deckGlobalPostSize} onValueChange={(val) => handleSettingChange('deck-global-post-size', val)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="4x4">4x4</SelectItem>
+                          <SelectItem value="6x6">6x6</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Joist Size */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-foreground">Joist Size</Label>
+                      <Select value={deckGlobalJoistSize} onValueChange={(val) => handleSettingChange('deck-global-joist-size', val)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2x8">2x8</SelectItem>
+                          <SelectItem value="2x10">2x10</SelectItem>
+                          <SelectItem value="2x12">2x12</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Railing Height */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-foreground">Railing Height</Label>
+                      <Select value={deckGlobalRailingHeight} onValueChange={(val) => handleSettingChange('deck-global-railing-height', val)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="36">36"</SelectItem>
+                          <SelectItem value="42">42"</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Stair Width */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-foreground">Stair Width</Label>
+                      <Select value={deckGlobalStairWidth} onValueChange={(val) => handleSettingChange('deck-global-stair-width', val)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="36">36"</SelectItem>
+                          <SelectItem value="42">42"</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(categories).map(([categoryGroup, items]) => {
+                const showCF = !isLumberGroup(categoryGroup);
+
+                return (
+                  <div key={categoryGroup} className="space-y-4">
+                    <div className="flex items-center gap-2 border-b pb-2">
+                      <h3 className="font-semibold text-foreground">{categoryGroup}</h3>
+                      {showCF && (
+                        <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded flex items-center gap-1">
+                          <Info className="h-3 w-3" />
+                          Conversion Factor available
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {items.map((category) => {
+                        const baseMatType = selectedMaterialType === 'default' ? null : selectedMaterialType;
+                        const matType = getEffectiveMaterialType(baseMatType, categoryGroup, category);
+                        const uniqueCategory = uniquifyCategory(categoryGroup, category);
+                        const currentValue = getDefaultValue(matType, uniqueCategory);
+                        const orgValue = getOrgDefaultValue(matType, uniqueCategory);
+                        const isCustomized = currentValue !== orgValue;
+                        const cfValue = showCF ? getConversionFactor(matType, uniqueCategory) : 1;
+
+                        return (
+                          <div key={category} className="space-y-2">
+                            <Label htmlFor={`${plannerType}-${selectedMaterialType}-${category}`} className="flex items-center gap-2 text-foreground">
+                              {category}
+                              {isCustomized && (
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Custom</span>
+                              )}
+                            </Label>
+                            <InventoryCombobox
+                              id={`${plannerType}-${selectedMaterialType}-${category}`}
+                              items={inventoryItems}
+                              value={currentValue}
+                              onChange={(value) => handleDefaultChange(matType, uniqueCategory, value)}
+                              placeholder="Select inventory item..."
+                            />
+                            {showCF && (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Label className="text-xs text-muted-foreground whitespace-nowrap" htmlFor={`cf-${plannerType}-${selectedMaterialType}-${category}`}>
+                                  CF:
+                                </Label>
+                                {(() => {
+                                  const cfKey = getCFKey(matType, uniqueCategory);
+                                  const editVal = cfEditValues[cfKey];
+                                  const userHasCF = hasUserCF(matType, uniqueCategory);
+                                  const orgCFVal = getOrgCF(matType, uniqueCategory);
+                                  const isInherited = !userHasCF && orgCFVal !== 1;
+                                  const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(cfValue));
+                                  return (
+                                    <>
+                                      <Input
+                                        id={`cf-${plannerType}-${selectedMaterialType}-${category}`}
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={displayVal}
+                                        onChange={(e) => handleCFInputChange(matType, uniqueCategory, e.target.value)}
+                                        onBlur={() => handleCFInputBlur(matType, uniqueCategory)}
+                                        placeholder={orgCFVal !== 1 ? String(orgCFVal) : '1'}
+                                        className={`h-7 w-24 text-xs ${isInherited ? 'border-amber-300 bg-amber-50/50' : ''}`}
+                                        title="Conversion Factor: raw qty × CF = purchase qty. E.g., 25 screws/box → CF=0.04 (1÷25). Enter any decimal."
+                                      />
+                                      {cfValue !== 1 && editVal === undefined && (
+                                        <span className="text-xs text-amber-600 font-medium">
+                                          ×{cfValue}
+                                        </span>
+                                      )}
+                                      {isInherited && (
+                                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded" title="Inherited from organization settings">
+                                          Org
+                                        </span>
+                                      )}
+                                      {userHasCF && orgCFVal !== 1 && (
+                                        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded" title={`Overrides org CF of ${orgCFVal}`}>
+                                          Override (org: {orgCFVal})
+                                        </span>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                            {isCustomized && orgValue !== 'none' && (
+                              <p className="text-xs text-muted-foreground">
+                                Org default: {inventoryItems.find(i => i.id === orgValue)?.name || 'Not set'}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

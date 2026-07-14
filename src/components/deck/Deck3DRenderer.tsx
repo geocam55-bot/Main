@@ -1127,8 +1127,14 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
       railingSegments.forEach(seg => {
         // Skip if railing side is not enabled in configuration
         const sideToCheck = seg.side.endsWith('-other') ? seg.side.substring(0, seg.side.length - 6) : seg.side;
-        if (config.railingSides && !config.railingSides.includes(sideToCheck as any)) {
-          return;
+        if (config.railingSides) {
+          const backmostZ = isCustom ? customMinZ : -deckLength / 2;
+          const isAtBackmostEdge = Math.abs(seg.z1 - backmostZ) < 0.05 && Math.abs(seg.z2 - backmostZ) < 0.05;
+          if (sideToCheck === 'back' && !isAtBackmostEdge) {
+            // Keep it: do not skip open-air back-facing segments (e.g. inner corners)
+          } else if (!config.railingSides.includes(sideToCheck as any)) {
+            return;
+          }
         }
 
         const segLength = Math.sqrt((seg.x2 - seg.x1) ** 2 + (seg.z2 - seg.z1) ** 2);

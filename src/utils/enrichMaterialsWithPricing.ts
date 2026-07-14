@@ -1,5 +1,5 @@
 import { createClient } from './supabase/client';
-import { getProjectWizardDefaults, getUserDefaults } from './project-wizard-defaults-client';
+import { getProjectWizardDefaults, getUserDefaults, getOrgConversionFactors } from './project-wizard-defaults-client';
 import { 
   HARDCODED_DEFAULTS_BY_SKU,
   SPRUCE_DEFAULTS_BY_SKU,
@@ -132,9 +132,80 @@ function fallbackMatchInventoryByDescription(
 }
 
 
-const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: string): string => {
+const getAccessoryParentGroup = (desc: string, category: string): 'framing' | 'decking' | 'railing' | 'stair' | null => {
+  const cleanDesc = desc.toLowerCase();
+  const cleanCat = category.toLowerCase();
+  
+  if (
+    (cleanDesc.includes('bracket') && (cleanDesc.includes('rail') || cleanDesc.includes('railing'))) ||
+    cleanDesc.includes('base plate cover') ||
+    cleanDesc.includes('post cap') ||
+    cleanDesc.includes('universal angle bracket') ||
+    cleanDesc.includes('vinyl insert') ||
+    cleanDesc.includes('rubber blocks') ||
+    cleanDesc.includes('support legs') ||
+    cleanDesc.includes('self drilling')
+  ) {
+    return 'railing';
+  }
+  
+  if (
+    cleanDesc.includes('deck clip') ||
+    cleanDesc.includes('deck screw') ||
+    cleanDesc.includes('composite screw') ||
+    cleanDesc.includes('composite plug')
+  ) {
+    return 'decking';
+  }
+
+  if (
+    cleanDesc.includes('lag screw') ||
+    cleanDesc.includes('ledger flashing') ||
+    cleanDesc.includes('formtube') ||
+    cleanDesc.includes('joist hanger') ||
+    cleanDesc.includes('post anchor') ||
+    cleanDesc.includes('concrete mix') ||
+    cleanDesc.includes('structural screw')
+  ) {
+    return 'framing';
+  }
+
+  return null;
+};
+
+const getDeckItemMaterialType = (
+  material: MaterialItem,
+  defaultPassType?: string,
+  userDefaults?: Record<string, string>
+): string => {
   const desc = material.description.toLowerCase();
   const cat = material.category.toLowerCase();
+  
+  const framingType = userDefaults?.['deck-default-framing-type'] || 'treated';
+  const deckingType = userDefaults?.['deck-default-decking-type'] || 'treated';
+  const railingType = userDefaults?.['deck-default-railing-type'] || 'treated';
+  const stairType = userDefaults?.['deck-default-stair-type'] || 'treated';
+
+  // Check if it's an accessory
+  const accGroup = getAccessoryParentGroup(material.description, material.category);
+  if (accGroup) {
+    if (accGroup === 'framing') {
+      const framingAccType = userDefaults?.['deck-default-framing-accessories-type'] || 'match';
+      return framingAccType === 'match' ? framingType : framingAccType;
+    }
+    if (accGroup === 'decking') {
+      const deckingAccType = userDefaults?.['deck-default-decking-accessories-type'] || 'match';
+      return deckingAccType === 'match' ? deckingType : deckingAccType;
+    }
+    if (accGroup === 'railing') {
+      const railingAccType = userDefaults?.['deck-default-railing-accessories-type'] || 'match';
+      return railingAccType === 'match' ? railingType : railingAccType;
+    }
+    if (accGroup === 'stair') {
+      const stairAccType = userDefaults?.['deck-default-stair-accessories-type'] || 'match';
+      return stairAccType === 'match' ? stairType : stairAccType;
+    }
+  }
 
   // 1. Is it an aluminum railing item?
   if (
@@ -151,6 +222,9 @@ const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: strin
     desc.includes('decorative post cap') ||
     desc.includes('universal angle bracket')
   ) {
+    if (railingType.startsWith('aluminum-')) {
+      return railingType;
+    }
     let color = 'white';
     if (desc.includes('black')) {
       color = 'black';
@@ -171,10 +245,7 @@ const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: strin
     if (desc.includes('spruce')) return 'spruce';
     if (desc.includes('treated')) return 'treated';
     
-    if (defaultPassType && ['composite', 'cedar', 'spruce', 'treated'].includes(defaultPassType)) {
-      return defaultPassType;
-    }
-    return 'treated';
+    return railingType;
   }
 
   // 3. Is it a Decking item?
@@ -184,10 +255,12 @@ const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: strin
     if (desc.includes('spruce')) return 'spruce';
     if (desc.includes('treated')) return 'treated';
 
-    if (defaultPassType && ['composite', 'cedar', 'spruce', 'treated'].includes(defaultPassType)) {
-      return defaultPassType;
+    // If stair item:
+    if (desc.includes('tread') || desc.includes('riser') || desc.includes('stringer')) {
+      return stairType;
     }
-    return 'treated';
+
+    return deckingType;
   }
 
   // 4. Is it a Framing item?
@@ -196,21 +269,14 @@ const getDeckItemMaterialType = (material: MaterialItem, defaultPassType?: strin
     if (desc.includes('spruce')) return 'spruce';
     if (desc.includes('treated') || desc.includes('pressure treated')) return 'treated';
     
-    if (defaultPassType && ['composite', 'cedar', 'spruce', 'treated'].includes(defaultPassType)) {
-      return defaultPassType;
+    if (desc.includes('stringer')) {
+      return stairType;
     }
-    return 'treated';
+
+    return framingType;
   }
 
-  // 5. Default/Hardware
-  if (defaultPassType && ['treated', 'composite', 'cedar', 'spruce'].includes(defaultPassType)) {
-    return defaultPassType;
-  }
-  if (defaultPassType && defaultPassType.startsWith('aluminum-')) {
-    return 'treated';
-  }
-
-  return defaultPassType || 'default';
+  return defaultPassType || 'treated';
 };
 
 /**
@@ -497,15 +563,19 @@ export async function enrichMaterialsWithT1Pricing(
       resolvedOrgId = 'default-org';
     }
 
-    // Get project wizard defaults and optional user-level overrides.
-    const [defaults, userDefaults] = await Promise.all([
+    // Get project wizard defaults, optional user-level overrides, and org-level conversion factors (contains modular default material settings).
+    const [defaults, userDefaults, orgCFData] = await Promise.all([
       getProjectWizardDefaults(resolvedOrgId),
       userDefaultsOverride
         ? Promise.resolve(userDefaultsOverride)
         : userId
           ? getUserDefaults(userId, resolvedOrgId)
           : Promise.resolve({}),
+      getOrgConversionFactors(resolvedOrgId).catch(() => ({} as Record<string, string>))
     ]);
+
+    // Merge org settings and user defaults to form a complete setting map
+    const deckSettingMap = { ...orgCFData, ...userDefaults };
 
 
     // Build logical multi-key map: material_type::material_category -> inventory_item_id
@@ -528,7 +598,7 @@ export async function enrichMaterialsWithT1Pricing(
 
     // Merge userDefaults into defaultsByMaterialAndCategory
     Object.entries(userDefaults).forEach(([key, itemId]) => {
-      if (!itemId || key.endsWith('-cf')) {
+      if (!itemId || key.endsWith('-cf') || key.startsWith('deck-default-') || key.startsWith('deck-global-')) {
         return;
       }
 
@@ -704,7 +774,7 @@ export async function enrichMaterialsWithT1Pricing(
       }
 
       const itemMaterialType = plannerType === 'deck'
-        ? getDeckItemMaterialType(material, normalizedMaterialType)
+        ? getDeckItemMaterialType(material, normalizedMaterialType, deckSettingMap)
         : (normalizedMaterialType || 'default');
 
       const resolveOverride = (baseKey: string): string | undefined => {

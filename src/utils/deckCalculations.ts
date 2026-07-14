@@ -55,17 +55,24 @@ export function calculateRailingLength(config: DeckConfig): number {
   if (config.railingStyle === 'None') {
     return 0;
   }
+  
+  const railingSides = config.railingSides || ['front', 'left', 'right'];
   let totalLength = 0;
   
   if (config.shape === 'rectangle') {
-    // Calculate perimeter excluding back (house side)
-    totalLength += config.width;  // front
-    totalLength += config.length; // right
-    totalLength += config.length; // left
+    // Calculate perimeter based on selected railing sides, excluding back unless detached
+    if (railingSides.includes('front')) totalLength += config.width;
+    if (railingSides.includes('right')) totalLength += config.length;
+    if (railingSides.includes('left')) totalLength += config.length;
+    if (config.isDetached && railingSides.includes('back')) totalLength += config.width;
     
-    // Subtract stairs if present (not on back/house side)
-    if (config.hasStairs && config.stairSide !== 'back') {
-      totalLength -= (config.stairWidth || 4);
+    // Subtract stairs if present on a side that has railing
+    if (config.hasStairs && config.stairSide) {
+      const stairSide = config.stairSide;
+      const sideToCheck = stairSide.endsWith('-other') ? stairSide.substring(0, stairSide.length - 6) : stairSide;
+      if (railingSides.includes(sideToCheck as any) && (sideToCheck !== 'back' || config.isDetached)) {
+        totalLength -= (config.stairWidth || 4);
+      }
     }
   } else if (config.shape === 'l-shape') {
     // L-shape: calculate complete outer perimeter excluding house side (back)
@@ -75,9 +82,68 @@ export function calculateRailingLength(config: DeckConfig): number {
     const lLength = config.lShapeLength || 4;
     const lPos = config.lShapePosition || 'top-left';
     
-    totalLength = 2 * mainLength + mainWidth + lWidth;
+    const segments: Array<{ length: number, side: string, part: string }> = [];
     
-    // Subtract stairs if present (stairs can be on any outer edge)
+    switch (lPos) {
+      case 'top-right':
+        segments.push({ length: lLength, side: 'right', part: 'l-shape' });
+        segments.push({ length: lWidth, side: 'front', part: 'l-shape' });
+        segments.push({ length: mainLength - lLength, side: 'right', part: 'main' });
+        segments.push({ length: mainWidth, side: 'front', part: 'main' });
+        segments.push({ length: mainLength, side: 'left', part: 'main' });
+        if (config.isDetached) {
+          segments.push({ length: mainWidth, side: 'back', part: 'main' });
+          segments.push({ length: lWidth, side: 'back', part: 'l-shape' });
+        }
+        break;
+      case 'bottom-right':
+        segments.push({ length: mainLength - lLength, side: 'right', part: 'main' });
+        segments.push({ length: lWidth, side: 'back', part: 'l-shape' });
+        segments.push({ length: lLength, side: 'right', part: 'l-shape' });
+        segments.push({ length: lWidth, side: 'front', part: 'l-shape' });
+        segments.push({ length: mainWidth, side: 'front', part: 'main' });
+        segments.push({ length: mainLength, side: 'left', part: 'main' });
+        if (config.isDetached) {
+          segments.push({ length: mainWidth, side: 'back', part: 'main' });
+        }
+        break;
+      case 'bottom-left':
+        segments.push({ length: mainLength, side: 'right', part: 'main' });
+        segments.push({ length: mainWidth, side: 'front', part: 'main' });
+        segments.push({ length: lWidth, side: 'front', part: 'l-shape' });
+        segments.push({ length: lLength, side: 'left', part: 'l-shape' });
+        segments.push({ length: lWidth, side: 'back', part: 'l-shape' });
+        segments.push({ length: mainLength - lLength, side: 'left', part: 'main' });
+        if (config.isDetached) {
+          segments.push({ length: mainWidth, side: 'back', part: 'main' });
+        }
+        break;
+      case 'top-left':
+      default:
+        segments.push({ length: mainLength, side: 'right', part: 'main' });
+        segments.push({ length: mainWidth, side: 'front', part: 'main' });
+        segments.push({ length: mainLength - lLength, side: 'left', part: 'main' });
+        segments.push({ length: lWidth, side: 'front', part: 'l-shape' });
+        segments.push({ length: lLength, side: 'left', part: 'l-shape' });
+        if (config.isDetached) {
+          segments.push({ length: lWidth, side: 'back', part: 'l-shape' });
+          segments.push({ length: mainWidth, side: 'back', part: 'main' });
+        }
+        break;
+    }
+    
+    segments.forEach(seg => {
+      const sideToCheck = seg.side;
+      const isAtBackmostEdge = (lPos === 'top-right' || lPos === 'top-left') && seg.side === 'back';
+      
+      if (sideToCheck === 'back' && !isAtBackmostEdge) {
+        // Open-air back-facing segment
+        totalLength += seg.length;
+      } else if (railingSides.includes(sideToCheck as any)) {
+        totalLength += seg.length;
+      }
+    });
+    
     if (config.hasStairs) {
       totalLength -= (config.stairWidth || 4);
     }
@@ -87,8 +153,29 @@ export function calculateRailingLength(config: DeckConfig): number {
     const leftW = config.uShapeLeftWidth || 6;
     const rightW = config.uShapeRightWidth || 6;
     const depth = config.uShapeDepth || 8;
-    totalLength = mainLength * 2 + mainWidth + leftW + rightW + depth * 2;
-
+    
+    const segments: Array<{ length: number, side: string, part: string }> = [];
+    segments.push({ length: mainLength + depth, side: 'right', part: 'u-right' });
+    segments.push({ length: rightW, side: 'front', part: 'u-right' });
+    segments.push({ length: depth, side: 'left', part: 'u-right' });
+    segments.push({ length: mainWidth - leftW - rightW, side: 'front', part: 'main' });
+    segments.push({ length: depth, side: 'right', part: 'u-left' });
+    segments.push({ length: leftW, side: 'front', part: 'u-left' });
+    segments.push({ length: mainLength + depth, side: 'left', part: 'u-left' });
+    if (config.isDetached) {
+      segments.push({ length: mainWidth, side: 'back', part: 'main' });
+    }
+    
+    segments.forEach(seg => {
+      if (seg.side === 'left' && seg.part === 'u-right') {
+        if (railingSides.includes('left')) totalLength += seg.length;
+      } else if (seg.side === 'right' && seg.part === 'u-left') {
+        if (railingSides.includes('right')) totalLength += seg.length;
+      } else if (railingSides.includes(seg.side as any)) {
+        totalLength += seg.length;
+      }
+    });
+    
     if (config.hasStairs) {
       totalLength -= (config.stairWidth || 4);
     }
@@ -101,9 +188,7 @@ export function calculateRailingLength(config: DeckConfig): number {
       const dy = config.customPoints[i].y - config.customPoints[j].y;
       perimeter += Math.sqrt(dx * dx + dy * dy);
     }
-    // Assume 75% of perimeter gets railing (excluding attached house side)
     totalLength = perimeter * 0.75;
-
     if (config.hasStairs) {
       totalLength -= (config.stairWidth || 4);
     }
@@ -323,8 +408,12 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
     });
   
   // ---- Beams ----
-  // Beams run parallel to house (span the width), placed every 8' along the length
-  const beamCount = Math.ceil(config.length / 8);
+  // Beams run parallel to house (span the width). 
+  // If attached to the house with a ledger, we only need beams at the outer spans (typically 1 beam up to 14' span).
+  // If detached, we need beams at both the front and back.
+  const beamCount = config.isDetached 
+    ? Math.ceil(config.length / 10) + 1 
+    : Math.ceil(config.length / 14);
   const beamCombo = getLumberCombination(config.width);
 
   beamCombo.forEach(({ length, count }) => {
@@ -394,7 +483,9 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   
   // ---- Posts ----
   // Post height = deck height + 1' (buried portion / connection)
-  const postCount = beamCount * Math.ceil(config.width / 8);
+  // Posts are spaced maximum 6' on center along each beam line.
+  const postsPerBeam = Math.ceil(config.width / 6) + 1;
+  const postCount = beamCount * postsPerBeam;
   const postHeight = Math.ceil(config.height + 1);
   const postLumberLength = selectLumberLength(postHeight);
   const ptSize = config.postSize || '4x4';
