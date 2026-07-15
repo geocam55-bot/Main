@@ -656,9 +656,10 @@ export const Kitchen3DRenderer = React.forwardRef<Kitchen3DRendererRef, Kitchen3
     renderer.domElement.addEventListener('mouseup', onMouseUp);
     renderer.domElement.addEventListener('wheel', onWheel);
 
+    let animationId: number;
     // Animation loop
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationId = requestAnimationFrame(animate);
 
       // Update camera position based on rotation
       camera.position.x = cameraDistance * Math.sin(cameraRotation.phi) * Math.cos(cameraRotation.theta);
@@ -692,6 +693,7 @@ export const Kitchen3DRenderer = React.forwardRef<Kitchen3DRendererRef, Kitchen3
 
     // Cleanup
     return () => {
+      cancelAnimationFrame(animationId);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('mousedown', onMouseDown);
       renderer.domElement.removeEventListener('mousemove', onMouseMove);

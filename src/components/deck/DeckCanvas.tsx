@@ -6,6 +6,50 @@ interface DeckCanvasProps {
   onChange?: (config: DeckConfig) => void;
 }
 
+function getLogicalStairPart(
+  shape: string,
+  lShapePosition: string | undefined,
+  stairSide: string
+): 'main' | 'l-shape' | 'u-left' | 'u-right' {
+  if (shape === 'u-shape') {
+    if (stairSide === 'left') return 'u-left';
+    if (stairSide === 'right') return 'u-right';
+    return 'main';
+  }
+
+  if (shape !== 'l-shape' || !lShapePosition) return 'main';
+  
+  if (stairSide === 'left') {
+    if (lShapePosition === 'bottom-left' || lShapePosition === 'top-left') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'right') {
+    if (lShapePosition === 'bottom-right' || lShapePosition === 'top-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'front') {
+    if (lShapePosition === 'bottom-left' || lShapePosition === 'bottom-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'back') {
+    if (lShapePosition === 'top-left' || lShapePosition === 'top-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  return 'main';
+}
+
 export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
   const topViewRef = useRef<HTMLCanvasElement>(null);
   const frontViewRef = useRef<HTMLCanvasElement>(null);
@@ -500,7 +544,7 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
     // Draw Stairs in Top View
     if (config.hasStairs) {
       const activeSide = isDraggingStairs && dragStairState ? dragStairState.side : (config.stairSide || 'front');
-      const activePart = isDraggingStairs && dragStairState ? dragStairState.part : (config.stairPart || 'main');
+      const activePart = isDraggingStairs && dragStairState ? dragStairState.part : (config.stairPart || getLogicalStairPart(config.shape, config.lShapePosition, activeSide));
       
       const activeRect = rects.find(r => r.part === activePart) || rects[0];
       const sideLength = (activeSide === 'front' || activeSide === 'back') ? activeRect.widthFeet : activeRect.lenFeet;
@@ -1109,7 +1153,7 @@ export function DeckCanvas({ config, onChange }: DeckCanvasProps) {
         setIsDraggingStairs(true);
         // Start dragging at the current configuration state
         const { rects } = getDeckGeometry();
-        const activePart = config.stairPart || 'main';
+        const activePart = config.stairPart || getLogicalStairPart(config.shape, config.lShapePosition, config.stairSide || 'front');
         const activeRect = rects.find(r => r.part === activePart) || rects[0];
         const sideLength = (config.stairSide === 'front' || config.stairSide === 'back') ? activeRect.widthFeet : activeRect.lenFeet;
         

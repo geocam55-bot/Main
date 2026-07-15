@@ -228,6 +228,7 @@ const templates: Array<{ id: string; name: string; description: string; config: 
       lShapePosition: 'bottom-left',
       hasStairs: true,
       stairSide: 'left',
+      stairPart: 'l-shape',
       stairWidth: 4,
       railingSides: ['front', 'left', 'right', 'back'],
       deckingPattern: 'diagonal',

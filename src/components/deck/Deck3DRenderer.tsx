@@ -40,6 +40,50 @@ export interface Deck3DRendererRef {
   getSnapshotUrl: () => string | null;
 }
 
+function getLogicalStairPart(
+  shape: string,
+  lShapePosition: string | undefined,
+  stairSide: string
+): 'main' | 'l-shape' | 'u-left' | 'u-right' {
+  if (shape === 'u-shape') {
+    if (stairSide === 'left') return 'u-left';
+    if (stairSide === 'right') return 'u-right';
+    return 'main';
+  }
+
+  if (shape !== 'l-shape' || !lShapePosition) return 'main';
+  
+  if (stairSide === 'left') {
+    if (lShapePosition === 'bottom-left' || lShapePosition === 'top-left') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'right') {
+    if (lShapePosition === 'bottom-right' || lShapePosition === 'top-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'front') {
+    if (lShapePosition === 'bottom-left' || lShapePosition === 'bottom-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'back') {
+    if (lShapePosition === 'top-left' || lShapePosition === 'top-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  return 'main';
+}
+
 /** Add wireframe edge outlines to a mesh for crisp definition */
 function addEdgeOutline(scene: Scene, geometry: BufferGeometry, mesh: Mesh, color = 0x333333) {
   const edges = new EdgesGeometry(geometry);
@@ -371,11 +415,58 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
     const uRightWidth = isUShape ? (config.uShapeRightWidth || 6) * scale : 0;
     const uDepth = isUShape ? (config.uShapeDepth || 8) * scale : 0;
     
+    // Color palettes based on deckingType
+    const getDeckingColor = (type: string): number => {
+      switch (type) {
+        case 'Spruce':
+          return 0xdfca9e; // Light yellowish-white Spruce wood
+        case 'Cedar':
+          return 0xbd6a3f; // Rich warm reddish-brown Cedar wood
+        case 'Composite':
+          return 0x71797e; // Slate gray Composite material
+        case 'Treated':
+        default:
+          return 0x8b6f47; // Olive greenish-brown Treated wood
+      }
+    };
+
+    const getBoardColor = (type: string): number => {
+      switch (type) {
+        case 'Spruce':
+          return 0xe8d9b5; // Matching board highlight for Spruce
+        case 'Cedar':
+          return 0xcc7b4e; // Matching board highlight for Cedar
+        case 'Composite':
+          return 0x808588; // Matching board highlight for Composite
+        case 'Treated':
+        default:
+          return 0x9d7f54; // Matching board highlight for Treated
+      }
+    };
+
+    const getPostColor = (type: string): number => {
+      switch (type) {
+        case 'Spruce':
+          return 0xb8a274; // Supporting posts shade for Spruce
+        case 'Cedar':
+          return 0x964b24; // Supporting posts shade for Cedar
+        case 'Composite':
+          return 0x505457; // Supporting posts shade for Composite
+        case 'Treated':
+        default:
+          return 0x6b5d4f; // Supporting posts shade for Treated
+      }
+    };
+
+    const deckingColor = getDeckingColor(config.deckingType);
+    const boardColor = getBoardColor(config.deckingType);
+    const postColor = getPostColor(config.deckingType);
+
     // Procedural textures
     const grassTex = createGrassTexture();
     const sidingTex = createSidingTexture();
     const concreteTex = createConcreteTexture();
-    const woodTex = createWoodTexture(0x8b6f47);
+    const woodTex = createWoodTexture(deckingColor);
     
     // Create ground with grass texture
     const groundGeometry = new PlaneGeometry(50, 50);
@@ -532,7 +623,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
 
     // Deck material with wood texture
     const deckMaterial = new MeshStandardMaterial({ 
-      color: 0x8b6f47,
+      color: deckingColor,
       roughness: 0.8,
       metalness: 0.1,
       map: woodTex
@@ -655,9 +746,9 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
     }
 
     // Deck boards (visual detail with proper spacing and wood texture)
-    const boardWoodTex = createWoodTexture(0x9d7f54);
+    const boardWoodTex = createWoodTexture(boardColor);
     const boardMaterial = new MeshStandardMaterial({ 
-      color: 0x9d7f54,
+      color: boardColor,
       roughness: 0.9,
       map: boardWoodTex
     });
@@ -789,9 +880,9 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
     // Support posts with proper standoff and sizing per BC Building Code
     const supportPostHeight = deckHeight - postStandoff;
     const supportPostGeometry = new BoxGeometry(postSize, supportPostHeight, postSize);
-    const postWoodTex = createWoodTexture(0x6b5d4f);
+    const postWoodTex = createWoodTexture(postColor);
     const supportPostMaterial = new MeshStandardMaterial({ 
-      color: 0x6b5d4f,
+      color: postColor,
       roughness: 0.7,
       map: postWoodTex
     });
@@ -1098,7 +1189,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
       const useGlassInfill = isAluminumRailing && (config.aluminumInfillType || 'Pickets') === 'Glass';
       const frameColor = isAluminumRailing
         ? (aluminumColor === 'Black' ? 0x1f2937 : 0xf8fafc)
-        : 0x8b6f47;
+        : deckingColor;
       
       const railingMaterial = new MeshStandardMaterial({ 
         color: frameColor,
@@ -1144,8 +1235,8 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         
         const stairWidth = (config.stairWidth || 4) * scale;
         // Apply stair gaps to matching perimeter segments
-        const activeStairPart = config.stairPart || 'main';
         const activeStairSide = config.stairSide || 'front';
+        const activeStairPart = config.stairPart || getLogicalStairPart(config.shape, config.lShapePosition, activeStairSide);
         const hasStairsOnSegment = !seg.isConnection && config.hasStairs && activeStairSide === seg.side && activeStairPart === seg.part;
         
         if (segLength > 0.1) {
@@ -1400,8 +1491,8 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
       const stepDepth = 0.28;
       const totalRun = numSteps * stepDepth;
 
-      const activeStairPart = config.stairPart || 'main';
       const activeStairSide = config.stairSide || 'front';
+      const activeStairPart = config.stairPart || getLogicalStairPart(config.shape, config.lShapePosition, activeStairSide);
       
       const allSegments = getOuterPerimeterSegments();
       const stairSegment = allSegments.find(s => s.side === activeStairSide && s.part === activeStairPart && !s.isConnection);
@@ -1535,7 +1626,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         const aluminumColor = config.aluminumRailingColor || 'White';
         const stairFrameColor = isAluminumRailing
           ? (aluminumColor === 'Black' ? 0x1f2937 : 0xf8fafc)
-          : 0x8b6f47;
+          : deckingColor;
          
          const railingMaterial = new MeshStandardMaterial({ 
           color: stairFrameColor,
@@ -1741,9 +1832,10 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
 
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
+    let animationId: number;
     // Animation loop
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationId = requestAnimationFrame(animate);
       
       // Update camera position based on mouse
       if (isDragging) {
@@ -1802,6 +1894,7 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
 
     // Cleanup
     return () => {
+      cancelAnimationFrame(animationId);
       cancelAnimationFrame(snapshotAnimationId);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);

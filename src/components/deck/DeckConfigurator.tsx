@@ -11,6 +11,50 @@ interface DeckConfiguratorProps {
   onChange: (config: DeckConfig) => void;
 }
 
+function getLogicalStairPart(
+  shape: string,
+  lShapePosition: string | undefined,
+  stairSide: string
+): 'main' | 'l-shape' | 'u-left' | 'u-right' {
+  if (shape === 'u-shape') {
+    if (stairSide === 'left') return 'u-left';
+    if (stairSide === 'right') return 'u-right';
+    return 'main';
+  }
+
+  if (shape !== 'l-shape' || !lShapePosition) return 'main';
+  
+  if (stairSide === 'left') {
+    if (lShapePosition === 'bottom-left' || lShapePosition === 'top-left') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'right') {
+    if (lShapePosition === 'bottom-right' || lShapePosition === 'top-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'front') {
+    if (lShapePosition === 'bottom-left' || lShapePosition === 'bottom-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  if (stairSide === 'back') {
+    if (lShapePosition === 'top-left' || lShapePosition === 'top-right') {
+      return 'l-shape';
+    }
+    return 'main';
+  }
+  
+  return 'main';
+}
+
 export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
   const updateConfig = (updates: Partial<DeckConfig>) => {
     onChange({ ...config, ...updates });
@@ -392,7 +436,14 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
                 </label>
                 <select
                   value={config.stairSide}
-                  onChange={(e) => updateConfig({ stairSide: e.target.value as any })}
+                  onChange={(e) => {
+                    const nextSide = e.target.value as any;
+                    const nextPart = getLogicalStairPart(config.shape, config.lShapePosition, nextSide);
+                    updateConfig({
+                      stairSide: nextSide,
+                      stairPart: nextPart
+                    });
+                  }}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-background text-foreground"
                 >
                   <option value="front">Front</option>
