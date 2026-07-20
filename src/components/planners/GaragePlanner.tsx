@@ -210,18 +210,7 @@ export function GaragePlanner({ user }: GaragePlannerProps) {
     };
     enrichMaterials();
   }, [
-    config.width,
-    config.length,
-    config.height,
-    config.bays,
-    config.doors.length,
-    config.hasWalkDoor,
-    config.walkDoorPosition,
-    config.sidingType,
-    config.roofingMaterial,
-    config.hasAtticTrusses,
-    config.isInsulated,
-    config.hasElectrical,
+    JSON.stringify(flatMaterials),
     user.organizationId,
     pricingContext.cfMap,
     pricingContext.mergedUserDefaults,

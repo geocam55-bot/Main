@@ -1074,10 +1074,9 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
             }
           }
           
-          const isBackSide = sideName === 'back';
-          
-          // Only add back segments if isDetached is true
-          if (!isBackSide || config.isDetached) {
+          // Only skip if it's at the back-most edge AND not detached
+          const isAtBackmostEdge = Math.abs(p1.y - customMinZ) < 0.05 && Math.abs(p2.y - customMinZ) < 0.05;
+          if (!isAtBackmostEdge || config.isDetached) {
             segments.push({
               x1: p1.x,
               z1: p1.y,
@@ -1596,6 +1595,21 @@ export const Deck3DRenderer = forwardRef<Deck3DRendererRef, Deck3DRendererProps>
         step.castShadow = true;
         step.receiveShadow = true;
         scene.add(step);
+
+        // Render Stair Riser behind/under this step
+        const riserThickness = 0.02;
+        const riserGeometry = new BoxGeometry(stairWidth, stepHeight, riserThickness);
+        const riser = new Mesh(riserGeometry, deckMaterial);
+
+        const riserCenterDist = stepDepth * i;
+        const riserX = stairBaseX + Math.sin(stairRotation) * riserCenterDist;
+        const riserZ = stairBaseZ + Math.cos(stairRotation) * riserCenterDist;
+
+        riser.position.set(riserX, 0.15 - stepHeight * (i + 0.5), riserZ);
+        riser.rotation.y = stairRotation;
+        riser.castShadow = true;
+        riser.receiveShadow = true;
+        scene.add(riser);
       }
 
       // Walkway: position dynamically at bottom of stairs!

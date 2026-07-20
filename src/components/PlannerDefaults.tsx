@@ -177,6 +177,7 @@ const SYSTEM_CF_SUGGESTIONS: Record<string, number> = {
   'Flashing': 1 / 10,
   'Furring Strip': 1 / 8,              // 8 ft/piece
   'Formtube': 3 / 12,                  // Sold in 12' lengths, 3' needed per footing (CF = 3/12)
+  'Stair Risers': 1 / 3,
 };
 
 const formatMaterialTypeLabel = (type: string, plannerType?: string): string => {
@@ -1231,6 +1232,8 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                       <div className="space-y-4">
                         {['Decking Boards', 'Stair Treads', 'Stair Risers'].map((category) => {
                           const matType = getResolvedMaterialType('decking');
+                          const showCF = category === 'Stair Risers';
+                          const cfValue = showCF ? getConversionFactor(matType, category) : 1;
                           return (
                             <div key={category} className="space-y-2">
                               <Label className="text-xs font-medium text-foreground">{category}</Label>
@@ -1241,6 +1244,46 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                                 onChange={(value) => handleDefaultChange(matType, category, value)}
                                 placeholder={`Select ${category}...`}
                               />
+                              {showCF && (
+                                <div className="flex items-center gap-2 flex-wrap pt-1">
+                                  <Label className="text-xs text-muted-foreground whitespace-nowrap" htmlFor={`cf-deck-decking-${category}`}>
+                                    CF:
+                                  </Label>
+                                  {(() => {
+                                    const cfKey = getCFKey(matType, category);
+                                    const editVal = cfEditValues[cfKey];
+                                    const userHasCF = hasUserCF(matType, category);
+                                    const orgCFVal = getOrgCF(matType, category);
+                                    const isInherited = !userHasCF && orgCFVal !== 1;
+                                    const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(cfValue));
+                                    return (
+                                      <>
+                                        <Input
+                                          id={`cf-deck-decking-${category}`}
+                                          type="text"
+                                          inputMode="decimal"
+                                          value={displayVal}
+                                          onChange={(e) => handleCFInputChange(matType, category, e.target.value)}
+                                          onBlur={() => handleCFInputBlur(matType, category)}
+                                          placeholder={orgCFVal !== 1 ? String(orgCFVal) : '1'}
+                                          className={`h-7 w-24 text-xs text-foreground bg-background ${isInherited ? 'border-amber-300 bg-amber-50/50' : ''}`}
+                                          title="Conversion Factor: raw qty × CF = purchase qty. Enter any decimal."
+                                        />
+                                        {cfValue !== 1 && editVal === undefined && (
+                                          <span className="text-xs text-amber-600 font-medium">
+                                            ×{cfValue}
+                                          </span>
+                                        )}
+                                        {isInherited && (
+                                          <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded" title="Inherited from organization settings">
+                                            Org
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
                               <LengthCollapsible
                                 label={category}
                                 category={category}
@@ -1388,6 +1431,8 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                       <div className="space-y-4">
                         {['Stair Treads', 'Stair Risers', 'Stair Stringers'].map((category) => {
                           const matType = getResolvedMaterialType('stair');
+                          const showCF = category === 'Stair Risers';
+                          const cfValue = showCF ? getConversionFactor(matType, category) : 1;
                           return (
                             <div key={category} className="space-y-2">
                               <Label className="text-xs font-medium text-foreground">{category}</Label>
@@ -1398,6 +1443,46 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
                                 onChange={(value) => handleDefaultChange(matType, category, value)}
                                 placeholder={`Select ${category}...`}
                               />
+                              {showCF && (
+                                <div className="flex items-center gap-2 flex-wrap pt-1">
+                                  <Label className="text-xs text-muted-foreground whitespace-nowrap" htmlFor={`cf-deck-stair-${category}`}>
+                                    CF:
+                                  </Label>
+                                  {(() => {
+                                    const cfKey = getCFKey(matType, category);
+                                    const editVal = cfEditValues[cfKey];
+                                    const userHasCF = hasUserCF(matType, category);
+                                    const orgCFVal = getOrgCF(matType, category);
+                                    const isInherited = !userHasCF && orgCFVal !== 1;
+                                    const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(cfValue));
+                                    return (
+                                      <>
+                                        <Input
+                                          id={`cf-deck-stair-${category}`}
+                                          type="text"
+                                          inputMode="decimal"
+                                          value={displayVal}
+                                          onChange={(e) => handleCFInputChange(matType, category, e.target.value)}
+                                          onBlur={() => handleCFInputBlur(matType, category)}
+                                          placeholder={orgCFVal !== 1 ? String(orgCFVal) : '1'}
+                                          className={`h-7 w-24 text-xs text-foreground bg-background ${isInherited ? 'border-amber-300 bg-amber-50/50' : ''}`}
+                                          title="Conversion Factor: raw qty × CF = purchase qty. Enter any decimal."
+                                        />
+                                        {cfValue !== 1 && editVal === undefined && (
+                                          <span className="text-xs text-amber-600 font-medium">
+                                            ×{cfValue}
+                                          </span>
+                                        )}
+                                        {isInherited && (
+                                          <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded" title="Inherited from organization settings">
+                                            Org
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
                             </div>
                           );
                         })}

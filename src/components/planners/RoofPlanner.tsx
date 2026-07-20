@@ -145,21 +145,8 @@ export function RoofPlanner({ user }: RoofPlannerProps) {
     };
     enrichMaterials();
   }, [
-    config.length,
-    config.width,
-    config.roofPitch,
-    config.style,
+    JSON.stringify(flatMaterials),
     config.shingleType,
-    config.underlaymentType,
-    config.hasValleys,
-    config.valleyCount,
-    config.hasSkylight,
-    config.skylightCount,
-    config.hasChimney,
-    config.chimneyCount,
-    config.hasDormers,
-    config.dormers,
-    config.wasteFactor,
     user.organizationId,
     pricingContext.cfMap,
     pricingContext.mergedUserDefaults,

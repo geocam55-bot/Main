@@ -65,6 +65,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     aluminumRailingColor: 'White',
     deckingPattern: 'perpendicular',
     joistSpacing: 16,
+    joistSize: '2x8',
     deckingType: 'Treated',
     unit: 'feet',
   });
@@ -96,6 +97,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
   const flatMaterials = [
     ...materials.framing,
     ...materials.decking,
+    ...(materials.stairs || []),
     ...materials.railing,
     ...materials.hardware,
   ];
@@ -151,6 +153,11 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
   useEffect(() => {
     const enrichMaterials = async () => {
       if (orgId && flatMaterials.length > 0) {
+        const mergedUserDefaultsWithActiveConfig = {
+          ...pricingContext.mergedUserDefaults,
+          'deck-global-joist-size': config.joistSize || '2x8',
+          'deck-global-post-size': config.postSize || '4x4',
+        };
         const { materials: enriched, totalT1Price: total } = await enrichMaterialsWithT1Pricing(
           flatMaterials,
           orgId,
@@ -158,7 +165,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
           pricingMaterialType,
           pricingContext.cfMap,
           user.id,
-          pricingContext.mergedUserDefaults
+          mergedUserDefaultsWithActiveConfig
         );
         setEnrichedMaterials(enriched);
         setTotalT1Price(total);
@@ -166,33 +173,15 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     };
     enrichMaterials();
   }, [
-    config.width,
-    config.length,
-    config.height,
-    config.shape,
-    config.lShapeWidth,
-    config.lShapeLength,
-    config.lShapePosition,
-    config.hasStairs,
-    config.stairSide,
-    config.stairWidth,
-    config.railingSides,
-    config.railingHeight,
-    config.railingStyle,
-    config.aluminumInfillType,
-    config.aluminumRailingColor,
-    config.joistSpacing,
-    config.deckingType,
-    config.postSize,
-    config.formtubeSize,
+    JSON.stringify(flatMaterials),
     pricingMaterialType,
-    config.deckingPattern,
     orgId,
     user.id,
-    flatMaterials.length,
     pricingContext.cfMap,
     pricingContext.mergedUserDefaults,
     defaultsVersion,
+    config.joistSize,
+    config.postSize,
   ]);
 
   // Create enriched materials structure for display
@@ -213,6 +202,7 @@ export function DeckPlanner({ user }: DeckPlannerProps) {
     return {
       framing: materials.framing.map(item => enrichedMap.get(item.description) || item),
       decking: materials.decking.map(item => enrichedMap.get(item.description) || item),
+      stairs: (materials.stairs || []).map(item => enrichedMap.get(item.description) || item),
       railing: materials.railing.map(item => enrichedMap.get(item.description) || item),
       hardware: materials.hardware.map(item => enrichedMap.get(item.description) || item),
     };

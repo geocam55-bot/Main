@@ -330,6 +330,7 @@ const SYSTEM_CF_SUGGESTIONS: Record<string, number> = {
   'Flashing': 1 / 10,
   'Furring Strip': 1 / 8,
   'Formtube': 3 / 12,                  // Sold in 12' lengths, 3' needed per footing (CF = 3/12)
+  'Stair Risers': 1 / 3,
 };
 
 // Define material categories for each planner type - organized by category sections
@@ -1713,6 +1714,8 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                   <div className="space-y-4">
                     {['Decking Boards', 'Stair Treads', 'Stair Risers'].map((category) => {
                       const matType = getResolvedMaterialType('decking');
+                      const showCF = category === 'Stair Risers';
+                      const cfValue = showCF ? (getOrgCF('deck', matType, category) || 1) : 1;
                       return (
                         <div key={category} className="space-y-2">
                           <Label className="text-xs font-medium text-foreground">{category}</Label>
@@ -1723,6 +1726,33 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                             onChange={(value) => handleDefaultChange('deck', matType, category, value)}
                             placeholder={`Select ${category}...`}
                           />
+                          {showCF && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <Label className="text-xs text-muted-foreground whitespace-nowrap">CF:</Label>
+                              {(() => {
+                                const cfKey = getCFKey('deck', matType, category);
+                                const editVal = cfEditValues[cfKey];
+                                const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(parseFloat(cfValue.toFixed(4))));
+                                return (
+                                  <>
+                                    <Input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={displayVal}
+                                      onChange={(e) => handleCFInputChange('deck', matType, category, e.target.value)}
+                                      onBlur={() => handleCFInputBlur('deck', matType, category)}
+                                      placeholder="1"
+                                      className="h-7 w-24 text-xs text-foreground bg-background"
+                                      title="Conversion Factor: raw qty × CF = purchase qty. Enter any decimal."
+                                    />
+                                    {cfValue !== 1 && editVal === undefined && (
+                                      <span className="text-xs text-amber-600 font-medium">×{parseFloat(cfValue.toFixed(4))}</span>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
                           <LengthCollapsible
                             label={category}
                             category={category}
@@ -1870,6 +1900,8 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                   <div className="space-y-4">
                     {['Stair Treads', 'Stair Risers', 'Stair Stringers'].map((category) => {
                       const matType = getResolvedMaterialType('stair');
+                      const showCF = category === 'Stair Risers';
+                      const cfValue = showCF ? (getOrgCF('deck', matType, category) || 1) : 1;
                       return (
                         <div key={category} className="space-y-2">
                           <Label className="text-xs font-medium text-foreground">{category}</Label>
@@ -1880,6 +1912,33 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                             onChange={(value) => handleDefaultChange('deck', matType, category, value)}
                             placeholder={`Select ${category}...`}
                           />
+                          {showCF && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <Label className="text-xs text-muted-foreground whitespace-nowrap">CF:</Label>
+                              {(() => {
+                                const cfKey = getCFKey('deck', matType, category);
+                                const editVal = cfEditValues[cfKey];
+                                const displayVal = editVal !== undefined ? editVal : (cfValue === 1 ? '' : String(parseFloat(cfValue.toFixed(4))));
+                                return (
+                                  <>
+                                    <Input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={displayVal}
+                                      onChange={(e) => handleCFInputChange('deck', matType, category, e.target.value)}
+                                      onBlur={() => handleCFInputBlur('deck', matType, category)}
+                                      placeholder="1"
+                                      className="h-7 w-24 text-xs text-foreground bg-background"
+                                      title="Conversion Factor: raw qty × CF = purchase qty. Enter any decimal."
+                                    />
+                                    {cfValue !== 1 && editVal === undefined && (
+                                      <span className="text-xs text-amber-600 font-medium">×{parseFloat(cfValue.toFixed(4))}</span>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

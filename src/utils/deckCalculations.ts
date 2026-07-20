@@ -351,6 +351,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   const isSpruce = deckingMaterialType.toLowerCase() === 'spruce';
   const isCedar = deckingMaterialType.toLowerCase() === 'cedar';
   const framingPrefix = isSpruce ? 'Spruce' : isCedar ? 'Cedar' : 'Pressure Treated';
+  const joistSize = config.joistSize || '2x8';
   
   // ---- Ledger Board ----
   // Spans the deck width, attaches to house
@@ -358,7 +359,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   ledgerCombo.forEach(({ length, count }) => {
     framing.push({
       category: 'Framing',
-      description: `${framingPrefix} Ledger Board (${length}')`,
+      description: `${joistSize} ${framingPrefix} Ledger Board (${length}')`,
       quantity: count,
       unit: 'pcs',
       notes: ledgerCombo.length > 1
@@ -378,7 +379,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   joistCombo.forEach(({ length, count }) => {
     framing.push({
       category: 'Framing',
-      description: `${framingPrefix} Joists (${length}')`,
+      description: `${joistSize} ${framingPrefix} Joists (${length}')`,
       quantity: numberOfJoists * count,
       unit: 'pcs',
       notes: joistCombo.length > 1
@@ -399,7 +400,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
     .forEach(([length, quantity]) => {
       framing.push({
         category: 'Framing',
-        description: `${framingPrefix} Rim Joists (${length}')`,
+        description: `${joistSize} ${framingPrefix} Rim Joists (${length}')`,
         quantity,
         unit: 'pcs',
         notes: 'Perimeter band boards',
@@ -419,7 +420,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
   beamCombo.forEach(({ length, count }) => {
     framing.push({
       category: 'Framing',
-      description: `${framingPrefix} Beams (${length}')`,
+      description: `${joistSize} ${framingPrefix} Beams (${length}')`,
       quantity: beamCount * count,
       unit: 'pcs',
       notes: beamCombo.length > 1
@@ -473,7 +474,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
     
     framing.push({
       category: 'Framing',
-      description: `${framingPrefix} Blocking (${blockingBoardLength}')`,
+      description: `${joistSize} ${framingPrefix} Blocking (${blockingBoardLength}')`,
       quantity: blockingQuantity,
       unit: 'pcs',
       notes: `Provides frame rigidity & rail post support. Individual block length: ${blockLength}\". Total blocks: ${totalBlocks} (${numberOfBays} bays × ${blockingRows} rows + ${railingBlocks} railing blocks).`,
@@ -728,7 +729,7 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
     
     framing.push({
       category: 'Stairs',
-      description: `Stair Stringers (${stringerLumberLength}')`,
+      description: `${joistSize} Stair Stringers (${stringerLumberLength}')`,
       quantity: 3,
       unit: 'pcs',
       notes: `${numberOfSteps} steps with 7" rise, 11" run`,
@@ -1022,11 +1023,17 @@ export function calculateMaterials(rawConfig: DeckConfig): DeckMaterials {
     }
   }
   
+  const stairItems = [
+    ...framing.filter(item => item.category === 'Stairs'),
+    ...decking.filter(item => item.category === 'Stairs')
+  ];
+
   return {
-    framing,
-    decking,
+    framing: framing.filter(item => item.category !== 'Stairs'),
+    decking: decking.filter(item => item.category !== 'Stairs'),
     railing,
     hardware,
+    stairs: stairItems,
   };
 }
 
@@ -1040,6 +1047,7 @@ export function getMaterialsSummary(materials: DeckMaterials): {
   const allItems = [
     ...materials.framing,
     ...materials.decking,
+    ...(materials.stairs || []),
     ...materials.railing,
     ...materials.hardware,
   ];

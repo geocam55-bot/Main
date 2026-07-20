@@ -317,6 +317,28 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
           </div>
         </div>
 
+        {/* Joist Size */}
+        <div>
+          <label className="block text-foreground text-sm mb-2">
+            Joist Size
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {(['2x8', '2x10', '2x12'] as const).map((size) => (
+              <button
+                key={size}
+                onClick={() => updateConfig({ joistSize: size })}
+                className={`px-4 py-2 rounded-lg border-2 transition-colors font-medium ${
+                  (config.joistSize || '2x8') === size
+                    ? 'border-purple-600 bg-purple-50 text-purple-700'
+                    : 'border-border text-foreground hover:border-slate-400 bg-background'
+                }`}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Decking Pattern */}
         <div>
           <label className="block text-foreground text-sm mb-2">
@@ -600,15 +622,15 @@ export function DeckConfigurator({ config, onChange }: DeckConfiguratorProps) {
             <p className="text-xs font-medium text-purple-700 mb-1.5">Auto-Selected Lumber Lengths</p>
             <div className="text-xs space-y-1 text-muted-foreground">
               <div className="flex justify-between">
-                <span>Ledger Board ({config.width}' span):</span>
+                <span>Ledger Board ({config.joistSize || '2x8'} - {config.width}' span):</span>
                 <span className="font-medium text-foreground">{getLumberLengthDescription(config.width)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Joists ({config.length}' span):</span>
+                <span>Joists ({config.joistSize || '2x8'} - {config.length}' span):</span>
                 <span className="font-medium text-foreground">{getLumberLengthDescription(config.length)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Beams ({config.width}' span):</span>
+                <span>Beams ({config.joistSize || '2x8'} - {config.width}' span):</span>
                 <span className="font-medium text-foreground">{getLumberLengthDescription(config.width)}</span>
               </div>
               {(() => {

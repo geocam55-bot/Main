@@ -82,6 +82,78 @@ function getDescriptionSearchTerms(description: string): string[] {
   return d.split(/\s+/).filter(Boolean);
 }
 
+function findSubstitutedItemForSize(
+  targetDescription: string,
+  defaultItem: InventoryItemWithPricing,
+  allInventoryItems: InventoryItemWithPricing[]
+): InventoryItemWithPricing | undefined {
+  const sizes = ["2x8", "2x10", "2x12", "4x4", "6x6", "2x6", "2x4", "5/4x6"];
+  const targetSize = sizes.find(s => targetDescription.includes(s));
+  if (!targetSize) return undefined;
+
+  const defaultItemText = `${defaultItem.name || ''} ${defaultItem.description || ''}`.toLowerCase();
+  const defaultSize = sizes.find(s => defaultItemText.includes(s.toLowerCase()));
+  if (!defaultSize || defaultSize === targetSize) {
+    return undefined; // No substitution needed or possible
+  }
+
+  let bestMatch: InventoryItemWithPricing | undefined;
+  let bestScore = -1;
+
+  // Extract length if present
+  const lengthMatch = targetDescription.match(/\((\d+')\)/) || targetDescription.match(/\b(\d+)'\b/) || targetDescription.match(/\b(\d+)\s*ft\b/);
+  const targetLength = lengthMatch ? lengthMatch[1].replace(/['\sft]/g, '') : undefined;
+
+  for (const item of allInventoryItems) {
+    const itemText = `${item.name || ''} ${item.description || ''} ${item.sku || ''}`.toLowerCase();
+    
+    // Must contain target size
+    if (!itemText.includes(targetSize.toLowerCase())) continue;
+
+    let score = 0;
+
+    // Check length
+    if (targetLength) {
+      const len = targetLength;
+      if (
+        itemText.includes(`(${len}')`) || 
+        itemText.includes(`${len}ft`) || 
+        itemText.includes(`${len} ft`) || 
+        itemText.includes(` ${len}'`) ||
+        itemText.includes(`x${len}'`) ||
+        itemText.includes(`x ${len}'`)
+      ) {
+        score += 30;
+      } else {
+        // If length doesn't match, penalize or skip
+        continue;
+      }
+    }
+
+    // Check material type or category terms
+    const defaultTerms = (defaultItem.name || '').toLowerCase()
+      .replace(/[()]/g, ' ')
+      .split(/\s+/)
+      .filter(t => t.length > 2 && t !== defaultSize && t !== 'lumber' && t !== 'board');
+      
+    defaultTerms.forEach(term => {
+      if (itemText.includes(term)) {
+        score += 5;
+      }
+    });
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = item;
+    }
+  }
+
+  if (bestMatch && bestScore >= 10) {
+    return bestMatch;
+  }
+  return undefined;
+}
+
 function fallbackMatchInventoryByDescription(
   material: MaterialItem,
   inventoryItems: InventoryItemWithPricing[]
@@ -91,18 +163,24 @@ function fallbackMatchInventoryByDescription(
   const terms = getDescriptionSearchTerms(material.description);
   const needsLength = material.lumberLength != null;
 
+  const sizes = ["2x8", "2x10", "2x12", "4x4", "6x6", "2x6", "2x4", "5/4x6"];
+  const targetSize = sizes.find(s => material.description.includes(s));
+
   let best: { item: InventoryItemWithPricing; score: number } | undefined;
 
   inventoryItems.forEach((item) => {
     const name = (item.name || '').toLowerCase();
-    if (!name) return;
+    const desc = (item.description || '').toLowerCase();
+    const sku = (item.sku || '').toLowerCase();
+    const text = `${name} ${desc} ${sku}`;
+    if (!text) return;
 
     let score = 0;
     terms.forEach((term) => {
-      if (name.includes(term)) score += 15;
+      if (text.includes(term)) score += 15;
     });
 
-    const matchedAllTerms = terms.length > 0 && terms.every((term) => name.includes(term));
+    const matchedAllTerms = terms.length > 0 && terms.every((term) => text.includes(term));
     if (matchedAllTerms) score += 40;
 
     if (needsLength) {
@@ -112,16 +190,30 @@ function fallbackMatchInventoryByDescription(
         `${len}ft`,
         `${len} ft`,
         `${len}-ft`,
+        ` ${len}'`,
       ];
 
-      if (lengthTokens.some((token) => name.includes(token))) {
+      if (lengthTokens.some((token) => text.includes(token))) {
         score += 40;
       } else {
-        score -= 15;
+        score -= 20;
       }
     }
 
-    if (score < 35) return;
+    // Size scoring
+    if (targetSize) {
+      if (text.includes(targetSize.toLowerCase())) {
+        score += 50;
+      } else {
+        // If it has a different size, penalize heavily
+        const hasOtherSize = sizes.some(s => s !== targetSize && text.includes(s.toLowerCase()));
+        if (hasOtherSize) {
+          score -= 50;
+        }
+      }
+    }
+
+    if (score < 30) return;
 
     if (!best || score > best.score) {
       best = { item, score };
@@ -305,6 +397,20 @@ const SKU_TO_FALLBACK_UUID: Record<string, string> = {
   "84895027": "f0000000-0000-0000-0000-848950270000",
   "51206852": "f0000000-0000-0000-0000-512068520000",
 
+  // Pressure Treated 2x10 SKUs
+  "84895100": "f0000000-0000-0000-0000-848951000000",
+  "84895101": "f0000000-0000-0000-0000-848951010000",
+  "84895102": "f0000000-0000-0000-0000-848951020000",
+  "84895103": "f0000000-0000-0000-0000-848951030000",
+  "84895104": "f0000000-0000-0000-0000-848951040000",
+
+  // Pressure Treated 2x12 SKUs
+  "84895120": "f0000000-0000-0000-0000-848951200000",
+  "84895121": "f0000000-0000-0000-0000-848951210000",
+  "84895122": "f0000000-0000-0000-0000-848951220000",
+  "84895123": "f0000000-0000-0000-0000-848951230000",
+  "84895124": "f0000000-0000-0000-0000-848951240000",
+
   // Spruce (SPF) SKUs
   "94895030": "f0000000-0000-0000-0000-948950300000",
   "94895031": "f0000000-0000-0000-0000-948950310000",
@@ -326,6 +432,20 @@ const SKU_TO_FALLBACK_UUID: Record<string, string> = {
   "94895021": "f0000000-0000-0000-0000-948950210000",
   "94895027": "f0000000-0000-0000-0000-948950270000",
   "91206852": "f0000000-0000-0000-0000-912068520000",
+  
+  // Spruce (SPF) 2x10 SKUs
+  "94895100": "f0000000-0000-0000-0000-948951000000",
+  "94895101": "f0000000-0000-0000-0000-948951010000",
+  "94895102": "f0000000-0000-0000-0000-948951020000",
+  "94895103": "f0000000-0000-0000-0000-948951030000",
+  "94895104": "f0000000-0000-0000-0000-948951040000",
+
+  // Spruce (SPF) 2x12 SKUs
+  "94895120": "f0000000-0000-0000-0000-948951200000",
+  "94895121": "f0000000-0000-0000-0000-948951210000",
+  "94895122": "f0000000-0000-0000-0000-948951220000",
+  "94895123": "f0000000-0000-0000-0000-948951230000",
+  "94895124": "f0000000-0000-0000-0000-948951240000",
 
   // Cedar SKUs
   "74895030": "f0000000-0000-0000-0000-748950300000",
@@ -348,6 +468,20 @@ const SKU_TO_FALLBACK_UUID: Record<string, string> = {
   "74895021": "f0000000-0000-0000-0000-748950210000",
   "74895027": "f0000000-0000-0000-0000-748950270000",
   "71206852": "f0000000-0000-0000-0000-712068520000",
+
+  // Cedar 2x10 SKUs
+  "74895100": "f0000000-0000-0000-0000-748951000000",
+  "74895101": "f0000000-0000-0000-0000-748951010000",
+  "74895102": "f0000000-0000-0000-0000-748951020000",
+  "74895103": "f0000000-0000-0000-0000-748951030000",
+  "74895104": "f0000000-0000-0000-0000-748951040000",
+
+  // Cedar 2x12 SKUs
+  "74895120": "f0000000-0000-0000-0000-748951200000",
+  "74895121": "f0000000-0000-0000-0000-748951210000",
+  "74895122": "f0000000-0000-0000-0000-748951220000",
+  "74895123": "f0000000-0000-0000-0000-748951230000",
+  "74895124": "f0000000-0000-0000-0000-748951240000",
 
   // Composite SKUs
   "64895016": "f0000000-0000-0000-0000-648950160000",
@@ -431,6 +565,20 @@ const HARDCODED_INVENTORY_DETAILS: Record<string, { name: string; unit_price: nu
   "84895027": { name: 'PT BROWN 2X6"X10\'', unit_price: 1781, cost: 1000, description: 'Pressure Treated Lumber' },
   "51206852": { name: 'PT BALUSTER BROWN 2X2X42', unit_price: 249, cost: 150, description: 'Pressure Treated Baluster' },
 
+  // Pressure Treated 2x10 Fallbacks
+  "84895100": { name: 'PT BROWN 2X10"X8\'', unit_price: 2699, cost: 1600, description: 'Pressure Treated Lumber (8\')' },
+  "84895101": { name: 'PT BROWN 2X10"X10\'', unit_price: 3349, cost: 2000, description: 'Pressure Treated Lumber (10\')' },
+  "84895102": { name: 'PT BROWN 2X10"X12\'', unit_price: 3999, cost: 2400, description: 'Pressure Treated Lumber (12\')' },
+  "84895103": { name: 'PT BROWN 2X10"X14\'', unit_price: 4649, cost: 2800, description: 'Pressure Treated Lumber (14\')' },
+  "84895104": { name: 'PT BROWN 2X10"X16\'', unit_price: 5299, cost: 3200, description: 'Pressure Treated Lumber (16\')' },
+
+  // Pressure Treated 2x12 Fallbacks
+  "84895120": { name: 'PT BROWN 2X12"X8\'', unit_price: 3299, cost: 2000, description: 'Pressure Treated Lumber (8\')' },
+  "84895121": { name: 'PT BROWN 2X12"X10\'', unit_price: 4149, cost: 2500, description: 'Pressure Treated Lumber (10\')' },
+  "84895122": { name: 'PT BROWN 2X12"X12\'', unit_price: 4999, cost: 3000, description: 'Pressure Treated Lumber (12\')' },
+  "84895123": { name: 'PT BROWN 2X12"X14\'', unit_price: 5799, cost: 3500, description: 'Pressure Treated Lumber (14\')' },
+  "84895124": { name: 'PT BROWN 2X12"X16\'', unit_price: 6599, cost: 4000, description: 'Pressure Treated Lumber (16\')' },
+
   // Spruce (SPF) Fallbacks
   "94895030": { name: 'SPF 2X8"X8\'', unit_price: 1599, cost: 1000, description: 'Spruce-Pine-Fir Lumber (8\')' },
   "94895031": { name: 'SPF 2X8"X10\'', unit_price: 1999, cost: 1200, description: 'Spruce-Pine-Fir Lumber (10\')' },
@@ -453,6 +601,20 @@ const HARDCODED_INVENTORY_DETAILS: Record<string, { name: string; unit_price: nu
   "94895027": { name: 'SPF 2X6"X10\'', unit_price: 1381, cost: 800, description: 'Spruce Lumber' },
   "91206852": { name: 'SPRUCE BALUSTER 2X2X42', unit_price: 199, cost: 110, description: 'Spruce Baluster' },
 
+  // Spruce (SPF) 2x10 Fallbacks
+  "94895100": { name: 'SPF 2X10"X8\'', unit_price: 2099, cost: 1300, description: 'Spruce-Pine-Fir Lumber (8\')' },
+  "94895101": { name: 'SPF 2X10"X10\'', unit_price: 2599, cost: 1600, description: 'Spruce-Pine-Fir Lumber (10\')' },
+  "94895102": { name: 'SPF 2X10"X12\'', unit_price: 3099, cost: 1900, description: 'Spruce-Pine-Fir Lumber (12\')' },
+  "94895103": { name: 'SPF 2X10"X14\'', unit_price: 3599, cost: 2200, description: 'Spruce-Pine-Fir Lumber (14\')' },
+  "94895104": { name: 'SPF 2X10"X16\'', unit_price: 4099, cost: 2500, description: 'Spruce-Pine-Fir Lumber (16\')' },
+
+  // Spruce (SPF) 2x12 Fallbacks
+  "94895120": { name: 'SPF 2X12"X8\'', unit_price: 2499, cost: 1500, description: 'Spruce-Pine-Fir Lumber (8\')' },
+  "94895121": { name: 'SPF 2X12"X10\'', unit_price: 3149, cost: 1900, description: 'Spruce-Pine-Fir Lumber (10\')' },
+  "94895122": { name: 'SPF 2X12"X12\'', unit_price: 3799, cost: 2300, description: 'Spruce-Pine-Fir Lumber (12\')' },
+  "94895123": { name: 'SPF 2X12"X14\'', unit_price: 4449, cost: 2700, description: 'Spruce-Pine-Fir Lumber (14\')' },
+  "94895124": { name: 'SPF 2X12"X16\'', unit_price: 5099, cost: 3100, description: 'Spruce-Pine-Fir Lumber (16\')' },
+
   // Cedar Fallbacks
   "74895030": { name: 'CEDAR 2X8"X8\'', unit_price: 2499, cost: 1500, description: 'Cedar Lumber (8\')' },
   "74895031": { name: 'CEDAR 2X8"X10\'', unit_price: 2999, cost: 1800, description: 'Cedar Lumber (10\')' },
@@ -474,6 +636,20 @@ const HARDCODED_INVENTORY_DETAILS: Record<string, { name: string; unit_price: nu
   "74895021": { name: 'CEDAR 2X4"X8\'', unit_price: 1299, cost: 800, description: 'Cedar Lumber' },
   "74895027": { name: 'CEDAR 2X6"X10\'', unit_price: 2181, cost: 1300, description: 'Cedar Lumber' },
   "71206852": { name: 'CEDAR BALUSTER 2X2X42', unit_price: 349, cost: 200, description: 'Cedar Baluster' },
+
+  // Cedar 2x10 Fallbacks
+  "74895100": { name: 'CEDAR 2X10"X8\'', unit_price: 3499, cost: 2100, description: 'Cedar Lumber (8\')' },
+  "74895101": { name: 'CEDAR 2X10"X10\'', unit_price: 4249, cost: 2600, description: 'Cedar Lumber (10\')' },
+  "74895102": { name: 'CEDAR 2X10"X12\'', unit_price: 4999, cost: 3100, description: 'Cedar Lumber (12\')' },
+  "74895103": { name: 'CEDAR 2X10"X14\'', unit_price: 5749, cost: 3600, description: 'Cedar Lumber (14\')' },
+  "74895104": { name: 'CEDAR 2X10"X16\'', unit_price: 6499, cost: 4100, description: 'Cedar Lumber (16\')' },
+
+  // Cedar 2x12 Fallbacks
+  "74895120": { name: 'CEDAR 2X12"X8\'', unit_price: 4299, cost: 2600, description: 'Cedar Lumber (8\')' },
+  "74895121": { name: 'CEDAR 2X12"X10\'', unit_price: 5349, cost: 3200, description: 'Cedar Lumber (10\')' },
+  "74895122": { name: 'CEDAR 2X12"X12\'', unit_price: 6399, cost: 3800, description: 'Cedar Lumber (12\')' },
+  "74895123": { name: 'CEDAR 2X12"X14\'', unit_price: 7449, cost: 4400, description: 'Cedar Lumber (14\')' },
+  "74895124": { name: 'CEDAR 2X12"X16\'', unit_price: 8499, cost: 5000, description: 'Cedar Lumber (16\')' },
 
   // Composite Fallbacks
   "64895016": { name: 'COMPOSITE 5/4X6"X8\'', unit_price: 3599, cost: 2200, description: 'Composite Decking Boards (8\')' },
@@ -533,6 +709,135 @@ const HARDCODED_INVENTORY_DETAILS: Record<string, { name: string; unit_price: nu
   "50000038": { name: 'Concrete Anchor Bolt 1/2"x10"', unit_price: 349, cost: 200, description: 'Foundation Anchor Bolt with Nut' },
   "50000039": { name: 'Aluminum Ridge Vent 4\'', unit_price: 1499, cost: 900, description: 'Low Profile Shingle Ridge Vent' },
 };
+
+export const getEffectiveCategoryForSize = (
+  category: string,
+  plannerType: string,
+  defaultsObj: Record<string, any>
+): string => {
+  if (plannerType !== 'deck' || !category) return category;
+
+  let baseCategory = category.trim();
+  let lengthSuffix = '';
+  
+  if (category.includes(' - ')) {
+    const parts = category.split(' - ');
+    const lastPart = parts[parts.length - 1].trim();
+    if (lastPart.endsWith("'") || lastPart.endsWith("ft")) {
+      lengthSuffix = ` - ${lastPart}`;
+      baseCategory = parts.slice(0, -1).join(' - ').trim();
+    }
+  }
+
+  // Remove existing size specifiers in parentheses
+  baseCategory = baseCategory
+    .replace(/\s*\(\d+x\d+\)/gi, '')
+    .replace(/\s*\(\d+\/\d+x\d+\)/gi, '')
+    .replace(/\s*\(6x6\)/gi, '')
+    .replace(/\s*\(4x4\)/gi, '');
+
+  const lowerBase = baseCategory.toLowerCase();
+
+  const joistSizeDependent = [
+    'ledger board', 
+    'joists', 
+    'rim joists', 
+    'beams', 
+    'stair stringers', 
+    'blocking',
+    'framing - ledger board by length',
+    'framing - joists by length',
+    'framing - rim joists by length',
+    'framing - beams by length',
+    'framing - blocking by length'
+  ];
+
+  if (joistSizeDependent.some(b => lowerBase === b || lowerBase.endsWith(b))) {
+    const joistSize = defaultsObj['deck-global-joist-size'] || defaultsObj['deck-settings-deck-global-joist-size'] || '2x8';
+    return `${baseCategory} (${joistSize})${lengthSuffix}`;
+  }
+
+  if (lowerBase === 'posts' || lowerBase === 'framing - posts by length' || lowerBase.endsWith('posts by length')) {
+    const postSize = defaultsObj['deck-global-post-size'] || defaultsObj['deck-settings-deck-global-post-size'] || '4x4';
+    return `${baseCategory} (${postSize})${lengthSuffix}`;
+  }
+
+  const deckingDependent = [
+    'decking boards', 
+    'stair treads', 
+    'stair risers',
+    'decking boards by length'
+  ];
+
+  if (deckingDependent.some(b => lowerBase === b || lowerBase.endsWith(b))) {
+    const deckingSize = defaultsObj['deck-global-decking-size'] || defaultsObj['deck-settings-deck-global-decking-size'] || '5/4x6';
+    return `${baseCategory} (${deckingSize})${lengthSuffix}`;
+  }
+
+  return category;
+};
+
+function getDynamicFallbackSku(
+  originalNormalizedBase: string,
+  mType: string,
+  joistSize: string,
+  postSize: string
+): string | undefined {
+  const lowerBase = originalNormalizedBase.toLowerCase();
+
+  // 1. Post-dependent: e.g. "posts (8')"
+  if (lowerBase === "posts (8')") {
+    let prefix = '8'; // treated
+    if (mType === 'spruce') prefix = '9';
+    else if (mType === 'cedar') prefix = '7';
+
+    if (postSize === '6x6') {
+      return `${prefix}4895046`; // 6x6x8 SKU
+    } else {
+      return `${prefix}4895043`; // 4x4x8 SKU
+    }
+  }
+
+  // 2. Joist-dependent: ledger board, joists, rim joists, beams, stair stringers, blocking
+  const isJoistDep = (
+    lowerBase.includes('joist') || 
+    lowerBase.includes('beam') || 
+    lowerBase.includes('ledger board') || 
+    lowerBase.includes('blocking') ||
+    lowerBase.includes('stair stringer')
+  ) && !lowerBase.includes('hanger') && !lowerBase.includes('anchor');
+
+  if (isJoistDep) {
+    let prefix = '8'; // treated
+    if (mType === 'spruce') prefix = '9';
+    else if (mType === 'cedar') prefix = '7';
+
+    // Parse the length from parentheses, e.g. "joists (16')" -> "16"
+    const lengthMatch = lowerBase.match(/\((\d+')\)/) || lowerBase.match(/\b(\d+)'\b/) || lowerBase.match(/\b(\d+)\s*ft\b/);
+    const length = lengthMatch ? lengthMatch[1].replace(/['\sft]/g, '') : undefined;
+
+    let lengthIndex = '1'; // default to 10' (index 1) if not found
+    if (length === '8') lengthIndex = '0';
+    else if (length === '10') lengthIndex = '1';
+    else if (length === '12') lengthIndex = '2';
+    else if (length === '14') lengthIndex = '3';
+    else if (length === '16') lengthIndex = '4';
+    else {
+      if (lowerBase.includes('beam')) lengthIndex = '2'; // beams default is 12'
+      else lengthIndex = '1'; // others default is 10'
+    }
+
+    if (joistSize === '2x10') {
+      return `${prefix}489510${lengthIndex}`;
+    } else if (joistSize === '2x12') {
+      return `${prefix}489512${lengthIndex}`;
+    } else {
+      return `${prefix}489503${lengthIndex}`;
+    }
+  }
+
+  return undefined;
+}
 
 export async function enrichMaterialsWithT1Pricing(
   materials: MaterialItem[],
@@ -624,6 +929,7 @@ export async function enrichMaterialsWithT1Pricing(
       ...Object.values(SPRUCE_DEFAULTS_BY_SKU),
       ...Object.values(CEDAR_DEFAULTS_BY_SKU),
       ...Object.values(COMPOSITE_DEFAULTS_BY_SKU),
+      ...Object.keys(HARDCODED_INVENTORY_DETAILS),
     ]));
 
     // Get unique valid inventory item IDs (currently only those from DB-configured defaults).
@@ -778,7 +1084,18 @@ export async function enrichMaterialsWithT1Pricing(
         : (normalizedMaterialType || 'default');
 
       const resolveOverride = (baseKey: string): string | undefined => {
-        const normalizedBase = baseKey.toLowerCase();
+        const originalNormalizedBase = baseKey.toLowerCase();
+        let normalizedBase = originalNormalizedBase;
+
+        if (plannerType === 'deck') {
+          const lengthMatch = baseKey.match(/(.+)\s*\((\d+'|\d+ft)\)/i);
+          let keyToConvert = baseKey;
+          if (lengthMatch) {
+            keyToConvert = `${lengthMatch[1].trim()} - ${lengthMatch[2]}`;
+          }
+          const effective = getEffectiveCategoryForSize(keyToConvert, 'deck', deckSettingMap);
+          normalizedBase = effective.toLowerCase();
+        }
 
         // Helper to verify if matched ID exists in inventory and is valid
         const verify = (id: string | undefined): string | undefined => {
@@ -791,6 +1108,12 @@ export async function enrichMaterialsWithT1Pricing(
         // 1. Direct material-specific lookup
         let matched = defaultsByMaterialAndCategory.get(`${itemMaterialType.toLowerCase()}::${normalizedBase}`);
         if (verify(matched)) return matched;
+
+        // 1b. Fallback to generic direct lookup if different
+        if (normalizedBase !== originalNormalizedBase) {
+          matched = defaultsByMaterialAndCategory.get(`${itemMaterialType.toLowerCase()}::${originalNormalizedBase}`);
+          if (verify(matched)) return matched;
+        }
 
         // 2. Prefix-agnostic material-specific lookup: check if any registered key ends with our baseKey
         for (const [mapKey, itemId] of defaultsByMaterialAndCategory.entries()) {
@@ -805,10 +1128,30 @@ export async function enrichMaterialsWithT1Pricing(
           }
         }
 
+        // 2b. Prefix-agnostic material-specific lookup (generic fallback)
+        if (normalizedBase !== originalNormalizedBase) {
+          for (const [mapKey, itemId] of defaultsByMaterialAndCategory.entries()) {
+            const [matType, catPath] = mapKey.split('::');
+            if (matType === itemMaterialType.toLowerCase() && catPath) {
+              const cleanPath = catPath.replace(/\s+/g, ' ').trim();
+              const cleanBase = originalNormalizedBase.replace(/\s+/g, ' ').trim();
+              
+              if (cleanPath === cleanBase || cleanPath.endsWith(` - ${cleanBase}`) || cleanPath.endsWith(`-${cleanBase}`)) {
+                if (verify(itemId)) return itemId;
+              }
+            }
+          }
+        }
+
         // 3. Try generic aluminum lookup if color specific fails
         if (itemMaterialType.toLowerCase().startsWith('aluminum-')) {
           matched = defaultsByMaterialAndCategory.get(`aluminum::${normalizedBase}`);
           if (verify(matched)) return matched;
+
+          if (normalizedBase !== originalNormalizedBase) {
+            matched = defaultsByMaterialAndCategory.get(`aluminum::${originalNormalizedBase}`);
+            if (verify(matched)) return matched;
+          }
 
           for (const [mapKey, itemId] of defaultsByMaterialAndCategory.entries()) {
             const [matType, catPath] = mapKey.split('::');
@@ -821,11 +1164,31 @@ export async function enrichMaterialsWithT1Pricing(
               }
             }
           }
+
+          if (normalizedBase !== originalNormalizedBase) {
+            for (const [mapKey, itemId] of defaultsByMaterialAndCategory.entries()) {
+              const [matType, catPath] = mapKey.split('::');
+              if (matType === 'aluminum' && catPath) {
+                const cleanPath = catPath.replace(/\s+/g, ' ').trim();
+                const cleanBase = originalNormalizedBase.replace(/\s+/g, ' ').trim();
+                
+                if (cleanPath === cleanBase || cleanPath.endsWith(` - ${cleanBase}`) || cleanPath.endsWith(`-${cleanBase}`)) {
+                  if (verify(itemId)) return itemId;
+                }
+              }
+            }
+          }
         }
 
         // 4. Try default/generic direct lookup
         matched = defaultsByMaterialAndCategory.get(`default::${normalizedBase}`);
         if (verify(matched)) return matched;
+
+        // 4b. Try default/generic direct lookup (generic fallback)
+        if (normalizedBase !== originalNormalizedBase) {
+          matched = defaultsByMaterialAndCategory.get(`default::${originalNormalizedBase}`);
+          if (verify(matched)) return matched;
+        }
 
         // 5. Try default/generic prefix-agnostic lookup
         for (const [mapKey, itemId] of defaultsByMaterialAndCategory.entries()) {
@@ -840,9 +1203,30 @@ export async function enrichMaterialsWithT1Pricing(
           }
         }
 
+        // 5b. Try default/generic prefix-agnostic lookup (generic fallback)
+        if (normalizedBase !== originalNormalizedBase) {
+          for (const [mapKey, itemId] of defaultsByMaterialAndCategory.entries()) {
+            const [matType, catPath] = mapKey.split('::');
+            if (matType === 'default' && catPath) {
+              const cleanPath = catPath.replace(/\s+/g, ' ').trim();
+              const cleanBase = originalNormalizedBase.replace(/\s+/g, ' ').trim();
+              
+              if (cleanPath === cleanBase || cleanPath.endsWith(` - ${cleanBase}`) || cleanPath.endsWith(`-${cleanBase}`)) {
+                if (verify(itemId)) return itemId;
+              }
+            }
+          }
+        }
+
         // 6. Direct fallback map lookup
         const dbFallback = fallbackDefaultsByCategory.get(normalizedBase);
         if (verify(dbFallback)) return dbFallback;
+
+        // 6b. Direct fallback map lookup (generic fallback)
+        if (normalizedBase !== originalNormalizedBase) {
+          const dbFallbackGeneric = fallbackDefaultsByCategory.get(originalNormalizedBase);
+          if (verify(dbFallbackGeneric)) return dbFallbackGeneric;
+        }
 
         // 7. Suffix-based fallback map lookup
         for (const [catPath, itemId] of fallbackDefaultsByCategory.entries()) {
@@ -854,22 +1238,41 @@ export async function enrichMaterialsWithT1Pricing(
           }
         }
 
+        // 7b. Suffix-based fallback map lookup (generic fallback)
+        if (normalizedBase !== originalNormalizedBase) {
+          for (const [catPath, itemId] of fallbackDefaultsByCategory.entries()) {
+            const cleanPath = catPath.replace(/\s+/g, ' ').trim();
+            const cleanBase = originalNormalizedBase.replace(/\s+/g, ' ').trim();
+            
+            if (cleanPath === cleanBase || cleanPath.endsWith(` - ${cleanBase}`) || cleanPath.endsWith(`-${cleanBase}`)) {
+              if (verify(itemId)) return itemId;
+            }
+          }
+        }
+
         // 8. Try hardcoded defaults by SKU as final fallback
         let fallbackSku: string | undefined = undefined;
         const mType = itemMaterialType.toLowerCase();
 
-        if (mType === 'spruce') {
-          fallbackSku = SPRUCE_DEFAULTS_BY_SKU[normalizedBase];
-        } else if (mType === 'cedar') {
-          fallbackSku = CEDAR_DEFAULTS_BY_SKU[normalizedBase];
-        } else if (mType === 'composite') {
-          fallbackSku = COMPOSITE_DEFAULTS_BY_SKU[normalizedBase];
-        } else {
-          fallbackSku = HARDCODED_DEFAULTS_BY_SKU[normalizedBase];
+        const joistSize = deckSettingMap['deck-global-joist-size'] || deckSettingMap['deck-settings-deck-global-joist-size'] || '2x8';
+        const postSize = deckSettingMap['deck-global-post-size'] || deckSettingMap['deck-settings-deck-global-post-size'] || '4x4';
+
+        fallbackSku = getDynamicFallbackSku(originalNormalizedBase, mType, joistSize, postSize);
+
+        if (!fallbackSku) {
+          if (mType === 'spruce') {
+            fallbackSku = SPRUCE_DEFAULTS_BY_SKU[originalNormalizedBase];
+          } else if (mType === 'cedar') {
+            fallbackSku = CEDAR_DEFAULTS_BY_SKU[originalNormalizedBase];
+          } else if (mType === 'composite') {
+            fallbackSku = COMPOSITE_DEFAULTS_BY_SKU[originalNormalizedBase];
+          } else {
+            fallbackSku = HARDCODED_DEFAULTS_BY_SKU[originalNormalizedBase];
+          }
         }
 
         if (!fallbackSku) {
-          fallbackSku = HARDCODED_DEFAULTS_BY_SKU[normalizedBase];
+          fallbackSku = HARDCODED_DEFAULTS_BY_SKU[originalNormalizedBase];
         }
 
         if (fallbackSku) {
@@ -1159,6 +1562,21 @@ export async function enrichMaterialsWithT1Pricing(
 
         if (inventoryItemId) {
           inventoryItem = inventoryMapById.get(inventoryItemId);
+          if (inventoryItem) {
+            const sizes = ["2x8", "2x10", "2x12", "4x4", "6x6", "2x6", "2x4", "5/4x6"];
+            const targetSize = sizes.find(s => material.description.includes(s));
+            if (targetSize) {
+              const itemText = `${inventoryItem.name || ''} ${inventoryItem.description || ''}`.toLowerCase();
+              const itemSize = sizes.find(s => itemText.includes(s.toLowerCase()));
+              if (itemSize && itemSize !== targetSize) {
+                const substitutedItem = findSubstitutedItemForSize(material.description, inventoryItem, Array.from(inventoryMapById.values()));
+                if (substitutedItem) {
+                  inventoryItem = substitutedItem;
+                  matchMethod = `Default match substituted to size ${targetSize}`;
+                }
+              }
+            }
+          }
         }
       }
       
@@ -1180,7 +1598,43 @@ export async function enrichMaterialsWithT1Pricing(
         // Pricing is PROPORTIONAL (no rounding): total = rawQty × CF × unitPrice
         // e.g., 12 ft of flashing tape, roll=$799, CF=0.0033 → 12 × 0.0033 × $799 = $31.64
         // e.g., 20 lbs deck screws, box=$X, CF=0.04 → 20 × 0.04 × $X = 0.8 × $X
-        const cf = (matchedDefaultKey && conversionFactors?.[matchedDefaultKey]) || 1;
+        let cf = 1;
+        if (conversionFactors) {
+          // 1. Direct matchedDefaultKey lookup
+          if (matchedDefaultKey && conversionFactors[matchedDefaultKey] !== undefined) {
+            cf = conversionFactors[matchedDefaultKey];
+          } 
+          // 2. Direct matchedDefaultKey lowercased lookup
+          else if (matchedDefaultKey && conversionFactors[matchedDefaultKey.toLowerCase()] !== undefined) {
+            cf = conversionFactors[matchedDefaultKey.toLowerCase()];
+          }
+          // 3. Effective category lookup (with size suffix)
+          else if (matchedDefaultKey) {
+            const effectiveCat = getEffectiveCategoryForSize(matchedDefaultKey, plannerType, deckSettingMap);
+            if (conversionFactors[effectiveCat.toLowerCase()] !== undefined) {
+              cf = conversionFactors[effectiveCat.toLowerCase()];
+            }
+          }
+          
+          // 4. Description/category-based fuzzy lookup as fallback
+          if (cf === 1) {
+            const descLower = material.description.toLowerCase();
+            
+            // Check if any key in conversionFactors is a match
+            for (const [cfKey, cfVal] of Object.entries(conversionFactors)) {
+              const cfKeyLower = cfKey.toLowerCase();
+              if (
+                descLower.includes(cfKeyLower) || 
+                cfKeyLower.includes(descLower) || 
+                (matchedDefaultKey && (cfKeyLower.includes(matchedDefaultKey.toLowerCase()) || matchedDefaultKey.toLowerCase().includes(cfKeyLower)))
+              ) {
+                cf = cfVal;
+                break;
+              }
+            }
+          }
+        }
+
         const hasCF = cf !== 1 && cf > 0;
         const convertedQty = hasCF ? material.quantity * cf : material.quantity;
         const orderQty = hasCF ? Math.ceil(convertedQty) : material.quantity; // whole units to order

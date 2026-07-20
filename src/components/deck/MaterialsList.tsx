@@ -42,6 +42,7 @@ export function MaterialsList({ materials, compact = false }: MaterialsListProps
   const allItems = [
     ...(materials.framing || []),
     ...(materials.decking || []),
+    ...(materials.stairs || []),
     ...(materials.railing || []),
     ...(materials.hardware || []),
   ];
@@ -58,7 +59,7 @@ export function MaterialsList({ materials, compact = false }: MaterialsListProps
     return (
       <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <div className="flex items-center gap-2 text-foreground mb-1">
               <Hammer className="w-4 h-4" />
@@ -73,6 +74,14 @@ export function MaterialsList({ materials, compact = false }: MaterialsListProps
               <span className="text-xs">Decking</span>
             </div>
             <div className="text-foreground">{materials.decking.length} items</div>
+          </div>
+
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-foreground mb-1">
+              <Package className="w-4 h-4" />
+              <span className="text-xs">Stairs</span>
+            </div>
+            <div className="text-foreground">{(materials.stairs || []).length} items</div>
           </div>
           
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
@@ -170,6 +179,44 @@ export function MaterialsList({ materials, compact = false }: MaterialsListProps
               </thead>
               <tbody>
                 {materials.decking.filter(item => item.quantity > 0).map((item, idx) => (
+                  <tr key={idx} className="border-b border-border hover:bg-muted">
+                    <td className="py-2 px-3 text-muted-foreground text-sm">{item.sku || '—'}</td>
+                    <td className="py-2 px-3 text-foreground">{item.description}</td>
+                    <td className="py-2 px-3 text-foreground text-right"><QtyCell item={item} /></td>
+                    <td className="py-2 px-3 text-muted-foreground"><UnitCell item={item} /></td>
+                    <td className="py-2 px-3 text-foreground text-right">{item.unitPrice ? `$${item.unitPrice.toFixed(2)}` : '—'}</td>
+                    <td className="py-2 px-3 text-foreground text-right">{item.totalCost ? `$${item.totalCost.toFixed(2)}` : '—'}</td>
+                    <td className="py-2 px-3 text-muted-foreground text-sm">{item.notes || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Stairs */}
+      {materials.stairs && materials.stairs.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Package className="w-5 h-5 text-indigo-600" />
+            <h3 className="text-foreground">Stairs</h3>
+          </div>
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-3 text-sm text-muted-foreground">SKU</th>
+                  <th className="text-left py-2 px-3 text-sm text-muted-foreground">Description</th>
+                  <th className="text-right py-2 px-3 text-sm text-muted-foreground">Qty</th>
+                  <th className="text-left py-2 px-3 text-sm text-muted-foreground">Unit</th>
+                  <th className="text-right py-2 px-3 text-sm text-muted-foreground">Unit Price</th>
+                  <th className="text-right py-2 px-3 text-sm text-muted-foreground">Total</th>
+                  <th className="text-left py-2 px-3 text-sm text-muted-foreground">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {materials.stairs.filter(item => item.quantity > 0).map((item, idx) => (
                   <tr key={idx} className="border-b border-border hover:bg-muted">
                     <td className="py-2 px-3 text-muted-foreground text-sm">{item.sku || '—'}</td>
                     <td className="py-2 px-3 text-foreground">{item.description}</td>
