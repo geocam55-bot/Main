@@ -5,7 +5,9 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
-import { Alert, AlertDescription } from '../ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { ThirdPartyDbSync } from './ThirdPartyDbSync';
 import {
   Dialog,
   DialogContent,
@@ -40,6 +42,7 @@ import {
   Loader2,
   RefreshCw,
   BookOpen,
+  Database,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import {
@@ -59,6 +62,8 @@ interface ApiAccessProps {
 }
 
 export function ApiAccess({ user, hasAccess }: ApiAccessProps) {
+  const [activeSubTab, setActiveSubTab] = useState<'3rd-party-db' | 'api-keys'>('3rd-party-db');
+  const [previewMode, setPreviewMode] = useState(false);
   const [keys, setKeys] = useState<ApiKeyMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -214,35 +219,45 @@ export function ApiAccess({ user, hasAccess }: ApiAccessProps) {
 
   const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07`;
 
-  // ── Upgrade wall for non-Enterprise ───────────────────────────────────
-  if (!hasAccess) {
+  // ── Upgrade wall for non-Enterprise with Preview option ───────────────
+  if (!hasAccess && !previewMode) {
     return (
       <div className="space-y-6">
-        <Card className="border-amber-200 bg-amber-50">
+        <Card className="border-amber-200 bg-amber-50/60">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center py-8 gap-4">
               <div className="p-4 bg-amber-100 rounded-full">
                 <Lock className="h-8 w-8 text-amber-600" />
               </div>
-              <h3 className="text-xl font-semibold text-amber-900">API Access - Enterprise Only</h3>
-              <p className="text-amber-700 max-w-md">
-                API access allows you to integrate ProSpaces CRM with external applications,
-                automate workflows, and build custom integrations using REST API keys.
+              <h3 className="text-xl font-semibold text-amber-900">API Access & 3rd-Party Database Integration</h3>
+              <p className="text-amber-800 max-w-lg text-sm">
+                Connect ProSpaces CRM with external databases, data warehouses, or custom backend services to synchronize <strong>Inventory</strong>, <strong>Contacts</strong>, and <strong>Bids</strong> tables using an API Key.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 w-full max-w-lg">
-                <div className="flex flex-col items-center gap-1 p-3 bg-background rounded-lg border border-amber-200">
-                  <Code className="h-5 w-5 text-amber-600" />
-                  <span className="text-xs font-medium text-amber-800">REST API</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2 w-full max-w-lg">
+                <div className="flex flex-col items-center gap-1 p-3 bg-background rounded-lg border border-amber-200 shadow-2xs">
+                  <Database className="h-5 w-5 text-indigo-600" />
+                  <span className="text-xs font-medium text-foreground">3rd-Party DB Sync</span>
                 </div>
-                <div className="flex flex-col items-center gap-1 p-3 bg-background rounded-lg border border-amber-200">
+                <div className="flex flex-col items-center gap-1 p-3 bg-background rounded-lg border border-amber-200 shadow-2xs">
                   <Key className="h-5 w-5 text-amber-600" />
-                  <span className="text-xs font-medium text-amber-800">API Key Auth</span>
+                  <span className="text-xs font-medium text-foreground">API Key Auth</span>
                 </div>
-                <div className="flex flex-col items-center gap-1 p-3 bg-background rounded-lg border border-amber-200">
+                <div className="flex flex-col items-center gap-1 p-3 bg-background rounded-lg border border-amber-200 shadow-2xs">
                   <ShieldAlert className="h-5 w-5 text-amber-600" />
-                  <span className="text-xs font-medium text-amber-800">Scoped Permissions</span>
+                  <span className="text-xs font-medium text-foreground">Scoped Permissions</span>
                 </div>
               </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 mt-4">
+                <Button
+                  onClick={() => setPreviewMode(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 font-semibold shadow-sm"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Preview 3rd-Party Database Sync Mockup
+                </Button>
+              </div>
+
               <Badge className="bg-purple-100 text-purple-700 border-purple-200 mt-2">
                 <Building2 className="h-3 w-3 mr-1" />
                 Available on Enterprise plan ($199/user/mo)
@@ -254,35 +269,80 @@ export function ApiAccess({ user, hasAccess }: ApiAccessProps) {
     );
   }
 
-  // ── Main Enterprise API Access UI ─────────────────────────────────────
+  // ── Main Enterprise API Access & DB Integration UI ─────────────────────
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Key className="h-5 w-5 text-purple-600" />
-            API Keys
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage API keys for external integrations and automation.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowDocs(!showDocs)}>
-            <BookOpen className="h-4 w-4 mr-1" />
-            {showDocs ? 'Hide Docs' : 'API Docs'}
+      {/* Admin Preview Mode Notice Banner if user is on non-Enterprise plan */}
+      {!hasAccess && previewMode && (
+        <Alert className="bg-indigo-50 border-indigo-200 text-indigo-900 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-indigo-600 shrink-0" />
+            <div>
+              <AlertTitle className="text-sm font-bold text-indigo-950">
+                Admin Preview Mode: 3rd-Party Database & API Key Integration
+              </AlertTitle>
+              <AlertDescription className="text-xs text-indigo-800">
+                You are interactively testing the configuration requirements for connecting <strong>Inventory</strong>, <strong>Contacts</strong>, and <strong>Bids</strong> tables to an external database via API Key.
+              </AlertDescription>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPreviewMode(false)}
+            className="shrink-0 bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs"
+          >
+            Exit Preview
           </Button>
-          <Button variant="outline" size="sm" onClick={loadKeys} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Create Key
-          </Button>
-        </div>
-      </div>
+        </Alert>
+      )}
+
+      {/* Sub-Navigation Tabs */}
+      <Tabs value={activeSubTab} onValueChange={(val: any) => setActiveSubTab(val)} className="w-full">
+        <TabsList className="grid grid-cols-2 max-w-md mb-6">
+          <TabsTrigger value="3rd-party-db" className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-indigo-600" />
+            <span>3rd-Party DB Sync</span>
+          </TabsTrigger>
+          <TabsTrigger value="api-keys" className="flex items-center gap-2">
+            <Key className="h-4 w-4 text-purple-600" />
+            <span>API Keys & REST API</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── TAB 1: 3RD-PARTY DATABASE SYNC MOCKUP ───────────────────── */}
+        <TabsContent value="3rd-party-db" className="space-y-6">
+          <ThirdPartyDbSync />
+        </TabsContent>
+
+        {/* ── TAB 2: INTERNAL API KEYS & DOCUMENTATION ────────────────── */}
+        <TabsContent value="api-keys" className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Key className="h-5 w-5 text-purple-600" />
+                ProSpaces API Keys
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Manage API keys to allow external scripts or webhooks to query ProSpaces REST endpoints.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowDocs(!showDocs)}>
+                <BookOpen className="h-4 w-4 mr-1" />
+                {showDocs ? 'Hide Docs' : 'API Docs'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={loadKeys} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Create Key
+              </Button>
+            </div>
+          </div>
 
       {/* API Documentation Collapsible */}
       {showDocs && (
@@ -451,6 +511,8 @@ export function ApiAccess({ user, hasAccess }: ApiAccessProps) {
           )}
         </div>
       )}
+        </TabsContent>
+      </Tabs>
 
       {/* ── Create Key Dialog ────────────────────────────────────────── */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
