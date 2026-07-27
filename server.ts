@@ -2938,7 +2938,7 @@ self.addEventListener('activate', (event) => {
         // otherwise default to index.html (SPA)
         const parts = url.split('/');
         const firstSegment = parts[1]?.split('?')[0];
-        if (firstSegment && ['project-wizards', 'marketing', 'insights', 'inventory', 'it'].includes(firstSegment)) {
+        if (firstSegment && ['project-wizards', 'marketing', 'insights', 'inventory', 'it', 'logistics'].includes(firstSegment)) {
           filename = `${firstSegment}.html`;
         }
       }
@@ -2987,7 +2987,7 @@ self.addEventListener('activate', (event) => {
       } else {
         const parts = url.split('/');
         const firstSegment = parts[1]?.split('?')[0];
-        if (firstSegment && ['project-wizards', 'marketing', 'insights', 'inventory', 'it'].includes(firstSegment)) {
+        if (firstSegment && ['project-wizards', 'marketing', 'insights', 'inventory', 'it', 'logistics'].includes(firstSegment)) {
           filename = `${firstSegment}.html`;
         }
       }

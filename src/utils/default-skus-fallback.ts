@@ -73,13 +73,6 @@ export const HARDCODED_DEFAULTS_BY_SKU: Record<string, string> = {
   "floor joists (16')": "84895034",
   "floor joists": "84895032",
 
-  "rim joists (8')": "84895030",
-  "rim joists (10')": "84895031",
-  "rim joists (12')": "84895032",
-  "rim joists (14')": "84895033",
-  "rim joists (16')": "84895034",
-  "rim joists": "84895032",
-
   "wall studs (8')": "84895030",
   "wall studs (10')": "84895031",
   "wall studs (12')": "84895032",

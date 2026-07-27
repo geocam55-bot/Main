@@ -859,6 +859,7 @@ export function AppContent() {
           onSelectInventorySpace={() => { window.location.href = '/inventory.html'; }}
           onSelectITSpace={() => { window.location.href = '/it.html'; }}
           onSelectMessagingSpace={() => { setCurrentView('messages'); }}
+          onSelectLogisticsSpace={() => { window.location.href = '/logistics.html'; }}
           onBack={async () => {
             await handleLogout();
           }}

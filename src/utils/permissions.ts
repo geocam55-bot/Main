@@ -17,7 +17,7 @@ export interface PermissionRecord extends Permission {
   role: UserRole;
 }
 
-export type SpaceId = 'sales' | 'marketing' | 'design' | 'insights' | 'inventory' | 'it';
+export type SpaceId = 'sales' | 'marketing' | 'design' | 'insights' | 'inventory' | 'it' | 'logistics';
 export type SpaceAccessLevel = 'none' | 'view' | 'full';
 
 export interface SpaceDefinition {
@@ -100,6 +100,7 @@ const SPACE_MODULES: Record<SpaceId, string[]> = {
   insights: ['reports', 'messages'],
   inventory: ['inventory', 'messages'],
   it: ['admin', 'users', 'security', 'tenants', 'import-export', 'messages'],
+  logistics: ['logistics', 'inventory', 'messages'],
 };
 
 const SPACE_ACCESS_ANCHOR_MODULE: Record<SpaceId, string> = {
@@ -109,6 +110,7 @@ const SPACE_ACCESS_ANCHOR_MODULE: Record<SpaceId, string> = {
   insights: 'reports',
   inventory: 'inventory',
   it: 'admin',
+  logistics: 'inventory',
 };
 
 export const ALL_SPACES: SpaceDefinition[] = [
@@ -153,6 +155,13 @@ export const ALL_SPACES: SpaceDefinition[] = [
     icon: '🛡️',
     description: 'User administration, security settings, import/export, and tenant controls.',
     modules: SPACE_MODULES.it,
+  },
+  {
+    id: 'logistics',
+    name: 'Logistics Space',
+    icon: '🚚',
+    description: 'Fleet management, GPS tracking, delivery dispatch, barcode scanning, and multi-depot operations.',
+    modules: SPACE_MODULES.logistics,
   },
 ];
 

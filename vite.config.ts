@@ -36,6 +36,7 @@
           insights: path.resolve(__dirname, 'insights.html'),
           inventory: path.resolve(__dirname, 'inventory.html'),
           it: path.resolve(__dirname, 'it.html'),
+          logistics: path.resolve(__dirname, 'logistics.html'),
         },
       },
     },

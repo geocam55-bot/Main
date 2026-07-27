@@ -8,6 +8,7 @@ import { InventorySpaceInfo } from './InventorySpaceInfo';
 import { InsightsSpaceInfo } from './InsightsSpaceInfo';
 import { MarketingSpaceInfo } from './MarketingSpaceInfo';
 import { ITSpaceInfo } from './ITSpaceInfo';
+import { LogisticsSpaceInfo } from './LogisticsSpaceInfo';
 import { HomeImprovementBenefits } from './HomeImprovementBenefits';
 import { LumberSuppliersBenefits } from './LumberSuppliersBenefits';
 import { ProDeskBenefits } from './ProDeskBenefits';
@@ -42,7 +43,8 @@ import {
   AlertBubble,
   HelpCircle,
   X,
-  Menu
+  Menu,
+  Truck
 } from 'lucide-react';
 
 /* ── Image Asset Imports ── */
@@ -76,7 +78,7 @@ interface LandingPageProps {
   onMemberLogin?: () => void;
 }
 
-type SpaceKey = 'sales' | 'build' | 'inventory' | 'insights' | 'marketing' | 'it';
+type SpaceKey = 'sales' | 'build' | 'inventory' | 'insights' | 'marketing' | 'it' | 'logistics';
 
 /* Exact accent colors & gradient backgrounds per screenshot */
 const SPACE_COLORS: Record<SpaceKey, { gradient: string; shadow: string }> = {
@@ -86,6 +88,7 @@ const SPACE_COLORS: Record<SpaceKey, { gradient: string; shadow: string }> = {
   insights:   { gradient: 'linear-gradient(135deg, #1B8FA6 0%, #4FC3E0 50%, #1B8FA6 100%)', shadow: 'rgba(27,143,166,0.45)' },
   marketing:  { gradient: 'linear-gradient(135deg, #E11D48 0%, #F97316 50%, #E11D48 100%)', shadow: 'rgba(225,29,72,0.45)' },
   it:         { gradient: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 50%, #7C3AED 100%)', shadow: 'rgba(124,58,237,0.45)' },
+  logistics:  { gradient: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 50%, #1D4ED8 100%)', shadow: 'rgba(37,99,235,0.45)' },
 };
 
 interface SpaceDef {
@@ -103,6 +106,7 @@ const SPACES: SpaceDef[] = [
   { key: 'insights',   title: 'Insights Space',   subtitle: 'Reports & Analytics',      icon: spaceInsightsSvg },
   { key: 'marketing',  title: 'Marketing Space',  subtitle: 'Campaigns & Leads',        icon: spaceMarketingSvg },
   { key: 'it',         title: 'IT Space',          subtitle: 'Systems & Support',        icon: spaceOperationsSvg },
+  { key: 'logistics',   title: 'Logistics Space',   subtitle: 'Fleet & Telemetry',        icon: spaceInventorySvg },
 ];
 
 const AUDIENCES = [
@@ -286,6 +290,16 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       />
     );
   }
+  if (selectedSpaceInfo === 'logistics') {
+    return (
+      <LogisticsSpaceInfo
+        onBack={() => setSelectedSpaceInfo(null)}
+        onEnterSpace={() => {
+          window.location.href = '/logistics.html';
+        }}
+      />
+    );
+  }
   if (selectedSpaceInfo === 'build') {
     return (
       <DesignSpaceInfo
@@ -318,7 +332,8 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
     inventory: 'Inventory Space',
     insights: 'Insights Space',
     marketing: 'Marketing Space',
-    it: 'IT Space'
+    it: 'IT Space',
+    logistics: 'Logistics Space'
   };
 
   const currentSpaceInfo = SPACES.find(s => s.key === activeTab);
@@ -459,20 +474,31 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
               Prospaces CRM connects sales, projects, inventory, and teams.
             </p>
 
-            {/* Direct CRM Access buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 mt-8">
+            {/* Direct CRM & Logistics Access buttons */}
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3.5 mt-8">
               <button
                 onClick={() => onMemberLogin ? onMemberLogin() : onGetStarted()}
-                className="bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-sm"
+                className="bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-sm cursor-pointer"
               >
                 <span>Enter CRM Workspace</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
+
+              <a
+                href="/logistics.html"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2.5 shadow-md shadow-blue-500/20 active:scale-[0.98] cursor-pointer"
+                title="Launch ProSpaces Logistics & Fleet Space"
+              >
+                <Truck className="h-4.5 w-4.5" />
+                <span>ProSpaces Logistics</span>
+                <ChevronRight className="h-4 w-4" />
+              </a>
+
               <button
                 onClick={() => {
                   document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-sm"
+                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-sm cursor-pointer"
               >
                 <span>View Benefits</span>
               </button>

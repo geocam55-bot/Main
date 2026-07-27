@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProSpaces — Logistics & Fleet Space</title>
+    <script>
+      (function() {
+        var unregisterAndPurge = function() {
+          var purgeFlag = 'sw_purge_done_v3';
+          if (sessionStorage.getItem(purgeFlag)) {
+            return;
+          }
+          sessionStorage.setItem(purgeFlag, 'true');
+
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              if (registrations && registrations.length > 0) {
+                var promises = registrations.map(function(reg) {
+                  return reg.unregister();
+                });
+                Promise.all(promises).then(function() {
+                  if ('caches' in window) {
+                    caches.keys().then(function(keys) {
+                      Promise.all(keys.map(function(k) { return caches.delete(k); })).then(function() {
+                        window.location.reload();
+                      });
+                    }).catch(function() {
+                      window.location.reload();
+                    });
+                  } else {
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          }
+        };
+
+        if ('serviceWorker' in navigator) {
+          if (navigator.serviceWorker.controller) {
+            unregisterAndPurge();
+          } else {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              if (regs && regs.length > 0) {
+                unregisterAndPurge();
+              }
+            });
+          }
+        }
+
+        try {
+          sessionStorage.removeItem("sw_clean_reload_attempted");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/logistics-entry.tsx"></script>
+  </body>
+</html>
