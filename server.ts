@@ -11,6 +11,7 @@ import os from 'os';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { GoogleGenAI, Type } from "@google/genai";
+import { registerLogisticsServer } from "./src/server/logistics-server";
 
 const projectId = "usorqldwroecyxucmtuw";
 const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
@@ -2842,6 +2843,9 @@ Result:
   // Trigger sync on server startup
   syncLocalEnvironmentToSupabase();
 
+  // Register Logistics Space API endpoints (state, user-heartbeat, telematics, tenants, etc.)
+  registerLogisticsServer(app);
+
   // --- SELF-UNINSTALLING SERVICE WORKER ENDPOINTS ---
   app.get(['/service-worker.js', '/sw.js'], (req, res) => {
     res.set({
@@ -2913,7 +2917,7 @@ self.addEventListener('activate', (event) => {
 
   if (!isProduction) {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: "custom",
     });
     app.use(vite.middlewares);

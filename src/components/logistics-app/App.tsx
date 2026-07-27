@@ -400,7 +400,7 @@ export default function App() {
     localStorage.setItem('prospaces_active_user', JSON.stringify(user));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (currentUser && currentTenant && users.length > 0) {
       // Safely prevent logout save if the loaded data in state is contaminated or mismatched
       const hasDifferentTenantData = 
@@ -418,12 +418,25 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem('prospaces_active_tenant');
     localStorage.removeItem('prospaces_active_user');
+    localStorage.removeItem('prospaces_cached_user');
     setActiveTab('dashboard');
     // Clear operational state completely on sign out
     setDeliveries([]);
     setTrucks([]);
     setBranches([]);
     setUsers([]);
+
+    try {
+      const supabase = getFrontendSupabase();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn("Supabase sign out error:", e);
+    }
+
+    // Redirect user to the ProSpaces CRM Hero page
+    window.location.href = '/';
   };
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
@@ -1479,7 +1492,7 @@ export default function App() {
             setShowLogin(false);
           }} 
           tenantsList={allTenants} 
-          onBackToLanding={() => setShowLogin(false)}
+          onBackToLanding={() => { window.location.href = '/'; }}
         />
       );
     }

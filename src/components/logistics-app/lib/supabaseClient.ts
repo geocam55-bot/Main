@@ -274,8 +274,8 @@ export function deserializeType(truck: any): any {
   };
 }
 
-const FALLBACK_SUPABASE_URL = "https://anqyjkjlzniruisqwthl.supabase.co";
-const FALLBACK_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFucXlqa2psem5pcnVpc3F3dGhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNDA3MTgsImV4cCI6MjA5NjkxNjcxOH0.-tJ0nb_eB6EDVVVTKlILibvXy7RwTc5USaXrkmHZY2k";
+const FALLBACK_SUPABASE_URL = "https://usorqldwroecyxucmtuw.supabase.co";
+const FALLBACK_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
 
 let cachedClient: any = null;
 let currentUrl = "";

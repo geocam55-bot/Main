@@ -184,6 +184,13 @@ export default function LandingPage({
             {/* Action Buttons */}
             <div className="hidden md:flex items-center space-x-3">
               <button 
+                onClick={() => { window.location.href = '/'; }}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center space-x-1.5"
+              >
+                <span>&larr;</span>
+                <span>ProSpaces CRM Hero</span>
+              </button>
+              <button 
                 onClick={onBookDemo}
                 className="px-5 py-2.5 bg-[#FF5A1F] hover:bg-[#E54B13] text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer hover:-translate-y-0.5 duration-150"
               >
@@ -234,6 +241,12 @@ export default function LandingPage({
                   Fleet Tracking
                 </button>
                 <div className="border-t border-slate-100 pt-3 flex flex-col space-y-2">
+                  <button 
+                    onClick={() => { window.location.href = '/'; }}
+                    className="w-full py-2.5 bg-slate-100 text-slate-800 font-bold text-sm rounded-xl text-center"
+                  >
+                    &larr; Return to ProSpaces CRM Hero
+                  </button>
                   <button 
                     onClick={onBookDemo}
                     className="w-full py-2.5 bg-[#FF5A1F] text-white font-bold text-sm rounded-xl text-center shadow-sm"
