@@ -92,8 +92,17 @@ interface GoogleMapContainerProps {
 
 const API_KEY_STATIC =
   process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  process.env.GOOGLE_MAPS_API_KEY ||
+  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  process.env.VITE_GOOGLE_MAPS_API_KEY ||
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
+  (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||
+  (import.meta as any).env?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+  (globalThis as any).GOOGLE_MAPS_API_KEY ||
   '';
 
 export default function GoogleMapContainer({
