@@ -16,6 +16,12 @@ import { MultiLocationBenefits } from './MultiLocationBenefits';
 import { KnowledgeBase } from './KnowledgeBase';
 import { MultiDeviceMockup } from './MultiDeviceMockup';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 import { 
   Info, 
   ChevronRight, 
@@ -386,6 +392,31 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 <span>Knowledge Base</span>
                 <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] text-[#1E6FD9]">✦</span>
               </button>
+
+              {/* Other Projects Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="group flex items-center gap-1.5 hover:text-[#1E6FD9] transition-all py-1 px-1 cursor-pointer focus:outline-none"
+                  id="nav-btn-other-projects"
+                >
+                  <span>Other Projects</span>
+                  <ChevronDown className="h-4 w-4 text-[#1E6FD9] transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-60 p-2 bg-white rounded-xl shadow-lg border border-slate-150 z-50">
+                  <DropdownMenuItem
+                    onClick={() => { window.location.href = '/logistics.html'; }}
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-blue-50 cursor-pointer text-slate-800 font-medium transition-colors"
+                  >
+                    <div className="h-8.5 w-8.5 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                      <Truck className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm text-slate-800">ProSpaces Logistics</div>
+                      <div className="text-xs text-slate-500 font-normal">Fleet, dispatch & yard portal</div>
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
           </div>
 
@@ -449,6 +480,20 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                   <span className="text-sm">Knowledge Base & Help</span>
                   <span className="text-[#1E6FD9] text-xs">✦</span>
                 </button>
+
+                <div className="pt-2 border-t border-slate-100 mt-1">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 mb-1 block">Other Projects</span>
+                  <button
+                    onClick={() => { window.location.href = '/logistics.html'; setMobileMenuOpen(false); }}
+                    className="w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all font-semibold text-slate-700"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Truck className="h-4.5 w-4.5 text-blue-600" />
+                      <span className="text-sm">ProSpaces Logistics</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}
@@ -474,7 +519,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
               Prospaces CRM connects sales, projects, inventory, and teams.
             </p>
 
-            {/* Direct CRM & Logistics Access buttons */}
+            {/* Direct CRM & Benefits Access buttons */}
             <div className="flex flex-col sm:flex-row flex-wrap gap-3.5 mt-8">
               <button
                 onClick={() => onMemberLogin ? onMemberLogin() : onGetStarted()}
@@ -483,16 +528,6 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 <span>Enter CRM Workspace</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
-
-              <a
-                href="/logistics.html"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2.5 shadow-md shadow-blue-500/20 active:scale-[0.98] cursor-pointer"
-                title="Launch ProSpaces Logistics & Fleet Space"
-              >
-                <Truck className="h-4.5 w-4.5" />
-                <span>ProSpaces Logistics</span>
-                <ChevronRight className="h-4 w-4" />
-              </a>
 
               <button
                 onClick={() => {
