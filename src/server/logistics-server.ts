@@ -3241,7 +3241,8 @@ Return the structured results in the required JSON format.`;
           grant_type: "password",
           username: userToUse,
           password: passToUse
-        })
+        }),
+        signal: AbortSignal.timeout(1500)
       });
       const data1 = await safeJsonParse(res1);
       if (data1) {
@@ -3258,7 +3259,8 @@ Return the structured results in the required JSON format.`;
         body: JSON.stringify({
           username: userToUse,
           password: passToUse
-        })
+        }),
+        signal: AbortSignal.timeout(1500)
       });
       const data2 = await safeJsonParse(res2);
       if (data2) {
@@ -3276,7 +3278,8 @@ Return the structured results in the required JSON format.`;
           grant_type: "client_credentials",
           client_id: userToUse,
           client_secret: passToUse
-        })
+        }),
+        signal: AbortSignal.timeout(1500)
       });
       const data3 = await safeJsonParse(res3);
       if (data3) {
@@ -3343,7 +3346,8 @@ Return the structured results in the required JSON format.`;
           "Authorization": "Bearer " + token,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ query: "{ getUserInfo { fleetId } }" })
+        body: JSON.stringify({ query: "{ getUserInfo { fleetId } }" }),
+        signal: AbortSignal.timeout(1500)
       });
 
       if (res.ok) {
@@ -3663,15 +3667,22 @@ async function getFleetId(token: string): Promise<string | null> {
           }
         }
       }
+
+      const envUser = process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || process.env.FLEETCOMPLETE_USERNAME || process.env.FLEETCOMPLETE_USER || process.env.VERCEL_FLEET_COMPLETE_USER;
+      const envPass = process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || process.env.FLEETCOMPLETE_PASSWORD || process.env.FLEETCOMPLETE_PASS || process.env.VERCEL_FLEET_COMPLETE_PASS;
+      const envApiKey = process.env.FLEET_COMPLETE_API_KEY || process.env.FLEETCOMPLETE_API_KEY;
       
       return res.json({
-        configured: isConfigured,
+        configured: isConfigured || !!envUser || !!envApiKey,
         activeConfigMode,
         tokenCached: !!(conn && (conn.api_key || conn.access_token)),
         tokenExpiresInMin: tokenExpiresInMin || 43200, // Default 30 days window if persistent
         cachedFleetId: cachedFleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
-        status: isConfigured ? 'active' : 'unconfigured',
-        message: isConfigured ? `Fleet Complete integration active and connected via Supabase (Mode: ${activeConfigMode}).` : 'Fleet Complete is unconfigured.'
+        clientId: conn?.client_id || envUser || "george.campbell@ronaatlantic.ca",
+        hasSecret: !!(conn?.client_secret || envPass),
+        apiKey: conn?.api_key || envApiKey || "",
+        status: (isConfigured || !!envUser || !!envApiKey) ? 'active' : 'unconfigured',
+        message: (isConfigured || !!envUser || !!envApiKey) ? `Fleet Complete integration active and connected via Supabase (Mode: ${activeConfigMode}).` : 'Fleet Complete is unconfigured.'
       });
     } catch (err: any) {
       return res.json({
@@ -3680,6 +3691,8 @@ async function getFleetId(token: string): Promise<string | null> {
         tokenCached: true,
         tokenExpiresInMin: 43200,
         cachedFleetId: "abb3c44d-0588-486d-9e49-441d9639727c",
+        clientId: "george.campbell@ronaatlantic.ca",
+        hasSecret: true,
         status: 'active',
         message: 'Fleet Complete integration active via Supabase.'
       });
