@@ -146,13 +146,17 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
     try {
       let result: any = null;
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
         const response = await customFetch('/api/auth/login', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ email: email.trim(), password })
+          body: JSON.stringify({ email: email.trim(), password }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         if (response.ok) {
           result = await response.json();
         } else {
@@ -205,6 +209,26 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
               if (aliasData && aliasData.length > 0) {
                 data = aliasData;
               }
+            }
+
+            if (!data || data.length === 0) {
+              try {
+                const { data: profData } = await supabase
+                  .from("profiles")
+                  .select("*")
+                  .ilike("email", normEmail);
+                if (profData && profData.length > 0) {
+                  data = profData.map((p: any) => ({
+                    id: p.id,
+                    name: p.name || p.email?.split('@')[0] || "User",
+                    email: p.email,
+                    role: p.role || "Admin",
+                    tenantId: p.organization_id || "prospaces",
+                    status: p.status || "Active",
+                    phone: p.phone || "(902) 555-0199"
+                  }));
+                }
+              } catch (_) {}
             }
 
             if (dbErr) {

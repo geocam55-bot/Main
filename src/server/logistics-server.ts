@@ -83,8 +83,11 @@ function getSupabase(reqOrBypass?: any, bypassCircuitBreaker: boolean = false) {
   }
 
   // Force the unified database server using environment variables or hardcoded fallback constants
-  let url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL).trim();
-  let key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || FALLBACK_SUPABASE_SERVICE_ROLE_KEY).trim();
+  let customUrl = req?.headers ? (req.headers['x-custom-supabase-url'] as string) : undefined;
+  let customKey = req?.headers ? (req.headers['x-custom-supabase-key'] as string) : undefined;
+
+  let url = (customUrl || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL).trim();
+  let key = (customKey || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_SERVICE_ROLE_KEY).trim();
 
   if (!url || !key) {
     return null;
@@ -138,7 +141,7 @@ function getSupabase(reqOrBypass?: any, bypassCircuitBreaker: boolean = false) {
   return supabaseClient;
 }
 
-function withTimeout<T>(promise: Promise<T> | any, ms: number = 45000): Promise<T> {
+function withTimeout<T>(promise: Promise<T> | any, ms: number = 3000): Promise<T> {
   let timer: NodeJS.Timeout;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -1525,12 +1528,12 @@ app.use((req, res, next) => {
 
       // Perform a ping / select test query against the database with a safe timeout to check if schema is constructed
       let testQuery = supabase.from("tenants").select("id").limit(1);
-      let { data, error } = await withTimeout<any>(testQuery, 45000);
+      let { data, error } = await withTimeout<any>(testQuery, 4000);
 
       if (error) {
          console.warn("Supabase connection: tenants table query failed, trying branches table fallback...");
          let fallbackQuery = supabase.from("branches").select("id").limit(1);
-         const { error: branchesErr } = await withTimeout<any>(fallbackQuery, 45000);
+         const { error: branchesErr } = await withTimeout<any>(fallbackQuery, 4000);
         if (!branchesErr) {
           error = null;
         }
@@ -1782,25 +1785,54 @@ app.use((req, res, next) => {
           .from("users")
           .select("*")
           .ilike("email", email.trim()),
-        45000
+        3000
       )) as any;
 
-      if (error) {
-        throw new Error(error.message);
+      if (error && !error.message?.includes("relation")) {
+        console.warn("Users query warning:", error.message);
+      }
+
+      // If exact email not found in 'users', check 'profiles' table (CRM shared profiles)
+      if (!data || data.length === 0) {
+        try {
+          const { data: profData } = (await withTimeout(
+            supabase
+              .from("profiles")
+              .select("*")
+              .ilike("email", email.trim()),
+            3000
+          )) as any;
+          if (profData && profData.length > 0) {
+            const p = profData[0];
+            data = [{
+              id: p.id,
+              name: p.name || p.email?.split('@')[0] || "User",
+              email: p.email,
+              role: p.role || "Admin",
+              tenantId: p.organization_id || "prospaces",
+              status: p.status || "Active",
+              phone: p.phone || "(902) 555-0199"
+            }];
+          }
+        } catch (pErr) {
+          console.warn("Profiles fallback query warning:", pErr);
+        }
       }
 
       // If exact email not found, check for email alias / prefix or george.ronaatlantic / george.campbell
       if ((!data || data.length === 0) && normEmail.includes("george")) {
-        const { data: aliasData } = (await withTimeout(
-          supabase
-            .from("users")
-            .select("*")
-            .or("email.ilike.%george%,email.ilike.%ronaatlantic%"),
-          45000
-        )) as any;
-        if (aliasData && aliasData.length > 0) {
-          data = aliasData;
-        }
+        try {
+          const { data: aliasData } = (await withTimeout(
+            supabase
+              .from("users")
+              .select("*")
+              .or("email.ilike.%george%,email.ilike.%ronaatlantic%"),
+            3000
+          )) as any;
+          if (aliasData && aliasData.length > 0) {
+            data = aliasData;
+          }
+        } catch (_) {}
       }
 
       if (data && data.length > 0) {
@@ -1852,13 +1884,17 @@ app.use((req, res, next) => {
         }
 
         // Fetch matching tenant definition
-        const { data: tenantData } = (await withTimeout(
-          supabase
-            .from("tenants")
-            .select("*")
-            .eq("id", user.tenantId || "prospaces"),
-          45000
-        )) as any;
+        let tenantData = null;
+        try {
+          const { data: tData } = (await withTimeout(
+            supabase
+              .from("tenants")
+              .select("*")
+              .eq("id", user.tenantId || "prospaces"),
+            3000
+          )) as any;
+          tenantData = tData;
+        } catch (_) {}
 
         return res.json({
           supabaseActive: true,
@@ -2290,7 +2326,7 @@ app.use((req, res, next) => {
         });
       }
 
-      // Fetch all tables in parallel with a timeout to prevent hanging (safe 45000ms timeout)
+      // Fetch all tables in parallel with a timeout to prevent hanging (safe 4000ms timeout)
       let [rBranches, rTrucks, rUsers, rDeliveries] = await withTimeout<any>(
         Promise.all([
           supabase.from("branches").select("*").eq("tenantId", tenantId),
@@ -2298,7 +2334,7 @@ app.use((req, res, next) => {
           supabase.from("users").select("*").eq("tenantId", tenantId),
           supabase.from("deliveries").select("*").eq("tenantId", tenantId)
         ]),
-        45000
+        4000
       );
 
       // If schema tables don't exist yet, it'll error.

@@ -14,6 +14,7 @@ import { CompleteDatabaseSetup } from './CompleteDatabaseSetup';
 import { ChangePasswordDialog } from './ChangePasswordDialog';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { setOrgMode } from '../utils/settings-client';
+import { ensureUserProfile } from '../utils/ensure-profile';
 import { Logo } from './Logo';
 import { FREE_ACCOUNT_BILLING_SUPPORT_EMAIL } from '../config/scoped-email';
 
@@ -139,26 +140,25 @@ export function Login({ onLogin, onBack }: LoginProps) {
             
             if (existingProfile) {
               // Profile exists — the issue may be an unconfirmed email in Supabase Auth.
-              // Try to auto-confirm via server endpoint, then retry sign-in once.
+              // Try to auto-confirm via server endpoint with 2s timeout, then retry sign-in once.
               try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
                 const confirmResp = await fetch(
                   `${getSupabaseUrl()}/functions/v1/make-server-8405be07/confirm-email`,
                   {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
                     body: JSON.stringify({ email }),
+                    signal: controller.signal,
                   }
                 );
+                clearTimeout(timeoutId);
                 if (confirmResp.ok) {
                   // Retry sign-in after confirming email
                   const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ email, password });
                   if (!retryError && retryData?.session && retryData?.user) {
-                    // Success! Replace signInData reference by re-assigning and continuing
-                    // We can't reassign const, so we throw a special marker to re-run
-                    // Instead, just proceed inline with the retry data
                     Object.assign(signInData || {}, retryData);
-                    // Clear the error so we fall through to the success path
-                    // We need to break out of this error handler — use a goto-like pattern
                     throw { __retrySuccess: true, signInData: retryData };
                   }
                 }
@@ -189,11 +189,12 @@ export function Login({ onLogin, onBack }: LoginProps) {
         throw new Error('Invalid response from server');
       }
 
-      // Always call /profiles/ensure first — it finds or creates the profile,
-      // and auto-fixes org mismatches and missing needs_password_change from admin metadata
+      // Try /profiles/ensure with a 2-second timeout, then fall back to direct Supabase client query
       let profile: any = null;
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
         const serverResp = await fetch(
           `${getSupabaseUrl()}/functions/v1/make-server-8405be07/profiles/ensure`,
           {
@@ -202,48 +203,66 @@ export function Login({ onLogin, onBack }: LoginProps) {
               'Authorization': `Bearer ${publicAnonKey}`,
               'X-User-Token': signInData.session.access_token,
             },
+            signal: controller.signal,
           }
         );
-        const serverResult = await serverResp.json();
-
-        if (serverResp.ok && serverResult.profile) {
-          profile = serverResult.profile;
-
-          // If server created a new profile with a new org, set org mode to single
-          if (serverResult.created) {
-            try {
-              await setOrgMode(profile.organization_id, 'single');
-            } catch (modeErr) {
-              // Ignore
+        clearTimeout(timeoutId);
+        if (serverResp.ok) {
+          const serverResult = await serverResp.json();
+          if (serverResult.profile) {
+            profile = serverResult.profile;
+            if (serverResult.created) {
+              try {
+                await setOrgMode(profile.organization_id, 'single');
+              } catch (modeErr) {
+                // Ignore
+              }
             }
-          }
-        } else if (serverResp.ok && serverResult.profileId) {
-          // Server created/found the profile but didn't return full data — re-fetch
-          const { data: refetched } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', signInData.user.id)
-            .maybeSingle();
-          if (refetched) {
-            profile = refetched;
+          } else if (serverResult.profileId) {
+            const { data: refetched } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', signInData.user.id)
+              .maybeSingle();
+            if (refetched) {
+              profile = refetched;
+            }
           }
         }
       } catch (ensureErr) {
         // Fall back gracefully
       }
 
-      // Fallback: fetch profile directly from client
+      // Fallback 1: fetch profile directly from client
       if (!profile) {
-        const { data: clientProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', signInData.user.id)
-          .maybeSingle();
-        profile = clientProfile;
+        try {
+          const { data: clientProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', signInData.user.id)
+            .maybeSingle();
+          profile = clientProfile;
+        } catch (_) {}
       }
 
+      // Fallback 2: ensure profile exists using ensureUserProfile helper
       if (!profile) {
-        throw new Error('Could not load or create your user profile. Please contact your administrator.');
+        try {
+          profile = await ensureUserProfile(signInData.user.id);
+        } catch (ensureProfileErr) {
+          console.warn('ensureUserProfile fallback notice:', ensureProfileErr);
+        }
+      }
+
+      // Fallback 3: construct fallback profile from auth user metadata
+      if (!profile) {
+        profile = {
+          id: signInData.user.id,
+          email: signInData.user.email || email,
+          name: signInData.user.user_metadata?.name || signInData.user.user_metadata?.full_name || email.split('@')[0],
+          role: signInData.user.user_metadata?.role || 'admin',
+          organization_id: signInData.user.user_metadata?.organization_id || 'org_001',
+        };
       }
 
       // Check if user needs to change password

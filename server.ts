@@ -2912,8 +2912,16 @@ self.addEventListener('activate', (event) => {
     }
   }
 
-  const isProduction = process.env.NODE_ENV === "production";
+  const rootUploadsDir = path.join(process.cwd(), "uploads");
+  const rootUploadDir = path.join(process.cwd(), "upload");
+  if (!fs.existsSync(rootUploadsDir)) fs.mkdirSync(rootUploadsDir, { recursive: true });
+  if (!fs.existsSync(rootUploadDir)) fs.mkdirSync(rootUploadDir, { recursive: true });
+  app.use("/uploads", express.static(rootUploadsDir));
+  app.use("/uploads", express.static(rootUploadDir));
+  app.use("/upload", express.static(rootUploadsDir));
+  app.use("/upload", express.static(rootUploadDir));
 
+  const isProduction = process.env.NODE_ENV === "production";
 
   if (!isProduction) {
     const vite = await createViteServer({
@@ -2923,10 +2931,24 @@ self.addEventListener('activate', (event) => {
     app.use(vite.middlewares);
 
     app.get('*all', async (req, res, next) => {
-      const url = req.originalUrl;
+      const url = req.originalUrl || req.url;
 
-      // Skip API requests so they don't get routed to HTML templates
-      if (url.startsWith('/api/')) {
+      // Skip API requests, upload directories, vite internal paths, and node_modules
+      if (
+        url.startsWith('/api/') ||
+        url.startsWith('/upload/') ||
+        url.startsWith('/uploads/') ||
+        url.startsWith('/@vite/') ||
+        url.startsWith('/@fs/') ||
+        url.startsWith('/node_modules/')
+      ) {
+        return next();
+      }
+
+      // Skip static assets or script/module files with non-html extensions
+      const cleanPath = url.split('?')[0];
+      const ext = path.extname(cleanPath).toLowerCase();
+      if (ext && ext !== '.html') {
         return next();
       }
 
@@ -2975,16 +2997,27 @@ self.addEventListener('activate', (event) => {
   } else {
     app.use(express.static(distPath));
     app.get('*all', (req, res, next) => {
-      // Skip API requests in production so they don't get routed to HTML index
-      if (req.originalUrl && req.originalUrl.startsWith('/api/')) {
+      const url = req.originalUrl || req.url;
+
+      // Skip API, upload, and static asset files in production
+      if (
+        url.startsWith('/api/') ||
+        url.startsWith('/upload/') ||
+        url.startsWith('/uploads/')
+      ) {
+        return next();
+      }
+
+      const cleanPath = url.split('?')[0];
+      const ext = path.extname(cleanPath).toLowerCase();
+      if (ext && ext !== '.html') {
         return next();
       }
 
       // Determine which HTML file to serve in production multi-page setup
       let filename = 'index.html';
-      const url = req.originalUrl || req.url;
       if (url.includes('.html')) {
-        const basename = path.basename(url.split('?')[0]);
+        const basename = path.basename(cleanPath);
         if (basename) {
           filename = basename;
         }
