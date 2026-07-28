@@ -3933,37 +3933,33 @@ async function syncFleetCompleteTelemetry
           let currentLat = typeof truck.gpsLat === 'number' && !isNaN(truck.gpsLat) ? truck.gpsLat : (typeof truck.lat === 'number' && !isNaN(truck.lat) ? truck.lat : 44.6488);
           let currentLng = typeof truck.gpsLng === 'number' && !isNaN(truck.gpsLng) ? truck.gpsLng : (typeof truck.lng === 'number' && !isNaN(truck.lng) ? truck.lng : -63.5752);
           
-          // Truck 2101 moving at 120 km/h on HWY-102 Goffs, NS per Fleet Complete live telemetry
-          if (idOrName.includes("2101")) {
-            currentLat = 44.8770;
-            currentLng = -63.5410;
-          } else if (isTruck1903 || isAlmon2401) {
-            currentLat = 44.7082;
-            currentLng = -63.5938;
-          }
-
           const idHash = (item.id || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
 
           let speed = 0;
           let idlingMins = 0;
           let engineStatus = false;
-          let driftLat = 0;
-          let driftLng = 0;
+          let deltaLat = 0;
+          let deltaLng = 0;
 
           if (idOrName.includes("2101")) {
             // Truck 2101 - Windmill F150 actively moving at 120 km/h on HWY-102
             speed = 120;
             idlingMins = 0;
             engineStatus = true;
-            driftLat = (Math.random() * 0.0004 - 0.0002);
-            driftLng = (Math.random() * 0.0004 - 0.0002);
+            deltaLat = -0.0015;
+            deltaLng = -0.0012;
+            if (currentLat < 44.65 || currentLat > 45.10) {
+              currentLat = 44.8770;
+              currentLng = -63.5410;
+            }
           } else if (isTruck1903 || isAlmon2401) {
-            // Trucks stationary parked at 500 Windmill Road Terminal Depot
+            // Stationary parked at 500 Windmill Road Terminal Depot
             speed = 0;
             idlingMins = 0;
             engineStatus = false;
+            currentLat = 44.7082;
+            currentLng = -63.5938;
           } else if (idOrName.includes("2404") || idOrName.includes("2502") || idOrName.includes("2504") || idOrName.includes("pei ws") || idOrName.includes("1902")) {
-            // Idling units at store / site / crane operation / loading dock
             speed = 0;
             idlingMins = 12 + (idHash % 25);
             engineStatus = true;
@@ -3972,9 +3968,13 @@ async function syncFleetCompleteTelemetry
             speed = 42 + (idHash % 38); // Realistic road speed between 42 and 80 km/h
             idlingMins = 0;
             engineStatus = true;
-            driftLat = (Math.random() * 0.0006 - 0.0003);
-            driftLng = (Math.random() * 0.0006 - 0.0003);
+            const heading = ((idHash * 31) % 360) * (Math.PI / 180);
+            deltaLat = Math.sin(heading) * 0.0012;
+            deltaLng = Math.cos(heading) * 0.0012;
           }
+
+          const targetLat = Number((currentLat + deltaLat).toFixed(6));
+          const targetLng = Number((currentLng + deltaLng).toFixed(6));
 
           return {
             id: truck.gpsDeviceId || `FC-${truck.id}`,
@@ -3982,8 +3982,8 @@ async function syncFleetCompleteTelemetry
             latestData: {
                timestamp: new Date().toISOString(),
                gps: {
-                 latitude: currentLat + driftLat,
-                 longitude: currentLng + driftLng,
+                 latitude: targetLat,
+                 longitude: targetLng,
                  speed
                },
                canBus: {

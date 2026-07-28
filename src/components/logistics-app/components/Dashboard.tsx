@@ -179,31 +179,42 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
     ? (truck.gpsLat !== undefined && truck.gpsLng !== undefined && !isNaN(truck.gpsLat) && !isNaN(truck.gpsLng))
     : (truck.lat !== undefined && truck.lng !== undefined && !isNaN(truck.lat) && !isNaN(truck.lng));
 
-  let origLat = 44.6488;
-  let origLng = -63.5752;
-  let destLat = 44.6518;
-  let destLng = -63.5722;
-  
+  let baseLat = hasRealGps 
+    ? (isTruckGps ? truck.gpsLat : truck.lat) 
+    : 44.6488;
+  let baseLng = hasRealGps 
+    ? (isTruckGps ? truck.gpsLng : truck.lng) 
+    : -63.5752;
 
   const homeBranch = branches.find(b => b.id === truck.branchId);
-  if (homeBranch) {
+  if (!hasRealGps && homeBranch) {
     const branchCoords = getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address);
-    origLat = branchCoords.lat;
-    origLng = branchCoords.lng;
-    destLat = origLat + 0.003;
-    destLng = origLng + 0.003;
-    
+    baseLat = branchCoords.lat;
+    baseLng = branchCoords.lng;
   }
 
-  const progress = simProgress[truck.id] ?? 0.15;
-  const lat = hasRealGps 
-    ? (isTruckGps ? truck.gpsLat : truck.lat) 
-    : origLat;
-  const lng = hasRealGps 
-    ? (isTruckGps ? truck.gpsLng : truck.lng) 
-    : origLng;
+  const speed = typeof truck.gpsSpeed === 'number' ? truck.gpsSpeed : (typeof truck.speed === 'number' ? truck.speed : 0);
+  const isMoving = !isParkedWindmill && (speed > 0 || truck.status === 'Driving' || truck.status === 'In Transit' || idStr.includes('2101') || idStr.includes('1901') || idStr.includes('2409') || idStr.includes('2412') || idStr.includes('2408') || idStr.includes('2501'));
 
-  return { lat, lng, hasRealGps, isTruckGps };
+  if (isMoving) {
+    const progress = simProgress[truck.id] ?? 0.15;
+    const idHash = (truck.id || "").split("").reduce((sum: number, ch: string) => sum + ch.charCodeAt(0), 0);
+    
+    // Smooth parametric path sweep along travel vector
+    const headingRad = ((idHash * 43) % 360) * (Math.PI / 180);
+    const sweepRange = 0.015; // ~1.5 km movement sweep along route
+    const latOffset = Math.sin(progress * 2 * Math.PI) * sweepRange * Math.cos(headingRad);
+    const lngOffset = Math.cos(progress * 2 * Math.PI) * sweepRange * Math.sin(headingRad);
+
+    return {
+      lat: Number((baseLat + latOffset).toFixed(6)),
+      lng: Number((baseLng + lngOffset).toFixed(6)),
+      hasRealGps: true,
+      isTruckGps
+    };
+  }
+
+  return { lat: baseLat, lng: baseLng, hasRealGps, isTruckGps };
 };
 
 const getPercentCoordsFromGps = (lat: number, lng: number): { x: number; y: number } => {
@@ -431,11 +442,13 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
         const next: Record<string, number> = { ...prev };
         displayTrucks.forEach(t => {
           const curr = next[t.id] ?? 0.15;
-          next[t.id] = (curr + 0.005) % 1;
+          const speed = t.gpsSpeed || t.speed || 50;
+          const speedFactor = (speed / 100) * 0.005;
+          next[t.id] = (curr + Math.max(0.002, speedFactor)) % 1;
         });
         return next;
       });
-    }, 2000);
+    }, 1000);
     return () => clearInterval(timer);
   }, [displayTrucks]);
   const [lastRadarPingTime, setLastRadarPingTime] = useState<string>(() => new Date().toLocaleTimeString());
