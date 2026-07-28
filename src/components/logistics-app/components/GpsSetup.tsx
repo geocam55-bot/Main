@@ -363,7 +363,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
   };
 
   // Filter trucks that do NOT have a stationary GPS configured yet, OR are currently selected for editing
-  const unconfiguredTrucks = trucks.filter(t => !t.gpsDeviceId || t.id === selectedTruckId);
+  const unconfiguredTrucks = trucks.filter(t => !t.gpsDeviceId || t.gpsDeviceId === 'DISABLED' || t.id === selectedTruckId);
 
   // Common pre-configured devices for easy setup
   const DEVICE_MODELS = [
@@ -438,7 +438,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
 
   const handleEditConnection = (truck: Truck) => {
     setSelectedTruckId(truck.id);
-    setDeviceId(truck.gpsDeviceId || '');
+    setDeviceId(truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED' ? truck.gpsDeviceId : '');
     setSerialNumber(truck.gpsSerialNumber || '');
     setDeviceName(truck.gpsDeviceName || 'Samsara VG54 Core Gateway');
     setSimIccid(truck.gpsSimIccid || 'Bell Mobility Business IoT');
@@ -448,20 +448,24 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
   };
 
   const handleRemoveConnection = (truck: Truck) => {
-    if (window.confirm(`Are you sure you want to decouple the stationary GPS unit from ${truck.name}? This will revert tracking back to Driver Mobile GPS.`)) {
-      const updated: Truck = {
-        ...truck,
-        gpsSource: 'mobile',
-        gpsDeviceId: '',
-        gpsDeviceName: '',
-        gpsSimIccid: '',
-        gpsStatus: 'Disconnected',
-        gpsLastHandshake: '',
-        gpsLat: undefined,
-        gpsLng: undefined
-      };
-      onUpdateTruck(updated);
-    }
+    const updated: Truck = {
+      ...truck,
+      gpsSource: 'mobile',
+      gpsDeviceId: 'DISABLED',
+      gpsDeviceName: '',
+      gpsSerialNumber: '',
+      gpsSimIccid: '',
+      gpsStatus: 'Disconnected',
+      gpsLastHandshake: '',
+      gpsLat: undefined,
+      gpsLng: undefined
+    };
+    onUpdateTruck(updated);
+    setSuccessMsg(`Stationary GPS unit decoupled from ${truck.name}.`);
+    
+    setTimeout(() => {
+      setSuccessMsg(null);
+    }, 5000);
   };
 
   return (
@@ -795,7 +799,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {trucks.filter(t => t.gpsDeviceId).map(truck => (
+                  {trucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED').map(truck => (
                     <tr key={truck.id} className="hover:bg-slate-50/50">
                       <td className="px-3 py-2.5 font-sans">
                         <div className="font-semibold text-gray-900">{truck.name}</div>
@@ -836,7 +840,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                       </td>
                     </tr>
                   ))}
-                  {trucks.filter(t => t.gpsDeviceId).length === 0 && (
+                  {trucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED').length === 0 && (
                     <tr>
                       <td colSpan={5} className="text-center py-8 text-gray-400 italic">
                         No stationary GPS connection records built yet. Use the form on the left to provision physical telematics.
@@ -905,7 +909,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {trucks.map(truck => {
-                    const isGpsConfigured = !!truck.gpsDeviceId;
+                    const isGpsConfigured = !!truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED';
                     const isUsingTruckGps = truck.gpsSource === 'truck';
                     const idOrName = (truck.id + ' ' + truck.name).toLowerCase();
                     const is2401Almon = idOrName.includes('2401') || idOrName.includes('almon');

@@ -4091,6 +4091,9 @@ async function syncFleetCompleteTelemetry
 
             if (matchedDbTruck) {
               const deserialized = deserializeType(matchedDbTruck);
+              if (deserialized.gpsDeviceId === 'DISABLED') {
+                continue; // Respect manual decoupling by user
+              }
               const updatedType = serializeToType(
                 deserialized.type || "Commercial Carrier", 
                 deserialized.registrationDueDate || "2026-11-29", 
@@ -4164,6 +4167,11 @@ async function syncFleetCompleteTelemetry
 
               if (matchesInMemory.length > 0) {
                 const matchedInMemoryTruck = matchesInMemory.find((m: any) => m.id !== vehicleName) || matchesInMemory[0];
+                const deserializedInMem = matchedInMemoryTruck.type && matchedInMemoryTruck.type.includes("||") ? deserializeType(matchedInMemoryTruck) : matchedInMemoryTruck;
+                
+                if (deserializedInMem.gpsDeviceId === 'DISABLED') {
+                  continue; // Respect manual decoupling by user
+                }
 
                 // Remove duplicate from list if any
                 if (matchesInMemory.length > 1) {
@@ -4220,6 +4228,8 @@ async function syncFleetCompleteTelemetry
       // Step 3 (Fallback): Loop through collected trucks and apply matching fallback/mock telemetry
       for (const item of trucksToProcessList) {
         const truck = item.truck;
+        if (truck.gpsDeviceId === 'DISABLED') continue;
+        
         const deviceMatch = liveData?.vehicles?.find((v: any) => 
           v.id === truck.gpsDeviceId || 
           v.name === truck.id ||

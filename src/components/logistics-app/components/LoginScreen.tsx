@@ -27,6 +27,21 @@ async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promis
   return window.fetch(input, init);
 }
 
+const fetchWithTimeout = async <T,>(promise: Promise<T>, ms = 5000): Promise<T | { error: any; data?: null }> => {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<{ error: any; data?: null }>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Request timed out')), ms);
+  });
+  try {
+    const res = await Promise.race([promise, timeoutPromise]) as T;
+    clearTimeout(timeoutId);
+    return res;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    return { error: e, data: null };
+  }
+};
+
 interface LoginScreenProps {
   onLoginSuccess: (tenant: Tenant, user: User) => void;
   tenantsList?: Tenant[];
@@ -147,7 +162,7 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
       let result: any = null;
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         const response = await customFetch('/api/auth/login', {
           method: 'POST',
           headers: {
@@ -196,29 +211,32 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
               }
             };
           } else {
-            let { data, error: dbErr } = await supabase
+            let res = await fetchWithTimeout(supabase
               .from("users")
               .select("*")
-              .ilike("email", normEmail);
+              .ilike("email", normEmail));
+            
+            let data = (res as any)?.data;
+            let dbErr = (res as any)?.error;
 
             if ((!data || data.length === 0) && normEmail.includes("george")) {
-              const { data: aliasData } = await supabase
+              const aliasRes = await fetchWithTimeout(supabase
                 .from("users")
                 .select("*")
-                .or("email.ilike.%george%,email.ilike.%ronaatlantic%");
-              if (aliasData && aliasData.length > 0) {
-                data = aliasData;
+                .or("email.ilike.%george%,email.ilike.%ronaatlantic%"));
+              if (aliasRes && aliasRes.data && aliasRes.data.length > 0) {
+                data = aliasRes.data;
               }
             }
 
             if (!data || data.length === 0) {
               try {
-                const { data: profData } = await supabase
+                const profRes = await fetchWithTimeout(supabase
                   .from("profiles")
                   .select("*")
-                  .ilike("email", normEmail);
-                if (profData && profData.length > 0) {
-                  data = profData.map((p: any) => ({
+                  .ilike("email", normEmail));
+                if (profRes && profRes.data && profRes.data.length > 0) {
+                  data = profRes.data.map((p: any) => ({
                     id: p.id,
                     name: p.name || p.email?.split('@')[0] || "User",
                     email: p.email,
@@ -268,10 +286,11 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
               }
 
               // Load active tenant dimensions
-              const { data: tenantData } = await supabase
+              const tenantRes = await fetchWithTimeout(supabase
                 .from("tenants")
                 .select("*")
-                .eq("id", userObj.tenantId);
+                .eq("id", userObj.tenantId));
+              const tenantData = tenantRes?.data;
 
               result = {
                 supabaseActive: true,
@@ -446,21 +465,21 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
 
         let insertError;
         try {
-          const { error } = await supabase
+          const res = await fetchWithTimeout(supabase
             .from("users")
-            .insert([newUserRecord]);
-          if (error) throw error;
+            .insert([newUserRecord]));
+          if (res?.error) throw res.error;
         } catch (dbErr: any) {
           const errMsg = dbErr.message || String(dbErr);
           if (errMsg.includes("column") && (errMsg.includes("password") || errMsg.includes("status") || errMsg.includes("42703"))) {
             console.warn("Direct users insert missing status/password columns, wrapping in phone payload...");
             const { password: userPass, status: userStat, ...strippedRecord } = newUserRecord;
             (strippedRecord as any).phone = serializeToPhone(newUserRecord.phone, userPass, userStat);
-            const { error: retryErr } = await supabase
+            const retryRes = await fetchWithTimeout(supabase
               .from("users")
-              .insert([strippedRecord]);
-            if (retryErr) {
-              insertError = retryErr;
+              .insert([strippedRecord]));
+            if (retryRes?.error) {
+              insertError = retryRes.error;
             }
           } else {
             insertError = dbErr;
@@ -472,10 +491,11 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
         }
 
         // Fetch corresponding tenant info
-        const { data: tenantData } = await supabase
+        const tenantRes = await fetchWithTimeout(supabase
           .from("tenants")
           .select("*")
-          .eq("id", resolvedTenant.id);
+          .eq("id", resolvedTenant.id));
+        const tenantData = tenantRes?.data;
 
         result = {
           success: true,

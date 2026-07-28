@@ -411,7 +411,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
       )
     : deliveries;
 
-  const displayTrucks = trucks;
+  const displayTrucks = trucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED');
 
   const isDriverOnline = (driverName: string): boolean => {
     if (!driverName) return false;

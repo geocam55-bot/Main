@@ -13,11 +13,24 @@ import crypto from 'crypto';
 import { GoogleGenAI, Type } from "@google/genai";
 import { registerLogisticsServer } from "./src/server/logistics-server";
 
-const projectId = "usorqldwroecyxucmtuw";
-const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
+const FALLBACK_PROJECT_ID = "usorqldwroecyxucmtuw";
+const FALLBACK_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
 
-const supabaseUrl = process.env.SUPABASE_URL || `https://${projectId}.supabase.co`;
-const supabaseKey = process.env.SUPABASE_ANON_KEY || publicAnonKey;
+function getActiveProjectId(): string {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  if (url) {
+    const clean = url.trim().replace(/^['"\s]+|['"\s]+$/g, '');
+    const match = clean.match(/https?:\/\/([^.]+)\.supabase\.co/);
+    if (match && match[1]) return match[1];
+  }
+  return FALLBACK_PROJECT_ID;
+}
+
+const projectId = getActiveProjectId();
+const publicAnonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || FALLBACK_ANON_KEY).trim().replace(/^['"\s]+|['"\s]+$/g, '');
+
+const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || `https://${projectId}.supabase.co`).trim().replace(/^['"\s]+|['"\s]+$/g, '');
+const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || publicAnonKey).trim().replace(/^['"\s]+|['"\s]+$/g, '');
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function saveVirtualFileServer(fileName: string, base64Content: string) {

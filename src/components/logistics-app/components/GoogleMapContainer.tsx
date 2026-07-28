@@ -775,7 +775,7 @@ function MapInner({
 
           const isTruckGps = truck.gpsSource === 'truck';
           const activeGpsSourceLabel = isTruckGps 
-            ? `<span class="bg-amber-100 text-amber-800 text-[9px] font-mono font-bold px-1.5 py-0.25 rounded-md border border-amber-200">🛰️ ${isMoving ? 'In Transit' : isIdling ? 'Idling' : 'Parked'}: ${truck.gpsDeviceId || 'Core Telematics'}</span>`
+            ? `<span class="bg-amber-100 text-amber-800 text-[9px] font-mono font-bold px-1.5 py-0.25 rounded-md border border-amber-200">🛰️ ${isMoving ? 'In Transit' : isIdling ? 'Idling' : 'Parked'}: ${truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED' ? truck.gpsDeviceId : 'Core Telematics'}</span>`
             : `<span class="bg-blue-100 text-blue-800 text-[9px] font-mono font-bold px-1.5 py-0.25 rounded-md border border-blue-200">📱 Mobile Device Geolocation</span>`;
 
           const popupMessage = !isOnline

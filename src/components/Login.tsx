@@ -116,11 +116,16 @@ export function Login({ onLogin, onBack }: LoginProps) {
     try {
       const supabase = createClient();
       
-      // Use direct Supabase Auth instead of Edge Function
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      // Use direct Supabase Auth with 10s timeout
+      const signInPromise = supabase.auth.signInWithPassword({
         email,
         password,
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Sign in request timed out. Please verify your Supabase credentials in Settings > Secrets.')), 10000)
+      );
+
+      const { data: signInData, error: signInError } = await Promise.race([signInPromise, timeoutPromise]);
 
       if (signInError) {
         // Check if this is an email confirmation error
