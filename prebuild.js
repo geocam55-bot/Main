@@ -30,3 +30,26 @@ if (fs.existsSync(base64File)) {
 } else {
   console.warn('[Prebuild Restorer] Base64 file does not exist, skipping conversion.');
 }
+
+// Sync logistics static images into public folder
+const logisticsImageMap = [
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'src/public/logistics-favicon.jpg'],
+  ['src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg', 'src/public/logistics-logo.jpg'],
+  ['src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg', 'src/public/images/logo_no_border_tight_1783077241511.jpg'],
+  ['src/components/logistics-app/assets/images/prospaces_hero_scene_1783169931786.jpg', 'src/public/images/prospaces_hero_scene_1783169931786.jpg'],
+  ['src/components/logistics-app/assets/images/samantha_testimonial_1783169949359.jpg', 'src/public/images/samantha_testimonial_1783169949359.jpg'],
+];
+
+for (const [srcRel, destRel] of logisticsImageMap) {
+  const srcPath = path.join(process.cwd(), srcRel);
+  const destPath = path.join(process.cwd(), destRel);
+  if (fs.existsSync(srcPath)) {
+    const destDir = path.dirname(destPath);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    fs.copyFileSync(srcPath, destPath);
+    console.log(`[Prebuild Restorer] Synced logistics asset to: ${destRel}`);
+  }
+}
+

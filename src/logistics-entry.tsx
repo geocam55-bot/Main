@@ -9,7 +9,6 @@ import { createClient } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
-import { DesktopOnlyAccess } from './components/DesktopOnlyAccess';
 import './index.css';
 
 function LogisticsEntryApp() {
@@ -186,9 +185,7 @@ function LogisticsEntryApp() {
     }
   };
 
-  if (isMobile) {
-    return <DesktopOnlyAccess spaceName="Logistics & Fleet Space" accentColorClass="bg-blue-600" />;
-  }
+  // Allow full mobile access for Logistics & Fleet Space
 
   if (loading) {
     return (

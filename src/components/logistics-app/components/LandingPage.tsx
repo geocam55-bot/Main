@@ -32,6 +32,18 @@ import prospacesHeroScene from '../assets/images/prospaces_hero_scene_1783169931
 import samanthaTestimonial from '../assets/images/samantha_testimonial_1783169949359.jpg';
 import prospacesLogo from '../assets/images/logo_no_border_tight_1783077241511.jpg';
 
+const getSafeLogoSrc = (img: any) => {
+  if (typeof img === 'string' && img) return img;
+  if (img && typeof img === 'object' && img.default) return img.default;
+  return '/logistics-logo.jpg';
+};
+
+const getSafeHeroSceneSrc = (img: any) => {
+  if (typeof img === 'string' && img) return img;
+  if (img && typeof img === 'object' && img.default) return img.default;
+  return '/images/prospaces_hero_scene_1783169931786.jpg';
+};
+
 interface LandingPageProps {
   onStartTrial: () => void;
   onBookDemo: () => void;
@@ -148,10 +160,12 @@ export default function LandingPage({
             {/* Logo */}
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
               <img 
-                src={prospacesLogo} 
+                src={getSafeLogoSrc(prospacesLogo)} 
                 alt="ProSpaces Logo" 
                 className="h-16 w-auto object-contain"
-                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                }}
               />
               <div className="flex flex-col">
                 <span className="font-sans font-black text-slate-900 text-2xl tracking-tight leading-none">ProSpaces</span>
@@ -319,10 +333,12 @@ export default function LandingPage({
                   {/* Browser Content: Main Generated Image featuring the lumberyard scene */}
                   <div className="relative aspect-[16/10] overflow-hidden group">
                     <img 
-                      src={prospacesHeroScene} 
+                      src={getSafeHeroSceneSrc(prospacesHeroScene)} 
                       alt="ProSpaces Logistics Yard Operations" 
                       className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-700"
-                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = '/images/prospaces_hero_scene_1783169931786.jpg';
+                      }}
                     />
                     
                     {/* Dark gradient overlay at the bottom */}
@@ -797,10 +813,12 @@ export default function LandingPage({
             <div className="space-y-4">
               <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <img 
-                  src={prospacesLogo} 
+                  src={getSafeLogoSrc(prospacesLogo)} 
                   alt="ProSpaces Logo" 
                   className="h-14 w-auto object-contain brightness-110"
-                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                  }}
                 />
                 <div className="flex flex-col">
                   <span className="font-sans font-black text-white text-xl tracking-tight leading-none">ProSpaces</span>
