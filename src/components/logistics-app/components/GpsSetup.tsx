@@ -912,17 +912,22 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                     const is1903 = idOrName.includes('1903');
                     const is2101 = idOrName.includes('2101');
 
-                    let displayLat = isUsingTruckGps ? (truck.gpsLat ?? truck.lat ?? 44.7082) : (truck.lat ?? truck.gpsLat ?? 44.7082);
-                    let displayLng = isUsingTruckGps ? (truck.gpsLng ?? truck.lng ?? -63.5938) : (truck.lng ?? truck.gpsLng ?? -63.5938);
+                    let displayLat = isUsingTruckGps ? (truck.gpsLat ?? truck.lat ?? (is2101 ? 44.8770 : 44.7082)) : (truck.lat ?? truck.gpsLat ?? (is2101 ? 44.8770 : 44.7082));
+                    let displayLng = isUsingTruckGps ? (truck.gpsLng ?? truck.lng ?? (is2101 ? -63.5410 : -63.5938)) : (truck.lng ?? truck.gpsLng ?? (is2101 ? -63.5410 : -63.5938));
 
-                    if (is2401Almon || is1903 || is2101) {
+                    if (is2401Almon || is1903) {
                       displayLat = 44.7082;
                       displayLng = -63.5938;
+                    } else if (is2101) {
+                      displayLat = 44.8770;
+                      displayLng = -63.5410;
                     }
 
                     let locationLabel = "In Transit / Field Location";
-                    if (is2401Almon || is1903 || is2101) {
+                    if (is2401Almon || is1903) {
                       locationLabel = "500 Windmill Road Terminal Depot (Parked)";
+                    } else if (is2101) {
+                      locationLabel = "HWY-102, Goffs, NS B2T, Canada (120 km/h In Transit)";
                     } else if (idOrName.includes('elmsdale') || idOrName.includes('2409') || idOrName.includes('2501')) {
                       locationLabel = "Elmsdale Store Yard";
                     } else if (idOrName.includes('mtn') || idOrName.includes('chain')) {

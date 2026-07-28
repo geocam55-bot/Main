@@ -764,7 +764,7 @@ function MapInner({
         {displayTrucks.map((truck: any) => {
           const isOnline = isTruckOnline(truck);
           const idOrName = ((truck.id || "") + " " + (truck.name || "")).toLowerCase();
-          const isParkedWindmill = idOrName.includes("1903") || idOrName.includes("2101") || idOrName.includes("2401") || idOrName.includes("almon");
+          const isParkedWindmill = idOrName.includes("1903") || idOrName.includes("2401") || idOrName.includes("almon");
 
           const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
           const isMoving = !isParkedWindmill && isOnline && ((typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || (assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED));

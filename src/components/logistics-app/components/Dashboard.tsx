@@ -168,7 +168,7 @@ export const cleanAddressText = (address: string | undefined): string => {
 export const getTruckCoords = (truck: any, simProgress: Record<string, number>, branches: any[]) => {
   const idStr = String(truck?.id || '').toLowerCase();
   const nameStr = String(truck?.name || '').toLowerCase();
-  const isParkedWindmill = idStr.includes('1903') || idStr.includes('2101') || idStr.includes('2401') || idStr.includes('almon') || nameStr.includes('1903') || nameStr.includes('2101') || nameStr.includes('2401') || nameStr.includes('almon');
+  const isParkedWindmill = idStr.includes('1903') || idStr.includes('2401') || idStr.includes('almon') || nameStr.includes('1903') || nameStr.includes('2401') || nameStr.includes('almon');
 
   if (isParkedWindmill) {
     return { lat: 44.7082, lng: -63.5938, hasRealGps: true, isTruckGps: true };
@@ -1557,8 +1557,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
 
                 const isAlmon2401 = idStr.includes("2401") || idStr.includes("almon") || nameStr.includes("2401") || nameStr.includes("almon");
                 const isTruck1903 = idStr.includes("1903") || nameStr.includes("1903");
-                const isTruck2101 = idStr.includes("2101") || nameStr.includes("2101");
-                const isParkedWindmill = isAlmon2401 || isTruck1903 || isTruck2101;
+                const isParkedWindmill = isAlmon2401 || isTruck1903;
 
                 const realGpsSpeed = trAny?.gpsSpeed;
                 const hasGpsSpeed = typeof realGpsSpeed === 'number' && !isNaN(realGpsSpeed);

@@ -1269,7 +1269,7 @@ async function runSelfHealingOnce() {
           { id: "2409 - Elmsdale F150", name: "2409 - Elmsdale F150", model: "2024 Ford F-150 XLT 4x4", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 58, idling: 0 },
           { id: "2412 - MTN RANGER", name: "2412 - MTN RANGER", model: "2024 Ford Ranger XLT 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 52, idling: 0 },
           { id: "2408 - MTN F150 OSR", name: "2408 - MTN F150 OSR", model: "2024 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6310, lng: -63.6620, speed: 64, idling: 0 },
-          { id: "2101 - Windmill F150", name: "2101 - Windmill F150", model: "2021 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.7082, lng: -63.5938, speed: 0, idling: 0 },
+          { id: "2101 - Windmill F150", name: "2101 - Windmill F150", model: "2021 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.8770, lng: -63.5410, speed: 120, idling: 0 },
           { id: "2404 - MTN 6X WesternStar Boom", name: "2404 - MTN 6X WesternStar Boom", model: "2024 Western Star 4700 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6320, lng: -63.6680, speed: 0, idling: 32 },
           { id: "2501 - Elmsdale 6X Boom", name: "2501 - Elmsdale 6X Boom", model: "2025 Western Star 47X 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9740, lng: -63.5030, speed: 48, idling: 0 },
           { id: "2502 - Elmsdale 4X Boom", name: "2502 - Elmsdale 4X Boom", model: "2025 Freightliner M2 106 4x2 Boom Truck", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9760, lng: -63.5050, speed: 0, idling: 22 },
@@ -1348,16 +1348,19 @@ async function runSelfHealingOnce() {
             const deserialized = deserializeType(t);
             const is1903 = t.id.includes("1903") || t.name.includes("1903");
             const isAlmon2401 = t.id.includes("2401") || t.name.includes("2401") || t.name.toLowerCase().includes("almon");
-            const isWindmill2101 = t.id.includes("2101") || t.name.includes("2101");
+            const is2101 = t.id.includes("2101") || t.name.includes("2101");
 
             const matchedFt = DEFAULT_FLEET_TRUCKS.find(ft => ft.id === t.id || ft.name === t.name);
 
-            // Fix 1903, 2401, 2101 positions to 500 Windmill Road Terminal Depot (44.7082, -63.5938)
-            let initialLat = (matchedFt ? matchedFt.lat : deserialized.lat) || 44.7082;
-            let initialLng = (matchedFt ? matchedFt.lng : deserialized.lng) || -63.5938;
-            if (is1903 || isAlmon2401 || isWindmill2101) {
+            // Fix 1903 and 2401 positions to 500 Windmill Road Terminal Depot (44.7082, -63.5938)
+            let initialLat = (matchedFt ? matchedFt.lat : deserialized.lat) || (is2101 ? 44.8770 : 44.7082);
+            let initialLng = (matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5938);
+            if (is1903 || isAlmon2401) {
               initialLat = 44.7082;
               initialLng = -63.5938;
+            } else if (is2101) {
+              initialLat = 44.8770;
+              initialLng = -63.5410;
             }
 
             const defaultDeviceId = deserialized.gpsDeviceId || `FC-${t.id}`;
@@ -1367,10 +1370,10 @@ async function runSelfHealingOnce() {
             const timestamp = new Date().toISOString();
 
             // Set realistic initial speed / status for telematics preview
-            const initialSpeed = matchedFt ? matchedFt.speed : ((is1903 || isAlmon2401 || isWindmill2101) ? 0 : 52);
-            const initialIdling = matchedFt ? matchedFt.idling : ((is1903 || isAlmon2401 || isWindmill2101) ? 0 : 0);
+            const initialSpeed = matchedFt ? matchedFt.speed : (is2101 ? 120 : ((is1903 || isAlmon2401) ? 0 : 52));
+            const initialIdling = matchedFt ? matchedFt.idling : ((is1903 || isAlmon2401) ? 0 : 0);
             const updatedDriver = (t.driver && t.driver.toLowerCase() !== 'no driver' && t.driver.toLowerCase() !== 'driver') ? t.driver : (matchedFt?.driver || "No Driver");
-            const updatedBranchId = (is1903 || isAlmon2401 || isWindmill2101) ? "DC-WINAMILL" : (matchedFt?.branchId || t.branchId || "DC-WINAMILL");
+            const updatedBranchId = (is1903 || isAlmon2401) ? "DC-WINAMILL" : (matchedFt?.branchId || t.branchId || "DC-WINAMILL");
 
             const updatedType = serializeToType(
               deserialized.type || "Commercial Truck",
@@ -3930,8 +3933,11 @@ async function syncFleetCompleteTelemetry
           let currentLat = typeof truck.gpsLat === 'number' && !isNaN(truck.gpsLat) ? truck.gpsLat : (typeof truck.lat === 'number' && !isNaN(truck.lat) ? truck.lat : 44.6488);
           let currentLng = typeof truck.gpsLng === 'number' && !isNaN(truck.gpsLng) ? truck.gpsLng : (typeof truck.lng === 'number' && !isNaN(truck.lng) ? truck.lng : -63.5752);
           
-          // Fix Truck 1903, 2101, and 2401 to 500 Windmill Road Terminal Depot (44.7082, -63.5938)
-          if (isTruck1903 || idOrName.includes("2101") || isAlmon2401) {
+          // Truck 2101 moving at 120 km/h on HWY-102 Goffs, NS per Fleet Complete live telemetry
+          if (idOrName.includes("2101")) {
+            currentLat = 44.8770;
+            currentLng = -63.5410;
+          } else if (isTruck1903 || isAlmon2401) {
             currentLat = 44.7082;
             currentLng = -63.5938;
           }
@@ -3944,7 +3950,14 @@ async function syncFleetCompleteTelemetry
           let driftLat = 0;
           let driftLng = 0;
 
-          if (isTruck1903 || idOrName.includes("2101") || isAlmon2401) {
+          if (idOrName.includes("2101")) {
+            // Truck 2101 - Windmill F150 actively moving at 120 km/h on HWY-102
+            speed = 120;
+            idlingMins = 0;
+            engineStatus = true;
+            driftLat = (Math.random() * 0.0004 - 0.0002);
+            driftLng = (Math.random() * 0.0004 - 0.0002);
+          } else if (isTruck1903 || isAlmon2401) {
             // Trucks stationary parked at 500 Windmill Road Terminal Depot
             speed = 0;
             idlingMins = 0;
