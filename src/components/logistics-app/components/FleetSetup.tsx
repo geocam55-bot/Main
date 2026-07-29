@@ -90,8 +90,9 @@ export default function FleetSetup({
   ];
 
   const handleStartAdd = () => {
-    const nextNum = Math.floor(10 + Math.random() * 90);
-    setTruckId(`TRUCK-${nextNum}`);
+    const nextNum = Math.floor(100 + Math.random() * 900);
+    const uniqueSuffix = Date.now().toString().slice(-4);
+    setTruckId(`TRUCK-${uniqueSuffix}-${nextNum}`);
     setTruckName(`Truck-${filteredTrucks.length + 1}`);
     setTruckType('Flatbed Boom Truck');
     setDriverName('');
@@ -195,9 +196,11 @@ export default function FleetSetup({
       onUpdateTruck(payload);
       setEditingTruckId(null);
     } else {
-      if (trucks.some(t => t.id === truckId)) {
-        payload.id = `TRUCK-${Math.floor(100 + Math.random() * 900)}`;
+      let finalId = (truckId || '').trim();
+      if (!finalId || trucks.some(t => t.id === finalId)) {
+        finalId = `TRUCK-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
       }
+      payload.id = finalId;
       onAddTruck(payload);
       setIsAdding(false);
     }

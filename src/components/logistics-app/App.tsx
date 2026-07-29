@@ -117,8 +117,7 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
   for (const truck of trucksList) {
     if (!truck || !truck.id) continue;
     
-    const num = extractVehicleNumber(truck.name) || extractVehicleNumber(truck.id);
-    const key = num ? `num_${num}` : `id_${truck.id.toLowerCase().trim()}`;
+    const key = String(truck.id).toLowerCase().trim();
 
     if (!map.has(key)) {
       map.set(key, truck);
