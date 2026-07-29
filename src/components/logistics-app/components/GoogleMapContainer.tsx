@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { Branch, DeliveryRecord, Truck, DeliveryStatus } from '../types';
-import { Activity, Settings, MapPin, Truck as TruckIcon, User, Clock, Users, MoreVertical, X, Car } from 'lucide-react';
+import { Activity, Settings, MapPin, Truck as TruckIcon, User, Clock, Users, MoreVertical, X, Car, Store as StoreIcon, Warehouse as WarehouseIcon, Building } from 'lucide-react';
 import { 
   getBranchCoordinates, 
   getDeliveryCoordinates, 
   getTruckCoords, 
-  cleanAddressText 
+  cleanAddressText,
+  isTruckAssignedToBranch
 } from './Dashboard';
 
 // Custom Polyline component for Google Maps
@@ -495,10 +496,12 @@ function MapInner({
 
   // Smoothly pan map to selected truck's active coordinates
   useEffect(() => {
-    if (!map || !selectedTrackTruckId) {
-      if (!selectedTrackTruckId) {
+    if (!map) return;
+
+    if (!selectedTrackTruckId) {
+      if (lastFlownTruckIdRef.current !== null) {
         lastFlownTruckIdRef.current = null;
-        setOpenPopup(null);
+        setOpenPopup((prev: any) => (prev?.type === 'truck' ? null : prev));
       }
       return;
     }
@@ -683,18 +686,8 @@ function MapInner({
         {/* Branch Markers */}
         {activeBranches.map((branch: any) => {
           const coords = getBranchCoordinates(branch.id, branch.name, branch.address);
-          const isDC = branch.type === 'DC';
+          const isDC = branch.type === 'DC' || branch.branchType === 'DC';
           const count = displayDeliveries.filter((d: any) => d.originBranch === branch.id && d.status !== DeliveryStatus.DELIVERED).length;
-
-          const iconSvg = isDC 
-            ? `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><path d="M22 22H2"/><path d="M10 22v-5a2 2 0 0 1 4 0v5"/><path d="M16 11V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v6"/><rect width="18" height="12" x="3" y="10" rx="2"/><path d="M18 10V5a2 2 0 0 0-2-2h-8A2 2 0 0 0 6 5v5"/></svg>`
-            : `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2 2 0 0 1-2-2V7"/><path d="M18 7v3a2 2 0 0 1-2 2v0a2 2 0 0 1-2-2V7"/><path d="M14 7v3a2 2 0 0 1-2 2v0a2 2 0 0 1-2-2V7"/><path d="M10 7v3a2 2 0 0 1-2 2v0a2 2 0 0 1-2-2V7"/><path d="M6 7v3a2 2 0 0 1-2 2v0a2 2 0 0 1-2-2V7"/></svg>`;
-
-          const cleanName = branch.name
-            .replace(/^ProSpaces\s*-\s*/i, '')
-            .replace(/^ProSpaces\s+/i, '')
-            .replace(/^\d+\s*-\s*/, '')
-            .replace(/^\d+\s+/, '');
 
           return (
             <AdvancedMarker 
@@ -708,16 +701,34 @@ function MapInner({
                 count
               })}
             >
-              <div 
-                className={`relative -translate-y-1 bg-slate-900 border-2 ${
-                  isDC ? 'border-red-500 text-red-400' : 'border-blue-400 text-blue-400'
-                } shadow-lg py-0.5 px-1.5 rounded-md text-[9px] font-mono leading-none flex items-center gap-1.5 justify-center whitespace-nowrap min-w-[75px]`}
-                style={{ height: '20px' }}
-              >
-                <div dangerouslySetInnerHTML={{ __html: iconSvg }} />
-                <span className="font-bold">{isDC ? "DC" : "STORE"}</span>
-                <span className="text-white opacity-95 font-sans font-semibold">{cleanName}</span>
-                {count > 0 && <span className="bg-amber-500 text-slate-950 px-1 rounded-full font-sans font-extrabold text-[8px]">{count}</span>}
+              <div className="relative group cursor-pointer flex flex-col items-center">
+                {/* Hover Tooltip - shows store name on hover */}
+                <div className="absolute -top-9 z-30 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none scale-95 group-hover:scale-100 bg-slate-900/95 text-white font-sans text-xs font-semibold px-2.5 py-1 rounded-md shadow-xl border border-slate-700/80 whitespace-nowrap flex items-center gap-1.5">
+                  <span>{branch.name}</span>
+                  {count > 0 && (
+                    <span className="bg-amber-500 text-slate-950 font-extrabold text-[10px] px-1.5 py-0.25 rounded-full">
+                      {count}
+                    </span>
+                  )}
+                </div>
+
+                {/* Circle Marker - Same size as Truck Icon (w-9 h-9) & Just a Circle */}
+                <div 
+                  className={`w-9 h-9 rounded-full shadow-lg border-2 flex items-center justify-center transition-all group-hover:scale-110 ${
+                    isDC 
+                      ? 'bg-slate-900 border-red-500 text-red-400 ring-2 ring-red-500/30' 
+                      : 'bg-slate-900 border-blue-400 text-blue-400 ring-2 ring-blue-400/30'
+                  }`}
+                >
+                  {isDC ? <WarehouseIcon className="w-4.5 h-4.5 shrink-0" /> : <StoreIcon className="w-4.5 h-4.5 shrink-0" />}
+                </div>
+
+                {/* Badge for pending carrier loads */}
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-slate-950 font-extrabold text-[9px] rounded-full flex items-center justify-center border border-slate-900 shadow">
+                    {count}
+                  </span>
+                )}
               </div>
             </AdvancedMarker>
           );
@@ -917,15 +928,78 @@ function MapInner({
                 </div>
               )}
 
-              {openPopup.type === 'branch' && (
-                <div>
-                  <p className="font-bold text-slate-800">{openPopup.branch.name}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Facility Type: {openPopup.branch.type === 'DC' ? 'Distribution Center' : 'Regional Store Depot'}</p>
-                  {openPopup.branch.address && <p className="text-[10px] text-slate-600 font-medium mt-1">{openPopup.branch.address}</p>}
-                  <p className="text-[9px] text-slate-400 mt-0.5">GPS Coords: {openPopup.position.lat.toFixed(4)}N, {openPopup.position.lng.toFixed(4)}W</p>
-                  <p className="text-[10px] text-amber-600 mt-1.5 font-bold border-t border-slate-100 pt-1">Pending Carrier Loads: {openPopup.count}</p>
-                </div>
-              )}
+              {openPopup.type === 'branch' && (() => {
+                const branch = openPopup.branch;
+                const isDC = branch.type === 'DC' || branch.branchType === 'DC';
+                const assignedTrucks = displayTrucks.filter((t: any) => isTruckAssignedToBranch(t, branch));
+                const pendingLoads = openPopup.count;
+                
+                return (
+                  <div className="w-[260px] p-0.5 font-sans">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                      <h3 className="font-semibold text-slate-800 text-sm truncate pr-2" title={branch.name}>
+                        {branch.name}
+                      </h3>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          isDC ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-blue-100 text-blue-700 border border-blue-200'
+                        }`}>
+                          {isDC ? 'Distribution Center' : 'Store Depot'}
+                        </span>
+                        <div 
+                          className="w-5 h-5 rounded text-slate-500 flex items-center justify-center cursor-pointer hover:bg-slate-100 transition-colors" 
+                          onClick={() => setOpenPopup(null)}
+                        >
+                          <X className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 mb-3">
+                      <div className="flex items-start gap-2.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
+                        <span className="text-slate-600 text-xs leading-relaxed">
+                          {branch.address || 'Address on file'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2.5">
+                        <Car className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="text-slate-600 text-xs">
+                          {assignedTrucks.length} Assigned Fleet Vehicles
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="text-slate-600 text-xs">
+                          {branch.operatingHours || 'Mon-Sat: 6:00 AM - 9:00 PM'}
+                        </span>
+                      </div>
+
+                      {branch.phoneNumber && (
+                        <div className="flex items-center gap-2.5">
+                          <Activity className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span className="text-slate-600 text-xs">{branch.phoneNumber}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-100">
+                        <span className="text-slate-500 text-xs">Pending Outbound Loads</span>
+                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          {pendingLoads} Active
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        GPS: {openPopup.position.lat.toFixed(4)}N, {openPopup.position.lng.toFixed(4)}W
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {openPopup.type === 'delivery' && (
                 <div>
@@ -943,7 +1017,7 @@ function MapInner({
 
               {openPopup.type === 'truck' && (() => {
                 const truck = openPopup.truck;
-                const branchName = activeBranches.find((b: any) => b.id === truck.branchId)?.name || 'Elmsdale';
+                const branchName = activeBranches.find((b: any) => isTruckAssignedToBranch(truck, b))?.name || 'Elmsdale';
                 return (
                   <div className="w-[260px] p-0.5">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">

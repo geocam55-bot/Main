@@ -19,7 +19,7 @@ import {
   clearAllDirect,
   deserializeType
 } from './lib/supabaseClient';
-import Dashboard from './components/Dashboard';
+import Dashboard, { isTruckAssignedToBranch } from './components/Dashboard';
 import LiveDashboard from './components/LiveDashboard';
 import ScanStation from './components/ScanStation';
 import DeliveryQueue from './components/DeliveryQueue';
@@ -2500,7 +2500,7 @@ export default function App() {
               onUpdateBranch={handleUpdateBranch}
               onDeleteBranch={handleDeleteBranch}
               truckCountByBranch={branches.reduce((acc, b) => {
-                acc[b.id] = trucks.filter(t => t.branchId === b.id).length;
+                acc[b.id] = trucks.filter(t => isTruckAssignedToBranch(t, b)).length;
                 return acc;
               }, {} as Record<string, number>)}
               readOnly={currentUser?.role === 'Dispatcher'}

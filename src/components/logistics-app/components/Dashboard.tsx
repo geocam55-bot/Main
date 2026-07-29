@@ -186,7 +186,7 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
     ? (isTruckGps ? truck.gpsLng : truck.lng) 
     : -63.5752;
 
-  const homeBranch = branches.find(b => b.id === truck.branchId);
+  const homeBranch = branches.find(b => isTruckAssignedToBranch(truck, b));
   if (!hasRealGps && homeBranch) {
     const branchCoords = getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address);
     baseLat = branchCoords.lat;
@@ -233,6 +233,48 @@ const getPercentCoordsFromGps = (lat: number, lng: number): { x: number; y: numb
   const y = 80 - latFactor * 60; // Map directly (80% south to 20% north)
 
   return { x, y };
+};
+
+export const isTruckAssignedToBranch = (truck: any, branch: any): boolean => {
+  if (!truck || !branch) return false;
+
+  const truckBranchId = String(truck.branchId || '').trim().toLowerCase();
+  const branchId = String(branch.id || '').trim().toLowerCase();
+  const branchCode = String(branch.branchCode || branch.code || '').trim().toLowerCase();
+  const branchName = String(branch.name || '').trim().toLowerCase();
+  const homeDepot = String(truck.homeDepot || '').trim().toLowerCase();
+
+  // 1. Direct ID or Code match
+  if (truckBranchId && (truckBranchId === branchId || (branchCode && truckBranchId === branchCode))) {
+    return true;
+  }
+
+  // 2. Windmill / Dartmouth DC alias matching
+  const isWindmillBranch = branchId === 'dc-winamill' || branchId === '500' || branchId === 'windmill' || branchName.includes('windmill') || branchName.includes('dartmouth');
+  const isWindmillTruck = truckBranchId === 'dc-winamill' || truckBranchId === '500' || truckBranchId === 'windmill' || homeDepot.includes('windmill') || homeDepot.includes('dartmouth');
+  if (isWindmillBranch && isWindmillTruck) return true;
+
+  // 3. Elmsdale alias matching
+  const isElmsdaleBranch = branchId === '01070' || branchId === 'dc-elmsdale' || branchId === 'elmsdale' || branchName.includes('elmsdale');
+  const isElmsdaleTruck = truckBranchId === '01070' || truckBranchId === 'dc-elmsdale' || truckBranchId === 'elmsdale' || homeDepot.includes('elmsdale');
+  if (isElmsdaleBranch && isElmsdaleTruck) return true;
+
+  // 4. Tantallon alias matching
+  const isTantallonBranch = branchId === '01075' || branchId === 'tantallon' || branchName.includes('tantallon');
+  const isTantallonTruck = truckBranchId === '01075' || truckBranchId === 'tantallon' || homeDepot.includes('tantallon');
+  if (isTantallonBranch && isTantallonTruck) return true;
+
+  // 5. General name match fallback
+  if (branchName && branchName.length > 3) {
+    const cleanBranchName = branchName.replace(/^prospaces\s*/i, '').replace(/^rona\s*/i, '').trim();
+    if (cleanBranchName && cleanBranchName.length > 2) {
+      if (homeDepot.includes(cleanBranchName) || truckBranchId.includes(cleanBranchName)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 };
 
 export const getBranchCoordinates = (id: string, name: string, address?: string): { x: number; y: number; lat: number; lng: number } => {
@@ -514,6 +556,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
   }, [viewingTripsTruckId, displayTrucks, trucks]);
 
   const [viewingDetailsTruckId, setViewingDetailsTruckId] = useState<string | null>(null);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [viewingCoordinatesTruckId, setViewingCoordinatesTruckId] = useState<string | null>(null);
   const [detailsAccordionOpen, setDetailsAccordionOpen] = useState<{
     general: boolean;
@@ -642,7 +685,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
   // Automatically adjust default HQ coordinates and center based on the active branches' region and current selected driver/truck's branch
   useEffect(() => {
     if (selectedTruck) {
-      const homeBranch = activeBranches.find(b => b.id === selectedTruck.branchId);
+      const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(selectedTruck, b));
       if (homeBranch) {
         const coords = getGpsForLocation(homeBranch.id, homeBranch.address || homeBranch.name);
         if (coords && coords.lat !== 0 && coords.lng !== 0) {
@@ -1033,7 +1076,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 
                 const getTruckAddress = (truck: any) => {
                   if (!truck) return '500 Windmill Rd, Dartmouth, NS B3B 1B3, Canada';
-                  const branch = activeBranches.find(b => b.id === truck.branchId);
+                  const branch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
                   if (branch && branch.address) return branch.address;
                   const delivery = displayDeliveries.find(d => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
                   if (delivery && delivery.deliveryAddress) return delivery.deliveryAddress;
@@ -1210,7 +1253,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = dest.lat; destLng = dest.lng;
                 } else {
-                  const homeBranch = activeBranches.find(b => b.id === matchedTruck.branchId);
+                  const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(matchedTruck, b));
                   const isProSpaces = matchedTruck.tenantId === 'prospaces';
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name) 
@@ -1271,7 +1314,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = dest.lat; destLng = dest.lng;
                 } else {
-                  const homeBranch = activeBranches.find(b => b.id === truck.branchId);
+                  const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
                   const isProSpaces = truck.tenantId === 'prospaces';
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name) 
@@ -1347,46 +1390,63 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
               {/* 2. Branch/DC Nodes */}
               {activeBranches.map(branch => {
                 const coords = getBranchCoordinates(branch.id, branch.name, branch.address);
-                const isDC = branch.type === 'DC';
+                const isDC = branch.type === 'DC' || branch.branchType === 'DC';
                 const countOfActiveDeliveriesAtBranch = displayDeliveries.filter(d => d.originBranch === branch.id && d.status !== DeliveryStatus.DELIVERED).length;
-
-                const cleanName = branch.name
-                  .replace(/^ProSpaces\s*-\s*/i, '')
-                  .replace(/^ProSpaces\s+/i, '')
-                  .replace(/^\d+\s*-\s*/, '')
-                  .replace(/^\d+\s+/, '');
+                const isSelected = selectedBranchId === branch.id;
 
                 return (
                   <div
                     key={`marker-${branch.id}`}
                     style={{ left: `${coords.x}%`, top: `${coords.y}%` }}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 group cursor-pointer z-10 transition-all hover:scale-110"
-                    title={`${branch.name} (${branch.type})`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedBranchId(prev => prev === branch.id ? null : branch.id);
+                    }}
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 group cursor-pointer z-20 transition-all hover:scale-110 flex flex-col items-center ${
+                      isSelected ? 'scale-110' : ''
+                    }`}
+                    title={branch.name}
                   >
-                    <div className={`p-1.5 rounded-lg border-2 ${
+                    {/* Circular Icon Marker - Same size as Truck Icon (w-8 h-8 in 2D map) */}
+                    <div className={`w-8 h-8 rounded-full border-2 ${
                       isDC 
-                        ? 'bg-red-950 border-red-500 text-red-400' 
-                        : 'bg-blue-950 border-blue-500 text-blue-400'
-                    } shadow-lg shadow-black/50 flex items-center justify-center space-x-1.5 whitespace-nowrap`}>
-                      {isDC ? <Warehouse className="h-3 w-3 shrink-0" /> : <Store className="h-3 w-3 shrink-0" />}
-                      <span className="text-[9px] font-mono leading-none font-bold">{isDC ? "DC" : "STORE"}</span>
-                      <span className="text-white text-[9px] font-sans font-semibold">{cleanName}</span>
+                        ? 'bg-slate-900 border-red-500 text-red-400 ring-2 ring-red-500/30' 
+                        : 'bg-slate-900 border-blue-400 text-blue-400 ring-2 ring-blue-400/30'
+                    } shadow-lg shadow-black/50 flex items-center justify-center`}>
+                      {isDC ? <Warehouse className="h-4 w-4 shrink-0" /> : <Store className="h-4 w-4 shrink-0" />}
                     </div>
 
                     {countOfActiveDeliveriesAtBranch > 0 && (
-                      <span className="absolute -top-2.5 -right-2 px-1 py-0.25 bg-amber-500 text-black font-semibold text-[8px] font-mono rounded-full scale-90 border border-slate-900 leading-none">
+                      <span className="absolute -top-1 -right-1 px-1 py-0.25 bg-amber-500 text-black font-extrabold text-[8px] font-mono rounded-full border border-slate-900 leading-none">
                         {countOfActiveDeliveriesAtBranch}
                       </span>
                     )}
 
-                    {/* Popover label on Hover */}
-                    <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-800 text-[10px] text-white px-2.5 py-1.5 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-25 font-sans min-w-[180px] max-w-[240px] whitespace-normal space-y-0.5">
-                      <span className="font-semibold block text-slate-100">{branch.name}</span>
+                    {/* Popover label on Hover or Click */}
+                    <div className={`absolute top-9 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-800 text-[10px] text-white px-2.5 py-2 rounded-lg shadow-xl transition-all z-30 font-sans min-w-[200px] max-w-[260px] whitespace-normal space-y-1 ${
+                      isSelected ? 'opacity-100 pointer-events-auto ring-2 ring-amber-500/50' : 'opacity-0 group-hover:opacity-100 pointer-events-none'
+                    }`}>
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-1">
+                        <span className="font-semibold block text-slate-100 truncate pr-1">{branch.name}</span>
+                        {isSelected && (
+                          <button 
+                            type="button" 
+                            onClick={(e) => { e.stopPropagation(); setSelectedBranchId(null); }}
+                            className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                       <p className="text-[9px] text-amber-400 font-medium">{isDC ? "Distribution Center" : "Regional Store Depot"}</p>
                       {branch.address && (
-                        <p className="text-[9px] text-slate-300 border-t border-slate-800 pt-1 mt-1 leading-normal">{branch.address}</p>
+                        <p className="text-[9px] text-slate-300 pt-0.5 leading-normal">{branch.address}</p>
                       )}
-                      <p className="text-[8px] text-slate-500 font-mono mt-1">ID: {branch.id} &bull; GPS: {coords.lat.toFixed(4)}N, {coords.lng.toFixed(4)}W</p>
+                      <p className="text-[8px] text-slate-500 font-mono">ID: {branch.id} &bull; GPS: {coords.lat.toFixed(4)}N, {coords.lng.toFixed(4)}W</p>
+                      <div className="text-[9px] text-emerald-400 font-medium pt-1 border-t border-slate-800 flex justify-between">
+                        <span>Assigned Fleet:</span>
+                        <span>{displayTrucks.filter(t => isTruckAssignedToBranch(t, branch)).length} Vehicles</span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1453,7 +1513,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   destLat = dest.lat; destLng = dest.lng;
                   isMoving = false;
                 } else {
-                  const homeBranch = activeBranches.find(b => b.id === truck.branchId);
+                  const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
                   const isProSpaces = truck.tenantId === 'prospaces';
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address) 
@@ -1992,8 +2052,8 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
               if (viewingTripsTruckId) {
                 const selectedTruckRow = combinedFleetList.find(t => t.id === viewingTripsTruckId) || combinedFleetList[0];
                 
-                const branchName = activeBranches.find(b => b.id === selectedTruckRow?.branchId)?.name || 'ProSpaces Elmsdale';
-                const branchAddr = activeBranches.find(b => b.id === selectedTruckRow?.branchId)?.address || '500 Windmill Rd, Dartmouth, NS B3B 1B3, Canada';
+                const branchName = activeBranches.find(b => isTruckAssignedToBranch(selectedTruckRow, b))?.name || 'ProSpaces Elmsdale';
+                const branchAddr = activeBranches.find(b => isTruckAssignedToBranch(selectedTruckRow, b))?.address || '500 Windmill Rd, Dartmouth, NS B3B 1B3, Canada';
                 
                 const activeRun = selectedTruckRow?.trips?.[0];
                 const destAddr = activeRun?.stops?.[1]?.address || '84 Charm Ln, Halifax, NS B3E, Canada';
@@ -3172,7 +3232,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
                 {displayTrucks.map(truck => {
-                  const associatedBranch = activeBranches.find(b => b.id === truck.branchId);
+                  const associatedBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
                   return (
                     <div key={truck.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl transition-all hover:border-blue-200/50 hover:bg-white hover:shadow-sm space-y-2 flex flex-col justify-between">
                       <div className="flex items-start justify-between">
