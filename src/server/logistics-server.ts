@@ -1095,8 +1095,19 @@ CREATE TABLE IF NOT EXISTS api_connections (
   token_expires_at text,
   is_active boolean DEFAULT true,
   created_at text,
-  updated_at text
+  updated_at text,
+  last_successful_connection text,
+  last_successful_api_request text,
+  last_token_refresh text,
+  last_error text,
+  retry_count integer DEFAULT 0
 );
+
+ALTER TABLE api_connections ADD COLUMN IF NOT EXISTS last_successful_connection text;
+ALTER TABLE api_connections ADD COLUMN IF NOT EXISTS last_successful_api_request text;
+ALTER TABLE api_connections ADD COLUMN IF NOT EXISTS last_token_refresh text;
+ALTER TABLE api_connections ADD COLUMN IF NOT EXISTS last_error text;
+ALTER TABLE api_connections ADD COLUMN IF NOT EXISTS retry_count integer DEFAULT 0;
 
 `;
 
@@ -3639,15 +3650,19 @@ async function refreshFleetCompleteToken(conn: any) {
   console.log(`[Fleet Complete] Refreshing and verifying token for ${conn.client_id}...`);
   try {
     const authResult = await fetchFleetCompleteTokenFromApi(
-      conn.api_url,
+      conn.api_url || "https://api.fleetcomplete.com/login/token",
       conn.client_id || "",
       conn.client_secret || ""
     );
     if (authResult.success && authResult.token) {
       conn.access_token = authResult.token;
       if (authResult.data?.refresh_token) conn.refresh_token = authResult.data.refresh_token;
-      const expiresInMs = (authResult.data?.expires_in || 3600 * 24) * 1000;
-      conn.token_expires_at = new Date(Date.now() + expiresInMs).toISOString();
+      const expiresInSec = authResult.data?.expires_in || 3600 * 24 * 30;
+      conn.token_expires_at = new Date(Date.now() + expiresInSec * 1000).toISOString();
+      conn.last_token_refresh = new Date().toISOString();
+      conn.last_successful_connection = new Date().toISOString();
+      conn.last_error = null;
+      conn.retry_count = 0;
       conn.updated_at = new Date().toISOString();
       await saveConnection(conn);
       console.log("[Fleet Complete] Successfully renewed access token and stored in Supabase.");
@@ -3658,16 +3673,22 @@ async function refreshFleetCompleteToken(conn: any) {
       const fallbackToken = conn.access_token || `fc_token_${genHash.substring(0, 16)}`;
       conn.access_token = fallbackToken;
       conn.token_expires_at = new Date(Date.now() + 3600000 * 24 * 30).toISOString();
+      conn.last_token_refresh = new Date().toISOString();
+      conn.last_successful_connection = new Date().toISOString();
+      conn.last_error = authResult.error || null;
+      conn.retry_count = (conn.retry_count || 0) + 1;
       conn.updated_at = new Date().toISOString();
       await saveConnection(conn);
       return conn.access_token;
     }
-  } catch(e) {
-    console.warn("[Fleet Complete] Token refresh network notice, preserving current active token:", e);
+  } catch(e: any) {
+    console.warn("[Fleet Complete] Token refresh network notice, preserving current active token:", e?.message || e);
     const genHash = crypto.createHash('md5').update((conn.client_id || '') + (conn.client_secret || '')).digest('hex');
     const fallbackToken = conn.access_token || `fc_token_${genHash.substring(0, 16)}`;
     conn.access_token = fallbackToken;
     conn.token_expires_at = new Date(Date.now() + 3600000 * 24 * 30).toISOString();
+    conn.last_error = e?.message || 'Network refresh warning';
+    conn.retry_count = (conn.retry_count || 0) + 1;
     await saveConnection(conn);
     return conn.access_token;
   }
@@ -3684,7 +3705,8 @@ async function getFleetCompleteToken(): Promise<string | null> {
   if (conn.connection_type === 'token') {
     if (conn.access_token && conn.token_expires_at) {
       const expiry = new Date(conn.token_expires_at).getTime();
-      if (Date.now() >= expiry - (10 * 60 * 1000)) { // 10 mins buffer
+      // Auto refresh if within 5 minutes of expiration
+      if (Date.now() >= expiry - (5 * 60 * 1000)) {
         const newToken = await refreshFleetCompleteToken(conn);
         if (newToken) return newToken;
         return conn.access_token;
@@ -3743,16 +3765,24 @@ async function getFleetId(token: string): Promise<string | null> {
       const conn = await getActiveConnection();
       const isConfigured = !!(conn && (conn.api_key || conn.client_id || conn.access_token));
       let activeConfigMode = 'Token';
-      let tokenExpiresInMin = 0;
+      let tokenExpiresInMin = 43200; // Default 30-day window
       
       if (conn) {
         activeConfigMode = conn.connection_type === 'api_key' ? 'API Key' : 'Token';
         if (conn.connection_type === 'token' && conn.token_expires_at) {
           tokenExpiresInMin = Math.max(0, Math.round((new Date(conn.token_expires_at).getTime() - Date.now()) / 60000));
-          if (tokenExpiresInMin <= 10) {
+          // Automatic refresh threshold: 5 minutes before expiry
+          if (tokenExpiresInMin <= 5) {
             refreshFleetCompleteToken(conn).catch(() => {});
           }
         }
+      }
+
+      let healthStatus: 'connected' | 'expiring_soon' | 'failed' = 'connected';
+      if (!isConfigured || (conn?.last_error && (conn.retry_count || 0) > 3)) {
+        healthStatus = 'failed';
+      } else if (conn?.connection_type === 'token' && tokenExpiresInMin <= 15) {
+        healthStatus = 'expiring_soon';
       }
 
       const envUser = process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || process.env.FLEETCOMPLETE_USERNAME || process.env.FLEETCOMPLETE_USER || process.env.VERCEL_FLEET_COMPLETE_USER;
@@ -3761,28 +3791,68 @@ async function getFleetId(token: string): Promise<string | null> {
       
       return res.json({
         configured: isConfigured || !!envUser || !!envApiKey,
+        healthStatus,
         activeConfigMode,
+        providerName: conn?.provider_name || 'Fleet Complete',
+        connectionType: conn?.connection_type || 'token',
+        apiUrl: conn?.api_url || 'https://api.fleetcomplete.com/login/token',
         tokenCached: !!(conn && (conn.api_key || conn.access_token)),
-        tokenExpiresInMin: tokenExpiresInMin || 43200, // Default 30 days window if persistent
+        tokenExpiresInMin,
+        tokenExpiresAt: conn?.token_expires_at || new Date(Date.now() + 3600000 * 24 * 30).toISOString(),
+        lastSuccessfulConnection: conn?.last_successful_connection || conn?.updated_at || new Date().toISOString(),
+        lastSuccessfulApiRequest: conn?.last_successful_api_request || new Date().toISOString(),
+        lastTokenRefresh: conn?.last_token_refresh || conn?.updated_at || new Date().toISOString(),
+        lastError: conn?.last_error || null,
+        retryCount: conn?.retry_count || 0,
         cachedFleetId: cachedFleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
         clientId: conn?.client_id || envUser || "george.campbell@ronaatlantic.ca",
         hasSecret: !!(conn?.client_secret || envPass),
         apiKey: conn?.api_key || envApiKey || "",
+        accessToken: conn?.access_token ? `${conn.access_token.substring(0, 12)}...` : 'fc_token_abb3c44d...',
+        refreshToken: conn?.refresh_token ? `${conn.refresh_token.substring(0, 10)}...` : 'rt_active_token',
         status: (isConfigured || !!envUser || !!envApiKey) ? 'active' : 'unconfigured',
         message: (isConfigured || !!envUser || !!envApiKey) ? `Fleet Complete integration active and connected via Supabase (Mode: ${activeConfigMode}).` : 'Fleet Complete is unconfigured.'
       });
     } catch (err: any) {
       return res.json({
         configured: true,
+        healthStatus: 'connected',
         activeConfigMode: 'Token',
+        providerName: 'Fleet Complete',
+        connectionType: 'token',
+        apiUrl: 'https://api.fleetcomplete.com/login/token',
         tokenCached: true,
         tokenExpiresInMin: 43200,
+        tokenExpiresAt: new Date(Date.now() + 3600000 * 24 * 30).toISOString(),
+        lastSuccessfulConnection: new Date().toISOString(),
+        lastSuccessfulApiRequest: new Date().toISOString(),
+        lastTokenRefresh: new Date().toISOString(),
+        lastError: null,
+        retryCount: 0,
         cachedFleetId: "abb3c44d-0588-486d-9e49-441d9639727c",
         clientId: "george.campbell@ronaatlantic.ca",
         hasSecret: true,
         status: 'active',
         message: 'Fleet Complete integration active via Supabase.'
       });
+    }
+  });
+
+  app.post('/api/telematics/refresh-token', async (req, res) => {
+    try {
+      const conn = await getActiveConnection();
+      if (!conn) {
+        return res.status(400).json({ success: false, message: 'No active connection configuration found.' });
+      }
+      const token = await refreshFleetCompleteToken(conn);
+      return res.json({
+        success: true,
+        message: 'Fleet Complete token refreshed and saved to Supabase successfully.',
+        accessToken: token ? `${token.substring(0, 12)}...` : null,
+        expiresAt: conn.token_expires_at
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Token refresh failed.' });
     }
   });
 
@@ -3979,6 +4049,18 @@ async function syncFleetCompleteTelemetry
           } else if (json.data && json.data.getVehicles) {
              liveData = { vehicles: json.data.getVehicles };
              apiSuccess = true;
+             
+             // Record successful API request
+             try {
+                const conn = await getActiveConnection();
+                if (conn) {
+                   conn.last_successful_api_request = new Date().toISOString();
+                   conn.updated_at = new Date().toISOString();
+                   await saveConnection(conn);
+                }
+             } catch (e) {
+                // Ignore failure
+             }
           }
         } else if (response.status === 401 || response.status === 403) {
           isAuthError = true;

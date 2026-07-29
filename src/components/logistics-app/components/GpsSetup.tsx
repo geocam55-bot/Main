@@ -277,7 +277,10 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
         } catch(e) {}
         
         setTelematicsStatus(data);
-        if (data.activeConfigMode) {
+        
+        if (data.connectionType) {
+          setConfigMode(data.connectionType === 'api_key' ? 'apikey' : 'token');
+        } else if (data.activeConfigMode) {
           if (data.activeConfigMode.toLowerCase().includes('token')) {
             setConfigMode('token');
           } else {
@@ -285,6 +288,9 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
           }
         }
 
+        if (data.apiUrl) {
+          setFcApiUrl(data.apiUrl);
+        }
         if (data.clientId) {
           setFcClientId(data.clientId);
         }
@@ -309,7 +315,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
     setFcErrorMsg(null);
     
     const body: any = {
-      connection_type: configMode,
+      connection_type: configMode === 'apikey' ? 'api_key' : 'token',
       api_url: fcApiUrl
     };
 
@@ -680,6 +686,76 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
             &bull; Database-backed secure storage. Tokens are encrypted at rest and automatically renewed by the background Connection Service.
           </p>
         </form>
+
+        {/* Connection Health Monitoring */}
+        {telematicsStatus && (
+          <div className="bg-white border border-slate-200 rounded-xl p-4 mt-4">
+            <h6 className="text-xs font-bold text-gray-800 mb-3 flex items-center border-b border-slate-100 pb-2">
+              <Activity className="h-4 w-4 mr-2 text-slate-500" />
+              Connection Health Monitoring
+            </h6>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Current Status</span>
+                <div className="flex items-center space-x-1.5">
+                  <span className={`h-2.5 w-2.5 rounded-full ${telematicsStatus.healthStatus === 'connected' ? 'bg-emerald-500' : telematicsStatus.healthStatus === 'expiring_soon' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
+                  <span className="text-xs font-bold text-gray-800 capitalize">
+                    {telematicsStatus.healthStatus === 'expiring_soon' ? 'Expiring Soon' : telematicsStatus.healthStatus}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last Connection</span>
+                <span className="text-xs text-gray-800 font-mono">
+                  {telematicsStatus.lastSuccessfulConnection ? new Date(telematicsStatus.lastSuccessfulConnection).toLocaleString() : 'N/A'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last API Request</span>
+                <span className="text-xs text-gray-800 font-mono">
+                  {telematicsStatus.lastSuccessfulApiRequest ? new Date(telematicsStatus.lastSuccessfulApiRequest).toLocaleString() : 'N/A'}
+                </span>
+              </div>
+              {configMode === 'token' && (
+                <>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Access Token</span>
+                    <span className="text-xs text-gray-800 font-mono">
+                      {telematicsStatus.accessToken || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Refresh Token</span>
+                    <span className="text-xs text-gray-800 font-mono">
+                      {telematicsStatus.refreshToken || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Token Expires At</span>
+                    <span className="text-xs text-gray-800 font-mono">
+                      {telematicsStatus.tokenExpiresAt ? new Date(telematicsStatus.tokenExpiresAt).toLocaleString() : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last Token Refresh</span>
+                    <span className="text-xs text-gray-800 font-mono">
+                      {telematicsStatus.lastTokenRefresh ? new Date(telematicsStatus.lastTokenRefresh).toLocaleString() : 'N/A'}
+                    </span>
+                  </div>
+                </>
+              )}
+              {telematicsStatus.lastError && (
+                <div className="space-y-1 sm:col-span-2 md:col-span-3">
+                  <span className="text-[10px] text-rose-500 font-semibold uppercase tracking-wider block">Error Message</span>
+                  <span className="text-xs text-rose-700 font-mono bg-rose-50 p-2 rounded block">
+                    {telematicsStatus.lastError}
+                    {telematicsStatus.retryCount > 0 && ` (Retries: ${telematicsStatus.retryCount})`}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
