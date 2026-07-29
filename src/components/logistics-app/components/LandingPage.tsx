@@ -160,11 +160,12 @@ export default function LandingPage({
             {/* Logo */}
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
               <img 
-                src={getSafeLogoSrc(prospacesLogo)} 
+                src="/logistics-logo.jpg" 
                 alt="ProSpaces Logo" 
                 className="h-16 w-auto object-contain"
+                referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                  (e.currentTarget as HTMLImageElement).src = getSafeLogoSrc(prospacesLogo);
                 }}
               />
               <div className="flex flex-col">
@@ -330,14 +331,15 @@ export default function LandingPage({
                     </div>
                   </div>
 
-                  {/* Browser Content: Main Generated Image featuring the lumberyard scene */}
+                  {/* Browser Content: Live GPS Fleet Tracking Map View inside Computer Screen */}
                   <div className="relative aspect-[16/10] overflow-hidden group">
                     <img 
-                      src={getSafeHeroSceneSrc(prospacesHeroScene)} 
-                      alt="ProSpaces Logistics Yard Operations" 
+                      src="/images/logistics_map_screen.jpg" 
+                      alt="ProSpaces Logistics Live GPS Fleet Map View" 
                       className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-700"
+                      referrerPolicy="no-referrer"
                       onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = '/images/prospaces_hero_scene_1783169931786.jpg';
+                        (e.currentTarget as HTMLImageElement).src = getSafeHeroSceneSrc(prospacesHeroScene);
                       }}
                     />
                     
@@ -813,11 +815,12 @@ export default function LandingPage({
             <div className="space-y-4">
               <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <img 
-                  src={getSafeLogoSrc(prospacesLogo)} 
+                  src="/logistics-logo.jpg" 
                   alt="ProSpaces Logo" 
                   className="h-14 w-auto object-contain brightness-110"
+                  referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                    (e.currentTarget as HTMLImageElement).src = getSafeLogoSrc(prospacesLogo);
                   }}
                 />
                 <div className="flex flex-col">

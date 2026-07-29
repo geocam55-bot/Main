@@ -890,29 +890,6 @@ function MapInner({
           </AdvancedMarker>
         ))}
 
-        {/* Polylines for Active Delivery Routes */}
-        {routesToDraw.map((route) => (
-          <MapPolyline
-            key={route.id}
-            path={route.path}
-            color={route.isSelected ? '#f59e0b' : '#64748b'}
-            weight={route.isSelected ? 3.5 : 2}
-            opacity={route.isSelected ? 0.95 : 0.6}
-            dashed={true}
-          />
-        ))}
-
-        {/* Telemetry wire linking dispatcher hq to chosen driver */}
-        {activeTruckGps && hqCoords && hqCoords.lat !== 0 && hqCoords.lng !== 0 && (
-          <MapPolyline
-            path={[hqCoords, activeTruckGps]}
-            color="#2563eb"
-            weight={1.5}
-            opacity={0.75}
-            dashed={true}
-          />
-        )}
-
         {/* Info Window / Popup */}
         {openPopup && (
           <InfoWindow

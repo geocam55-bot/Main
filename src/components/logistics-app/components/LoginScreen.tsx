@@ -647,11 +647,12 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
           {/* Main ProSpaces Logo Representation */}
           <div className="flex flex-col items-center mb-6">
             <img 
-              src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
+              src="/logistics-logo.jpg" 
               alt="ProSpaces Logo" 
               className="h-28 w-auto object-contain mx-auto"
+              referrerPolicy="no-referrer"
               onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                (e.currentTarget as HTMLImageElement).src = typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logo.jpg';
               }}
             />
           </div>

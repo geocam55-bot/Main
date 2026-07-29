@@ -1565,11 +1565,12 @@ export default function App() {
             <div className="flex items-center space-x-3 text-center sm:text-left">
               <div className="shrink-0 flex items-center justify-center bg-white p-1 rounded-lg border border-amber-500/10 shadow-sm">
                 <img 
-                  src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
+                  src="/logistics-logo.jpg" 
                   alt="ProSpaces Logo" 
                   className="h-10 w-auto object-contain"
+                  referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                    (e.currentTarget as HTMLImageElement).src = typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logo.jpg';
                   }}
                 />
               </div>
@@ -1805,11 +1806,12 @@ export default function App() {
           <div className="flex items-center space-x-2.5 sm:space-x-4 text-left">
             <div className="shrink-0 flex items-center justify-center">
               <img 
-                src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
+                src="/logistics-logo.jpg" 
                 alt="ProSpaces Logo" 
                 className="h-10 sm:h-16 w-auto object-contain animate-fade-in"
+                referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                  (e.currentTarget as HTMLImageElement).src = typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logo.jpg';
                 }}
               />
             </div>
