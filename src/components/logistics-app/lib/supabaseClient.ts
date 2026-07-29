@@ -278,7 +278,26 @@ export function deserializeType(truck: any): any {
     ...(gpsLat !== undefined && !isNaN(gpsLat) ? { gpsLat } : {}),
     ...(gpsLng !== undefined && !isNaN(gpsLng) ? { gpsLng } : {}),
     ...(gpsSpeed !== undefined && !isNaN(gpsSpeed) ? { gpsSpeed } : {}),
-    ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {})
+    ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {}),
+
+    // Map snake_case DB columns back to camelCase frontend interface
+    truckNumber: truck.truck_number,
+    vin: truck.vin,
+    licensePlate: truck.license_plate,
+    make: truck.make,
+    model: truck.model,
+    year: truck.year,
+    color: truck.color,
+    capacityWeightKg: truck.capacity_weight_kg,
+    capacityVolumeM3: truck.capacity_volume_m3,
+    fuelType: truck.fuel_type,
+    currentMileage: truck.current_mileage,
+    lastServiceDate: truck.last_service_date,
+    nextServiceDueDate: truck.next_service_due_date,
+    insurancePolicyNumber: truck.insurance_policy_number,
+    insuranceExpiryDate: truck.insurance_expiry_date,
+    userField1: truck.user_field_1,
+    userField2: truck.user_field_2
   };
 }
 

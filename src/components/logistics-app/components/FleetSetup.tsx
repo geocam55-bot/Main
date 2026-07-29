@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, Branch, User } from '../types';
 import { Truck as TruckIcon, Plus, Trash2, Edit2, Shield, Info, ChevronRight, FileCheck, AlertTriangle, Calendar } from 'lucide-react';
+import { isTruckAssignedToBranch } from './Dashboard';
 
 interface FleetSetupProps {
   trucks: Truck[];
@@ -65,16 +66,10 @@ export default function FleetSetup({
 
   // Get trucks assigned to the currently selected branch
   const isAll = selectedBranchId === 'ALL' || !selectedBranchId;
+  const selectedBranch = isAll ? null : branches.find(b => b.id === selectedBranchId);
   const filteredTrucks = isAll
     ? trucks
-    : trucks.filter(t => {
-        if (t.branchId === selectedBranchId) return true;
-        if (selectedBranchId === '01070' && (t.branchId === 'DC-ELMSDALE' || t.branchId === 'ELMSDALE')) return true;
-        if (selectedBranchId === 'DC-ELMSDALE' && t.branchId === '01070') return true;
-        if (selectedBranchId === 'DC-WINAMILL' && (t.branchId === '500' || t.branchId === 'WINAMILL')) return true;
-        return false;
-      });
-  const selectedBranch = isAll ? null : branches.find(b => b.id === selectedBranchId);
+    : trucks.filter(t => selectedBranch ? isTruckAssignedToBranch(t, selectedBranch) : t.branchId === selectedBranchId);
 
   // Filter registered users with Driver role
   const driversList = (users || []).filter(u => u.role?.toLowerCase() === 'driver');
@@ -117,7 +112,7 @@ export default function FleetSetup({
     setInsurancePolicyNumber('');
     setInsuranceExpiryDate('');
     
-    setTargetBranchId(selectedBranchId || (branches[0]?.id || ''));
+    setTargetBranchId(selectedBranchId === 'ALL' ? (branches[0]?.id || '') : (selectedBranchId || branches[0]?.id || ''));
     setIsAdding(true);
     setEditingTruckId(null);
   };

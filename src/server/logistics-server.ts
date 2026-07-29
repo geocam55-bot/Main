@@ -459,7 +459,26 @@ function deserializeType(truck: any): any {
     ...(gpsLat !== undefined && !isNaN(gpsLat) ? { gpsLat } : {}),
     ...(gpsLng !== undefined && !isNaN(gpsLng) ? { gpsLng } : {}),
     ...(gpsSpeed !== undefined && !isNaN(gpsSpeed) ? { gpsSpeed } : {}),
-    ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {})
+    ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {}),
+
+    // Map snake_case DB columns back to camelCase frontend interface
+    truckNumber: truck.truck_number,
+    vin: truck.vin,
+    licensePlate: truck.license_plate,
+    make: truck.make,
+    model: truck.model,
+    year: truck.year,
+    color: truck.color,
+    capacityWeightKg: truck.capacity_weight_kg,
+    capacityVolumeM3: truck.capacity_volume_m3,
+    fuelType: truck.fuel_type,
+    currentMileage: truck.current_mileage,
+    lastServiceDate: truck.last_service_date,
+    nextServiceDueDate: truck.next_service_due_date,
+    insurancePolicyNumber: truck.insurance_policy_number,
+    insuranceExpiryDate: truck.insurance_expiry_date,
+    userField1: truck.user_field_1,
+    userField2: truck.user_field_2
   };
 }
 
@@ -599,7 +618,9 @@ create table if not exists trucks (
   battery_health varchar,
   vehicle_health_score double precision,
   maintenance_status varchar,
-  safety_inspection_status varchar
+  safety_inspection_status varchar,
+  user_field_1 varchar,
+  user_field_2 varchar
 );
 
 -- 4. Create users table
@@ -1018,6 +1039,8 @@ ALTER TABLE trucks ADD COLUMN IF NOT EXISTS battery_health varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS vehicle_health_score double precision;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS maintenance_status varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS safety_inspection_status varchar;
+ALTER TABLE trucks ADD COLUMN IF NOT EXISTS user_field_1 varchar;
+ALTER TABLE trucks ADD COLUMN IF NOT EXISTS user_field_2 varchar;
 
 -- Upgrade Users
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_number varchar;
@@ -2712,7 +2735,26 @@ app.use((req, res, next) => {
                 ),
                 driver: t.driver,
                 branchId: t.branchId,
-                registrationDueDate: t.registrationDueDate || null
+                registrationDueDate: t.registrationDueDate || null,
+                
+                // Map camelCase frontend fields to snake_case backend columns
+                truck_number: t.truckNumber || null,
+                vin: t.vin || null,
+                license_plate: t.licensePlate || null,
+                make: t.make || null,
+                model: t.model || null,
+                year: t.year || null,
+                color: t.color || null,
+                capacity_weight_kg: t.capacityWeightKg || null,
+                capacity_volume_m3: t.capacityVolumeM3 || null,
+                fuel_type: t.fuelType || null,
+                current_mileage: t.currentMileage || null,
+                last_service_date: t.lastServiceDate || null,
+                next_service_due_date: t.nextServiceDueDate || null,
+                insurance_policy_number: t.insurancePolicyNumber || null,
+                insurance_expiry_date: t.insuranceExpiryDate || null,
+                user_field_1: t.userField1 || null,
+                user_field_2: t.userField2 || null
               };
             });
 
