@@ -2397,14 +2397,14 @@ export default function ArchitectureView({
       weight: weightVal,
       orderTotal: orderTotalVal,
       status: DeliveryStatus.REGISTERED,
-      registeredAt: new Date().toLocaleString(),
+      registeredAt: new Date().toISOString(),
       pdfUrl: physicalPdfLink,
       documentType: selectedDocType,
       destinationNotes: `[Automated PDF Capture - Type: ${selectedDocType}] PO#: ${recordId} | Supplier/Customer: ${customerVal} | Date: ${dateVal}. Matches OCR template regional Nova_Scotia_Regional_Core with confidence 98.5%.${physicalPdfLink ? ` Physical Document stored: ${physicalPdfLink}` : ''}`,
       history: [
         {
           status: DeliveryStatus.REGISTERED,
-          timestamp: new Date().toLocaleString(),
+          timestamp: new Date().toISOString(),
           location: activeBranches.find(b => b.id === selectedBranchId)?.name || 'Central Logistics Depot',
           operator: 'Azure OCR Automate Stream',
           notes: `Ingested automatically into logistics. Ready for truck pre-allocation or dispatch.${physicalPdfLink ? ` Physical copy archived on server.` : ''}`

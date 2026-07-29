@@ -305,15 +305,37 @@ export const parseToYYYYMMDD = (dateStr?: string | null): string | null => {
     return str;
   }
 
+  // Pre-process: if there's a comma (like in toLocaleString), grab the date part
+  let datePart = str;
+  if (str.includes(',')) {
+    datePart = str.split(',')[0].trim();
+  } else if (str.includes(' ')) {
+    // some locales use space like "DD/MM/YYYY HH:MM:SS"
+    datePart = str.split(' ')[0].trim();
+  }
+
   // 2. Strict M/D/YYYY or MM/DD/YYYY or M/D/YY pattern without time
-  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str)) {
-    const mdYMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(datePart)) {
+    const mdYMatch = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if (mdYMatch) {
-      const month = mdYMatch[1].padStart(2, '0');
-      const day = mdYMatch[2].padStart(2, '0');
-      let year = mdYMatch[3];
-      if (year.length === 2) year = `20${year}`;
-      return `${year}-${month}-${day}`;
+      // In US format it is MM/DD/YYYY, in UK it is DD/MM/YYYY. 
+      // This is a naive parse assuming MM/DD/YYYY for US. Let's just use JS Date if possible.
+      const parsedPart = new Date(datePart);
+      if (!isNaN(parsedPart.getTime())) {
+        const year = parsedPart.getFullYear();
+        const month = String(parsedPart.getMonth() + 1).padStart(2, '0');
+        const day = String(parsedPart.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      } else {
+        // Fallback for DD/MM/YYYY that failed JS parsing
+        const p1 = parseInt(mdYMatch[1], 10);
+        const p2 = parseInt(mdYMatch[2], 10);
+        const month = (p1 > 12 ? p2 : p1).toString().padStart(2, '0');
+        const day = (p1 > 12 ? p1 : p2).toString().padStart(2, '0');
+        let year = mdYMatch[3];
+        if (year.length === 2) year = `20${year}`;
+        return `${year}-${month}-${day}`;
+      }
     }
   }
 
