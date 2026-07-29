@@ -706,7 +706,8 @@ create table if not exists deliveries (
   scheduled_date text,
   tracking_number varchar,
   pickup_location text,
-  dropoff_location text
+  dropoff_location text,
+  "documentType" text
 );
 
 -- 6. Create gps_units_setup table for built-in GPS hardware configurations in Trucks
@@ -1084,6 +1085,7 @@ ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS scheduled_date text;
 ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS tracking_number varchar;
 ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS pickup_location text;
 ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS dropoff_location text;
+ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS "documentType" text;
 
 -- Upgrade GPS Tracking History
 ALTER TABLE gps_tracking_history ADD COLUMN IF NOT EXISTS gps_device_id varchar;
@@ -2662,6 +2664,30 @@ app.use((req, res, next) => {
       const sanitizedUsers = uniqueUsers.map((u: any) => ({ ...u, tenantId }));
       const sanitizedDeliveries = uniqueDeliveries.map((d: any) => {
         const copy = { ...d, tenantId };
+        
+        // Ensure orderNumber is populated since it has a NOT NULL constraint in Supabase
+        if (!copy.orderNumber) {
+          copy.orderNumber = copy.invoiceNumber || copy.epicorSalesOrder || copy.id || "N/A";
+        }
+        if (copy.customer === undefined) {
+          copy.customer = copy.customerName || "N/A";
+        }
+        if (copy.destination === undefined) {
+          copy.destination = copy.deliveryAddress || "N/A";
+        }
+        if (copy.date === undefined) {
+          copy.date = copy.registeredAt || new Date().toISOString();
+        }
+        if (!copy.assignedTruckId) {
+          copy.assignedTruckId = copy.assignedTruck || "unassigned";
+        }
+        if (!copy.assignedDriverId) {
+          copy.assignedDriverId = copy.assignedDriver || "unassigned";
+        }
+        if (copy.eta === undefined) {
+          copy.eta = "N/A";
+        }
+        
         // Preserve new fields inside history just in case they get stripped due to missing DB columns
         if (copy.history && Array.isArray(copy.history) && copy.history.length > 0) {
            const lastHistory = copy.history[copy.history.length - 1];
@@ -2852,6 +2878,8 @@ app.use((req, res, next) => {
         let deliveriesToUpsert = [...sanitizedDeliveries];
         let success = false;
         let attempts = 0;
+        let lastErrMsg = '';
+        console.log("DEBUG UPSERT deliveriesToUpsert[0]:", deliveriesToUpsert[0]);
         while (!success && attempts < 15) {
           try {
             const { error } = await supabase.from("deliveries").upsert(deliveriesToUpsert);
@@ -2860,6 +2888,8 @@ app.use((req, res, next) => {
           } catch (dbErr: any) {
             attempts++;
             const errMsg = dbErr.message || String(dbErr);
+            lastErrMsg = errMsg;
+            console.log(`[Deliveries Sync] Attempt ${attempts} failed with error:`, errMsg);
             
             // Check for missing column error, e.g., 'column "pdfUrl" of relation "deliveries" does not exist' or error code "42703"
             if (errMsg.includes("column") || errMsg.includes("42703") || dbErr.code === "42703" || dbErr.code === "PGRST204") {
@@ -2875,6 +2905,7 @@ app.use((req, res, next) => {
                 else if (errMsg.includes("destinationNotes")) colToStrip = "destinationNotes";
                 else if (errMsg.includes("customerSignature")) colToStrip = "customerSignature";
                 else if (errMsg.includes("deliveryPhoto")) colToStrip = "deliveryPhoto";
+                else if (errMsg.includes("documentType")) colToStrip = "documentType";
               }
               
               if (colToStrip) {
@@ -2898,7 +2929,7 @@ app.use((req, res, next) => {
           }
         }
         if (!success) {
-          throw new Error("Deliveries Sync failed after maximum retries due to persistent schema mismatch.");
+          throw new Error(`Deliveries Sync failed after maximum retries due to persistent schema mismatch. Last error: ${lastErrMsg}`);
         }
 
         // Delete any deliveries for this tenant that are NOT in sanitizedDeliveries

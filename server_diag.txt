@@ -1,2 +1,4 @@
-[DIAG] Server starting at 2026-07-29T14:40:51.283Z
-[2026-07-29T14:40:54.026Z] REQ: GET /api/health (original: /api/health)
+[DIAG] Server starting at 2026-07-29T14:55:18.585Z
+[2026-07-29T14:55:20.629Z] REQ: GET /api/tenant/state?tenantId=prospaces&_t=1785336925499 (original: /api/tenant/state?tenantId=prospaces&_t=1785336925499)
+[2026-07-29T14:55:20.649Z] REQ: GET /api/supabase-status (original: /api/supabase-status)
+[2026-07-29T14:55:24.127Z] REQ: POST /api/tenant/save-state (original: /api/tenant/save-state)
