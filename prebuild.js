@@ -33,11 +33,31 @@ if (fs.existsSync(base64File)) {
 
 // Sync logistics static images into public folder
 const logisticsImageMap = [
+  // Favicons
   ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'src/public/logistics-favicon.jpg'],
-  ['src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg', 'src/public/logistics-logo.jpg'],
-  ['src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg', 'src/public/images/logo_no_border_tight_1783077241511.jpg'],
-  ['src/components/logistics-app/assets/images/prospaces_hero_scene_1783169931786.jpg', 'src/public/images/prospaces_hero_scene_1783169931786.jpg'],
-  ['src/components/logistics-app/assets/images/samantha_testimonial_1783169949359.jpg', 'src/public/images/samantha_testimonial_1783169949359.jpg'],
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'src/public/favicon.jpg'],
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'src/public/favicon.ico'],
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'src/public/favicon.png'],
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'public/logistics-favicon.jpg'],
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'public/favicon.jpg'],
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'public/favicon.ico'],
+  ['src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg', 'public/favicon.png'],
+
+  // Logos
+  ['src/assets/images/prospaces_logo_clean_1785321128582.jpg', 'src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg'],
+  ['src/assets/images/prospaces_logo_clean_1785321128582.jpg', 'src/public/logistics-logo.jpg'],
+  ['src/assets/images/prospaces_logo_clean_1785321128582.jpg', 'src/public/images/logo_no_border_tight_1783077241511.jpg'],
+  ['src/assets/images/prospaces_logo_clean_1785321128582.jpg', 'public/logistics-logo.jpg'],
+  ['src/assets/images/prospaces_logo_clean_1785321128582.jpg', 'public/logo.jpg'],
+  ['src/assets/images/prospaces_logo_clean_1785321128582.jpg', 'public/images/logo_no_border_tight_1783077241511.jpg'],
+
+  // Hero Map Scene Screen
+  ['src/assets/images/light_map_view_1785321141916.jpg', 'src/components/logistics-app/assets/images/prospaces_hero_scene_1783169931786.jpg'],
+  ['src/assets/images/light_map_view_1785321141916.jpg', 'src/public/images/prospaces_hero_scene_1783169931786.jpg'],
+  ['src/assets/images/light_map_view_1785321141916.jpg', 'src/public/images/logistics_map_screen.jpg'],
+  ['src/assets/images/light_map_view_1785321141916.jpg', 'public/images/prospaces_hero_scene_1783169931786.jpg'],
+  ['src/assets/images/light_map_view_1785321141916.jpg', 'public/images/logistics_map_screen.jpg'],
+  ['src/assets/images/light_map_view_1785321141916.jpg', 'public/logistics-map-view.jpg']
 ];
 
 for (const [srcRel, destRel] of logisticsImageMap) {
