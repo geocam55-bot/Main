@@ -105,6 +105,53 @@ function deduplicateUsers(usersList: User[]): User[] {
   return deduped;
 }
 
+function extractVehicleNumber(str: string | undefined | null): string | null {
+  if (!str) return null;
+  const match = str.match(/\d+/);
+  return match ? match[0] : null;
+}
+
+function deduplicateTrucks(trucksList: Truck[]): Truck[] {
+  const map = new Map<string, Truck>();
+
+  for (const truck of trucksList) {
+    if (!truck || !truck.id) continue;
+    
+    const num = extractVehicleNumber(truck.name) || extractVehicleNumber(truck.id);
+    const key = num ? `num_${num}` : `id_${truck.id.toLowerCase().trim()}`;
+
+    if (!map.has(key)) {
+      map.set(key, truck);
+    } else {
+      const existing = map.get(key)!;
+      const existingHasGps = !!(existing.gpsDeviceId && existing.gpsDeviceId !== 'DISABLED');
+      const newHasGps = !!(truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED');
+
+      if (!existingHasGps && newHasGps) {
+        map.set(key, { ...existing, ...truck });
+      } else if (existingHasGps && newHasGps) {
+        if (truck.gpsLastHandshake && (!existing.gpsLastHandshake || new Date(truck.gpsLastHandshake) > new Date(existing.gpsLastHandshake))) {
+          map.set(key, { ...existing, ...truck });
+        } else {
+          map.set(key, { ...truck, ...existing });
+        }
+      } else {
+        map.set(key, {
+          ...existing,
+          driver: (existing.driver && existing.driver.toLowerCase() !== 'no driver') ? existing.driver : truck.driver,
+          branchId: existing.branchId || truck.branchId,
+          lat: truck.lat ?? existing.lat,
+          lng: truck.lng ?? existing.lng,
+          gpsLat: truck.gpsLat ?? existing.gpsLat,
+          gpsLng: truck.gpsLng ?? existing.gpsLng
+        });
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
@@ -852,7 +899,7 @@ export default function App() {
           const filteredUsers = (data.users || []).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
 
           setDeliveries(filteredDeliveries);
-          setTrucks(filteredTrucks);
+          setTrucks(deduplicateTrucks(filteredTrucks));
           setBranches(filteredBranches);
           setUsers(deduplicateUsers(filteredUsers));
           setLastSyncTime(new Date().toLocaleTimeString());
@@ -904,7 +951,7 @@ export default function App() {
           localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(rawUsers));
 
           setDeliveries(rawDeliveries.filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id)));
-          setTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id)));
+          setTrucks(deduplicateTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id))));
           setBranches(rawBranches.filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id)));
           setUsers(deduplicateUsers(rawUsers.filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id))));
           setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Local Cache)`);
@@ -936,7 +983,7 @@ export default function App() {
           const rawUsers = cachedUsers ? JSON.parse(cachedUsers) : [];
 
           setDeliveries(rawDeliveries.filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id)));
-          setTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id)));
+          setTrucks(deduplicateTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id))));
           setBranches(rawBranches.filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id)));
           setUsers(deduplicateUsers(rawUsers.filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id))));
           setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Local Fallback)`);

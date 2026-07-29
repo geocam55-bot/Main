@@ -367,27 +367,35 @@ function deserializeType(truck: any): any {
     cleanType = cleanType.replace(/\|\|gpsSource:[^|]+/, "");
   }
 
+  const safeDecode = (val: string) => {
+    try {
+      return decodeURIComponent(val).trim();
+    } catch {
+      return val.trim();
+    }
+  };
+
   const gpsDeviceIdMatch = type.match(/\|\|gpsDeviceId:([^|]+)/);
   if (gpsDeviceIdMatch) {
-    gpsDeviceId = decodeURIComponent(gpsDeviceIdMatch[1]).trim();
+    gpsDeviceId = safeDecode(gpsDeviceIdMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsDeviceId:[^|]+/, "");
   }
 
   const gpsSerialNumberMatch = type.match(/\|\|gpsSerialNumber:([^|]+)/);
   if (gpsSerialNumberMatch) {
-    gpsSerialNumber = decodeURIComponent(gpsSerialNumberMatch[1]).trim();
+    gpsSerialNumber = safeDecode(gpsSerialNumberMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsSerialNumber:[^|]+/, "");
   }
 
   const gpsDeviceNameMatch = type.match(/\|\|gpsDeviceName:([^|]+)/);
   if (gpsDeviceNameMatch) {
-    gpsDeviceName = decodeURIComponent(gpsDeviceNameMatch[1]).trim();
+    gpsDeviceName = safeDecode(gpsDeviceNameMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsDeviceName:[^|]+/, "");
   }
 
   const gpsSimIccidMatch = type.match(/\|\|gpsSimIccid:([^|]+)/);
   if (gpsSimIccidMatch) {
-    gpsSimIccid = decodeURIComponent(gpsSimIccidMatch[1]).trim();
+    gpsSimIccid = safeDecode(gpsSimIccidMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsSimIccid:[^|]+/, "");
   }
 
@@ -453,6 +461,47 @@ function deserializeType(truck: any): any {
     ...(gpsSpeed !== undefined && !isNaN(gpsSpeed) ? { gpsSpeed } : {}),
     ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {})
   };
+}
+
+function deduplicateServerTrucks(trucksList: any[]): any[] {
+  const map = new Map<string, any>();
+
+  for (const truck of trucksList) {
+    if (!truck || !truck.id) continue;
+    
+    const num = extractVehicleNumber(truck.name) || extractVehicleNumber(truck.id);
+    const key = num ? `num_${num}` : `id_${truck.id.toLowerCase().trim()}`;
+
+    if (!map.has(key)) {
+      map.set(key, truck);
+    } else {
+      const existing = map.get(key)!;
+      const existingHasGps = !!(existing.gpsDeviceId && existing.gpsDeviceId !== 'DISABLED');
+      const newHasGps = !!(truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED');
+
+      if (!existingHasGps && newHasGps) {
+        map.set(key, { ...existing, ...truck });
+      } else if (existingHasGps && newHasGps) {
+        if (truck.gpsLastHandshake && (!existing.gpsLastHandshake || new Date(truck.gpsLastHandshake) > new Date(existing.gpsLastHandshake))) {
+          map.set(key, { ...existing, ...truck });
+        } else {
+          map.set(key, { ...truck, ...existing });
+        }
+      } else {
+        map.set(key, {
+          ...existing,
+          driver: (existing.driver && String(existing.driver).toLowerCase() !== 'no driver') ? existing.driver : truck.driver,
+          branchId: existing.branchId || truck.branchId,
+          lat: truck.lat ?? existing.lat,
+          lng: truck.lng ?? existing.lng,
+          gpsLat: truck.gpsLat ?? existing.gpsLat,
+          gpsLng: truck.gpsLng ?? existing.gpsLng
+        });
+      }
+    }
+  }
+
+  return Array.from(map.values());
 }
 
 const SH_SQL = `/* SUPABASE SCHEMA INITIALIZATION FOR PROSPACES DELIVERY AND LOGISTICS PORTAL */
@@ -2346,7 +2395,7 @@ app.use((req, res, next) => {
       // No automatic mock seeding - working exclusively with live database records
 
       const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
-      const deserializedTrucks = (rTrucks.data || []).map((t: any) => deserializeType(t));
+      const deserializedTrucks = deduplicateServerTrucks((rTrucks.data || []).map((t: any) => deserializeType(t)));
 
       // Reset failure counters on query success
       supabaseConsecutiveFailures = 0;

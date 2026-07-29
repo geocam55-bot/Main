@@ -186,27 +186,35 @@ export function deserializeType(truck: any): any {
     cleanType = cleanType.replace(/\|\|gpsSource:[^|]+/, "");
   }
 
+  const safeDecode = (val: string) => {
+    try {
+      return decodeURIComponent(val).trim();
+    } catch {
+      return val.trim();
+    }
+  };
+
   const gpsDeviceIdMatch = type.match(/\|\|gpsDeviceId:([^|]+)/);
   if (gpsDeviceIdMatch) {
-    gpsDeviceId = decodeURIComponent(gpsDeviceIdMatch[1]);
+    gpsDeviceId = safeDecode(gpsDeviceIdMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsDeviceId:[^|]+/, "");
   }
 
   const gpsSerialNumberMatch = type.match(/\|\|gpsSerialNumber:([^|]+)/);
   if (gpsSerialNumberMatch) {
-    gpsSerialNumber = decodeURIComponent(gpsSerialNumberMatch[1]);
+    gpsSerialNumber = safeDecode(gpsSerialNumberMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsSerialNumber:[^|]+/, "");
   }
 
   const gpsDeviceNameMatch = type.match(/\|\|gpsDeviceName:([^|]+)/);
   if (gpsDeviceNameMatch) {
-    gpsDeviceName = decodeURIComponent(gpsDeviceNameMatch[1]);
+    gpsDeviceName = safeDecode(gpsDeviceNameMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsDeviceName:[^|]+/, "");
   }
 
   const gpsSimIccidMatch = type.match(/\|\|gpsSimIccid:([^|]+)/);
   if (gpsSimIccidMatch) {
-    gpsSimIccid = decodeURIComponent(gpsSimIccidMatch[1]);
+    gpsSimIccid = safeDecode(gpsSimIccidMatch[1]);
     cleanType = cleanType.replace(/\|\|gpsSimIccid:[^|]+/, "");
   }
 
@@ -512,7 +520,23 @@ export async function saveTenantStateDirect(
     id: t.id,
     tenantId,
     name: t.name,
-    type: serializeToType(t.type, t.registrationDueDate, t.lat, t.lng),
+    type: serializeToType(
+      t.type,
+      t.registrationDueDate,
+      t.lat,
+      t.lng,
+      t.gpsSource,
+      t.gpsDeviceId,
+      t.gpsSerialNumber,
+      t.gpsDeviceName,
+      t.gpsSimIccid,
+      t.gpsStatus,
+      t.gpsLastHandshake,
+      t.gpsLat,
+      t.gpsLng,
+      t.gpsSpeed,
+      t.gpsIdlingMins
+    ),
     driver: t.driver,
     branchId: t.branchId
   }));
