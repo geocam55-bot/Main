@@ -90,7 +90,7 @@ const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'ST. MARGARET\'S BAY': { lat: 44.6225, lng: -63.9538 },
   
   // Silicon Valley, California
-  'CAMPBELL': { lat: 37.2872, lng: -121.9500 },
+  'CAMPBELL, CA': { lat: 37.2872, lng: -121.9500 },
   'SUNNYVALE': { lat: 37.3688, lng: -122.0363 },
   'SAN MATEO': { lat: 37.5630, lng: -122.3255 },
   'SAN JOSE': { lat: 37.3382, lng: -121.8863 },
@@ -136,8 +136,8 @@ const getGpsForLocation = (id: string, nameOrAddress: string): { lat: number; ln
   }
   
   // Fallback hash logic:
-  // If the string contains CA (isolated word), California, or known Bay Area names, place it in Silicon Valley (but not if it contains Canada)
-  const isCalifornia = (/\bCA\b/.test(norm) || norm.includes('CALIFORNIA') || norm.includes('BAY AREA') || norm.includes('SILICON')) && !norm.includes('CANADA');
+  // Strictly check for explicit California / Bay Area keywords and avoid matching Canada/NS country or province codes
+  const isCalifornia = (norm.includes('CALIFORNIA') || norm.includes('SAN JOSE') || norm.includes('BAY AREA') || norm.includes('SILICON VALLEY')) && !norm.includes('CANADA') && !norm.includes('NS') && !norm.includes('NOVA SCOTIA');
   
   let score = 0;
   for (let i = 0; i < norm.length; i++) {
@@ -698,15 +698,14 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
     const hasCaliforniaBranch = activeBranches.some(b => {
       const addr = (b.address || '').toUpperCase();
       const name = (b.name || '').toUpperCase();
-      const hasCal = (/\bCA\b/.test(addr) || addr.includes('CALIFORNIA') || name.includes('CAMPBELL') || name.includes('SAN JOSE') || name.includes('CALIFORNIA') || /\bCA\b/.test(name));
-      const hasCan = addr.includes('CANADA') || name.includes('CANADA');
-      return hasCal && !hasCan;
+      const isCal = (addr.includes('CALIFORNIA') || name.includes('CALIFORNIA') || addr.includes('SAN JOSE') || name.includes('SAN JOSE')) && !addr.includes('CANADA') && !addr.includes('NS') && !addr.includes('NOVA SCOTIA');
+      return isCal;
     });
     
     if (hasCaliforniaBranch) {
       setHqCoords({ lat: 37.3382, lng: -121.8863 }); // California default HQ
     } else {
-      setHqCoords({ lat: 44.6488, lng: -63.5752 }); // Halifax default HQ
+      setHqCoords({ lat: 44.6488, lng: -63.5752 }); // Halifax Atlantic Canada default HQ
     }
   }, [activeBranches, selectedTruck]);
 
@@ -1254,12 +1253,9 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   destLat = dest.lat; destLng = dest.lng;
                 } else {
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(matchedTruck, b));
-                  const isProSpaces = matchedTruck.tenantId === 'prospaces';
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name) 
-                    : isProSpaces 
-                      ? { lat: 44.6488, lng: -63.5752 } 
-                      : { lat: 37.2872, lng: -121.9500 };
+                    : { lat: 44.6488, lng: -63.5752 };
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = orig.lat + 0.003; destLng = orig.lng + 0.003;
                 }
@@ -1315,12 +1311,9 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   destLat = dest.lat; destLng = dest.lng;
                 } else {
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
-                  const isProSpaces = truck.tenantId === 'prospaces';
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name) 
-                    : isProSpaces 
-                      ? { lat: 44.6488, lng: -63.5752 } 
-                      : { lat: 37.2872, lng: -121.9500 };
+                    : { lat: 44.6488, lng: -63.5752 };
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = orig.lat + 0.003; destLng = orig.lng + 0.003;
                 }
@@ -1514,12 +1507,9 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   isMoving = false;
                 } else {
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
-                  const isProSpaces = truck.tenantId === 'prospaces';
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address) 
-                    : isProSpaces 
-                      ? { lat: 44.6488, lng: -63.5752 } 
-                      : { lat: 37.2872, lng: -121.9500 };
+                    : { lat: 44.6488, lng: -63.5752 };
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = orig.lat + 0.003; destLng = orig.lng + 0.003;
                   isMoving = false;

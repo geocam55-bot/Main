@@ -348,9 +348,8 @@ export default function GoogleMapContainer({
   const hasCaliforniaBranch = activeBranches.some(b => {
     const addr = (b.address || '').toUpperCase();
     const name = (b.name || '').toUpperCase();
-    const hasCal = (/\bCA\b/.test(addr) || addr.includes('CALIFORNIA') || name.includes('CAMPBELL') || name.includes('SAN JOSE') || name.includes('CALIFORNIA') || /\bCA\b/.test(name));
-    const hasCan = addr.includes('CANADA') || name.includes('CANADA');
-    return hasCal && !hasCan;
+    const isCal = (addr.includes('CALIFORNIA') || name.includes('CALIFORNIA') || addr.includes('SAN JOSE') || name.includes('SAN JOSE')) && !addr.includes('CANADA') && !addr.includes('NS') && !addr.includes('NOVA SCOTIA');
+    return isCal;
   });
 
   const initialCenter = hasCaliforniaBranch
