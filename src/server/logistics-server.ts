@@ -2822,38 +2822,64 @@ app.use((req, res, next) => {
                 last_service_date: t.lastServiceDate || null,
                 next_service_due_date: t.nextServiceDueDate || null,
                 insurance_policy_number: t.insurancePolicyNumber || null,
-                insurance_expiry_date: t.insuranceExpiryDate || null,
-                user_field_1: t.userField1 || null,
-                user_field_2: t.userField2 || null
+                insurance_expiry_date: t.insuranceExpiryDate || null
               };
             });
 
-            try {
-              const { error } = await supabase.from("trucks").upsert(trucksToUpsert);
-              if (error) throw error;
-            } catch (dbErr: any) {
+            // Iterative retry loop that dynamically strips missing columns from Supabase trucks table
+            let currentTruckPayload = trucksToUpsert;
+            let truckAttempts = 0;
+            while (truckAttempts < 25) {
+              truckAttempts++;
+              const { error: dbErr } = await supabase.from("trucks").upsert(currentTruckPayload);
+              if (!dbErr) break;
+
               const errMsg = dbErr.message || String(dbErr);
-              if (errMsg.includes("column") && (errMsg.includes("registrationDueDate") || errMsg.includes("42703") || dbErr.code === "42703")) {
-                console.log("[Trucks Sync] Supabase trucks table is missing 'registrationDueDate' column. Retrying upsert with serialized fallback...");
-                const strippedTrucks = trucksToUpsert.map((t: any) => {
-                  const { registrationDueDate, ...rest } = t;
-                  return rest;
-                });
-                const { error: retryErr } = await supabase.from("trucks").upsert(strippedTrucks);
-                if (retryErr) throw new Error(`Trucks Sync Retry Error: ${retryErr.message}`);
+              console.log(`[Trucks Sync] Adjusting trucks payload (Attempt ${truckAttempts}):`, errMsg);
+
+              const isMissingColumnError = (
+                dbErr.code === "42703" ||
+                dbErr.code === "PGRST204" ||
+                (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+              ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+
+              if (isMissingColumnError) {
+                const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
+                let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
+
+                if (colToStrip) {
+                  console.log(`[Trucks Sync] Stripping missing column '${colToStrip}' and retrying...`);
+                  currentTruckPayload = currentTruckPayload.map((t: any) => {
+                    const copy = { ...t };
+                    delete copy[colToStrip];
+                    return copy;
+                  });
+                } else {
+                  console.log(`[Trucks Sync] Fallback: stripping all extended truck columns...`);
+                  currentTruckPayload = currentTruckPayload.map((t: any) => ({
+                    id: t.id,
+                    tenantId: t.tenantId,
+                    name: t.name,
+                    type: t.type,
+                    driver: t.driver,
+                    branchId: t.branchId
+                  }));
+                }
               } else {
                 throw dbErr;
               }
             }
 
-            const truckIds = sanitizedTrucks.map((t: any) => `"${String(t.id).replace(/"/g, '""')}"`);
-            const { error: deleteErr } = await supabase
-              .from("trucks")
-              .delete()
-              .eq("tenantId", tenantId)
-              .not("id", "in", `(${truckIds.join(",")})`);
-            if (deleteErr) {
-              console.warn("Non-blocking trucks sync deletion failed:", deleteErr.message);
+            const truckIds = sanitizedTrucks.map((t: any) => String(t.id).trim()).filter(Boolean);
+            if (truckIds.length > 0) {
+              const { error: deleteErr } = await supabase
+                .from("trucks")
+                .delete()
+                .eq("tenantId", tenantId)
+                .not("id", "in", `(${truckIds.join(",")})`);
+              if (deleteErr) {
+                console.warn("Non-blocking trucks sync deletion failed:", deleteErr.message);
+              }
             }
           } catch (dbErr: any) {
             throw new Error(`Trucks Sync Error: ${dbErr.message}`);
@@ -2879,17 +2905,59 @@ app.use((req, res, next) => {
               };
             });
 
-            const { error } = await supabase.from("users").upsert(usersToUpsert);
-            if (error) throw error;
+            let currentUserPayload = usersToUpsert;
+            let userAttempts = 0;
+            while (userAttempts < 10) {
+              userAttempts++;
+              const { error: dbErr } = await supabase.from("users").upsert(currentUserPayload);
+              if (!dbErr) break;
 
-            const userIds = sanitizedUsers.map((u: any) => `"${String(u.id).replace(/"/g, '""')}"`);
-            const { error: deleteErr } = await supabase
-              .from("users")
-              .delete()
-              .eq("tenantId", tenantId)
-              .not("id", "in", `(${userIds.join(",")})`);
-            if (deleteErr) {
-              console.warn("Non-blocking users sync deletion failed:", deleteErr.message);
+              const errMsg = dbErr.message || String(dbErr);
+              console.log(`[Users Sync] Adjusting users payload (Attempt ${userAttempts}):`, errMsg);
+
+              const isMissingColumnError = (
+                dbErr.code === "42703" ||
+                dbErr.code === "PGRST204" ||
+                (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+              ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+
+              if (isMissingColumnError) {
+                const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
+                let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
+
+                if (colToStrip) {
+                  console.log(`[Users Sync] Stripping missing column '${colToStrip}' and retrying...`);
+                  currentUserPayload = currentUserPayload.map((u: any) => {
+                    const copy = { ...u };
+                    delete copy[colToStrip];
+                    return copy;
+                  });
+                } else {
+                  console.log(`[Users Sync] Fallback: stripping extended user columns...`);
+                  currentUserPayload = currentUserPayload.map((u: any) => ({
+                    id: u.id,
+                    tenantId: u.tenantId,
+                    name: u.name,
+                    email: u.email,
+                    role: u.role,
+                    phone: u.phone
+                  }));
+                }
+              } else {
+                throw dbErr;
+              }
+            }
+
+            const userIds = sanitizedUsers.map((u: any) => String(u.id).trim()).filter(Boolean);
+            if (userIds.length > 0) {
+              const { error: deleteErr } = await supabase
+                .from("users")
+                .delete()
+                .eq("tenantId", tenantId)
+                .not("id", "in", `(${userIds.join(",")})`);
+              if (deleteErr) {
+                console.warn("Non-blocking users sync deletion failed:", deleteErr.message);
+              }
             }
           } catch (dbErr: any) {
             throw new Error(`Users Sync Error: ${dbErr.message}`);
@@ -2933,7 +3001,7 @@ app.use((req, res, next) => {
             attempts++;
             const errMsg = dbErr.message || String(dbErr);
             lastErrMsg = errMsg;
-            console.log(`[Deliveries Sync] Attempt ${attempts} failed with error:`, errMsg);
+            console.log(`[Deliveries Sync] Adjusting deliveries payload (Attempt ${attempts}):`, errMsg);
             
             // Check for missing column error, e.g., 'column "pdfUrl" of relation "deliveries" does not exist' or error code "42703".
             // Do NOT strip columns on NOT NULL constraint violations (code 23502)
