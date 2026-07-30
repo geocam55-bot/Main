@@ -405,8 +405,10 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
     const targetTruck = trucks.find(t => t.id === selectedTruckId);
     if (!targetTruck) return;
 
+    const cleanType = (targetTruck.type || '').split('||')[0].trim() || 'Commercial Truck';
     const updatedTruck: Truck = {
       ...targetTruck,
+      type: cleanType,
       gpsSource: 'truck', // Auto-switch to newly configured truck GPS
       gpsDeviceId: deviceId.trim(),
       gpsSerialNumber: serialNumber.trim(),
@@ -414,9 +416,8 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
       gpsSimIccid: simIccid,
       gpsStatus: 'Connected',
       gpsLastHandshake: new Date().toISOString(),
-      // We will now rely on live tracking components instead of initial setup coords
-      gpsLat: 44.6488,
-      gpsLng: -63.5752
+      gpsLat: targetTruck.gpsLat || targetTruck.lat || 44.6488,
+      gpsLng: targetTruck.gpsLng || targetTruck.lng || -63.5752
     };
 
     onUpdateTruck(updatedTruck);

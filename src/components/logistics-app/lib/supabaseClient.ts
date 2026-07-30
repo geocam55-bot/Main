@@ -96,7 +96,8 @@ export function serializeToType(
   gpsSpeed?: number,
   gpsIdlingMins?: number
 ): string {
-  const baseType = (type || "").trim();
+  // Strip out any existing ||tag:value metadata from type to prevent duplicate tag accumulation
+  const baseType = (type || "").split("||")[0].trim() || "Commercial Truck";
   let res = baseType;
   if (registrationDueDate) {
     res += ` ||regdue:${registrationDueDate}`;
@@ -145,46 +146,24 @@ export function serializeToType(
 
 export function deserializeType(truck: any): any {
   if (!truck) return truck;
-  const type = truck.type || "";
-  let cleanType = type;
-  let registrationDueDate = truck.registrationDueDate || "";
-  let lat: number | undefined;
-  let lng: number | undefined;
-  let gpsSource: 'mobile' | 'truck' | undefined;
-  let gpsDeviceId: string | undefined;
-  let gpsSerialNumber: string | undefined;
-  let gpsDeviceName: string | undefined;
-  let gpsSimIccid: string | undefined;
-  let gpsStatus: 'Connected' | 'Disconnected' | 'Syncing' | 'Error' | undefined;
-  let gpsLastHandshake: string | undefined;
-  let gpsLat: number | undefined;
-  let gpsLng: number | undefined;
-  let gpsSpeed: number | undefined;
-  let gpsIdlingMins: number | undefined;
+  const rawType = truck.type || "";
+  const cleanType = rawType.split("||")[0].trim() || "Commercial Truck";
 
-  const regdueMatch = type.match(/\|\|regdue:([^|]+)/);
-  if (regdueMatch) {
-    registrationDueDate = regdueMatch[1];
-    cleanType = cleanType.replace(/\|\|regdue:[^|]+/, "");
-  }
-
-  const latMatch = type.match(/\|\|lat:([^|]+)/);
-  if (latMatch) {
-    lat = parseFloat(latMatch[1]);
-    cleanType = cleanType.replace(/\|\|lat:[^|]+/, "");
-  }
-
-  const lngMatch = type.match(/\|\|lng:([^|]+)/);
-  if (lngMatch) {
-    lng = parseFloat(lngMatch[1]);
-    cleanType = cleanType.replace(/\|\|lng:[^|]+/, "");
-  }
-
-  const gpsSourceMatch = type.match(/\|\|gpsSource:([^|]+)/);
-  if (gpsSourceMatch) {
-    gpsSource = gpsSourceMatch[1] as any;
-    cleanType = cleanType.replace(/\|\|gpsSource:[^|]+/, "");
-  }
+  // Check direct DB columns / object properties first
+  let registrationDueDate = truck.registrationDueDate || truck.registration_due_date || "";
+  let lat: number | undefined = truck.lat !== undefined ? truck.lat : undefined;
+  let lng: number | undefined = truck.lng !== undefined ? truck.lng : undefined;
+  let gpsSource: 'mobile' | 'truck' | undefined = truck.gpsSource || truck.gps_source || undefined;
+  let gpsDeviceId: string | undefined = truck.gpsDeviceId || truck.gps_device_id || undefined;
+  let gpsSerialNumber: string | undefined = truck.gpsSerialNumber || truck.gps_serial_number || undefined;
+  let gpsDeviceName: string | undefined = truck.gpsDeviceName || truck.gps_device_name || undefined;
+  let gpsSimIccid: string | undefined = truck.gpsSimIccid || truck.gps_sim_iccid || undefined;
+  let gpsStatus: 'Connected' | 'Disconnected' | 'Syncing' | 'Error' | undefined = truck.gpsStatus || truck.gps_status || undefined;
+  let gpsLastHandshake: string | undefined = truck.gpsLastHandshake || truck.gps_last_handshake || undefined;
+  let gpsLat: number | undefined = truck.gpsLat !== undefined ? truck.gpsLat : (truck.gps_lat !== undefined ? truck.gps_lat : undefined);
+  let gpsLng: number | undefined = truck.gpsLng !== undefined ? truck.gpsLng : (truck.gps_lng !== undefined ? truck.gps_lng : undefined);
+  let gpsSpeed: number | undefined = truck.gpsSpeed !== undefined ? truck.gpsSpeed : (truck.gps_speed !== undefined ? truck.gps_speed : undefined);
+  let gpsIdlingMins: number | undefined = truck.gpsIdlingMins !== undefined ? truck.gpsIdlingMins : (truck.gps_idling_mins !== undefined ? truck.gps_idling_mins : undefined);
 
   const safeDecode = (val: string) => {
     try {
@@ -194,68 +173,59 @@ export function deserializeType(truck: any): any {
     }
   };
 
-  const gpsDeviceIdMatch = type.match(/\|\|gpsDeviceId:([^|]+)/);
-  if (gpsDeviceIdMatch) {
-    gpsDeviceId = safeDecode(gpsDeviceIdMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsDeviceId:[^|]+/, "");
-  }
+  // Helper function to extract the LAST occurrence of a metadata tag in type string
+  const getLastMatch = (pattern: RegExp) => {
+    const matches = [...rawType.matchAll(pattern)];
+    if (matches.length > 0) {
+      return matches[matches.length - 1][1];
+    }
+    return null;
+  };
 
-  const gpsSerialNumberMatch = type.match(/\|\|gpsSerialNumber:([^|]+)/);
-  if (gpsSerialNumberMatch) {
-    gpsSerialNumber = safeDecode(gpsSerialNumberMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsSerialNumber:[^|]+/, "");
-  }
+  const regdue = getLastMatch(/\|\|regdue:([^|]+)/g);
+  if (regdue) registrationDueDate = regdue;
 
-  const gpsDeviceNameMatch = type.match(/\|\|gpsDeviceName:([^|]+)/);
-  if (gpsDeviceNameMatch) {
-    gpsDeviceName = safeDecode(gpsDeviceNameMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsDeviceName:[^|]+/, "");
-  }
+  const latStr = getLastMatch(/\|\|lat:([^|]+)/g);
+  if (latStr && !isNaN(parseFloat(latStr))) lat = parseFloat(latStr);
 
-  const gpsSimIccidMatch = type.match(/\|\|gpsSimIccid:([^|]+)/);
-  if (gpsSimIccidMatch) {
-    gpsSimIccid = safeDecode(gpsSimIccidMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsSimIccid:[^|]+/, "");
-  }
+  const lngStr = getLastMatch(/\|\|lng:([^|]+)/g);
+  if (lngStr && !isNaN(parseFloat(lngStr))) lng = parseFloat(lngStr);
 
-  const gpsStatusMatch = type.match(/\|\|gpsStatus:([^|]+)/);
-  if (gpsStatusMatch) {
-    gpsStatus = gpsStatusMatch[1] as any;
-    cleanType = cleanType.replace(/\|\|gpsStatus:[^|]+/, "");
-  }
+  const srcStr = getLastMatch(/\|\|gpsSource:([^|]+)/g);
+  if (srcStr) gpsSource = srcStr.trim() as any;
 
-  const gpsLastHandshakeMatch = type.match(/\|\|gpsLastHandshake:([^|]+)/);
-  if (gpsLastHandshakeMatch) {
-    gpsLastHandshake = gpsLastHandshakeMatch[1];
-    cleanType = cleanType.replace(/\|\|gpsLastHandshake:[^|]+/, "");
-  }
+  const devId = getLastMatch(/\|\|gpsDeviceId:([^|]+)/g);
+  if (devId) gpsDeviceId = safeDecode(devId);
 
-  const gpsLatMatch = type.match(/\|\|gpsLat:([^|]+)/);
-  if (gpsLatMatch) {
-    gpsLat = parseFloat(gpsLatMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsLat:[^|]+/, "");
-  }
+  const sn = getLastMatch(/\|\|gpsSerialNumber:([^|]+)/g);
+  if (sn) gpsSerialNumber = safeDecode(sn);
 
-  const gpsLngMatch = type.match(/\|\|gpsLng:([^|]+)/);
-  if (gpsLngMatch) {
-    gpsLng = parseFloat(gpsLngMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsLng:[^|]+/, "");
-  }
+  const dn = getLastMatch(/\|\|gpsDeviceName:([^|]+)/g);
+  if (dn) gpsDeviceName = safeDecode(dn);
 
-  const gpsSpeedMatch = type.match(/\|\|gpsSpeed:([^|]+)/);
-  if (gpsSpeedMatch) {
-    gpsSpeed = parseFloat(gpsSpeedMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsSpeed:[^|]+/, "");
-  }
+  const sim = getLastMatch(/\|\|gpsSimIccid:([^|]+)/g);
+  if (sim) gpsSimIccid = safeDecode(sim);
 
-  const gpsIdlingMinsMatch = type.match(/\|\|gpsIdlingMins:([^|]+)/);
-  if (gpsIdlingMinsMatch) {
-    gpsIdlingMins = parseFloat(gpsIdlingMinsMatch[1]);
-    cleanType = cleanType.replace(/\|\|gpsIdlingMins:[^|]+/, "");
-  }
+  const st = getLastMatch(/\|\|gpsStatus:([^|]+)/g);
+  if (st) gpsStatus = st.trim() as any;
+
+  const hs = getLastMatch(/\|\|gpsLastHandshake:([^|]+)/g);
+  if (hs) gpsLastHandshake = hs.trim();
+
+  const gLat = getLastMatch(/\|\|gpsLat:([^|]+)/g);
+  if (gLat && !isNaN(parseFloat(gLat))) gpsLat = parseFloat(gLat);
+
+  const gLng = getLastMatch(/\|\|gpsLng:([^|]+)/g);
+  if (gLng && !isNaN(parseFloat(gLng))) gpsLng = parseFloat(gLng);
+
+  const gSpd = getLastMatch(/\|\|gpsSpeed:([^|]+)/g);
+  if (gSpd && !isNaN(parseFloat(gSpd))) gpsSpeed = parseFloat(gSpd);
+
+  const gIdle = getLastMatch(/\|\|gpsIdlingMins:([^|]+)/g);
+  if (gIdle && !isNaN(parseFloat(gIdle))) gpsIdlingMins = parseFloat(gIdle);
 
   const is1903 = (truck.id || "").includes("1903") || (truck.name || "").includes("1903") || (gpsDeviceName || "").includes("1903");
-  if (is1903) {
+  if (is1903 && lat === undefined) {
     lat = 44.7082;
     lng = -63.5938;
     gpsLat = 44.7082;
@@ -264,16 +234,16 @@ export function deserializeType(truck: any): any {
 
   return {
     ...truck,
-    type: cleanType.trim(),
+    type: cleanType,
     registrationDueDate,
     ...(lat !== undefined && !isNaN(lat) ? { lat } : {}),
     ...(lng !== undefined && !isNaN(lng) ? { lng } : {}),
-    gpsSource: gpsSource || (gpsDeviceId ? 'truck' : 'mobile'),
+    gpsSource: gpsSource || (gpsDeviceId && gpsDeviceId !== 'DISABLED' ? 'truck' : 'mobile'),
     gpsDeviceId: gpsDeviceId || '',
     gpsSerialNumber: gpsSerialNumber || '',
     gpsDeviceName: gpsDeviceName || '',
     gpsSimIccid: gpsSimIccid || '',
-    gpsStatus: gpsStatus || 'Disconnected',
+    gpsStatus: gpsStatus || (gpsDeviceId && gpsDeviceId !== 'DISABLED' ? 'Connected' : 'Disconnected'),
     gpsLastHandshake: gpsLastHandshake || '',
     ...(gpsLat !== undefined && !isNaN(gpsLat) ? { gpsLat } : {}),
     ...(gpsLng !== undefined && !isNaN(gpsLng) ? { gpsLng } : {}),
@@ -281,23 +251,23 @@ export function deserializeType(truck: any): any {
     ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {}),
 
     // Map snake_case DB columns back to camelCase frontend interface
-    truckNumber: truck.truck_number,
+    truckNumber: truck.truck_number || truck.truckNumber,
     vin: truck.vin,
-    licensePlate: truck.license_plate,
+    licensePlate: truck.license_plate || truck.licensePlate,
     make: truck.make,
     model: truck.model,
     year: truck.year,
     color: truck.color,
-    capacityWeightKg: truck.capacity_weight_kg,
-    capacityVolumeM3: truck.capacity_volume_m3,
-    fuelType: truck.fuel_type,
-    currentMileage: truck.current_mileage,
-    lastServiceDate: truck.last_service_date,
-    nextServiceDueDate: truck.next_service_due_date,
-    insurancePolicyNumber: truck.insurance_policy_number,
-    insuranceExpiryDate: truck.insurance_expiry_date,
-    userField1: truck.user_field_1,
-    userField2: truck.user_field_2
+    capacityWeightKg: truck.capacity_weight_kg || truck.capacityWeightKg,
+    capacityVolumeM3: truck.capacity_volume_m3 || truck.capacityVolumeM3,
+    fuelType: truck.fuel_type || truck.fuelType,
+    currentMileage: truck.current_mileage || truck.currentMileage,
+    lastServiceDate: truck.last_service_date || truck.lastServiceDate,
+    nextServiceDueDate: truck.next_service_due_date || truck.nextServiceDueDate,
+    insurancePolicyNumber: truck.insurance_policy_number || truck.insurancePolicyNumber,
+    insuranceExpiryDate: truck.insurance_expiry_date || truck.insuranceExpiryDate,
+    userField1: truck.user_field_1 || truck.userField1,
+    userField2: truck.user_field_2 || truck.userField2
   };
 }
 

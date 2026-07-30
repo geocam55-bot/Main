@@ -129,14 +129,13 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       if (!existingHasGps && newHasGps) {
         map.set(key, { ...existing, ...truck });
       } else if (existingHasGps && newHasGps) {
-        if (truck.gpsLastHandshake && (!existing.gpsLastHandshake || new Date(truck.gpsLastHandshake) > new Date(existing.gpsLastHandshake))) {
-          map.set(key, { ...existing, ...truck });
-        } else {
-          map.set(key, { ...truck, ...existing });
-        }
+        map.set(key, { ...existing, ...truck });
+      } else if (existingHasGps && !newHasGps) {
+        map.set(key, { ...truck, ...existing });
       } else {
         map.set(key, {
           ...existing,
+          ...truck,
           driver: (existing.driver && existing.driver.toLowerCase() !== 'no driver') ? existing.driver : truck.driver,
           branchId: existing.branchId || truck.branchId,
           lat: truck.lat ?? existing.lat,
