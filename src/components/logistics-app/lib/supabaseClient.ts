@@ -487,12 +487,77 @@ export async function fetchTenantStateDirect(tenantId: string) {
   const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
   const deserializedTrucks = (rTrucks.data || []).map((t: any) => deserializeType(t));
 
+  const rawDeliveries = rDeliveries.data || [];
+  const enrichedDeliveries = rawDeliveries.map((d: any) => {
+    let meta: any = {};
+    if (d.items && Array.isArray(d.items) && d.items.length > 0) {
+      try {
+        const firstItem = d.items[0];
+        const parsed = typeof firstItem === 'string' ? JSON.parse(firstItem) : firstItem;
+        if (parsed && parsed._meta) {
+          meta = parsed._meta;
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    const invoiceNumber = d.invoiceNumber || meta.invoiceNumber || d.orderNumber || d.id;
+    const epicorSalesOrder = d.epicorSalesOrder || meta.epicorSalesOrder || d.orderNumber || d.id;
+    const customerName = d.customerName || meta.customerName || d.customer || "N/A";
+    const deliveryAddress = d.deliveryAddress || meta.deliveryAddress || d.destination || "N/A";
+    const phone = d.phone !== undefined ? d.phone : (meta.phone !== undefined ? meta.phone : "");
+    const originBranch = d.originBranch || meta.originBranch || d.pickup_location || "prospaces-dc";
+    const registeredAt = d.registeredAt || meta.registeredAt || d.date || d.scheduled_date || new Date().toISOString();
+    const status = d.status || meta.status || "REGISTERED";
+    const assignedTruck = d.assignedTruck || meta.assignedTruck || (d.assignedTruckId && d.assignedTruckId !== "unassigned" ? d.assignedTruckId : undefined);
+    const assignedDriver = d.assignedDriver || meta.assignedDriver || (d.assignedDriverId && d.assignedDriverId !== "unassigned" ? d.assignedDriverId : undefined);
+    const assignedPicker = d.assignedPicker || meta.assignedPicker;
+    const destinationNotes = d.destinationNotes || meta.destinationNotes;
+    const customerSignature = d.customerSignature || meta.customerSignature;
+    const deliveryPhoto = d.deliveryPhoto || meta.deliveryPhoto;
+    const pdfUrl = d.pdfUrl || meta.pdfUrl;
+    const documentType = d.documentType || meta.documentType;
+    const weight = d.weight || meta.weight;
+    const orderTotal = d.orderTotal || meta.orderTotal;
+    const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
+
+    return {
+      ...d,
+      id: d.id,
+      tenantId: d.tenantId,
+      invoiceNumber,
+      epicorSalesOrder,
+      customerName,
+      deliveryAddress,
+      phone,
+      originBranch,
+      weight,
+      orderTotal,
+      destinationNotes,
+      status,
+      registeredAt,
+      pickedAt: d.pickedAt || meta.pickedAt,
+      deliveredAt: d.deliveredAt || meta.deliveredAt,
+      returnedAt: d.returnedAt || meta.returnedAt,
+      returnReason: d.returnReason || meta.returnReason,
+      assignedTruck,
+      assignedDriver,
+      assignedPicker,
+      customerSignature,
+      deliveryPhoto,
+      pdfUrl,
+      documentType,
+      history
+    };
+  });
+
   return {
     supabaseActive: true,
     branches: rBranches.data || [],
     trucks: deserializedTrucks,
     users: deserializedUsers,
-    deliveries: rDeliveries.data || []
+    deliveries: enrichedDeliveries
   };
 }
 
@@ -569,32 +634,49 @@ export async function saveTenantStateDirect(
   }));
 
   const mappedDeliveries = uniqueDeliveries.map(d => {
-    const obj: any = {
+    const fullMeta = {
       id: d.id,
-      tenantId,
-      invoiceNumber: d.invoiceNumber,
-      epicorSalesOrder: d.epicorSalesOrder,
-      customerName: d.customerName,
-      deliveryAddress: d.deliveryAddress,
-      phone: d.phone,
-      originBranch: d.originBranch,
+      tenantId: d.tenantId || tenantId,
+      invoiceNumber: d.invoiceNumber || d.orderNumber || d.id || "",
+      epicorSalesOrder: d.epicorSalesOrder || d.orderNumber || d.id || "",
+      customerName: d.customerName || d.customer || "N/A",
+      deliveryAddress: d.deliveryAddress || d.destination || "N/A",
+      phone: d.phone || "",
+      originBranch: d.originBranch || "prospaces-dc",
+      weight: d.weight,
+      orderTotal: d.orderTotal,
       destinationNotes: d.destinationNotes,
-      status: d.status,
-      registeredAt: d.registeredAt,
+      status: d.status || "REGISTERED",
+      registeredAt: d.registeredAt || d.date || new Date().toISOString(),
       pickedAt: d.pickedAt,
       deliveredAt: d.deliveredAt,
       returnedAt: d.returnedAt,
       returnReason: d.returnReason,
       assignedTruck: d.assignedTruck,
       assignedDriver: d.assignedDriver,
+      assignedPicker: d.assignedPicker,
       customerSignature: d.customerSignature,
       deliveryPhoto: d.deliveryPhoto,
+      pdfUrl: d.pdfUrl,
+      documentType: d.documentType,
       history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
     };
+
+    const obj: any = {
+      id: String(d.id),
+      tenantId: String(tenantId),
+      orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
+      customer: String(d.customerName || d.customer || "N/A"),
+      destination: String(d.deliveryAddress || d.destination || "N/A"),
+      scheduled_date: String(d.registeredAt || d.date || new Date().toISOString()),
+      assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
+      assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
+      status: String(d.status || "REGISTERED"),
+      eta: String(d.eta || "N/A"),
+      pickup_location: String(d.originBranch || "prospaces-dc"),
+      items: [JSON.stringify({ _meta: fullMeta })]
+    };
     
-    // Explicitly add potentially missing columns if they have values to avoid undefined breaking upserts
-    // BUT since we know these columns might be missing in Supabase, we omit them entirely in the direct client
-    // fallback so that the save doesn't crash. The backend /save-state endpoint has proper regex stripping.
     return obj;
   });
 

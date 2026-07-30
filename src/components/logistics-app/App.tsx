@@ -1335,6 +1335,7 @@ export default function App() {
   // Sync with Supabase when deliveries change
   const handleAddOrUpdateDelivery = async (newRecord: DeliveryRecord) => {
     if (!currentTenant) return;
+    lastMutationTimeRef.current = Date.now();
     const updated = [...deliveries];
     const index = updated.findIndex(d => d.id === newRecord.id);
     if (index >= 0) {
@@ -1343,6 +1344,9 @@ export default function App() {
       updated.unshift(newRecord);
     }
     setDeliveries(updated);
+    if (currentTenant.id) {
+      localStorage.setItem(`prospaces_deliveries_tenant_${currentTenant.id}`, JSON.stringify(updated));
+    }
     await syncStateToSupabase(currentTenant.id, updated, trucks, branches, users);
   };
 

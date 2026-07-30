@@ -2439,41 +2439,89 @@ app.use((req, res, next) => {
 
         const rawDeliveries = rDeliveries.data || [];
         const enrichedDeliveries = rawDeliveries.map((d: any) => {
-          if (!d.assignedPicker && d.history && Array.isArray(d.history)) {
-            // Find the most recent history entry with a picker assigned
-            const pickerEntry = [...d.history].reverse().find((h: any) => h.notes && h.notes.includes("Picker assigned: "));
+          let meta: any = {};
+          if (d.items && Array.isArray(d.items) && d.items.length > 0) {
+            try {
+              const firstItem = d.items[0];
+              const parsed = typeof firstItem === 'string' ? JSON.parse(firstItem) : firstItem;
+              if (parsed && parsed._meta) {
+                meta = parsed._meta;
+              }
+            } catch (e) {
+              // ignore parse error
+            }
+          }
+
+          const invoiceNumber = d.invoiceNumber || meta.invoiceNumber || d.orderNumber || d.id;
+          const epicorSalesOrder = d.epicorSalesOrder || meta.epicorSalesOrder || d.orderNumber || d.id;
+          const customerName = d.customerName || meta.customerName || d.customer || "N/A";
+          const deliveryAddress = d.deliveryAddress || meta.deliveryAddress || d.destination || "N/A";
+          const phone = d.phone !== undefined ? d.phone : (meta.phone !== undefined ? meta.phone : "");
+          const originBranch = d.originBranch || meta.originBranch || d.pickup_location || "prospaces-dc";
+          const registeredAt = d.registeredAt || meta.registeredAt || d.date || d.scheduled_date || new Date().toISOString();
+          const status = d.status || meta.status || "REGISTERED";
+          const assignedTruck = d.assignedTruck || meta.assignedTruck || (d.assignedTruckId && d.assignedTruckId !== "unassigned" ? d.assignedTruckId : undefined);
+          const assignedDriver = d.assignedDriver || meta.assignedDriver || (d.assignedDriverId && d.assignedDriverId !== "unassigned" ? d.assignedDriverId : undefined);
+          const assignedPicker = d.assignedPicker || meta.assignedPicker;
+          const destinationNotes = d.destinationNotes || meta.destinationNotes;
+          const customerSignature = d.customerSignature || meta.customerSignature;
+          const deliveryPhoto = d.deliveryPhoto || meta.deliveryPhoto;
+          const pdfUrl = d.pdfUrl || meta.pdfUrl;
+          const documentType = d.documentType || meta.documentType;
+          const weight = d.weight || meta.weight;
+          const orderTotal = d.orderTotal || meta.orderTotal;
+          const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
+
+          const resObj = {
+            ...d,
+            id: d.id,
+            tenantId: d.tenantId,
+            invoiceNumber,
+            epicorSalesOrder,
+            customerName,
+            deliveryAddress,
+            phone,
+            originBranch,
+            weight,
+            orderTotal,
+            destinationNotes,
+            status,
+            registeredAt,
+            pickedAt: d.pickedAt || meta.pickedAt,
+            deliveredAt: d.deliveredAt || meta.deliveredAt,
+            returnedAt: d.returnedAt || meta.returnedAt,
+            returnReason: d.returnReason || meta.returnReason,
+            assignedTruck,
+            assignedDriver,
+            assignedPicker,
+            customerSignature,
+            deliveryPhoto,
+            pdfUrl,
+            documentType,
+            history
+          };
+
+          if (!resObj.assignedPicker && resObj.history && Array.isArray(resObj.history)) {
+            const pickerEntry = [...resObj.history].reverse().find((h: any) => h.notes && h.notes.includes("Picker assigned: "));
             if (pickerEntry) {
               const match = pickerEntry.notes.match(/Picker assigned: ([^.]+)/);
               if (match) {
-                d.assignedPicker = match[1].trim();
+                resObj.assignedPicker = match[1].trim();
               }
             }
           }
-          if (d.history && Array.isArray(d.history)) {
-            // Scan backwards to find the most recent valid values
-            for (let i = d.history.length - 1; i >= 0; i--) {
-                const entry = d.history[i];
-                if (!d.customerSignature && entry.customerSignature) {
-                    d.customerSignature = entry.customerSignature;
-                }
-                if (!d.deliveryPhoto && entry.deliveryPhoto) {
-                    d.deliveryPhoto = entry.deliveryPhoto;
-                }
-                if (!d.destinationNotes && entry.destinationNotes) {
-                    d.destinationNotes = entry.destinationNotes;
-                }
-                if (!d.weight && entry.weight) {
-                    d.weight = entry.weight;
-                }
-                if (!d.orderTotal && entry.orderTotal) {
-                    d.orderTotal = entry.orderTotal;
-                }
-                if (!d.assignedPicker && entry.assignedPicker) {
-                    d.assignedPicker = entry.assignedPicker;
-                }
+          if (resObj.history && Array.isArray(resObj.history)) {
+            for (let i = resObj.history.length - 1; i >= 0; i--) {
+              const entry = resObj.history[i];
+              if (!resObj.customerSignature && entry.customerSignature) resObj.customerSignature = entry.customerSignature;
+              if (!resObj.deliveryPhoto && entry.deliveryPhoto) resObj.deliveryPhoto = entry.deliveryPhoto;
+              if (!resObj.destinationNotes && entry.destinationNotes) resObj.destinationNotes = entry.destinationNotes;
+              if (!resObj.weight && entry.weight) resObj.weight = entry.weight;
+              if (!resObj.orderTotal && entry.orderTotal) resObj.orderTotal = entry.orderTotal;
+              if (!resObj.assignedPicker && entry.assignedPicker) resObj.assignedPicker = entry.assignedPicker;
             }
           }
-          return d;
+          return resObj;
         });
 
       res.json({
@@ -2663,54 +2711,50 @@ app.use((req, res, next) => {
       const sanitizedTrucks = uniqueTrucks.map((t: any) => ({ ...t, tenantId }));
       const sanitizedUsers = uniqueUsers.map((u: any) => ({ ...u, tenantId }));
       const sanitizedDeliveries = uniqueDeliveries.map((d: any) => {
-        const copy = { ...d, tenantId };
-        
-        // Ensure orderNumber is populated since it has a NOT NULL constraint in Supabase
-        if (!copy.orderNumber) {
-          copy.orderNumber = copy.invoiceNumber || copy.epicorSalesOrder || copy.id || "N/A";
-        }
-        if (copy.customer === undefined) {
-          copy.customer = copy.customerName || "N/A";
-        }
-        if (copy.destination === undefined) {
-          copy.destination = copy.deliveryAddress || "N/A";
-        }
-        if (copy.date === undefined) {
-          copy.date = copy.registeredAt || new Date().toISOString();
-        }
-        if (!copy.assignedTruckId) {
-          copy.assignedTruckId = copy.assignedTruck || "unassigned";
-        }
-        if (!copy.assignedDriverId) {
-          copy.assignedDriverId = copy.assignedDriver || "unassigned";
-        }
-        if (copy.eta === undefined) {
-          copy.eta = "N/A";
-        }
-        
-        // Preserve new fields inside history just in case they get stripped due to missing DB columns
-        if (copy.history && Array.isArray(copy.history) && copy.history.length > 0) {
-           const lastHistory = copy.history[copy.history.length - 1];
-           if (copy.customerSignature) {
-               lastHistory.customerSignature = copy.customerSignature;
-           }
-           if (copy.deliveryPhoto) {
-               lastHistory.deliveryPhoto = copy.deliveryPhoto;
-           }
-           if (copy.destinationNotes) {
-               lastHistory.destinationNotes = copy.destinationNotes;
-           }
-           if (copy.weight) {
-               lastHistory.weight = copy.weight;
-           }
-           if (copy.orderTotal) {
-               lastHistory.orderTotal = copy.orderTotal;
-           }
-           if (copy.assignedPicker) {
-               lastHistory.assignedPicker = copy.assignedPicker;
-           }
-        }
-        return copy;
+        const fullMeta = {
+          id: String(d.id),
+          tenantId: String(d.tenantId || tenantId),
+          invoiceNumber: String(d.invoiceNumber || d.orderNumber || d.id || ""),
+          epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
+          customerName: String(d.customerName || d.customer || "N/A"),
+          deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
+          phone: String(d.phone || ""),
+          originBranch: String(d.originBranch || "prospaces-dc"),
+          weight: d.weight,
+          orderTotal: d.orderTotal,
+          destinationNotes: d.destinationNotes,
+          status: String(d.status || "REGISTERED"),
+          registeredAt: String(d.registeredAt || d.date || new Date().toISOString()),
+          pickedAt: d.pickedAt,
+          deliveredAt: d.deliveredAt,
+          returnedAt: d.returnedAt,
+          returnReason: d.returnReason,
+          assignedTruck: d.assignedTruck,
+          assignedDriver: d.assignedDriver,
+          assignedPicker: d.assignedPicker,
+          customerSignature: d.customerSignature,
+          deliveryPhoto: d.deliveryPhoto,
+          pdfUrl: d.pdfUrl,
+          documentType: d.documentType,
+          history: d.history || []
+        };
+
+        // Construct object using ONLY columns known to exist in Supabase 'deliveries' table, with _meta in items.
+        // Guarantee non-null string fallbacks for all NOT NULL table constraints.
+        return {
+          id: String(d.id),
+          tenantId: String(d.tenantId || tenantId),
+          orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
+          customer: String(d.customerName || d.customer || "N/A"),
+          destination: String(d.deliveryAddress || d.destination || "N/A"),
+          scheduled_date: String(d.registeredAt || d.date || new Date().toISOString()),
+          assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
+          assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
+          status: String(d.status || "REGISTERED"),
+          eta: String(d.eta || "N/A"),
+          pickup_location: String(d.originBranch || "prospaces-dc"),
+          items: [JSON.stringify({ _meta: fullMeta })]
+        };
       });
 
       // 1. Branches
@@ -2891,8 +2935,15 @@ app.use((req, res, next) => {
             lastErrMsg = errMsg;
             console.log(`[Deliveries Sync] Attempt ${attempts} failed with error:`, errMsg);
             
-            // Check for missing column error, e.g., 'column "pdfUrl" of relation "deliveries" does not exist' or error code "42703"
-            if (errMsg.includes("column") || errMsg.includes("42703") || dbErr.code === "42703" || dbErr.code === "PGRST204") {
+            // Check for missing column error, e.g., 'column "pdfUrl" of relation "deliveries" does not exist' or error code "42703".
+            // Do NOT strip columns on NOT NULL constraint violations (code 23502)
+            const isMissingColumnError = (
+              dbErr.code === "42703" || 
+              dbErr.code === "PGRST204" || 
+              (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+            ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+
+            if (isMissingColumnError) {
               const match = errMsg.match(/column "([^"]+)"|column ([^\s]+) of relation|'([^']+)' column/);
               let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
               
@@ -2933,14 +2984,16 @@ app.use((req, res, next) => {
         }
 
         // Delete any deliveries for this tenant that are NOT in sanitizedDeliveries
-        const deliveryIds = sanitizedDeliveries.map((d: any) => `"${String(d.id).replace(/"/g, '""')}"`);
-        const { error: deleteErr } = await supabase
-          .from("deliveries")
-          .delete()
-          .eq("tenantId", tenantId)
-          .not("id", "in", `(${deliveryIds.join(",")})`);
-        if (deleteErr) {
-          console.warn("Non-blocking deliveries sync deletion failed:", deleteErr.message);
+        const deliveryIds = sanitizedDeliveries.map((d: any) => String(d.id).trim()).filter(Boolean);
+        if (deliveryIds.length > 0) {
+          const { error: deleteErr } = await supabase
+            .from("deliveries")
+            .delete()
+            .eq("tenantId", tenantId)
+            .not("id", "in", `(${deliveryIds.join(",")})`);
+          if (deleteErr) {
+            console.warn("Non-blocking deliveries sync deletion failed:", deleteErr.message);
+          }
         }
       } else if (deliveries !== undefined) {
         await supabase.from("deliveries").delete().eq("tenantId", tenantId);
@@ -3687,7 +3740,21 @@ async function saveConnection(conn: any) {
   const supabase = getSupabase(null, true);
   if (supabase) {
     try {
-      const { error } = await supabase.from('api_connections').upsert([toSave]);
+      const dbConnRecord = {
+        id: toSave.id || "fc-connection-1",
+        provider_name: toSave.provider_name || "Fleet Complete",
+        connection_type: toSave.connection_type || "token",
+        api_url: toSave.api_url || "https://api.fleetcomplete.com/login/token",
+        api_key: toSave.api_key || "",
+        client_id: toSave.client_id || "",
+        client_secret: toSave.client_secret || "",
+        access_token: toSave.access_token || "",
+        refresh_token: toSave.refresh_token || "",
+        token_expires_at: toSave.token_expires_at || null,
+        is_active: toSave.is_active !== undefined ? toSave.is_active : true,
+        updated_at: toSave.updated_at || new Date().toISOString()
+      };
+      const { error } = await supabase.from('api_connections').upsert([dbConnRecord]);
       if (error) console.warn('[Fleet Complete Supabase] api_connections upsert notice:', error.message);
       else console.log('[Fleet Complete Supabase] Saved connection to api_connections table in Supabase.');
     } catch(e: any) {

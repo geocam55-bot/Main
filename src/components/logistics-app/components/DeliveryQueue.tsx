@@ -415,8 +415,10 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL');
   const [selectedDateFilter, setSelectedDateFilter] = useState(() => {
     const today = new Date();
-    const tzOffset = today.getTimezoneOffset() * 60000;
-    return new Date(Date.now() - tzOffset).toISOString().substring(0, 10);
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   });
   const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'ALL' | DeliveryStatus>('ALL');
@@ -786,10 +788,10 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
         if (matchesExplicitDate) {
           // Document directly matches the selected date
         } else {
-          // Roll over active/incomplete tickets registered on or before the selected date
+          // Keep active/incomplete tickets visible on the live logistics board
           const regDate = registeredDate || primaryDate;
-          if (regDate && regDate < selectedDateFilter) {
-            // Allow active ticket to roll over
+          if (!regDate || regDate <= selectedDateFilter || record.status === DeliveryStatus.REGISTERED || record.status === DeliveryStatus.PICKED) {
+            // Allow active/pending tickets to remain visible on the queue
           } else {
             return false;
           }
