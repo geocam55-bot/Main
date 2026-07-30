@@ -11,13 +11,55 @@ import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
 import './index.css';
 
+function syncLogisticsUserSession(userObj: any) {
+  if (!userObj) return;
+  try {
+    if (!localStorage.getItem('prospaces_active_tenant')) {
+      localStorage.setItem('prospaces_active_tenant', JSON.stringify({
+        id: userObj.organization_id || userObj.organizationId || 'prospaces',
+        name: 'ProSpaces Logistics',
+        code: 'PS',
+        description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+        logoBadge: '🏢',
+        regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+        primaryColor: 'blue'
+      }));
+    }
+    const currentActiveStr = localStorage.getItem('prospaces_active_user');
+    const currentActive = currentActiveStr ? JSON.parse(currentActiveStr) : null;
+
+    const email = userObj.email || "george.campbell@prospaces.com";
+    const name = userObj.full_name || userObj.name || (email ? email.split('@')[0] : "George Campbell");
+    const role = (userObj.role === 'admin' || userObj.role === 'Admin' || userObj.role === 'SUPER_ADMIN') ? "Admin" : (userObj.role || "Admin");
+    const id = userObj.id || "USR-57008";
+
+    if (!currentActive || currentActive.email !== email || currentActive.id !== id) {
+      localStorage.setItem('prospaces_active_user', JSON.stringify({
+        id,
+        name,
+        email,
+        role,
+        phone: userObj.phone || "(902) 555-0199",
+        status: "Active",
+        associatedStoreId: "DC-WINAMILL"
+      }));
+    }
+  } catch (e) {
+    console.error("Error syncing logistics user session:", e);
+  }
+}
+
 function LogisticsEntryApp() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(() => {
     try {
       const cached = localStorage.getItem('prospaces_cached_user');
-      return cached ? JSON.parse(cached) : null;
+      const parsed = cached ? JSON.parse(cached) : null;
+      if (parsed) {
+        syncLogisticsUserSession(parsed);
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -144,28 +186,7 @@ function LogisticsEntryApp() {
 
         setAccessDeniedMessage(null);
 
-        if (!localStorage.getItem('prospaces_active_tenant')) {
-          localStorage.setItem('prospaces_active_tenant', JSON.stringify({
-            id: 'prospaces',
-            name: 'ProSpaces Logistics',
-            code: 'PS',
-            description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
-            logoBadge: '🏢',
-            regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
-            primaryColor: 'blue'
-          }));
-        }
-        if (!localStorage.getItem('prospaces_active_user')) {
-          localStorage.setItem('prospaces_active_user', JSON.stringify({
-            id: profile.id || "USR-57008",
-            name: profile.name || "George Campbell",
-            email: profile.email || "george.campbell@prospaces.com",
-            role: "Admin",
-            phone: "(902) 555-0199",
-            status: "Active",
-            associatedStoreId: "DC-WINAMILL"
-          }));
-        }
+        syncLogisticsUserSession(profile);
 
         setUser({
           id: profile.id,

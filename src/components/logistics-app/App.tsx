@@ -168,13 +168,103 @@ export default function App() {
   });
 
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
-    const cached = localStorage.getItem('prospaces_active_tenant');
-    return cached ? JSON.parse(cached) : null;
+    try {
+      const cached = localStorage.getItem('prospaces_active_tenant');
+      if (cached) return JSON.parse(cached);
+      const crmUserStr = localStorage.getItem('prospaces_cached_user');
+      if (crmUserStr) {
+        const crmUser = JSON.parse(crmUserStr);
+        const defaultTenant: Tenant = {
+          id: crmUser?.organization_id || crmUser?.organizationId || 'prospaces',
+          name: 'ProSpaces Logistics',
+          code: 'PS',
+          description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+          logoBadge: '🏢',
+          regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+          primaryColor: 'blue'
+        };
+        localStorage.setItem('prospaces_active_tenant', JSON.stringify(defaultTenant));
+        return defaultTenant;
+      }
+    } catch (e) {}
+    return null;
   });
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const cached = localStorage.getItem('prospaces_active_user');
-    return cached ? JSON.parse(cached) : null;
+    try {
+      const cached = localStorage.getItem('prospaces_active_user');
+      if (cached) return JSON.parse(cached);
+      const crmUserStr = localStorage.getItem('prospaces_cached_user');
+      if (crmUserStr) {
+        const crmUser = JSON.parse(crmUserStr);
+        if (crmUser && (crmUser.email || crmUser.id)) {
+          const autoUser: User = {
+            id: crmUser.id || "USR-57008",
+            name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
+            email: crmUser.email || "george.campbell@prospaces.com",
+            role: (crmUser.role === 'admin' || crmUser.role === 'Admin' || crmUser.role === 'SUPER_ADMIN') ? "Admin" : (crmUser.role || "Admin"),
+            phone: crmUser.phone || "(902) 555-0199",
+            status: "Active",
+            associatedStoreId: "DC-WINAMILL"
+          };
+          localStorage.setItem('prospaces_active_user', JSON.stringify(autoUser));
+          return autoUser;
+        }
+      }
+    } catch (e) {}
+    return null;
   });
+
+  // Keep active user and tenant in sync with localStorage updates
+  useEffect(() => {
+    const syncUserAndTenant = () => {
+      try {
+        const activeUserStr = localStorage.getItem('prospaces_active_user');
+        const activeTenantStr = localStorage.getItem('prospaces_active_tenant');
+        const crmUserStr = localStorage.getItem('prospaces_cached_user');
+
+        if (activeUserStr && activeTenantStr) {
+          const u = JSON.parse(activeUserStr);
+          const t = JSON.parse(activeTenantStr);
+          if (u && (!currentUser || currentUser.email !== u.email || currentUser.id !== u.id)) {
+            setCurrentUser(u);
+          }
+          if (t && (!currentTenant || currentTenant.id !== t.id)) {
+            setCurrentTenant(t);
+          }
+        } else if (crmUserStr && (!currentUser || !currentTenant)) {
+          const crmUser = JSON.parse(crmUserStr);
+          if (crmUser && (crmUser.email || crmUser.id)) {
+            const autoUser: User = {
+              id: crmUser.id || "USR-57008",
+              name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
+              email: crmUser.email || "george.campbell@prospaces.com",
+              role: (crmUser.role === 'admin' || crmUser.role === 'Admin' || crmUser.role === 'SUPER_ADMIN') ? "Admin" : (crmUser.role || "Admin"),
+              phone: crmUser.phone || "(902) 555-0199",
+              status: "Active",
+              associatedStoreId: "DC-WINAMILL"
+            };
+            const autoTenant: Tenant = {
+              id: crmUser.organization_id || crmUser.organizationId || 'prospaces',
+              name: 'ProSpaces Logistics',
+              code: 'PS',
+              description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+              logoBadge: '🏢',
+              regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+              primaryColor: 'blue'
+            };
+            localStorage.setItem('prospaces_active_user', JSON.stringify(autoUser));
+            localStorage.setItem('prospaces_active_tenant', JSON.stringify(autoTenant));
+            setCurrentUser(autoUser);
+            setCurrentTenant(autoTenant);
+          }
+        }
+      } catch (e) {}
+    };
+
+    syncUserAndTenant();
+    window.addEventListener('storage', syncUserAndTenant);
+    return () => window.removeEventListener('storage', syncUserAndTenant);
+  }, [currentUser, currentTenant]);
 
   const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);

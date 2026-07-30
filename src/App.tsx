@@ -859,7 +859,36 @@ export function AppContent() {
           onSelectInventorySpace={() => { window.location.href = '/inventory.html'; }}
           onSelectITSpace={() => { window.location.href = '/it.html'; }}
           onSelectMessagingSpace={() => { setCurrentView('messages'); }}
-          onSelectLogisticsSpace={() => { window.location.href = '/logistics.html'; }}
+          onSelectLogisticsSpace={() => {
+            if (user) {
+              try {
+                localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
+                const activeTenant = {
+                  id: user.organization_id || 'prospaces',
+                  name: 'ProSpaces Logistics',
+                  code: 'PS',
+                  description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+                  logoBadge: '🏢',
+                  regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+                  primaryColor: 'blue'
+                };
+                const activeUser = {
+                  id: user.id || "USR-57008",
+                  name: user.full_name || user.name || (user.email ? user.email.split('@')[0] : "George Campbell"),
+                  email: user.email || "george.campbell@prospaces.com",
+                  role: (user.role === 'admin' || user.role === 'Admin' || user.role === 'SUPER_ADMIN') ? "Admin" : (user.role || "Admin"),
+                  phone: user.phone || "(902) 555-0199",
+                  status: "Active",
+                  associatedStoreId: "DC-WINAMILL"
+                };
+                localStorage.setItem('prospaces_active_tenant', JSON.stringify(activeTenant));
+                localStorage.setItem('prospaces_active_user', JSON.stringify(activeUser));
+              } catch (e) {
+                console.error('Failed setting logistics user in localStorage:', e);
+              }
+            }
+            window.location.href = '/logistics.html';
+          }}
           onBack={async () => {
             await handleLogout();
           }}
