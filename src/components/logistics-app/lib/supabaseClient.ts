@@ -414,7 +414,8 @@ export async function fetchTenantsDirect(): Promise<any[]> {
 export async function saveTenantDirect(tenant: any): Promise<void> {
   const supabase = getFrontendSupabase();
   if (!supabase) return;
-  const { error } = await supabase.from("tenants").upsert(tenant);
+  const payload = tenant?.tenant || tenant;
+  const { error } = await supabase.from("tenants").upsert(payload);
   if (error) throw error;
 }
 

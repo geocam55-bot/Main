@@ -4142,7 +4142,7 @@ async function getFleetId(token: string): Promise<string | null> {
   app.get("/api/tenants", async (req, res) => {
     const fallbackTenants: any[] = [];
     try {
-      const supabase = getSupabase(req);
+      const supabase = getSupabase(req, true);
       if (!supabase) return res.json({ supabaseActive: false, tenants: fallbackTenants });
       const { data, error } = await supabase.from("tenants").select("*");
       if (error) throw error;
@@ -4154,11 +4154,31 @@ async function getFleetId(token: string): Promise<string | null> {
 
   app.post("/api/tenants", async (req, res) => {
     try {
-      const supabase = getSupabase(req);
+      const supabase = getSupabase(req, true);
       if (!supabase) return res.json({ supabaseActive: false, success: true, message: "Saved in memory" });
-      const { data, error } = await supabase.from("tenants").upsert([req.body]).select();
+      const tenantData = req.body?.tenant || req.body;
+      if (!tenantData || !tenantData.id) {
+        return res.status(400).json({ success: false, error: "Missing required tenant id field" });
+      }
+      const { data, error } = await supabase.from("tenants").upsert([tenantData]).select();
       if (error) throw error;
       res.json({ success: true, tenant: data[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/tenants/:id", async (req, res) => {
+    try {
+      const supabase = getSupabase(req, true);
+      if (!supabase) return res.json({ supabaseActive: false, success: true, message: "Deleted in memory" });
+      const tenantId = req.params.id;
+      if (!tenantId) {
+        return res.status(400).json({ success: false, error: "Missing tenant ID parameter" });
+      }
+      const { error } = await supabase.from("tenants").delete().eq("id", tenantId);
+      if (error) throw error;
+      res.json({ success: true, deletedId: tenantId });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
