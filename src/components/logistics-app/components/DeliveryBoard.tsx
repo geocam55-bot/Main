@@ -149,6 +149,13 @@ export function DeliveryBoard({
   const [showFreightPool, setShowFreightPool] = useState<boolean>(false);
   const [showScheduleModal, setShowScheduleModal] = useState<{ freight: DeliveryRecord; date: string; slot: 'AM' | 'PM' } | null>(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState<boolean>(false);
+  const [selectedTruckSummary, setSelectedTruckSummary] = useState<{
+    truckName: string;
+    driverName: string;
+    slot: 'AM' | 'PM';
+    dateStr: string;
+    deliveries: DeliveryRecord[];
+  } | null>(null);
 
   // Form states for Admin Config Modal
   const [configBranchTarget, setConfigBranchTarget] = useState<string>('ALL');
@@ -796,7 +803,7 @@ export function DeliveryBoard({
 
                 // Group deliveries by actual Truck Designation Name and Assigned Logistics Driver
                 const groupDeliveriesByTruck = (dels: DeliveryRecord[]) => {
-                  const map: Record<string, { truckName: string; driverName: string; stops: number }> = {};
+                  const map: Record<string, { truckName: string; driverName: string; stops: number; deliveries: DeliveryRecord[] }> = {};
                   
                   if (dels.length === 0) return [];
 
@@ -818,9 +825,10 @@ export function DeliveryBoard({
                     const truckKey = matchedTruck?.id || d.assignedTruck || truckName;
 
                     if (!map[truckKey]) {
-                      map[truckKey] = { truckName, driverName, stops: 0 };
+                      map[truckKey] = { truckName, driverName, stops: 0, deliveries: [] };
                     }
                     map[truckKey].stops += 1;
+                    map[truckKey].deliveries.push(d);
                   });
 
                   return Object.values(map);
@@ -883,18 +891,31 @@ export function DeliveryBoard({
                           amTrucks.map((t, idx) => (
                             <div
                               key={idx}
-                              className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-2xs hover:border-slate-300 transition-all"
+                              onClick={() => setSelectedTruckSummary({
+                                truckName: t.truckName,
+                                driverName: t.driverName,
+                                slot: 'AM',
+                                dateStr,
+                                deliveries: t.deliveries
+                              })}
+                              className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-2xs hover:border-blue-400 hover:shadow-md hover:bg-slate-50/80 transition-all cursor-pointer group"
                             >
                               <div className="flex items-center space-x-3">
-                                <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                                <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                                   <TruckIcon className="h-4 w-4" />
                                 </div>
                                 <div>
-                                  <div className="text-xs font-bold text-slate-900">{t.truckName}</div>
+                                  <div className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center space-x-1.5">
+                                    <span>{t.truckName}</span>
+                                    <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.2 rounded group-hover:bg-blue-100 group-hover:text-blue-800">Orders Summary</span>
+                                  </div>
                                   <div className="text-[11px] text-slate-500">{t.driverName}</div>
                                 </div>
                               </div>
-                              <span className="text-xs font-bold text-slate-600">{t.stops} {t.stops === 1 ? 'stop' : 'stops'}</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-700">{t.stops} {t.stops === 1 ? 'stop' : 'stops'}</span>
+                                <ChevronRightIcon className="h-4 w-4 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                              </div>
                             </div>
                           ))
                         )}
@@ -973,18 +994,31 @@ export function DeliveryBoard({
                           pmTrucks.map((t, idx) => (
                             <div
                               key={idx}
-                              className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-2xs hover:border-slate-300 transition-all"
+                              onClick={() => setSelectedTruckSummary({
+                                truckName: t.truckName,
+                                driverName: t.driverName,
+                                slot: 'PM',
+                                dateStr,
+                                deliveries: t.deliveries
+                              })}
+                              className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-2xs hover:border-blue-400 hover:shadow-md hover:bg-slate-50/80 transition-all cursor-pointer group"
                             >
                               <div className="flex items-center space-x-3">
-                                <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                                <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                                   <TruckIcon className="h-4 w-4" />
                                 </div>
                                 <div>
-                                  <div className="text-xs font-bold text-slate-900">{t.truckName}</div>
+                                  <div className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center space-x-1.5">
+                                    <span>{t.truckName}</span>
+                                    <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.2 rounded group-hover:bg-blue-100 group-hover:text-blue-800">Orders Summary</span>
+                                  </div>
                                   <div className="text-[11px] text-slate-500">{t.driverName}</div>
                                 </div>
                               </div>
-                              <span className="text-xs font-bold text-slate-600">{t.stops} {t.stops === 1 ? 'stop' : 'stops'}</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-700">{t.stops} {t.stops === 1 ? 'stop' : 'stops'}</span>
+                                <ChevronRightIcon className="h-4 w-4 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                              </div>
                             </div>
                           ))
                         )}
@@ -1376,6 +1410,167 @@ export function DeliveryBoard({
                 className="px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg"
               >
                 Confirm Scheduling
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TRUCK ORDERS SUMMARY MODAL */}
+      {selectedTruckSummary && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300">
+                  <TruckIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-sm font-extrabold text-white">{selectedTruckSummary.truckName} Manifest Summary</h3>
+                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                      {selectedTruckSummary.slot} Block
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 font-medium flex items-center space-x-2 mt-0.5">
+                    <span>👤 Driver: <strong className="text-white">{selectedTruckSummary.driverName}</strong></span>
+                    <span>•</span>
+                    <span>📅 {selectedTruckSummary.dateStr}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTruckSummary(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Summary KPI Strip */}
+            <div className="bg-slate-50 border-b border-slate-200 p-3 grid grid-cols-3 gap-3 shrink-0">
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Orders / Stops</span>
+                <span className="text-base font-black text-slate-900">{selectedTruckSummary.deliveries.length}</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Category Mix</span>
+                <span className="text-xs font-bold text-slate-700">
+                  {selectedTruckSummary.deliveries.filter(d => d.deliveryCategory === 'Retail').length} Retail / {selectedTruckSummary.deliveries.filter(d => d.deliveryCategory === 'Pro').length} Pro
+                </span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Est. Total Weight</span>
+                <span className="text-xs font-bold text-slate-700">
+                  {selectedTruckSummary.deliveries.reduce((sum, d) => sum + (parseFloat((d.weight || '').replace(/[^0-9.]/g, '')) || 0), 0) > 0
+                    ? `${selectedTruckSummary.deliveries.reduce((sum, d) => sum + (parseFloat((d.weight || '').replace(/[^0-9.]/g, '')) || 0), 0).toLocaleString()} lbs`
+                    : 'N/A'}
+                </span>
+              </div>
+            </div>
+
+            {/* Orders List */}
+            <div className="p-4 overflow-y-auto space-y-3 flex-1">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                  Assigned Orders ({selectedTruckSummary.deliveries.length})
+                </h4>
+              </div>
+
+              {selectedTruckSummary.deliveries.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs font-medium">
+                  No orders assigned to this truck for {selectedTruckSummary.slot} block.
+                </div>
+              ) : (
+                selectedTruckSummary.deliveries.map((ord, idx) => (
+                  <div
+                    key={ord.id || idx}
+                    className="bg-white border border-slate-200 hover:border-blue-300 rounded-xl p-3.5 shadow-2xs transition-all space-y-2.5"
+                  >
+                    {/* Order Top Bar */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md font-mono border border-slate-200">
+                          Order #{ord.epicorSalesOrder || ord.invoiceNumber || ord.id}
+                        </span>
+                        {ord.deliveryCategory && (
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${
+                            ord.deliveryCategory === 'Pro'
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              : ord.deliveryCategory === 'Transfer'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {ord.deliveryCategory}
+                          </span>
+                        )}
+                      </div>
+
+                      <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                        ord.status === DeliveryStatus.DELIVERED
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : ord.status === DeliveryStatus.PICKED_AND_LOADED
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-slate-100 text-slate-700 border-slate-200'
+                      }`}>
+                        {ord.status.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+
+                    {/* Customer & Address Info */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Ship To / Customer</span>
+                        <span className="font-extrabold text-slate-800">{ord.customerName}</span>
+                        {ord.phone && <span className="text-[11px] text-slate-500 block">📞 {ord.phone}</span>}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Ship To Address</span>
+                        <span className="font-semibold text-slate-700 line-clamp-2">{ord.deliveryAddress}</span>
+                      </div>
+                    </div>
+
+                    {/* Order Meta details (Origin, Weight, Total, Notes) */}
+                    <div className="bg-slate-50/80 rounded-lg p-2 text-[11px] grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-600 border border-slate-100">
+                      <div>
+                        <span className="text-slate-400 block text-[9px] font-bold uppercase">Origin</span>
+                        <span className="font-bold text-slate-700">{ord.originBranch || 'Main DC'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[9px] font-bold uppercase">Weight</span>
+                        <span className="font-bold text-slate-700">{ord.weight || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[9px] font-bold uppercase">Order Total</span>
+                        <span className="font-bold text-slate-700">{ord.orderTotal || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[9px] font-bold uppercase">Slot / Window</span>
+                        <span className="font-bold text-slate-700">{ord.scheduledSlot || selectedTruckSummary.slot} Block</span>
+                      </div>
+                    </div>
+
+                    {ord.destinationNotes && (
+                      <div className="text-[11px] bg-amber-50/60 text-amber-900 border border-amber-200/60 rounded-lg px-2.5 py-1.5 font-medium">
+                        📝 <strong className="font-bold">Notes:</strong> {ord.destinationNotes}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <span className="text-xs text-slate-500 font-medium">
+                {selectedTruckSummary.deliveries.length} total stops on {selectedTruckSummary.truckName}
+              </span>
+              <button
+                onClick={() => setSelectedTruckSummary(null)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
+              >
+                Close Summary
               </button>
             </div>
           </div>
