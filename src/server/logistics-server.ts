@@ -3415,10 +3415,198 @@ Output schema keys:
       }
 
       const parsedJson = JSON.parse(rawText.trim());
-      res.json(parsedJson);
+      
+      // Persist actual scan image to server folder
+      const savedImage = saveBase64ScanImage(fileData, "scan_photo", {
+        barcodeText: parsedJson?.barcodeText || null,
+        source: 'ai_vision_scan'
+      });
+
+      res.json({
+        ...parsedJson,
+        savedImage,
+        fileUrl: savedImage?.fileUrl
+      });
     } catch (err: any) {
       console.error("Gemini Scan Photo Error:", err);
       res.status(500).json({ error: err.message || "An exception occurred during server-side Gemini scanner execution." });
+    }
+  });
+
+  // Helper to persist base64 scan images directly to server /uploads/scans directory
+  function saveBase64ScanImage(fileData: string, prefix = "scan", metadata: any = {}) {
+    try {
+      if (!fileData) return null;
+      const parts = fileData.match(/^data:(.*);base64,(.*)$/);
+      let mimeType = "image/jpeg";
+      let base64Data = fileData;
+      
+      if (parts) {
+        mimeType = parts[1];
+        base64Data = parts[2];
+      } else if (fileData.startsWith("data:")) {
+        base64Data = fileData.split(",")[1] || fileData;
+      }
+
+      let ext = "jpg";
+      if (mimeType.includes("png")) ext = "png";
+      else if (mimeType.includes("webp")) ext = "webp";
+      else if (mimeType.includes("pdf")) ext = "pdf";
+
+      const scansDir = path.join(process.cwd(), "uploads", "scans");
+      if (!fs.existsSync(scansDir)) {
+        fs.mkdirSync(scansDir, { recursive: true });
+      }
+
+      const timestampIso = new Date().toISOString();
+      const timestampClean = timestampIso.replace(/[:.]/g, "-");
+      const randomSuffix = Math.random().toString(36).substring(2, 7);
+      const filename = `${prefix}_${timestampClean}_${randomSuffix}.${ext}`;
+      const filePath = path.join(scansDir, filename);
+
+      const buffer = Buffer.from(base64Data, "base64");
+      fs.writeFileSync(filePath, buffer);
+
+      const fileUrl = `/uploads/scans/${filename}`;
+
+      const indexFilePath = path.join(scansDir, "scans_index.json");
+      let indexLog: any[] = [];
+      if (fs.existsSync(indexFilePath)) {
+        try {
+          indexLog = JSON.parse(fs.readFileSync(indexFilePath, "utf-8"));
+        } catch (e) {
+          indexLog = [];
+        }
+      }
+
+      const entry = {
+        id: `scan-${Date.now()}-${randomSuffix}`,
+        filename,
+        fileUrl,
+        sizeBytes: buffer.length,
+        mimeType,
+        timestamp: timestampIso,
+        barcodeText: metadata.barcodeText || null,
+        source: metadata.source || 'camera_or_upload',
+        tenantId: metadata.tenantId || 'prospaces',
+        orderId: metadata.orderId || null,
+        driverName: metadata.driverName || null,
+        notes: metadata.notes || null
+      };
+
+      indexLog.unshift(entry);
+      if (indexLog.length > 500) indexLog = indexLog.slice(0, 500);
+
+      fs.writeFileSync(indexFilePath, JSON.stringify(indexLog, null, 2));
+
+      console.log(`[Scan Image Storage] Saved physical scan image to disk: ${filePath} (${buffer.length} bytes)`);
+
+      return entry;
+    } catch (err) {
+      console.error("[Scan Image Storage] Error saving scan image to server folder:", err);
+      return null;
+    }
+  }
+
+  // API Route for explicitly saving scan images / delivery proof photos to server folder
+  app.post("/api/save-scan-image", async (req, res) => {
+    try {
+      const { fileData, barcodeText, source, orderId, driverName, tenantId, notes, prefix } = req.body || {};
+      if (!fileData) {
+        return res.status(400).json({ error: "No image file data provided." });
+      }
+
+      const savedRecord = saveBase64ScanImage(fileData, prefix || "scan", {
+        barcodeText,
+        source,
+        orderId,
+        driverName,
+        tenantId,
+        notes
+      });
+
+      if (!savedRecord) {
+        return res.status(500).json({ error: "Failed to save scan image to server uploads folder." });
+      }
+
+      return res.json({
+        success: true,
+        message: `Scan image successfully saved to server folder /uploads/scans/${savedRecord.filename}`,
+        savedImage: savedRecord,
+        fileUrl: savedRecord.fileUrl
+      });
+    } catch (err: any) {
+      console.error("Save scan image endpoint error:", err);
+      return res.status(500).json({ error: err.message || "Server exception during scan image saving." });
+    }
+  });
+
+  // API Route for retrieving all server-saved scan images
+  app.get("/api/scanned-images", async (req, res) => {
+    try {
+      const scansDir = path.join(process.cwd(), "uploads", "scans");
+      const indexFilePath = path.join(scansDir, "scans_index.json");
+      
+      let scans: any[] = [];
+      if (fs.existsSync(indexFilePath)) {
+        try {
+          scans = JSON.parse(fs.readFileSync(indexFilePath, "utf-8"));
+        } catch (e) {
+          scans = [];
+        }
+      }
+
+      // Fallback: list files in uploads/scans directory if index is empty
+      if (scans.length === 0 && fs.existsSync(scansDir)) {
+        const files = fs.readdirSync(scansDir).filter(f => !f.endsWith('.json'));
+        scans = files.map(filename => {
+          const stats = fs.statSync(path.join(scansDir, filename));
+          return {
+            id: filename,
+            filename,
+            fileUrl: `/uploads/scans/${filename}`,
+            sizeBytes: stats.size,
+            timestamp: stats.mtime.toISOString(),
+            source: 'server_disk'
+          };
+        }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      }
+
+      res.json({
+        success: true,
+        count: scans.length,
+        scansDir: "/uploads/scans",
+        scans
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to retrieve scanned images." });
+    }
+  });
+
+  // API Route for deleting a server-saved scan image
+  app.delete("/api/scanned-images/:filename", async (req, res) => {
+    try {
+      const { filename } = req.params;
+      const safeName = path.basename(filename);
+      const scansDir = path.join(process.cwd(), "uploads", "scans");
+      const filePath = path.join(scansDir, safeName);
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      const indexFilePath = path.join(scansDir, "scans_index.json");
+      if (fs.existsSync(indexFilePath)) {
+        try {
+          let indexLog = JSON.parse(fs.readFileSync(indexFilePath, "utf-8"));
+          indexLog = indexLog.filter((item: any) => item.filename !== safeName);
+          fs.writeFileSync(indexFilePath, JSON.stringify(indexLog, null, 2));
+        } catch (e) {}
+      }
+
+      res.json({ success: true, message: `Scan image ${safeName} deleted from server.` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to delete scan image." });
     }
   });
 
@@ -3502,7 +3690,18 @@ Return the structured results in the required JSON format.`;
       }
 
       const parsedJson = JSON.parse(rawText.trim());
-      res.json({ success: true, data: parsedJson });
+
+      // Save document OCR scan image to server folder
+      const savedImage = saveBase64ScanImage(fileData, "ocr_doc", {
+        docType: docType || 'document'
+      });
+
+      res.json({
+        success: true,
+        data: parsedJson,
+        savedImage,
+        fileUrl: savedImage?.fileUrl
+      });
     } catch (err: any) {
       console.error("OCR Extraction Error:", err);
       res.status(500).json({ error: err.message || "An exception occurred during real-time document parsing." });

@@ -25,7 +25,11 @@ import {
   AlertCircle, 
   RefreshCw,
   CheckCircle2,
-  ListFilter
+  ListFilter,
+  Folder,
+  Download,
+  ExternalLink,
+  Image
 } from 'lucide-react';
 
 interface ScanStationProps {
@@ -136,6 +140,60 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
   const [isScanningFrame, setIsScanningFrame] = useState(false);
   const [isBgScanning, setIsBgScanning] = useState(false);
   const [fullFrameMode, setFullFrameMode] = useState(true);
+
+  // Server Scan Storage Directory States & Handlers (/uploads/scans/)
+  const [savedScans, setSavedScans] = useState<any[]>([]);
+  const [showScansGallery, setShowScansGallery] = useState(false);
+  const [loadingScansGallery, setLoadingScansGallery] = useState(false);
+
+  const saveScanImageToServer = async (fileData: string, barcodeText?: string, source = 'camera_snap', orderId?: string) => {
+    try {
+      if (!fileData) return;
+      await fetch("/api/save-scan-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileData,
+          barcodeText: barcodeText || null,
+          source,
+          orderId: orderId || scannedRecord?.id || null,
+          driverName: users.find(u => u.role === 'DRIVER')?.name || 'Scan Station Operator'
+        })
+      });
+    } catch (err) {
+      console.warn("Server scan image save error:", err);
+    }
+  };
+
+  const fetchSavedScanImages = async () => {
+    setLoadingScansGallery(true);
+    try {
+      const res = await fetch("/api/scanned-images");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.scans)) {
+          setSavedScans(data.scans);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch saved scan images:", e);
+    } finally {
+      setLoadingScansGallery(false);
+    }
+  };
+
+  const deleteSavedScanImage = async (filename: string) => {
+    try {
+      const res = await fetch(`/api/scanned-images/${encodeURIComponent(filename)}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        setSavedScans(prev => prev.filter(s => s.filename !== filename));
+      }
+    } catch (e) {
+      console.warn("Failed to delete scan image:", e);
+    }
+  };
 
   const zxingCodeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
@@ -373,6 +431,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
 
       const clientSideBarcode = await scanBarcodeFromDataUrl(fileData);
       if (clientSideBarcode) {
+        saveScanImageToServer(fileData, clientSideBarcode, 'camera_snap');
         handleScanAction(clientSideBarcode);
         setScanMessage(`📋 Decoded Barcode (Local Decoder): ${clientSideBarcode}`);
         stopCamera();
@@ -445,6 +504,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
 
       const clientSideBarcode = await scanBarcodeFromDataUrl(fileData);
       if (clientSideBarcode) {
+        saveScanImageToServer(fileData, clientSideBarcode, 'camera_auto_bg');
         handleScanAction(clientSideBarcode);
         setScanMessage(`📋 Auto-Decoded (Local): ${clientSideBarcode}`);
         stopCamera();
@@ -547,6 +607,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
       setScanMessage("Decoding photograph using local browser engines...");
       const clientSideBarcode = await scanBarcodeFromDataUrl(fileData);
       if (clientSideBarcode) {
+        saveScanImageToServer(fileData, clientSideBarcode, 'file_upload');
         handleScanAction(clientSideBarcode);
         setScanMessage(`📋 Decoded Barcode (Local Engine): ${clientSideBarcode}`);
         setTimeout(() => setScanMessage(''), 4500);
@@ -977,18 +1038,32 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 self-start sm:self-center">
-          {deviceMode === 'mobile' ? (
-            <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
-              <Smartphone className="h-4 w-4" />
-              <span>Mobile Handheld View</span>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
-              <Laptop className="h-4 w-4" />
-              <span>Desktop Terminal View</span>
-            </div>
-          )}
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+          <button
+            type="button"
+            onClick={() => {
+              fetchSavedScanImages();
+              setShowScansGallery(true);
+            }}
+            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl border border-emerald-500/50 text-xs font-bold cursor-pointer transition-all shadow-sm"
+          >
+            <Folder className="h-4 w-4" />
+            <span>Saved Server Scans (/uploads/scans)</span>
+          </button>
+
+          <div className="flex items-center space-x-2 bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800">
+            {deviceMode === 'mobile' ? (
+              <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
+                <Smartphone className="h-4 w-4" />
+                <span>Mobile Handheld View</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
+                <Laptop className="h-4 w-4" />
+                <span>Desktop Terminal View</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2184,10 +2259,13 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
                               const base64 = reader.result as string;
                               try {
                                 const compressed = await compressImage(base64, 800, 800);
-                                setDeliveryPhoto(compressed);
+                                const photoToUse = compressed || base64;
+                                setDeliveryPhoto(photoToUse);
+                                saveScanImageToServer(photoToUse, undefined, 'delivery_pod_photo', scannedRecord?.id);
                               } catch (err) {
                                 console.warn("Failed to compress driver photo, using original:", err);
                                 setDeliveryPhoto(base64);
+                                saveScanImageToServer(base64, undefined, 'delivery_pod_photo', scannedRecord?.id);
                               }
                             };
                             reader.readAsDataURL(file);
@@ -2255,6 +2333,159 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
             <div className="w-32 h-1 bg-slate-400 rounded-full" />
           </div>
 
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 📁 SERVER SAVED SCAN IMAGES GALLERY MODAL (/uploads/scans) */}
+      {/* ========================================================================= */}
+      {showScansGallery && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="bg-slate-900 px-6 py-4 border-b border-slate-800 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+                  <Folder className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white">Server Scan Storage Directory</h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Target Folder: <span className="text-emerald-400 font-bold">/uploads/scans/</span> ({savedScans.length} files stored on server disk)
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={fetchSavedScanImages}
+                  disabled={loadingScansGallery}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center space-x-1"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingScansGallery ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowScansGallery(false)}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50 space-y-4">
+              {loadingScansGallery ? (
+                <div className="py-16 text-center space-y-3">
+                  <div className="w-10 h-10 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mx-auto" />
+                  <p className="text-xs text-slate-500 font-mono font-bold">Loading saved scan records from server disk...</p>
+                </div>
+              ) : savedScans.length === 0 ? (
+                <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center space-y-3">
+                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
+                    <Image className="h-6 w-6" />
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-sm">No Scan Images Found in /uploads/scans/</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    Scan images captured via smartphone camera, uploaded photos, or OCR documents will automatically be saved to the server folder and indexed here.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {savedScans.map((scan) => (
+                    <div key={scan.id || scan.filename} className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm space-y-3 flex flex-col justify-between hover:border-slate-300 transition-all">
+                      
+                      {/* Image Thumbnail Container */}
+                      <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden group border border-slate-200">
+                        <img 
+                          src={scan.fileUrl} 
+                          alt={scan.filename}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded text-[9px] font-mono font-bold text-emerald-400 border border-emerald-500/30">
+                          {scan.source || 'scan'}
+                        </div>
+                        {scan.sizeBytes && (
+                          <div className="absolute bottom-2 right-2 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded text-[9px] font-mono text-slate-300">
+                            {(scan.sizeBytes / 1024).toFixed(1)} KB
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Details */}
+                      <div className="space-y-1.5 text-left text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-slate-900 truncate text-[11px]" title={scan.filename}>
+                            {scan.filename}
+                          </span>
+                        </div>
+
+                        {scan.barcodeText && (
+                          <div className="bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg text-[10px] font-mono text-emerald-800 font-bold flex items-center justify-between">
+                            <span>Decoded Barcode:</span>
+                            <span>{scan.barcodeText}</span>
+                          </div>
+                        )}
+
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          Saved: {new Date(scan.timestamp).toLocaleString()}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <a 
+                          href={scan.fileUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[10px] uppercase font-mono flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          <span>View Image</span>
+                        </a>
+
+                        <a 
+                          href={scan.fileUrl} 
+                          download={scan.filename}
+                          className="py-1.5 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-[10px] uppercase font-mono flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                        >
+                          <Download className="h-3 w-3" />
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => deleteSavedScanImage(scan.filename)}
+                          className="py-1.5 px-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-lg text-[10px] transition-colors cursor-pointer"
+                          title="Delete file from server folder"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 text-right">
+              <button
+                type="button"
+                onClick={() => setShowScansGallery(false)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Close Gallery
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
 
