@@ -1535,6 +1535,45 @@ export default function App() {
     }
   };
 
+  const handleUpdateClosureRules = async (rules: SlotClosureRule[]) => {
+    if (!currentTenant) return;
+    let updatedBranches = [...branches];
+    if (updatedBranches.length === 0) {
+      updatedBranches = [{ id: 'ALL', name: 'All Stores', type: 'STORE', address: 'Main Center', closureRules: rules }];
+    } else {
+      updatedBranches = updatedBranches.map((b, idx) => idx === 0 ? { ...b, closureRules: rules } : b);
+    }
+    setBranches(updatedBranches);
+    try {
+      localStorage.setItem(`prospaces_closure_rules_${currentTenant.id}`, JSON.stringify(rules));
+    } catch (e) {}
+    await syncStateToSupabase(currentTenant.id, deliveries, trucks, updatedBranches, users);
+  };
+
+  const handleUpdateStoreConfigs = async (configs: Record<string, StoreDeliveryConfig>) => {
+    if (!currentTenant) return;
+    let updatedBranches = branches.map(b => {
+      const configForBranch = configs[b.id] || configs['ALL'];
+      if (configForBranch) {
+        return {
+          ...b,
+          deliveryBoardConfig: configForBranch,
+          deliveryDays: configForBranch.deliveryDays
+        };
+      }
+      return b;
+    });
+    if (updatedBranches.length === 0) {
+      const defaultConfig = configs['ALL'] || { branchId: 'ALL', deliveryDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], amTimeRange: '07:00 AM - 12:00 PM', pmTimeRange: '12:00 PM - 05:00 PM', amMaxCap: 6, pmMaxCap: 6, cutoffTime: '16:00', allowOverbooking: false };
+      updatedBranches = [{ id: 'ALL', name: 'All Stores', type: 'STORE', address: 'Main Center', deliveryBoardConfig: defaultConfig, deliveryDays: defaultConfig.deliveryDays }];
+    }
+    setBranches(updatedBranches);
+    try {
+      localStorage.setItem(`prospaces_store_configs_${currentTenant.id}`, JSON.stringify(configs));
+    } catch (e) {}
+    await syncStateToSupabase(currentTenant.id, deliveries, trucks, updatedBranches, users);
+  };
+
   // User handlers
   const handleAddUser = async (newUser: User) => {
     if (!currentTenant) return;
@@ -2607,6 +2646,8 @@ export default function App() {
               currentTenant={currentTenant}
               onUpdateDelivery={handleAddOrUpdateDelivery}
               onAddDelivery={handleAddOrUpdateDelivery}
+              onUpdateClosureRules={handleUpdateClosureRules}
+              onUpdateStoreConfigs={handleUpdateStoreConfigs}
             />
           )}
           {activeTab === 'stores' && (

@@ -43,6 +43,9 @@ interface DeliveryBoardProps {
   currentTenant: any;
   onUpdateDelivery: (delivery: DeliveryRecord) => void;
   onAddDelivery?: (delivery: Partial<DeliveryRecord>) => void;
+  onUpdateClosureRules?: (rules: SlotClosureRule[]) => void;
+  onUpdateStoreConfigs?: (configs: Record<string, StoreDeliveryConfig>) => void;
+  initialClosureRules?: SlotClosureRule[];
 }
 
 const DEFAULT_DAYS: ('Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun')[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -66,7 +69,10 @@ export function DeliveryBoard({
   currentUser,
   currentTenant,
   onUpdateDelivery,
-  onAddDelivery
+  onAddDelivery,
+  onUpdateClosureRules,
+  onUpdateStoreConfigs,
+  initialClosureRules
 }: DeliveryBoardProps) {
   // Role checks
   const isDispatcherOrAdmin = ['Dispatcher', 'Admin', 'SUPER_ADMIN'].includes(currentUser?.role || '');
@@ -92,6 +98,7 @@ export function DeliveryBoard({
 
   // Slot closure rules state
   const [closureRules, setClosureRules] = useState<SlotClosureRule[]>(() => {
+    if (initialClosureRules && initialClosureRules.length > 0) return initialClosureRules;
     try {
       const saved = localStorage.getItem('prospaces_delivery_board_closures');
       return saved ? JSON.parse(saved) : [
@@ -100,8 +107,8 @@ export function DeliveryBoard({
           branchId: 'ALL',
           date: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
           slot: 'PM',
-          closureType: 'CLOSED_ALL',
-          reason: 'Slot Closed by Dispatcher',
+          closureType: 'CLOSED_RETAIL',
+          reason: 'Restricted for Pro Construction Orders',
           closedBy: 'Dispatcher Center'
         }
       ];
@@ -109,6 +116,32 @@ export function DeliveryBoard({
       return [];
     }
   });
+
+  // Sync branches metadata into state if loaded from Supabase
+  useEffect(() => {
+    let rulesUpdated = false;
+    let configsUpdated = false;
+    const mergedRules = [...closureRules];
+    const mergedConfigs = { ...storeConfigs };
+
+    (branches || []).forEach(b => {
+      if (b.closureRules && Array.isArray(b.closureRules)) {
+        b.closureRules.forEach((r: SlotClosureRule) => {
+          if (!mergedRules.some(existing => existing.id === r.id || (existing.date === r.date && existing.slot === r.slot && existing.branchId === r.branchId))) {
+            mergedRules.push(r);
+            rulesUpdated = true;
+          }
+        });
+      }
+      if (b.deliveryBoardConfig) {
+        mergedConfigs[b.id] = b.deliveryBoardConfig;
+        configsUpdated = true;
+      }
+    });
+
+    if (rulesUpdated) setClosureRules(mergedRules);
+    if (configsUpdated) setStoreConfigs(mergedConfigs);
+  }, [branches]);
 
   // Active Modals & Sidebars
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
@@ -129,10 +162,45 @@ export function DeliveryBoard({
   const [closureTypeForm, setClosureTypeForm] = useState<ClosureType>('CLOSED_ALL');
   const [closureReasonForm, setClosureReasonForm] = useState<string>('');
 
+  // Pre-populate Closure Modal form when opened
+  useEffect(() => {
+    if (showClosureModal) {
+      const { date, slot } = showClosureModal;
+      const targetSlot = slot === 'ALL_DAY' ? 'AM' : slot;
+      const existing = closureRules.find(r =>
+        (r.branchId === 'ALL' || r.branchId === selectedBranchId) &&
+        r.date === date &&
+        (r.slot === 'ALL_DAY' || r.slot === targetSlot) &&
+        r.closureType !== 'NONE'
+      );
+      if (existing) {
+        setClosureTypeForm(existing.closureType);
+        setClosureReasonForm(existing.reason || '');
+      } else {
+        setClosureTypeForm('CLOSED_ALL');
+        setClosureReasonForm('');
+      }
+    }
+  }, [showClosureModal, selectedBranchId, closureRules]);
+
   // Form states for Scheduling Freight onto Board
   const [schedCategoryForm, setSchedCategoryForm] = useState<'Retail' | 'Pro' | 'Transfer'>('Retail');
   const [schedTruckForm, setSchedTruckForm] = useState<string>('');
   const [schedDriverForm, setSchedDriverForm] = useState<string>('');
+
+  // Sync form state when schedule modal opens
+  useEffect(() => {
+    if (showScheduleModal?.freight) {
+      const f = showScheduleModal.freight;
+      setSchedCategoryForm(f.deliveryCategory || 'Retail');
+      const matchedTruck = trucks.find(t => t.id === f.assignedTruck || t.name === f.assignedTruck || t.truckNumber === f.assignedTruck) || trucks[0];
+      const initialTruck = f.assignedTruck || matchedTruck?.name || matchedTruck?.id || '';
+      setSchedTruckForm(initialTruck);
+      
+      const initialDriver = f.assignedDriver || matchedTruck?.driver || users.find(u => u.role === 'Driver' || u.role === 'Logistics')?.name || '';
+      setSchedDriverForm(initialDriver);
+    }
+  }, [showScheduleModal, trucks, users]);
 
   // Save configs to localStorage
   useEffect(() => {
@@ -240,10 +308,17 @@ export function DeliveryBoard({
       cutoffTime: '16:00',
       allowOverbooking: false,
     };
-    setStoreConfigs(prev => ({
-      ...prev,
+    const newConfigs = {
+      ...storeConfigs,
       [configBranchTarget]: updated
-    }));
+    };
+    setStoreConfigs(newConfigs);
+    try {
+      localStorage.setItem('prospaces_delivery_board_configs', JSON.stringify(newConfigs));
+    } catch (e) {}
+    if (onUpdateStoreConfigs) {
+      onUpdateStoreConfigs(newConfigs);
+    }
     setShowConfigModal(false);
   };
 
@@ -254,6 +329,7 @@ export function DeliveryBoard({
 
     const filtered = closureRules.filter(r => !(r.date === date && (r.slot === slot || slot === 'ALL_DAY')));
 
+    let newRules: SlotClosureRule[];
     if (closureTypeForm !== 'NONE') {
       const newRule: SlotClosureRule = {
         id: `rule-${Date.now()}`,
@@ -265,9 +341,16 @@ export function DeliveryBoard({
         closedBy: currentUser?.name || 'Dispatcher',
         createdAt: new Date().toISOString()
       };
-      setClosureRules([...filtered, newRule]);
+      newRules = [...filtered, newRule];
     } else {
-      setClosureRules(filtered);
+      newRules = filtered;
+    }
+    setClosureRules(newRules);
+    try {
+      localStorage.setItem('prospaces_delivery_board_closures', JSON.stringify(newRules));
+    } catch (e) {}
+    if (onUpdateClosureRules) {
+      onUpdateClosureRules(newRules);
     }
     setShowClosureModal(null);
   };
@@ -276,6 +359,13 @@ export function DeliveryBoard({
   const handleConfirmSchedule = () => {
     if (!showScheduleModal) return;
     const { freight, date, slot } = showScheduleModal;
+
+    // Check non-delivery day
+    const dayName = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+    if (!activeConfig.deliveryDays.includes(dayName as any)) {
+      alert(`Cannot schedule: ${date} (${dayName}) is configured as a Non-Delivery Day in Store Setup.`);
+      return;
+    }
 
     // Check slot closure rule
     const rule = getClosureRule(date, slot);
@@ -515,6 +605,8 @@ export function DeliveryBoard({
                   const dayName = dayDate.toLocaleDateString('en-US', { weekday: 'short' });
                   const monthDay = dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+                  const isDeliveryDay = activeConfig.deliveryDays.includes(dayName as any);
+
                   const amDeliveries = getSlotDeliveries(dateStr, 'AM');
                   const pmDeliveries = getSlotDeliveries(dateStr, 'PM');
 
@@ -531,11 +623,13 @@ export function DeliveryBoard({
                         setCurrentDate(dayDate);
                         setViewMode('day');
                       }}
-                      className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all cursor-pointer flex items-center justify-between group"
+                      className={`bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all cursor-pointer flex items-center justify-between group ${
+                        !isDeliveryDay ? 'bg-slate-50/50' : ''
+                      }`}
                     >
                       {/* Left: Day Label */}
                       <div className="w-20 shrink-0">
-                        <div className="text-sm font-black text-slate-900">{dayName}</div>
+                        <div className={`text-sm font-black ${isDeliveryDay ? 'text-slate-900' : 'text-slate-500'}`}>{dayName}</div>
                         <div className="text-xs text-slate-400 font-medium">{monthDay}</div>
                       </div>
 
@@ -545,8 +639,37 @@ export function DeliveryBoard({
                         {/* AM Row */}
                         <div className="flex items-center space-x-3">
                           <span className="text-xs font-extrabold text-slate-400 w-6">AM</span>
-                          {amRule ? (
-                            <span className="text-xs font-bold text-slate-400 italic">Closed</span>
+                          {!isDeliveryDay ? (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[11px] font-black px-2 py-0.5 rounded-md border flex items-center space-x-1 shadow-2xs bg-slate-100 text-slate-600 border-slate-300">
+                                <Lock className="h-3 w-3 shrink-0 text-slate-400" />
+                                <span>Closed (Non-Delivery Day)</span>
+                              </span>
+                            </div>
+                          ) : amRule ? (
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-[11px] font-black px-2 py-0.5 rounded-md border flex items-center space-x-1 shadow-2xs ${
+                                amRule.closureType === 'CLOSED_RETAIL'
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                  : amRule.closureType === 'CLOSED_PRO'
+                                  ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
+                                  : 'bg-rose-100 text-rose-800 border-rose-200'
+                              }`}>
+                                <Lock className="h-3 w-3 shrink-0" />
+                                <span>
+                                  {amRule.closureType === 'CLOSED_RETAIL'
+                                    ? 'Closed for Retail'
+                                    : amRule.closureType === 'CLOSED_PRO'
+                                    ? 'Closed for Pro'
+                                    : 'Closed'}
+                                </span>
+                              </span>
+                              {amDeliveries.length > 0 && (
+                                <span className="text-[10px] font-bold text-slate-500">
+                                  ({amDeliveries.length} booked)
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
                               <div
@@ -560,8 +683,37 @@ export function DeliveryBoard({
                         {/* PM Row */}
                         <div className="flex items-center space-x-3">
                           <span className="text-xs font-extrabold text-slate-400 w-6">PM</span>
-                          {pmRule ? (
-                            <span className="text-xs font-bold text-slate-400 italic">Closed</span>
+                          {!isDeliveryDay ? (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[11px] font-black px-2 py-0.5 rounded-md border flex items-center space-x-1 shadow-2xs bg-slate-100 text-slate-600 border-slate-300">
+                                <Lock className="h-3 w-3 shrink-0 text-slate-400" />
+                                <span>Closed (Non-Delivery Day)</span>
+                              </span>
+                            </div>
+                          ) : pmRule ? (
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-[11px] font-black px-2 py-0.5 rounded-md border flex items-center space-x-1 shadow-2xs ${
+                                pmRule.closureType === 'CLOSED_RETAIL'
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                  : pmRule.closureType === 'CLOSED_PRO'
+                                  ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
+                                  : 'bg-rose-100 text-rose-800 border-rose-200'
+                              }`}>
+                                <Lock className="h-3 w-3 shrink-0" />
+                                <span>
+                                  {pmRule.closureType === 'CLOSED_RETAIL'
+                                    ? 'Closed for Retail'
+                                    : pmRule.closureType === 'CLOSED_PRO'
+                                    ? 'Closed for Pro'
+                                    : 'Closed'}
+                                </span>
+                              </span>
+                              {pmDeliveries.length > 0 && (
+                                <span className="text-[10px] font-bold text-slate-500">
+                                  ({pmDeliveries.length} booked)
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
                               <div
@@ -580,15 +732,15 @@ export function DeliveryBoard({
                       <div className="flex items-center space-x-3 shrink-0">
                         <div className="text-right text-xs font-bold space-y-1">
                           <div>
-                            {amRule ? (
-                              <span className="text-slate-400">--</span>
+                            {!isDeliveryDay || (amRule && amRule.closureType === 'CLOSED_ALL') ? (
+                              <span className="text-slate-400 font-extrabold">--</span>
                             ) : (
                               <span className="text-[#2563eb]">{amDeliveries.length}/{amCap}</span>
                             )}
                           </div>
                           <div>
-                            {pmRule ? (
-                              <span className="text-slate-400">--</span>
+                            {!isDeliveryDay || (pmRule && pmRule.closureType === 'CLOSED_ALL') ? (
+                              <span className="text-slate-400 font-extrabold">--</span>
                             ) : (
                               <span className={pmDeliveries.length === 0 ? 'text-[#15803d]' : 'text-[#2563eb]'}>
                                 {pmDeliveries.length}/{pmCap}
@@ -642,17 +794,31 @@ export function DeliveryBoard({
                 const amOpenSlots = amCap - amDeliveries.length;
                 const pmOpenSlots = pmCap - pmDeliveries.length;
 
-                // Group deliveries by truck or driver
+                // Group deliveries by actual Truck Designation Name and Assigned Logistics Driver
                 const groupDeliveriesByTruck = (dels: DeliveryRecord[]) => {
                   const map: Record<string, { truckName: string; driverName: string; stops: number }> = {};
                   
                   if (dels.length === 0) return [];
 
                   dels.forEach((d, idx) => {
-                    const truckKey = d.assignedTruck || `Truck ${idx + 1}`;
-                    const driver = d.assignedDriver || (idx === 0 ? 'M. Khan' : idx === 1 ? 'J. Ruiz / T. Levy' : 'S. Park');
+                    // Match real truck from trucks list
+                    const matchedTruck = trucks.find(t => 
+                      t.id === d.assignedTruck || 
+                      t.name === d.assignedTruck || 
+                      t.truckNumber === d.assignedTruck
+                    );
+
+                    // Real Truck Designation Name
+                    const truckName = matchedTruck?.name || d.assignedTruck || matchedTruck?.truckNumber || (trucks[idx % (trucks.length || 1)]?.name) || `Truck ${idx + 1}`;
+
+                    // Real Assigned Logistics Driver
+                    const matchedUser = users.find(u => u.name === d.assignedDriver || u.id === d.assignedDriver);
+                    const driverName = d.assignedDriver || matchedUser?.name || matchedTruck?.driver || (users.find(u => u.role === 'Driver' || u.role === 'Logistics')?.name) || 'Unassigned Driver';
+
+                    const truckKey = matchedTruck?.id || d.assignedTruck || truckName;
+
                     if (!map[truckKey]) {
-                      map[truckKey] = { truckName: truckKey, driverName: driver, stops: 0 };
+                      map[truckKey] = { truckName, driverName, stops: 0 };
                     }
                     map[truckKey].stops += 1;
                   });
@@ -1154,15 +1320,45 @@ export function DeliveryBoard({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Truck</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Truck Designation Name</label>
                 <select
                   value={schedTruckForm}
-                  onChange={(e) => setSchedTruckForm(e.target.value)}
+                  onChange={(e) => {
+                    const selVal = e.target.value;
+                    setSchedTruckForm(selVal);
+                    const selTruck = trucks.find(t => t.id === selVal || t.name === selVal || t.truckNumber === selVal);
+                    if (selTruck?.driver) {
+                      setSchedDriverForm(selTruck.driver);
+                    }
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800"
                 >
-                  <option value="">Auto / Truck 1</option>
+                  <option value="">-- Select Truck Designation --</option>
                   {trucks.map(t => (
-                    <option key={t.id} value={t.id}>{t.name || t.truckNumber}</option>
+                    <option key={t.id} value={t.name || t.id}>
+                      🚛 {t.name || t.truckNumber || t.id} {t.driver ? `(${t.driver})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Logistics Driver</label>
+                <select
+                  value={schedDriverForm}
+                  onChange={(e) => setSchedDriverForm(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800"
+                >
+                  <option value="">-- Select Driver --</option>
+                  {users.filter(u => u.role === 'Driver' || u.role === 'Logistics' || u.role === 'Admin' || u.role === 'Dispatcher' || !u.role).map(u => (
+                    <option key={u.id} value={u.name}>
+                      👤 {u.name} {u.role ? `(${u.role})` : ''}
+                    </option>
+                  ))}
+                  {Array.from(new Set(trucks.map(t => t.driver).filter(Boolean))).map(driverName => (
+                    <option key={driverName} value={driverName}>
+                      👤 {driverName} (Assigned Driver)
+                    </option>
                   ))}
                 </select>
               </div>

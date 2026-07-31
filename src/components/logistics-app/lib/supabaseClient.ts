@@ -528,9 +528,38 @@ export async function fetchTenantStateDirect(tenantId: string) {
     };
   });
 
+  const rawBranches = rBranches.data || [];
+  const deserializedBranches = rawBranches.map((b: any) => {
+    let address = b.address || "";
+    let closureRules = b.closureRules;
+    let deliveryBoardConfig = b.deliveryBoardConfig;
+    let deliveryDays = b.deliveryDays;
+
+    if (address.includes("||META:")) {
+      const parts = address.split("||META:");
+      address = parts[0];
+      try {
+        const meta = JSON.parse(parts[1]);
+        if (meta.closureRules) closureRules = meta.closureRules;
+        if (meta.deliveryBoardConfig) deliveryBoardConfig = meta.deliveryBoardConfig;
+        if (meta.deliveryDays) deliveryDays = meta.deliveryDays;
+      } catch (e) {
+        console.warn("Failed to parse branch meta:", e);
+      }
+    }
+
+    return {
+      ...b,
+      address,
+      closureRules,
+      deliveryBoardConfig,
+      deliveryDays
+    };
+  });
+
   return {
     supabaseActive: true,
-    branches: rBranches.data || [],
+    branches: deserializedBranches,
     trucks: deserializedTrucks,
     users: deserializedUsers,
     deliveries: enrichedDeliveries
@@ -601,13 +630,28 @@ export async function saveTenantStateDirect(
     branchId: t.branchId
   }));
 
-  const mappedBranches = uniqueBranches.map(b => ({
-    id: b.id,
-    tenantId,
-    name: b.name,
-    type: b.type,
-    address: b.address
-  }));
+  const mappedBranches = uniqueBranches.map(b => {
+    let rawAddr = b.address || "";
+    if (rawAddr.includes("||META:")) {
+      rawAddr = rawAddr.split("||META:")[0];
+    }
+    let addressVal = rawAddr;
+    if (b.closureRules || b.deliveryBoardConfig || b.deliveryDays) {
+      const meta = {
+        closureRules: b.closureRules,
+        deliveryBoardConfig: b.deliveryBoardConfig,
+        deliveryDays: b.deliveryDays
+      };
+      addressVal = `${rawAddr}||META:${JSON.stringify(meta)}`;
+    }
+    return {
+      id: b.id,
+      tenantId,
+      name: b.name,
+      type: b.type,
+      address: addressVal
+    };
+  });
 
   const mappedDeliveries = uniqueDeliveries.map(d => {
     const fullMeta = {
