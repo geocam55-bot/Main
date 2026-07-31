@@ -4213,7 +4213,7 @@ async function syncFleetCompleteTelemetry
           allRawDbTrucks = rawTrucks;
           rawTrucks.forEach((t: any) => {
             const deserialized = deserializeType(t);
-            if (deserialized && deserialized.gpsSource === 'truck') {
+            if (deserialized && (deserialized.gpsSource === 'truck' || (deserialized.gpsDeviceId && deserialized.gpsDeviceId !== 'DISABLED') || deserialized.gpsSource !== 'disabled')) {
               trucksToProcessList.push({
                 id: t.id,
                 tenantId: t.tenantId || 'prospaces',
@@ -4235,7 +4235,7 @@ async function syncFleetCompleteTelemetry
         state.trucks.forEach((t: any) => {
           // If in-memory, truck is already client-side style.
           const deserialized = t.type && t.type.includes("||") ? deserializeType(t) : t;
-          if (deserialized && deserialized.gpsSource === 'truck') {
+          if (deserialized && (deserialized.gpsSource === 'truck' || (deserialized.gpsDeviceId && deserialized.gpsDeviceId !== 'DISABLED') || deserialized.gpsSource !== 'disabled')) {
             trucksToProcessList.push({
               id: t.id,
               tenantId: tid,
@@ -4450,8 +4450,7 @@ async function syncFleetCompleteTelemetry
 
             let matchedDbTruck = null;
             if (matches.length > 0) {
-              // Prioritize pre-existing manual trucks
-              matchedDbTruck = matches.find((m: any) => m.id !== vehicleName) || matches[0];
+              matchedDbTruck = matches.find((m: any) => m.id === vehicleName || m.name === vehicleName) || matches[0];
             }
 
             if (matchedDbTruck) {
@@ -4523,7 +4522,7 @@ async function syncFleetCompleteTelemetry
               });
 
               if (matchesInMemory.length > 0) {
-                const matchedInMemoryTruck = matchesInMemory.find((m: any) => m.id !== vehicleName) || matchesInMemory[0];
+                const matchedInMemoryTruck = matchesInMemory.find((m: any) => m.id === vehicleName || m.name === vehicleName) || matchesInMemory[0];
                 const deserializedInMem = matchedInMemoryTruck.type && matchedInMemoryTruck.type.includes("||") ? deserializeType(matchedInMemoryTruck) : matchedInMemoryTruck;
                 
                 if (deserializedInMem.gpsDeviceId === 'DISABLED') {
@@ -4606,9 +4605,9 @@ async function syncFleetCompleteTelemetry
             const updatedType = serializeToType(
               truck.type, 
               truck.registrationDueDate, 
-              truck.lat, 
-              truck.lng, 
-              truck.gpsSource, 
+              lat, 
+              lng, 
+              truck.gpsSource || 'truck', 
               truck.gpsDeviceId,
               truck.gpsSerialNumber,
               truck.gpsDeviceName,

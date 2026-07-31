@@ -1142,9 +1142,18 @@ export default function App() {
       (payload) => {
         const data = payload.payload;
         if (data && data.truckId) {
+          const nowIso = new Date().toISOString();
           setTrucks(prevTrucks => prevTrucks.map(t => {
             if (t.id === data.truckId) {
-              return { ...t, lat: data.lat, lng: data.lng };
+              return { 
+                ...t, 
+                lat: data.lat, 
+                lng: data.lng,
+                gpsLat: data.lat,
+                gpsLng: data.lng,
+                gpsLastHandshake: nowIso,
+                gpsStatus: 'Connected'
+              };
             }
             return t;
           }));
@@ -1507,6 +1516,7 @@ export default function App() {
 
   const handleUpdateTruck = async (updatedTruck: Truck) => {
     if (!currentTenant) return;
+    lastMutationTimeRef.current = Date.now();
     const updated = trucks.map(t => t.id === updatedTruck.id ? updatedTruck : t);
     setTrucks(updated);
     await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
