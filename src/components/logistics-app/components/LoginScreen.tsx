@@ -866,8 +866,8 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
                 <label className="block text-xs font-semibold text-slate-700">
                   Operational Portal Role
                 </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {['Admin', 'Dispatcher', 'Driver', 'Picker'].map((role) => {
+                <div className="grid grid-cols-5 gap-1.5">
+                  {['Admin', 'Dispatcher', 'Driver', 'Picker', 'SUPER_ADMIN'].map((role) => {
                     const isActive = customRole === role;
                     return (
                       <button

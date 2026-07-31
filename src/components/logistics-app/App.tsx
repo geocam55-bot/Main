@@ -38,7 +38,7 @@ import {
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
-  Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon
+  Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2
 } from 'lucide-react';
 import prospacesLogo from './assets/images/logo_no_border_tight_1783077241511.jpg';
 
@@ -193,16 +193,27 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const cached = localStorage.getItem('prospaces_active_user');
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const u = JSON.parse(cached);
+        if (u) {
+          if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin', 'super_admin'].includes(String(u.role).toLowerCase())) {
+            u.role = 'SUPER_ADMIN';
+          }
+          return u;
+        }
+      }
       const crmUserStr = localStorage.getItem('prospaces_cached_user');
       if (crmUserStr) {
         const crmUser = JSON.parse(crmUserStr);
         if (crmUser && (crmUser.email || crmUser.id)) {
+          const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
+            ? "SUPER_ADMIN"
+            : ((crmUser.role === 'admin' || crmUser.role === 'Admin') ? "Admin" : (crmUser.role || "Admin"));
           const autoUser: User = {
             id: crmUser.id || "USR-57008",
             name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
             email: crmUser.email || "george.campbell@prospaces.com",
-            role: (crmUser.role === 'admin' || crmUser.role === 'Admin' || crmUser.role === 'SUPER_ADMIN') ? "Admin" : (crmUser.role || "Admin"),
+            role: autoUserRole as any,
             phone: crmUser.phone || "(902) 555-0199",
             status: "Active",
             associatedStoreId: "DC-WINAMILL"
@@ -215,6 +226,9 @@ export default function App() {
     return null;
   });
 
+  // State to switch between Super Admin Tenant Maintenance and Tenant Application Workspace
+  const [superAdminViewMode, setSuperAdminViewMode] = useState<'tenant_maintenance' | 'app_workspace'>('tenant_maintenance');
+
   // Keep active user and tenant in sync with localStorage updates
   useEffect(() => {
     const syncUserAndTenant = () => {
@@ -226,8 +240,13 @@ export default function App() {
         if (activeUserStr && activeTenantStr) {
           const u = JSON.parse(activeUserStr);
           const t = JSON.parse(activeTenantStr);
-          if (u && (!currentUser || currentUser.email !== u.email || currentUser.id !== u.id)) {
-            setCurrentUser(u);
+          if (u) {
+            if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
+              u.role = 'SUPER_ADMIN';
+            }
+            if (!currentUser || currentUser.email !== u.email || currentUser.id !== u.id || currentUser.role !== u.role) {
+              setCurrentUser(u);
+            }
           }
           if (t && (!currentTenant || currentTenant.id !== t.id)) {
             setCurrentTenant(t);
@@ -235,11 +254,14 @@ export default function App() {
         } else if (crmUserStr && (!currentUser || !currentTenant)) {
           const crmUser = JSON.parse(crmUserStr);
           if (crmUser && (crmUser.email || crmUser.id)) {
+            const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
+              ? "SUPER_ADMIN"
+              : ((crmUser.role === 'admin' || crmUser.role === 'Admin') ? "Admin" : (crmUser.role || "Admin"));
             const autoUser: User = {
               id: crmUser.id || "USR-57008",
               name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
               email: crmUser.email || "george.campbell@prospaces.com",
-              role: (crmUser.role === 'admin' || crmUser.role === 'Admin' || crmUser.role === 'SUPER_ADMIN') ? "Admin" : (crmUser.role || "Admin"),
+              role: autoUserRole as any,
               phone: crmUser.phone || "(902) 555-0199",
               status: "Active",
               associatedStoreId: "DC-WINAMILL"
@@ -1684,8 +1706,8 @@ export default function App() {
     );
   }
 
-  // Check if logged in user is a SUPER_ADMIN
-  if (currentUser.role === 'SUPER_ADMIN') {
+  // Check if logged in user is a SUPER_ADMIN in tenant maintenance mode
+  if (currentUser.role === 'SUPER_ADMIN' && superAdminViewMode === 'tenant_maintenance') {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col font-sans text-slate-100 antialiased selection:bg-amber-500 selection:text-slate-950 animate-fade-in" id="super-admin-layout">
         
@@ -1722,6 +1744,32 @@ export default function App() {
                   Global Organizational Partition Controls & Ecosystem Tenant Provisioning
                 </p>
               </div>
+            </div>
+
+            {/* Super Admin Navigation View Switcher */}
+            <div className="flex items-center bg-slate-900 border border-slate-800 p-1 rounded-xl space-x-1 shadow-inner">
+              <button
+                onClick={() => setSuperAdminViewMode('tenant_maintenance')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                  superAdminViewMode === 'tenant_maintenance'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                <span>Tenant Maintenance</span>
+              </button>
+              <button
+                onClick={() => setSuperAdminViewMode('app_workspace')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                  superAdminViewMode === 'app_workspace'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                <span>Launch App Workspace</span>
+              </button>
             </div>
 
             {/* Quick Status Bar */}
@@ -1929,6 +1977,49 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-gray-800 antialiased selection:bg-blue-600 selection:text-white w-full max-w-full overflow-x-hidden" id="main-app-container">
+      
+      {/* Super Admin Top Controller Banner when in App Workspace Mode */}
+      {currentUser.role === 'SUPER_ADMIN' && (
+        <div className="bg-slate-950 text-amber-300 px-4 py-2 flex flex-wrap items-center justify-between text-xs border-b border-amber-500/30 shadow-md gap-2 z-50">
+          <div className="flex items-center space-x-2.5">
+            <span className="bg-amber-500 text-slate-950 text-[10px] uppercase font-mono px-2 py-0.5 rounded font-black tracking-wider shadow-xs">
+              SUPER ADMIN MODE
+            </span>
+            <span className="text-slate-200 font-medium">
+              Active Workspace: <strong className="text-amber-400 font-bold">{currentTenant?.name}</strong> <span className="text-slate-400 font-mono text-[11px]">({currentTenant?.id})</span>
+            </span>
+          </div>
+          <div className="flex items-center space-x-3">
+            {allTenants.length > 0 && (
+              <div className="flex items-center space-x-1.5">
+                <label className="text-slate-400 text-[11px] font-mono">Switch Tenant:</label>
+                <select
+                  value={currentTenant?.id}
+                  onChange={(e) => {
+                    const found = allTenants.find(t => t.id === e.target.value);
+                    if (found) {
+                      setCurrentTenant(found);
+                      localStorage.setItem('prospaces_active_tenant', JSON.stringify(found));
+                    }
+                  }}
+                  className="bg-slate-900 text-amber-300 text-xs px-2.5 py-1 rounded-lg border border-slate-700 font-mono focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  {allTenants.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <button
+              onClick={() => setSuperAdminViewMode('tenant_maintenance')}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1 rounded-lg text-xs transition-all shadow-sm cursor-pointer border border-amber-300 flex items-center space-x-1.5"
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              <span>Return to Tenant Maintenance</span>
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Enterprise Sticky Brand Header & Unified Navigation */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-200" id="prospaces-header">

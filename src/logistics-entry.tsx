@@ -30,7 +30,9 @@ function syncLogisticsUserSession(userObj: any) {
 
     const email = userObj.email || "george.campbell@prospaces.com";
     const name = userObj.full_name || userObj.name || (email ? email.split('@')[0] : "George Campbell");
-    const role = (userObj.role === 'admin' || userObj.role === 'Admin' || userObj.role === 'SUPER_ADMIN') ? "Admin" : (userObj.role || "Admin");
+    const role = (userObj.role === 'SUPER_ADMIN' || userObj.role === 'Super_Admin' || userObj.role === 'super_admin' || email === 'superadmin@prospaces.com')
+      ? "SUPER_ADMIN"
+      : ((userObj.role === 'admin' || userObj.role === 'Admin') ? "Admin" : (userObj.role || "Admin"));
     const id = userObj.id || "USR-57008";
 
     if (!currentActive || currentActive.email !== email || currentActive.id !== id) {

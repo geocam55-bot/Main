@@ -876,7 +876,9 @@ export function AppContent() {
                   id: user.id || "USR-57008",
                   name: user.full_name || user.name || (user.email ? user.email.split('@')[0] : "George Campbell"),
                   email: user.email || "george.campbell@prospaces.com",
-                  role: (user.role === 'admin' || user.role === 'Admin' || user.role === 'SUPER_ADMIN') ? "Admin" : (user.role || "Admin"),
+                  role: (user.role === 'SUPER_ADMIN' || user.role === 'Super_Admin' || user.role === 'super_admin' || user.email === 'superadmin@prospaces.com')
+                    ? "SUPER_ADMIN"
+                    : ((user.role === 'admin' || user.role === 'Admin') ? "Admin" : (user.role || "Admin")),
                   phone: user.phone || "(902) 555-0199",
                   status: "Active",
                   associatedStoreId: "DC-WINAMILL"
