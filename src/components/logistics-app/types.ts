@@ -29,8 +29,35 @@ export interface DeliveryRecord {
   deliveryPhoto?: string; // Live image description or actual asset URL
   pdfUrl?: string; // Link to the uploaded physical invoice/receipt PDF
   documentType?: string; // E.g., 'Supplier Pickup', 'Order', 'Credit', 'RMA'
+  scheduledDate?: string; // YYYY-MM-DD
+  scheduledSlot?: 'AM' | 'PM';
+  deliveryCategory?: 'Retail' | 'Pro' | 'Transfer';
   history: HistoryEvent[];
   tenantId?: string;
+}
+
+export type ClosureType = 'NONE' | 'CLOSED_ALL' | 'CLOSED_RETAIL' | 'CLOSED_PRO';
+
+export interface SlotClosureRule {
+  id: string;
+  branchId: string; // 'ALL' or specific store ID
+  date: string; // YYYY-MM-DD
+  slot: 'AM' | 'PM' | 'ALL_DAY';
+  closureType: ClosureType;
+  reason?: string;
+  closedBy?: string;
+  createdAt?: string;
+}
+
+export interface StoreDeliveryConfig {
+  branchId: string; // Store or DC ID
+  deliveryDays: ('Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun')[];
+  amTimeRange: string; // e.g. "07:00 AM - 12:00 PM"
+  pmTimeRange: string; // e.g. "12:00 PM - 05:00 PM"
+  amMaxCap: number; // Max capacity per AM slot
+  pmMaxCap: number; // Max capacity per PM slot
+  cutoffTime: string; // e.g. "16:00"
+  allowOverbooking: boolean;
 }
 
 export interface HistoryEvent {

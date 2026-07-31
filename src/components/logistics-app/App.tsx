@@ -33,11 +33,12 @@ import SuperAdminTenantsView from './components/SuperAdminTenantsView';
 import UserProfileModal, { renderUserAvatarHelper } from './components/UserProfileModal';
 import GpsSetup from './components/GpsSetup';
 import EnterpriseHub from './components/EnterpriseHub';
+import { DeliveryBoard } from './components/DeliveryBoard';
 import { 
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
-  Compass, Sparkles, Activity, Menu, X, Settings
+  Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon
 } from 'lucide-react';
 import prospacesLogo from './assets/images/logo_no_border_tight_1783077241511.jpg';
 
@@ -2321,6 +2322,16 @@ export default function App() {
                       </button>
 
                       <button
+                        onClick={() => { setActiveTab('delivery-board'); setActiveNavDropdown(null); }}
+                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                          activeTab === 'delivery-board' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <CalendarIcon className="h-4 w-4 text-blue-600" />
+                        <span>Delivery Board</span>
+                      </button>
+
+                      <button
                         onClick={() => { setActiveTab('document-import'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
                           activeTab === 'document-import' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
@@ -2584,6 +2595,18 @@ export default function App() {
               onDeleteDelivery={handleDeleteDelivery}
               branches={branches}
               users={users}
+            />
+          )}
+          {activeTab === 'delivery-board' && (
+            <DeliveryBoard
+              deliveries={deliveries}
+              branches={branches}
+              trucks={trucks}
+              users={users}
+              currentUser={currentUser}
+              currentTenant={currentTenant}
+              onUpdateDelivery={handleAddOrUpdateDelivery}
+              onAddDelivery={handleAddOrUpdateDelivery}
             />
           )}
           {activeTab === 'stores' && (

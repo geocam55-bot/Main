@@ -490,6 +490,9 @@ export async function fetchTenantStateDirect(tenantId: string) {
     const documentType = d.documentType || meta.documentType;
     const weight = d.weight || meta.weight;
     const orderTotal = d.orderTotal || meta.orderTotal;
+    const scheduledDate = d.scheduledDate || d.scheduled_date || meta.scheduledDate;
+    const scheduledSlot = d.scheduledSlot || d.scheduled_slot || meta.scheduledSlot;
+    const deliveryCategory = d.deliveryCategory || d.delivery_category || meta.deliveryCategory;
     const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
 
     return {
@@ -518,6 +521,9 @@ export async function fetchTenantStateDirect(tenantId: string) {
       deliveryPhoto,
       pdfUrl,
       documentType,
+      scheduledDate,
+      scheduledSlot,
+      deliveryCategory,
       history
     };
   });
@@ -629,6 +635,9 @@ export async function saveTenantStateDirect(
       deliveryPhoto: d.deliveryPhoto,
       pdfUrl: d.pdfUrl,
       documentType: d.documentType,
+      scheduledDate: d.scheduledDate,
+      scheduledSlot: d.scheduledSlot,
+      deliveryCategory: d.deliveryCategory,
       history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
     };
 

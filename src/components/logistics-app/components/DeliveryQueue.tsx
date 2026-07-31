@@ -450,6 +450,9 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
   const [formPicker, setFormPicker] = useState('');
   const [formDeliveredAt, setFormDeliveredAt] = useState('');
   const [formRegisteredAt, setFormRegisteredAt] = useState('');
+  const [formScheduledDate, setFormScheduledDate] = useState('');
+  const [formScheduledSlot, setFormScheduledSlot] = useState<'AM' | 'PM' | ''>('');
+  const [formDeliveryCategory, setFormDeliveryCategory] = useState<'Retail' | 'Pro' | 'Transfer'>('Retail');
 
   // Picker selection quick popup state
   const [pickerModalDeliveryId, setPickerModalDeliveryId] = useState<string | null>(null);
@@ -480,6 +483,9 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
     setFormPicker('');
     setFormRegisteredAt(new Date().toISOString().substring(0, 10));
     setFormDeliveredAt('');
+    setFormScheduledDate(new Date().toISOString().substring(0, 10));
+    setFormScheduledSlot('');
+    setFormDeliveryCategory('Retail');
     
     setIsModalOpen(true);
   };
@@ -505,6 +511,9 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
     setFormPicker(record.assignedPicker || '');
     setFormRegisteredAt(parseToYYYYMMDD(record.registeredAt) || new Date().toISOString().substring(0, 10));
     setFormDeliveredAt(parseToYYYYMMDD(record.deliveredAt) || '');
+    setFormScheduledDate(record.scheduledDate || parseToYYYYMMDD(record.registeredAt) || new Date().toISOString().substring(0, 10));
+    setFormScheduledSlot(record.scheduledSlot || '');
+    setFormDeliveryCategory(record.deliveryCategory || 'Retail');
     
     setIsModalOpen(true);
   };
@@ -590,6 +599,9 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
         customerSignature: formStatus === DeliveryStatus.DELIVERED ? (formSignature || editingRecord.customerSignature || 'Physical Signoff Done') : undefined,
         deliveryPhoto: formStatus === DeliveryStatus.DELIVERED ? (formPhoto || editingRecord.deliveryPhoto || undefined) : undefined,
         pdfUrl: formPdfUrl || undefined,
+        scheduledDate: formScheduledDate || undefined,
+        scheduledSlot: (formScheduledSlot as 'AM' | 'PM') || undefined,
+        deliveryCategory: formDeliveryCategory || 'Retail',
         history: newHistory
       };
 
@@ -639,6 +651,9 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
         customerSignature: formStatus === DeliveryStatus.DELIVERED ? (formSignature || 'Physical Handoff Validated') : undefined,
         deliveryPhoto: formStatus === DeliveryStatus.DELIVERED ? (formPhoto || undefined) : undefined,
         pdfUrl: formPdfUrl || undefined,
+        scheduledDate: formScheduledDate || undefined,
+        scheduledSlot: (formScheduledSlot as 'AM' | 'PM') || undefined,
+        deliveryCategory: formDeliveryCategory || 'Retail',
         history: newHistory
       };
 
@@ -1093,6 +1108,64 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
                         <span className="text-emerald-800 font-semibold">{delivery.assignedPicker}</span>
                       </div>
                     )}
+
+                    {/* Interactive AM/PM Slot Quick Toggle for Delivery Board Connection */}
+                    <div className="flex items-center space-x-1.5 py-1 px-2.5 bg-slate-100/80 border border-slate-200/80 rounded-lg text-slate-700" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden sm:inline">Delivery Board:</span>
+                      <div className="flex items-center bg-white rounded border border-slate-200 p-0.5 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const todayStr = new Date().toISOString().substring(0, 10);
+                            const targetDate = delivery.scheduledDate || delivery.registeredAt?.substring(0, 10) || todayStr;
+                            const newSlot = delivery.scheduledSlot === 'AM' ? undefined : 'AM';
+                            onAddOrUpdateDelivery({
+                              ...delivery,
+                              scheduledDate: targetDate,
+                              scheduledSlot: newSlot
+                            });
+                          }}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                            delivery.scheduledSlot === 'AM'
+                              ? 'bg-amber-500 text-white shadow-xs font-black ring-1 ring-amber-600'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                          title="Click to toggle AM Delivery Board slot"
+                        >
+                          ☀️ AM
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const todayStr = new Date().toISOString().substring(0, 10);
+                            const targetDate = delivery.scheduledDate || delivery.registeredAt?.substring(0, 10) || todayStr;
+                            const newSlot = delivery.scheduledSlot === 'PM' ? undefined : 'PM';
+                            onAddOrUpdateDelivery({
+                              ...delivery,
+                              scheduledDate: targetDate,
+                              scheduledSlot: newSlot
+                            });
+                          }}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                            delivery.scheduledSlot === 'PM'
+                              ? 'bg-indigo-600 text-white shadow-xs font-black ring-1 ring-indigo-700'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                          title="Click to toggle PM Delivery Board slot"
+                        >
+                          🌙 PM
+                        </button>
+                      </div>
+                      {delivery.scheduledSlot ? (
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border shadow-2xs ${
+                          delivery.scheduledSlot === 'AM' ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-indigo-100 text-indigo-900 border-indigo-300'
+                        }`}>
+                          {delivery.scheduledDate || 'Today'} ({delivery.scheduledSlot})
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-medium text-slate-400 italic">Unscheduled</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Right Column: Status Banner */}
@@ -1606,6 +1679,45 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
                     onChange={(e) => setFormRegisteredAt(e.target.value)}
                     className="w-full bg-white border border-slate-200 p-2 text-xs rounded-lg font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
+                </div>
+
+                {/* Delivery Board Scheduled Date */}
+                <div>
+                  <label className="block text-blue-800 font-bold mb-1 font-mono uppercase text-[10px]">Delivery Board Scheduled Date</label>
+                  <input 
+                    type="date"
+                    value={formScheduledDate}
+                    onChange={(e) => setFormScheduledDate(e.target.value)}
+                    className="w-full bg-blue-50/50 border border-blue-200 p-2 text-xs rounded-lg font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Delivery Board Slot (AM/PM) */}
+                <div>
+                  <label className="block text-blue-800 font-bold mb-1 font-mono uppercase text-[10px]">Delivery Board Time Slot (AM/PM)</label>
+                  <select
+                    value={formScheduledSlot}
+                    onChange={(e) => setFormScheduledSlot(e.target.value as 'AM' | 'PM' | '')}
+                    className="w-full bg-blue-50/50 border border-blue-200 p-2 text-xs rounded-lg font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">-- Unscheduled / Unassigned --</option>
+                    <option value="AM">☀️ AM Slot (Morning Delivery)</option>
+                    <option value="PM">🌙 PM Slot (Afternoon Delivery)</option>
+                  </select>
+                </div>
+
+                {/* Delivery Category */}
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1 font-mono uppercase text-[10px]">Delivery Category</label>
+                  <select
+                    value={formDeliveryCategory}
+                    onChange={(e) => setFormDeliveryCategory(e.target.value as 'Retail' | 'Pro' | 'Transfer')}
+                    className="w-full bg-white border border-slate-200 p-2 text-xs rounded-lg font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="Retail">🛒 Retail Customer</option>
+                    <option value="Pro">🏗️ Pro Contractor</option>
+                    <option value="Transfer">🚚 Store Transfer</option>
+                  </select>
                 </div>
 
                 {/* Picker selection if Picked & Loaded is chosen */}
