@@ -2401,6 +2401,34 @@ app.use((req, res, next) => {
       const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
       const deserializedTrucks = deduplicateServerTrucks((rTrucks.data || []).map((t: any) => deserializeType(t)));
 
+      const deserializedBranches = (rBranches.data || []).map((b: any) => {
+        let address = b.address || "";
+        let closureRules = b.closureRules;
+        let deliveryBoardConfig = b.deliveryBoardConfig;
+        let deliveryDays = b.deliveryDays;
+
+        if (address.includes("||META:")) {
+          const parts = address.split("||META:");
+          address = parts[0];
+          try {
+            const meta = JSON.parse(parts[1]);
+            if (meta.closureRules) closureRules = meta.closureRules;
+            if (meta.deliveryBoardConfig) deliveryBoardConfig = meta.deliveryBoardConfig;
+            if (meta.deliveryDays) deliveryDays = meta.deliveryDays;
+          } catch (e) {
+            // ignore parse error
+          }
+        }
+
+        return {
+          ...b,
+          address,
+          closureRules,
+          deliveryBoardConfig,
+          deliveryDays
+        };
+      });
+
       // Reset failure counters on query success
       supabaseConsecutiveFailures = 0;
       supabaseTemporarilyDisabled = false;
@@ -2439,6 +2467,9 @@ app.use((req, res, next) => {
           const documentType = d.documentType || meta.documentType;
           const weight = d.weight || meta.weight;
           const orderTotal = d.orderTotal || meta.orderTotal;
+          const scheduledDate = d.scheduledDate || d.scheduled_date || meta.scheduledDate;
+          const scheduledSlot = d.scheduledSlot || d.scheduled_slot || meta.scheduledSlot;
+          const deliveryCategory = d.deliveryCategory || d.delivery_category || meta.deliveryCategory;
           const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
 
           const resObj = {
@@ -2467,6 +2498,9 @@ app.use((req, res, next) => {
             deliveryPhoto,
             pdfUrl,
             documentType,
+            scheduledDate,
+            scheduledSlot,
+            deliveryCategory,
             history
           };
 
@@ -2495,7 +2529,7 @@ app.use((req, res, next) => {
 
       res.json({
         supabaseActive: true,
-        branches: rBranches.data || [],
+        branches: deserializedBranches,
         trucks: deserializedTrucks,
         users: deserializedUsers,
         deliveries: enrichedDeliveries
@@ -2676,7 +2710,28 @@ app.use((req, res, next) => {
       }
 
       // Force-inject appropriate tenantIds into nested payloads to maintain strict database isolation
-      const sanitizedBranches = uniqueBranches.map((b: any) => ({ ...b, tenantId }));
+      const sanitizedBranches = uniqueBranches.map((b: any) => {
+        let rawAddr = b.address || "";
+        if (rawAddr.includes("||META:")) {
+          rawAddr = rawAddr.split("||META:")[0];
+        }
+        let addressVal = rawAddr;
+        if (b.closureRules || b.deliveryBoardConfig || b.deliveryDays) {
+          const meta = {
+            closureRules: b.closureRules,
+            deliveryBoardConfig: b.deliveryBoardConfig,
+            deliveryDays: b.deliveryDays
+          };
+          addressVal = `${rawAddr}||META:${JSON.stringify(meta)}`;
+        }
+        return {
+          id: b.id,
+          tenantId,
+          name: b.name,
+          type: b.type,
+          address: addressVal
+        };
+      });
       const sanitizedTrucks = uniqueTrucks.map((t: any) => ({ ...t, tenantId }));
       const sanitizedUsers = uniqueUsers.map((u: any) => ({ ...u, tenantId }));
       const sanitizedDeliveries = uniqueDeliveries.map((d: any) => {
@@ -2705,6 +2760,9 @@ app.use((req, res, next) => {
           deliveryPhoto: d.deliveryPhoto,
           pdfUrl: d.pdfUrl,
           documentType: d.documentType,
+          scheduledDate: d.scheduledDate,
+          scheduledSlot: d.scheduledSlot,
+          deliveryCategory: d.deliveryCategory,
           history: d.history || []
         };
 

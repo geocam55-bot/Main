@@ -89,6 +89,10 @@ export function DeliveryBoard({
   // Store delivery configs state
   const [storeConfigs, setStoreConfigs] = useState<Record<string, StoreDeliveryConfig>>(() => {
     try {
+      if (currentTenant?.id) {
+        const tenantSaved = localStorage.getItem(`prospaces_store_configs_${currentTenant.id}`);
+        if (tenantSaved) return JSON.parse(tenantSaved);
+      }
       const saved = localStorage.getItem('prospaces_delivery_board_configs');
       return saved ? JSON.parse(saved) : { ALL: DEFAULT_STORE_CONFIG };
     } catch {
@@ -100,6 +104,10 @@ export function DeliveryBoard({
   const [closureRules, setClosureRules] = useState<SlotClosureRule[]>(() => {
     if (initialClosureRules && initialClosureRules.length > 0) return initialClosureRules;
     try {
+      if (currentTenant?.id) {
+        const tenantSaved = localStorage.getItem(`prospaces_closure_rules_${currentTenant.id}`);
+        if (tenantSaved) return JSON.parse(tenantSaved);
+      }
       const saved = localStorage.getItem('prospaces_delivery_board_closures');
       return saved ? JSON.parse(saved) : [
         {
@@ -117,12 +125,35 @@ export function DeliveryBoard({
     }
   });
 
-  // Sync branches metadata into state if loaded from Supabase
+  // Sync branches metadata into state if loaded from Supabase or tenant cache
   useEffect(() => {
     let rulesUpdated = false;
     let configsUpdated = false;
     const mergedRules = [...closureRules];
     const mergedConfigs = { ...storeConfigs };
+
+    if (currentTenant?.id) {
+      try {
+        const tenantRules = localStorage.getItem(`prospaces_closure_rules_${currentTenant.id}`);
+        if (tenantRules) {
+          const parsed = JSON.parse(tenantRules);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((r: SlotClosureRule) => {
+              if (!mergedRules.some(existing => existing.id === r.id)) {
+                mergedRules.push(r);
+                rulesUpdated = true;
+              }
+            });
+          }
+        }
+        const tenantConfigs = localStorage.getItem(`prospaces_store_configs_${currentTenant.id}`);
+        if (tenantConfigs) {
+          const parsed = JSON.parse(tenantConfigs);
+          Object.assign(mergedConfigs, parsed);
+          configsUpdated = true;
+        }
+      } catch (e) {}
+    }
 
     (branches || []).forEach(b => {
       if (b.closureRules && Array.isArray(b.closureRules)) {
@@ -141,7 +172,7 @@ export function DeliveryBoard({
 
     if (rulesUpdated) setClosureRules(mergedRules);
     if (configsUpdated) setStoreConfigs(mergedConfigs);
-  }, [branches]);
+  }, [branches, currentTenant]);
 
   // Active Modals & Sidebars
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
@@ -270,14 +301,23 @@ export function DeliveryBoard({
 
   // Filter deliveries by selected store
   const filteredDeliveries = deliveries.filter(d => {
-    if (selectedBranchId !== 'ALL' && d.originBranch !== selectedBranchId) {
-      return false;
+    if (selectedBranchId !== 'ALL') {
+      const selectedBranch = branches.find(b => b.id === selectedBranchId || b.name === selectedBranchId);
+      const branchName = selectedBranch?.name;
+      const branchId = selectedBranch?.id || selectedBranchId;
+
+      const matchesId = d.originBranch === branchId;
+      const matchesName = branchName ? (d.originBranch === branchName || d.originBranch?.toLowerCase() === branchName.toLowerCase()) : false;
+      const matchesRaw = d.originBranch === selectedBranchId;
+      if (!matchesId && !matchesName && !matchesRaw) {
+        return false;
+      }
     }
     return true;
   });
 
   // Unassigned freight for scheduling
-  const unassignedFreight = filteredDeliveries.filter(d => !d.scheduledDate || d.status === DeliveryStatus.REGISTERED);
+  const unassignedFreight = filteredDeliveries.filter(d => !d.scheduledDate && d.status === DeliveryStatus.REGISTERED);
 
   // Get closure rule for date & slot
   const getClosureRule = (dateStr: string, slot: 'AM' | 'PM') => {
@@ -292,14 +332,24 @@ export function DeliveryBoard({
   // Get deliveries for specific date & slot
   const getSlotDeliveries = (dateStr: string, slot: 'AM' | 'PM') => {
     return filteredDeliveries.filter(d => {
-      const dateMatch = d.scheduledDate ? d.scheduledDate === dateStr : d.registeredAt?.startsWith(dateStr);
-      if (!dateMatch) return false;
-
-      if (d.scheduledSlot) {
-        return d.scheduledSlot === slot;
+      const targetDate = d.scheduledDate ? d.scheduledDate.split('T')[0] : '';
+      if (targetDate) {
+        if (targetDate !== dateStr) return false;
+        if (d.scheduledSlot) {
+          return d.scheduledSlot === slot;
+        }
+        const hour = new Date(d.registeredAt || Date.now()).getHours();
+        return slot === 'AM' ? hour < 12 : hour >= 12;
       }
-      const hour = new Date(d.registeredAt || Date.now()).getHours();
-      return slot === 'AM' ? hour < 12 : hour >= 12;
+
+      // If not explicitly scheduled with a scheduledDate, only match if active status and registeredAt falls on dateStr
+      if (d.status !== DeliveryStatus.REGISTERED && d.registeredAt?.startsWith(dateStr)) {
+        if (d.scheduledSlot) return d.scheduledSlot === slot;
+        const hour = new Date(d.registeredAt || Date.now()).getHours();
+        return slot === 'AM' ? hour < 12 : hour >= 12;
+      }
+
+      return false;
     });
   };
 
