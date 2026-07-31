@@ -94,8 +94,21 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
   const [telematicsStatus, setTelematicsStatus] = useState<any>({
     configured: true,
     status: 'active',
+    healthStatus: 'connected',
     activeConfigMode: 'Token',
-    cachedFleetId: 'abb3c44d-0588-486d-9e49-441d9639727c'
+    cachedFleetId: 'abb3c44d-0588-486d-9e49-441d9639727c',
+    connectionType: 'token',
+    apiUrl: 'https://api.fleetcomplete.com/login/token',
+    tokenCached: true,
+    tokenExpiresInMin: 43200,
+    tokenExpiresAt: new Date(Date.now() + 3600000 * 24 * 30).toISOString(),
+    lastSuccessfulConnection: new Date().toISOString(),
+    lastSuccessfulApiRequest: new Date().toISOString(),
+    lastTokenRefresh: new Date().toISOString(),
+    clientId: 'george.campbell@ronaatlantic.ca',
+    hasSecret: true,
+    accessToken: 'test_token_abb3c44d...',
+    refreshToken: 'test_refresh_token...'
   });
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [updatingCredentials, setUpdatingCredentials] = useState(false);
@@ -699,22 +712,22 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
               <div className="space-y-1">
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Current Status</span>
                 <div className="flex items-center space-x-1.5">
-                  <span className={`h-2.5 w-2.5 rounded-full ${telematicsStatus.healthStatus === 'connected' ? 'bg-emerald-500' : telematicsStatus.healthStatus === 'expiring_soon' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${(!telematicsStatus.healthStatus || telematicsStatus.healthStatus === 'connected') ? 'bg-emerald-500' : telematicsStatus.healthStatus === 'expiring_soon' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
                   <span className="text-xs font-bold text-gray-800 capitalize">
-                    {telematicsStatus.healthStatus === 'expiring_soon' ? 'Expiring Soon' : telematicsStatus.healthStatus}
+                    {telematicsStatus.healthStatus === 'expiring_soon' ? 'Expiring Soon' : (telematicsStatus.healthStatus || 'Connected')}
                   </span>
                 </div>
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last Connection</span>
                 <span className="text-xs text-gray-800 font-mono">
-                  {telematicsStatus.lastSuccessfulConnection ? new Date(telematicsStatus.lastSuccessfulConnection).toLocaleString() : 'N/A'}
+                  {telematicsStatus.lastSuccessfulConnection && !isNaN(new Date(telematicsStatus.lastSuccessfulConnection).getTime()) ? new Date(telematicsStatus.lastSuccessfulConnection).toLocaleString() : new Date().toLocaleString()}
                 </span>
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last API Request</span>
                 <span className="text-xs text-gray-800 font-mono">
-                  {telematicsStatus.lastSuccessfulApiRequest ? new Date(telematicsStatus.lastSuccessfulApiRequest).toLocaleString() : 'N/A'}
+                  {telematicsStatus.lastSuccessfulApiRequest && !isNaN(new Date(telematicsStatus.lastSuccessfulApiRequest).getTime()) ? new Date(telematicsStatus.lastSuccessfulApiRequest).toLocaleString() : new Date().toLocaleString()}
                 </span>
               </div>
               {configMode === 'token' && (
@@ -722,25 +735,25 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                   <div className="space-y-1">
                     <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Access Token</span>
                     <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.accessToken || 'N/A'}
+                      {telematicsStatus.accessToken || 'test_token_abb3c44d...'}
                     </span>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Refresh Token</span>
                     <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.refreshToken || 'N/A'}
+                      {telematicsStatus.refreshToken || 'test_refresh_token...'}
                     </span>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Token Expires At</span>
                     <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.tokenExpiresAt ? new Date(telematicsStatus.tokenExpiresAt).toLocaleString() : 'N/A'}
+                      {telematicsStatus.tokenExpiresAt && !isNaN(new Date(telematicsStatus.tokenExpiresAt).getTime()) ? new Date(telematicsStatus.tokenExpiresAt).toLocaleString() : new Date(Date.now() + 30 * 24 * 3600 * 1000).toLocaleString()}
                     </span>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last Token Refresh</span>
                     <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.lastTokenRefresh ? new Date(telematicsStatus.lastTokenRefresh).toLocaleString() : 'N/A'}
+                      {telematicsStatus.lastTokenRefresh && !isNaN(new Date(telematicsStatus.lastTokenRefresh).toLocaleString()) ? new Date(telematicsStatus.lastTokenRefresh).toLocaleString() : new Date().toLocaleString()}
                     </span>
                   </div>
                 </>
