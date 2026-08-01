@@ -4570,40 +4570,57 @@ async function syncFleetCompleteTelemetry
           const timeStep = Math.floor(Date.now() / 15000);
           const stateCycle = (idHash + timeStep) % 10;
 
+          const now = new Date();
+          const currentUtcHour = now.getUTCHours();
+          const localAstHour = (currentUtcHour - 3 + 24) % 24;
+          const localAstDay = now.getUTCDay();
+          const isStoreClosed = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
+
+          const isNoDriver = !truck.driver || truck.driver.toLowerCase() === 'no driver' || truck.driver.toLowerCase() === 'unassigned';
+
           let speed = 0;
           let idlingMins = 0;
           let engineStatus = false;
           let deltaLat = 0;
           let deltaLng = 0;
 
-          if (idOrName.includes("2101")) {
-            speed = 110 + (timeStep % 15);
-            idlingMins = 0;
-            engineStatus = true;
-            deltaLat = -0.0015;
-            deltaLng = -0.0012;
-            if (currentLat < 44.65 || currentLat > 45.10) {
-              currentLat = 44.8770;
-              currentLng = -63.5410;
+          if (!isStoreClosed && !isNoDriver) {
+            if (idOrName.includes("2101")) {
+              speed = 110 + (timeStep % 15);
+              idlingMins = 0;
+              engineStatus = true;
+              deltaLat = -0.0015;
+              deltaLng = -0.0012;
+              if (currentLat < 44.65 || currentLat > 45.10) {
+                currentLat = 44.8770;
+                currentLng = -63.5410;
+              }
+            } else if (stateCycle < 6) {
+              // Driving / In Transit on active Maritime route (60% of time)
+              speed = 38 + ((idHash * 7 + timeStep * 13) % 48); // 38 to 86 km/h
+              idlingMins = 0;
+              engineStatus = true;
+              const heading = ((idHash * 31 + timeStep * 17) % 360) * (Math.PI / 180);
+              deltaLat = Math.sin(heading) * 0.0014;
+              deltaLng = Math.cos(heading) * 0.0014;
+            } else if (stateCycle < 8) {
+              // Engine Idling at job site / stop (20% of time)
+              speed = 0;
+              idlingMins = 4 + ((timeStep * 3 + idHash) % 20);
+              engineStatus = true;
+            } else {
+              // Parked at depot (20% of time)
+              speed = 0;
+              idlingMins = 0;
+              engineStatus = false;
             }
-          } else if (stateCycle < 6) {
-            // Driving / In Transit on active Maritime route (60% of time)
-            speed = 38 + ((idHash * 7 + timeStep * 13) % 48); // 38 to 86 km/h
-            idlingMins = 0;
-            engineStatus = true;
-            const heading = ((idHash * 31 + timeStep * 17) % 360) * (Math.PI / 180);
-            deltaLat = Math.sin(heading) * 0.0014;
-            deltaLng = Math.cos(heading) * 0.0014;
-          } else if (stateCycle < 8) {
-            // Engine Idling at job site / stop (20% of time)
-            speed = 0;
-            idlingMins = 4 + ((timeStep * 3 + idHash) % 20);
-            engineStatus = true;
           } else {
-            // Parked at depot (20% of time)
+            // Stores closed or no driver -> strictly Parked at depot
             speed = 0;
             idlingMins = 0;
             engineStatus = false;
+            deltaLat = 0;
+            deltaLng = 0;
           }
 
           if (currentLat < 44.4 || currentLat > 45.3 || currentLng < -64.2 || currentLng > -62.8) {

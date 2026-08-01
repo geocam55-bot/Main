@@ -774,10 +774,17 @@ function MapInner({
         {/* Trucks / Active Drivers */}
         {displayTrucks.map((truck: any) => {
           const isOnline = isTruckOnline(truck);
+          const isNoDriver = !truck.driver || truck.driver.toLowerCase() === 'no driver' || truck.driver.toLowerCase() === 'unassigned';
+
+          const nowDate = new Date();
+          const currentUtcHour = nowDate.getUTCHours();
+          const localAstHour = (currentUtcHour - 3 + 24) % 24;
+          const localAstDay = nowDate.getUTCDay();
+          const isStoreClosedNow = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
 
           const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
-          const isMoving = isOnline && ((typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || (assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED));
-          const isIdling = !isMoving && isOnline && (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0);
+          const isMoving = !isStoreClosedNow && !isNoDriver && isOnline && ((typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || (assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED));
+          const isIdling = !isStoreClosedNow && !isNoDriver && !isMoving && isOnline && (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0);
 
           const coords = getTruckCoords(truck, simProgress, activeBranches);
           const isSelected = selectedTrackTruckId === truck.id;

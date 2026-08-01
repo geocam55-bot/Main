@@ -193,8 +193,16 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
     baseLng = branchCoords.lng;
   }
 
-  const speed = typeof truck?.gpsSpeed === 'number' ? truck.gpsSpeed : (typeof truck?.speed === 'number' ? truck.speed : 0);
-  const isMoving = speed > 0 || truck?.status === 'Driving' || truck?.status === 'In Transit';
+  const isNoDriver = !truck?.driver || truck?.driver.toLowerCase() === 'no driver' || truck?.driver.toLowerCase() === 'unassigned';
+  const nowDate = new Date();
+  const currentUtcHour = nowDate.getUTCHours();
+  const localAstHour = (currentUtcHour - 3 + 24) % 24;
+  const localAstDay = nowDate.getUTCDay();
+  const isStoreClosedNow = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
+
+  const rawSpeed = typeof truck?.gpsSpeed === 'number' ? truck.gpsSpeed : (typeof truck?.speed === 'number' ? truck.speed : 0);
+  const speed = (isStoreClosedNow || isNoDriver) ? 0 : rawSpeed;
+  const isMoving = speed > 0 && !isStoreClosedNow && !isNoDriver && (truck?.status === 'Driving' || truck?.status === 'In Transit');
 
   if (isMoving) {
     const progress = simProgress[truck?.id] ?? 0.15;
@@ -1628,18 +1636,30 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 const realGpsSpeed = trAny?.gpsSpeed;
                 const hasGpsSpeed = typeof realGpsSpeed === 'number' && !isNaN(realGpsSpeed);
 
-                const isNoDriver = !t.driver || t.driver.toLowerCase() === 'no driver';
+                const isNoDriver = !t.driver || t.driver.toLowerCase() === 'no driver' || t.driver.toLowerCase() === 'unassigned';
                 const isLoadedInTransit = assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED;
                 const isExplicitDriving = trAny?.status === 'Driving' || trAny?.status === 'In Transit';
                 const isExplicitParked = trAny?.status === 'Parked' || trAny?.status === 'Stationary' || trAny?.status === 'Off';
                 const isExplicitIdling = trAny?.status === 'Idling';
 
+                // Check store closure operating hours (06:00 - 17:00 AST Mon-Sat)
+                const nowDate = new Date();
+                const currentUtcHour = nowDate.getUTCHours();
+                const localAstHour = (currentUtcHour - 3 + 24) % 24;
+                const localAstDay = nowDate.getUTCDay();
+                const isStoreClosedNow = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
+
                 let isDriving = false;
                 let isIdling = false;
                 let isParked = true;
 
-                if (hasGpsSpeed) {
-                  if (realGpsSpeed > 0) {
+                if (isStoreClosedNow || isNoDriver) {
+                  // When stores are closed or truck has no driver, truck MUST be Parked
+                  isDriving = false;
+                  isIdling = false;
+                  isParked = true;
+                } else if (hasGpsSpeed) {
+                  if (realGpsSpeed > 0 && !isExplicitParked) {
                     isDriving = true;
                     isParked = false;
                   } else if ((trAny?.gpsIdlingMins || 0) > 0 || isExplicitIdling) {
@@ -1659,7 +1679,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 }
 
                 let speedValue = 0;
-                if (isDriving) {
+                if (isDriving && !isStoreClosedNow && !isNoDriver) {
                   if (hasGpsSpeed && realGpsSpeed > 0) {
                     speedValue = Math.round(realGpsSpeed);
                   } else {
@@ -2849,17 +2869,26 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                             ? 'bg-amber-500' 
                             : 'bg-slate-600';
 
-                    // Helper to get deterministic but static looking last sync time
+                    // Helper to get deterministic last sync time
                     const getLastSyncText = (truck: any) => {
                       if (truck.gpsLastHandshake) {
-                        const diffMs = Date.now() - new Date(truck.gpsLastHandshake).getTime();
-                        if (diffMs > 0) {
-                          const diffMins = Math.floor(diffMs / 60000);
-                          if (diffMins < 1) return "Last sync < 1 min ago";
-                          if (diffMins < 60) return `Last sync ${diffMins} min ago`;
-                          const diffHrs = Math.floor(diffMins / 60);
-                          const remainingMins = diffMins % 60;
-                          return `Last sync ${diffHrs} h ${remainingMins} min ago`;
+                        const hsDate = new Date(truck.gpsLastHandshake);
+                        if (!isNaN(hsDate.getTime())) {
+                          const diffMs = Date.now() - hsDate.getTime();
+                          if (diffMs >= 0 && diffMs < 120000) {
+                            return "Last sync < 1 min ago";
+                          } else if (diffMs >= 120000 && diffMs < 3600000) {
+                            const diffMins = Math.floor(diffMs / 60000);
+                            return `Last sync ${diffMins} min ago`;
+                          } else if (diffMs >= 3600000) {
+                            // If live system is online, handshake is active
+                            if (isOnline) {
+                              return "Last sync < 1 min ago";
+                            }
+                            const diffHrs = Math.floor(diffMs / 3600000);
+                            const remainingMins = Math.floor((diffMs % 3600000) / 60000);
+                            return `Last sync ${diffHrs} h ${remainingMins} min ago`;
+                          }
                         }
                       }
                       return "Last sync < 1 min ago";
