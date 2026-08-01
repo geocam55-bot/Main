@@ -63,9 +63,14 @@ const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'DC-WINAMILL': { lat: 44.70820, lng: -63.59380 },
   'WINAMILL': { lat: 44.70820, lng: -63.59380 },
 
-  // Nova Scotia Locations
+  // Specific Street & Hubley Matches
+  'SPARROW LANE': { lat: 44.6642, lng: -63.8560 },
+  'HUBLEY': { lat: 44.6601, lng: -63.8580 },
+
+  // Nova Scotia Communities & Regional Locations
   'WINDMILL': { lat: 44.7082, lng: -63.5938 },
   'TANTALLON': { lat: 44.70417, lng: -63.85807 },
+  'TIMBERLEA': { lat: 44.6465, lng: -63.7431 },
   'DARTMOUTH': { lat: 44.6636, lng: -63.5683 },
   'BRIDGEWATER': { lat: 44.3789, lng: -64.5126 },
   'HALIFAX': { lat: 44.6488, lng: -63.5752 },
@@ -74,6 +79,8 @@ const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'ELMSDALE': { lat: 44.979223, lng: -63.504250 },
   'ALMON': { lat: 44.65360, lng: -63.60110 },
   'HUBBARDS': { lat: 44.6314, lng: -64.0531 },
+  'LOWER SACKVILLE': { lat: 44.7642, lng: -63.6823 },
+  'MIDDLE SACKVILLE': { lat: 44.7892, lng: -63.7258 },
   'SACKVILLE': { lat: 44.7642, lng: -63.6823 },
   'BEDFORD': { lat: 44.7303, lng: -63.6617 },
   'TRURO': { lat: 45.3647, lng: -63.2687 },
@@ -86,8 +93,24 @@ const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'KENTVILLE': { lat: 45.0775, lng: -64.4965 },
   'HAMMONDS PLAINS': { lat: 44.7364, lng: -63.7854 },
   'COLE HARBOUR': { lat: 44.6644, lng: -63.4842 },
+  'FALL RIVER': { lat: 44.8143, lng: -63.6152 },
+  'PORTERS LAKE': { lat: 44.7355, lng: -63.3082 },
+  'EASTERN PASSAGE': { lat: 44.6133, lng: -63.4866 },
+  'SPRYFIELD': { lat: 44.6190, lng: -63.6062 },
+  'PEGGYS COVE': { lat: 44.4922, lng: -63.9161 },
   'ST. MARGARETS BAY': { lat: 44.6225, lng: -63.9538 },
   'ST. MARGARET\'S BAY': { lat: 44.6225, lng: -63.9538 },
+  'LUNENBURG': { lat: 44.3770, lng: -64.3180 },
+  'MAHONE BAY': { lat: 44.4480, lng: -64.3820 },
+  'WOLFVILLE': { lat: 45.0915, lng: -64.3642 },
+  'NEW GLASGOW': { lat: 45.5878, lng: -62.6465 },
+  'SYDNEY': { lat: 46.1368, lng: -60.1942 },
+  'AMHERST': { lat: 45.8335, lng: -64.2154 },
+  'MONCTON': { lat: 46.0878, lng: -64.7782 },
+  'SAINT JOHN': { lat: 45.2733, lng: -66.0633 },
+  'FREDERICTON': { lat: 45.9636, lng: -66.6431 },
+  'CHARLOTTETOWN': { lat: 46.2382, lng: -63.1311 },
+  'SUMMERSIDE': { lat: 46.3959, lng: -63.7887 },
   
   // Silicon Valley, California
   'CAMPBELL, CA': { lat: 37.2872, lng: -121.9500 },
@@ -102,8 +125,9 @@ const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'ORCHARD CITY': { lat: 37.2872, lng: -121.9500 },
 };
 
-const getGpsForLocation = (id: string, nameOrAddress: string): { lat: number; lng: number } => {
-  const combined = id + ' ' + nameOrAddress;
+const getGpsForLocation = (id: string, nameOrAddress: string): { lat: number; lng: number } | null => {
+  const combined = (id + ' ' + (nameOrAddress || '')).trim();
+  if (!combined) return null;
   
   // Try matching ||lat:XX ||lng:YY or lat:XX lng:YY
   const latMatch = combined.match(/\|\|lat:\s*(-?\d+(?:\.\d+)?)/i) || combined.match(/lat:\s*(-?\d+(?:\.\d+)?)/i);
@@ -135,25 +159,9 @@ const getGpsForLocation = (id: string, nameOrAddress: string): { lat: number; ln
     }
   }
   
-  // Fallback hash logic:
-  // Strictly check for explicit California / Bay Area keywords and avoid matching Canada/NS country or province codes
-  const isCalifornia = (norm.includes('CALIFORNIA') || norm.includes('SAN JOSE') || norm.includes('BAY AREA') || norm.includes('SILICON VALLEY')) && !norm.includes('CANADA') && !norm.includes('NS') && !norm.includes('NOVA SCOTIA');
-  
-  let score = 0;
-  for (let i = 0; i < norm.length; i++) {
-    score += norm.charCodeAt(i);
-  }
-  
-  if (isCalifornia) {
-    const lat = 37.25 + ((score % 50) / 50) * 0.45;
-    const lng = -122.35 + (((score * 17) % 50) / 50) * 0.50;
-    return { lat, lng };
-  } else {
-    // Default to Nova Scotia (Halifax region)
-    const lat = 44.35 + ((score % 40) / 40) * 0.35;
-    const lng = -64.4 + (((score * 17) % 40) / 40) * 0.70;
-    return { lat, lng };
-  }
+  // If the address is incomplete or not a direct match to any known location or embedded lat/lng,
+  // do NOT assign fake pseudo-random coordinates. Return null so it is not shown on the map.
+  return null;
 };
 
 export const cleanAddressText = (address: string | undefined): string => {
@@ -271,15 +279,18 @@ export const isTruckAssignedToBranch = (truck: any, branch: any): boolean => {
 
 export const getBranchCoordinates = (id: string, name: string, address?: string): { x: number; y: number; lat: number; lng: number } => {
   const combinedStr = `${name || ''} ${address || ''}`.trim();
-  const { lat, lng } = getGpsForLocation(id, combinedStr);
+  const gps = getGpsForLocation(id, combinedStr);
+  const lat = gps ? gps.lat : 44.70820; // Fallback to central Windmill HQ for branch depot nodes
+  const lng = gps ? gps.lng : -63.59380;
   const coords = getPercentCoordsFromGps(lat, lng);
   return { x: coords.x, y: coords.y, lat, lng };
 };
 
-export const getDeliveryCoordinates = (id: string, address: string, originX: number, originY: number): { x: number; y: number; lat: number; lng: number } => {
-  const { lat, lng } = getGpsForLocation(id, address);
-  const coords = getPercentCoordsFromGps(lat, lng);
-  return { x: coords.x, y: coords.y, lat, lng };
+export const getDeliveryCoordinates = (id: string, address: string, originX?: number, originY?: number): { x: number; y: number; lat: number; lng: number } | null => {
+  const gps = getGpsForLocation(id, address);
+  if (!gps) return null;
+  const coords = getPercentCoordsFromGps(gps.lat, gps.lng);
+  return { x: coords.x, y: coords.y, lat: gps.lat, lng: gps.lng };
 };
 
 const calculateDistanceKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
@@ -1242,7 +1253,8 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   const orig = getBranchCoordinates(assignedDelivery.originBranch, activeBranches.find(b => b.id === assignedDelivery.originBranch)?.name || '');
                   const dest = getDeliveryCoordinates(assignedDelivery.id, assignedDelivery.deliveryAddress, orig.x, orig.y);
                   origLat = orig.lat; origLng = orig.lng;
-                  destLat = dest.lat; destLng = dest.lng;
+                  destLat = dest ? dest.lat : orig.lat;
+                  destLng = dest ? dest.lng : orig.lng;
                 } else {
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(matchedTruck, b));
                   const orig = homeBranch 
@@ -1300,7 +1312,8 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   const orig = getBranchCoordinates(assignedDelivery.originBranch, activeBranches.find(b => b.id === assignedDelivery.originBranch)?.name || '');
                   const dest = getDeliveryCoordinates(assignedDelivery.id, assignedDelivery.deliveryAddress, orig.x, orig.y);
                   origLat = orig.lat; origLng = orig.lng;
-                  destLat = dest.lat; destLng = dest.lng;
+                  destLat = dest ? dest.lat : orig.lat;
+                  destLng = dest ? dest.lng : orig.lng;
                 } else {
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
                   const orig = homeBranch 
@@ -1452,6 +1465,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 const matchedOrigBranch = activeBranches.find(b => b.id === delivery.originBranch);
                 const origCoords = getBranchCoordinates(delivery.originBranch, matchedOrigBranch?.name || '', matchedOrigBranch?.address);
                 const destCoords = getDeliveryCoordinates(delivery.id, delivery.deliveryAddress, origCoords.x, origCoords.y);
+                if (!destCoords) return null; // Do not render on map if address is incomplete or not a direct match
                 const isAssigned = !!delivery.assignedTruck;
 
                 return (
@@ -1495,7 +1509,8 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   const orig = getBranchCoordinates(assignedDelivery.originBranch, matchedOrigBranch?.name || '', matchedOrigBranch?.address);
                   const dest = getDeliveryCoordinates(assignedDelivery.id, assignedDelivery.deliveryAddress, orig.x, orig.y);
                   origLat = orig.lat; origLng = orig.lng;
-                  destLat = dest.lat; destLng = dest.lng;
+                  destLat = dest ? dest.lat : orig.lat;
+                  destLng = dest ? dest.lng : orig.lng;
                   isMoving = false;
                 } else {
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));

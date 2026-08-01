@@ -329,27 +329,88 @@ export function DeliveryBoard({
     );
   };
 
+  // Check if a date is an available delivery day for the active store configuration
+  const isAvailableDeliveryDay = (targetDateStr: string) => {
+    const targetDate = new Date(targetDateStr + 'T00:00:00');
+    const dayName = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
+
+    // Check if day is in active store's delivery days
+    if (!activeConfig.deliveryDays.includes(dayName as any)) {
+      return false;
+    }
+
+    // Check if date has full day closure rule
+    const allDayRule = closureRules.find(r => 
+      (r.branchId === 'ALL' || r.branchId === selectedBranchId) &&
+      r.date === targetDateStr &&
+      r.slot === 'ALL_DAY' &&
+      r.closureType === 'CLOSED_ALL'
+    );
+    if (allDayRule) return false;
+
+    const amRule = getClosureRule(targetDateStr, 'AM');
+    const pmRule = getClosureRule(targetDateStr, 'PM');
+    if (amRule?.closureType === 'CLOSED_ALL' && pmRule?.closureType === 'CLOSED_ALL') {
+      return false;
+    }
+
+    return true;
+  };
+
+  // Find the next available delivery day starting on or after startSearchDateStr
+  const getNextAvailableDeliveryDay = (startSearchDateStr: string): string => {
+    if (!startSearchDateStr) return formatDateStr(new Date());
+    let curr = new Date(startSearchDateStr + 'T00:00:00');
+    for (let i = 0; i < 60; i++) {
+      const candidateStr = formatDateStr(curr);
+      if (isAvailableDeliveryDay(candidateStr)) {
+        return candidateStr;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    return startSearchDateStr;
+  };
+
   // Get deliveries for specific date & slot
   const getSlotDeliveries = (dateStr: string, slot: 'AM' | 'PM') => {
+    const todayStr = formatDateStr(new Date());
+
     return filteredDeliveries.filter(d => {
-      const targetDate = d.scheduledDate ? d.scheduledDate.split('T')[0] : '';
-      if (targetDate) {
-        if (targetDate !== dateStr) return false;
-        if (d.scheduledSlot) {
-          return d.scheduledSlot === slot;
+      let effectiveDate = '';
+      const isCompleted = d.status === DeliveryStatus.DELIVERED || d.status === DeliveryStatus.RETURNED;
+
+      if (isCompleted) {
+        // Completed or returned deliveries stay on their completion / scheduled / registered date
+        if (d.deliveredAt) {
+          effectiveDate = d.deliveredAt.split('T')[0];
+        } else if (d.scheduledDate) {
+          effectiveDate = d.scheduledDate.split('T')[0];
+        } else if (d.registeredAt) {
+          effectiveDate = d.registeredAt.split('T')[0];
         }
-        const hour = new Date(d.registeredAt || Date.now()).getHours();
-        return slot === 'AM' ? hour < 12 : hour >= 12;
+      } else {
+        // Incomplete / active deliveries:
+        // Original date is scheduledDate or registeredAt date
+        const origDate = d.scheduledDate 
+          ? d.scheduledDate.split('T')[0] 
+          : (d.registeredAt ? d.registeredAt.split('T')[0] : '');
+
+        if (origDate) {
+          // If the delivery was not completed on its registered/scheduled date, or if its original date was closed,
+          // automatically roll forward to the Next Available Delivery Day on or after max(origDate, todayStr)
+          const startSearchDate = origDate < todayStr ? todayStr : origDate;
+          effectiveDate = getNextAvailableDeliveryDay(startSearchDate);
+        }
       }
 
-      // If not explicitly scheduled with a scheduledDate, only match if active status and registeredAt falls on dateStr
-      if (d.status !== DeliveryStatus.REGISTERED && d.registeredAt?.startsWith(dateStr)) {
-        if (d.scheduledSlot) return d.scheduledSlot === slot;
-        const hour = new Date(d.registeredAt || Date.now()).getHours();
-        return slot === 'AM' ? hour < 12 : hour >= 12;
-      }
+      if (effectiveDate !== dateStr) return false;
 
-      return false;
+      // Determine slot
+      if (d.scheduledSlot) {
+        return d.scheduledSlot === slot;
+      }
+      const hour = new Date(d.registeredAt || Date.now()).getHours();
+      return slot === 'AM' ? hour < 12 : hour >= 12;
     });
   };
 

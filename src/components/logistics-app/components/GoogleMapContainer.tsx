@@ -631,8 +631,8 @@ function MapInner({
       const dest = getDeliveryCoordinates(assignedDelivery.id, assignedDelivery.deliveryAddress, orig.x, orig.y);
       origLat = isNaN(orig.lat) ? 44.6488 : orig.lat;
       origLng = isNaN(orig.lng) ? -63.5752 : orig.lng;
-      destLat = isNaN(dest.lat) ? 44.6488 : dest.lat;
-      destLng = isNaN(dest.lng) ? -63.5752 : dest.lng;
+      destLat = dest && !isNaN(dest.lat) ? dest.lat : 0;
+      destLng = dest && !isNaN(dest.lng) ? dest.lng : 0;
     }
 
     const { lat: truckLat, lng: truckLng } = getTruckCoords(truck, simProgress, activeBranches);
@@ -746,6 +746,7 @@ function MapInner({
           const matchedOrigBranch = activeBranches.find((b: any) => b.id === delivery.originBranch);
           const origCoords = getBranchCoordinates(delivery.originBranch, matchedOrigBranch?.name || '', matchedOrigBranch?.address);
           const destCoords = getDeliveryCoordinates(delivery.id, delivery.deliveryAddress, origCoords.x, origCoords.y);
+          if (!destCoords) return null; // Do not show on map if address is incomplete or not a direct match
 
           return (
             <AdvancedMarker
