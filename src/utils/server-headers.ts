@@ -10,7 +10,7 @@
  * from localStorage on page load.
  */
 
-import { createClient } from './supabase/client';
+import { createClient, handleAuthError } from './supabase/client';
 import { publicAnonKey } from './supabase/info';
 
 const supabase = createClient();
@@ -66,13 +66,16 @@ export async function getUserAccessToken(): Promise<string | null> {
         const getSessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 1500));
         const raceResult = await Promise.race([getSessionPromise, timeoutPromise]) as any;
+        if (raceResult?.error) {
+          handleAuthError(raceResult.error);
+        }
         const session = raceResult?.data?.session || raceResult?.session;
         if (session?.access_token) {
           _cachedToken = session.access_token;
           _cachedTokenExpiresAtMs = session.expires_at ? session.expires_at * 1000 : null;
         }
-      } catch {
-        // Ignore and continue with refresh/cached fallback.
+      } catch (e) {
+        handleAuthError(e);
       }
     }
 
@@ -92,13 +95,22 @@ export async function getUserAccessToken(): Promise<string | null> {
         const raceResult = await Promise.race([refreshPromise, timeoutPromise]) as any;
         const refreshed = raceResult?.data?.session || raceResult?.session;
         const refreshError = raceResult?.error;
-        if (!refreshError && refreshed?.access_token) {
+        if (refreshError) {
+          handleAuthError(refreshError);
+          _cachedToken = null;
+          _cachedTokenExpiresAtMs = null;
+          return null;
+        }
+        if (refreshed?.access_token) {
           _cachedToken = refreshed.access_token;
           _cachedTokenExpiresAtMs = refreshed.expires_at ? refreshed.expires_at * 1000 : null;
           return refreshed.access_token;
         }
-      } catch {
-        // Refresh failed — fall through to cached token.
+      } catch (e) {
+        handleAuthError(e);
+        _cachedToken = null;
+        _cachedTokenExpiresAtMs = null;
+        return null;
       }
     }
 

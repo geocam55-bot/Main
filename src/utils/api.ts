@@ -1,4 +1,4 @@
-import { createClient } from './supabase/client';
+import { createClient, handleAuthError } from './supabase/client';
 import { getAllCampaignsClient, createCampaignClient, updateCampaignClient, deleteCampaignClient, sendCampaignClient } from './campaigns-client';
 import { getAllQuotesClient, getQuotesByOpportunityClient, createQuoteClient, updateQuoteClient, deleteQuoteClient, getQuoteTrackingStatusClient, fixQuoteOrganizationIds } from './quotes-client';
 import { getAllInventoryClient, createInventoryClient, updateInventoryClient, deleteInventoryClient, upsertInventoryBySKUClient, bulkUpsertInventoryBySKUClient, searchInventoryClient, regenerateInventoryKeywordsClient, regenerateAllInventoryKeywordsClient } from './inventory-client';
@@ -66,36 +66,44 @@ export const authAPI = {
   },
 
   getSession: async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    
-    // If we have a session, fetch the user's profile from the database
-    if (session?.user) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-      
-      if (profileError) {
-        // Return session without profile data if profile fetch fails
-        return { session, user: null };
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        handleAuthError(error);
+        return { session: null, user: null };
       }
       
-      // Construct user object with profile data
-      const user = {
-        id: profile.id,
-        email: profile.email || session.user.email,
-        name: profile.name || session.user.user_metadata?.name || '',
-        role: profile.role || 'standard_user',
-        organizationId: profile.organization_id,
-        managerId: profile.manager_id,
-      };
+      // If we have a session, fetch the user's profile from the database
+      if (session?.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profileError) {
+          // Return session without profile data if profile fetch fails
+          return { session, user: null };
+        }
+        
+        // Construct user object with profile data
+        const user = {
+          id: profile.id,
+          email: profile.email || session.user.email,
+          name: profile.name || session.user.user_metadata?.name || '',
+          role: profile.role || 'standard_user',
+          organizationId: profile.organization_id,
+          managerId: profile.manager_id,
+        };
+        
+        return { session, user };
+      }
       
-      return { session, user };
+      return { session: null, user: null };
+    } catch (err) {
+      handleAuthError(err);
+      return { session: null, user: null };
     }
-    
-    return { session, user: null };
   },
 };
 

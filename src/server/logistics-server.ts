@@ -1408,16 +1408,9 @@ async function runSelfHealingOnce() {
 
             const matchedFt = DEFAULT_FLEET_TRUCKS.find(ft => ft.id === t.id || ft.name === t.name);
 
-            // Fix 1903 and 2401 positions to 500 Windmill Road Terminal Depot (44.7082, -63.5938)
-            let initialLat = (matchedFt ? matchedFt.lat : deserialized.lat) || (is2101 ? 44.8770 : 44.7082);
-            let initialLng = (matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5938);
-            if (is1903 || isAlmon2401) {
-              initialLat = 44.7082;
-              initialLng = -63.5938;
-            } else if (is2101) {
-              initialLat = 44.8770;
-              initialLng = -63.5410;
-            }
+            // Set realistic initial position / telematics
+            let initialLat = (typeof deserialized.gpsLat === 'number' && !isNaN(deserialized.gpsLat)) ? deserialized.gpsLat : ((matchedFt ? matchedFt.lat : deserialized.lat) || (is2101 ? 44.8770 : 44.7082));
+            let initialLng = (typeof deserialized.gpsLng === 'number' && !isNaN(deserialized.gpsLng)) ? deserialized.gpsLng : ((matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5938));
 
             const defaultDeviceId = deserialized.gpsDeviceId || `FC-${t.id}`;
             const defaultSerialNumber = deserialized.gpsSerialNumber || `SN-FC${Math.floor(100000 + Math.random() * 900000)}`;
@@ -1426,10 +1419,10 @@ async function runSelfHealingOnce() {
             const timestamp = new Date().toISOString();
 
             // Set realistic initial speed / status for telematics preview
-            const initialSpeed = matchedFt ? matchedFt.speed : (is2101 ? 120 : ((is1903 || isAlmon2401) ? 0 : 52));
-            const initialIdling = matchedFt ? matchedFt.idling : ((is1903 || isAlmon2401) ? 0 : 0);
+            const initialSpeed = typeof deserialized.gpsSpeed === 'number' ? deserialized.gpsSpeed : (matchedFt ? matchedFt.speed : (is2101 ? 120 : 45));
+            const initialIdling = typeof deserialized.gpsIdlingMins === 'number' ? deserialized.gpsIdlingMins : (matchedFt ? matchedFt.idling : 0);
             const updatedDriver = (t.driver && t.driver.toLowerCase() !== 'no driver' && t.driver.toLowerCase() !== 'driver') ? t.driver : (matchedFt?.driver || "No Driver");
-            const updatedBranchId = (is1903 || isAlmon2401) ? "DC-WINAMILL" : (matchedFt?.branchId || t.branchId || "DC-WINAMILL");
+            const updatedBranchId = matchedFt?.branchId || t.branchId || "DC-WINAMILL";
 
             const updatedType = serializeToType(
               deserialized.type || "Commercial Truck",
@@ -2808,7 +2801,27 @@ app.use((req, res, next) => {
       if (trucks !== undefined) {
         if (sanitizedTrucks.length > 0) {
           try {
+            // Fetch existing DB trucks to preserve live server telematics coordinates
+            const { data: existingDbTrucks } = await supabase.from("trucks").select("*").eq("tenantId", tenantId);
+            const existingTruckMap = new Map<string, any>();
+            if (existingDbTrucks) {
+              for (const ex of existingDbTrucks) {
+                const deserialized = deserializeType(ex);
+                existingTruckMap.set(String(ex.id).toLowerCase(), { ...ex, ...deserialized });
+              }
+            }
+
             const trucksToUpsert = sanitizedTrucks.map((t: any) => {
+              const ex = existingTruckMap.get(String(t.id).toLowerCase());
+
+              const gpsLat = (typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (ex?.gpsLat ?? t.gpsLat ?? ex?.lat ?? t.lat);
+              const gpsLng = (typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (ex?.gpsLng ?? t.gpsLng ?? ex?.lng ?? t.lng);
+              const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : (ex?.lat ?? t.lat ?? gpsLat);
+              const lng = (typeof t.lng === 'number' && !isNaN(t.lng)) ? t.lng : (ex?.lng ?? t.lng ?? gpsLng);
+              const gpsSpeed = (typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : (ex?.gpsSpeed ?? t.gpsSpeed);
+              const gpsIdlingMins = (typeof t.gpsIdlingMins === 'number' && !isNaN(t.gpsIdlingMins)) ? t.gpsIdlingMins : (ex?.gpsIdlingMins ?? t.gpsIdlingMins);
+              const gpsLastHandshake = (ex?.gpsLastHandshake && t.gpsLastHandshake && ex.gpsLastHandshake > t.gpsLastHandshake) ? ex.gpsLastHandshake : (t.gpsLastHandshake || ex?.gpsLastHandshake);
+
               return {
                 id: t.id,
                 tenantId: t.tenantId,
@@ -2816,19 +2829,19 @@ app.use((req, res, next) => {
                 type: serializeToType(
                   t.type,
                   t.registrationDueDate,
-                  t.lat,
-                  t.lng,
-                  t.gpsSource,
-                  t.gpsDeviceId,
-                  t.gpsSerialNumber,
-                  t.gpsDeviceName,
-                  t.gpsSimIccid,
-                  t.gpsStatus,
-                  t.gpsLastHandshake,
-                  t.gpsLat,
-                  t.gpsLng,
-                  t.gpsSpeed,
-                  t.gpsIdlingMins
+                  lat,
+                  lng,
+                  t.gpsSource || 'truck',
+                  t.gpsDeviceId || ex?.gpsDeviceId,
+                  t.gpsSerialNumber || ex?.gpsSerialNumber,
+                  t.gpsDeviceName || ex?.gpsDeviceName,
+                  t.gpsSimIccid || ex?.gpsSimIccid,
+                  t.gpsStatus || ex?.gpsStatus || 'Connected',
+                  gpsLastHandshake,
+                  gpsLat,
+                  gpsLng,
+                  gpsSpeed,
+                  gpsIdlingMins
                 ),
                 driver: t.driver,
                 branchId: t.branchId,
@@ -4554,6 +4567,8 @@ async function syncFleetCompleteTelemetry
           let currentLng = typeof truck.gpsLng === 'number' && !isNaN(truck.gpsLng) ? truck.gpsLng : (typeof truck.lng === 'number' && !isNaN(truck.lng) ? truck.lng : -63.5752);
           
           const idHash = (item.id || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+          const timeStep = Math.floor(Date.now() / 15000);
+          const stateCycle = (idHash + timeStep) % 10;
 
           let speed = 0;
           let idlingMins = 0;
@@ -4562,8 +4577,7 @@ async function syncFleetCompleteTelemetry
           let deltaLng = 0;
 
           if (idOrName.includes("2101")) {
-            // Truck 2101 - Windmill F150 actively moving at 120 km/h on HWY-102
-            speed = 120;
+            speed = 110 + (timeStep % 15);
             idlingMins = 0;
             engineStatus = true;
             deltaLat = -0.0015;
@@ -4572,25 +4586,29 @@ async function syncFleetCompleteTelemetry
               currentLat = 44.8770;
               currentLng = -63.5410;
             }
-          } else if (isTruck1903 || isAlmon2401) {
-            // Stationary parked at 500 Windmill Road Terminal Depot
+          } else if (stateCycle < 6) {
+            // Driving / In Transit on active Maritime route (60% of time)
+            speed = 38 + ((idHash * 7 + timeStep * 13) % 48); // 38 to 86 km/h
+            idlingMins = 0;
+            engineStatus = true;
+            const heading = ((idHash * 31 + timeStep * 17) % 360) * (Math.PI / 180);
+            deltaLat = Math.sin(heading) * 0.0014;
+            deltaLng = Math.cos(heading) * 0.0014;
+          } else if (stateCycle < 8) {
+            // Engine Idling at job site / stop (20% of time)
+            speed = 0;
+            idlingMins = 4 + ((timeStep * 3 + idHash) % 20);
+            engineStatus = true;
+          } else {
+            // Parked at depot (20% of time)
             speed = 0;
             idlingMins = 0;
             engineStatus = false;
-            currentLat = 44.7082;
-            currentLng = -63.5938;
-          } else if (idOrName.includes("2404") || idOrName.includes("2502") || idOrName.includes("2504") || idOrName.includes("pei ws") || idOrName.includes("1902")) {
-            speed = 0;
-            idlingMins = 12 + (idHash % 25);
-            engineStatus = true;
-          } else {
-            // Active driving units in transit on highways/routes
-            speed = 42 + (idHash % 38); // Realistic road speed between 42 and 80 km/h
-            idlingMins = 0;
-            engineStatus = true;
-            const heading = ((idHash * 31) % 360) * (Math.PI / 180);
-            deltaLat = Math.sin(heading) * 0.0012;
-            deltaLng = Math.cos(heading) * 0.0012;
+          }
+
+          if (currentLat < 44.4 || currentLat > 45.3 || currentLng < -64.2 || currentLng > -62.8) {
+            currentLat = 44.6488 + ((idHash % 8) * 0.02);
+            currentLng = -63.5752 - ((idHash % 8) * 0.02);
           }
 
           const targetLat = Number((currentLat + deltaLat).toFixed(6));
@@ -4821,29 +4839,27 @@ async function syncFleetCompleteTelemetry
             await supabase.from('trucks').update({
               type: updatedType
             }).eq('id', truck.id);
-          } else {
-            // Update local in-memory structure
-            const state = inMemoryTenantStates[item.tenantId];
-            if (state && state.trucks) {
-              state.trucks = state.trucks.map((t: any) => {
-                if (t.id === truck.id) {
-                  // Return updated React truck shape directly
-                  return {
-                    ...t,
-                    gpsStatus: 'Connected',
-                    gpsLastHandshake: timestamp,
-                    gpsLat: lat,
-                    gpsLng: lng,
-                    gpsSpeed: speed,
-                    gpsIdlingMins: idlingMins,
-                    // Keep coordinates synced
-                    lat,
-                    lng
-                  };
-                }
-                return t;
-              });
-            }
+          }
+
+          // ALWAYS update in-memory state so any state requests get live telemetry immediately
+          const state = inMemoryTenantStates[item.tenantId];
+          if (state && state.trucks) {
+            state.trucks = state.trucks.map((t: any) => {
+              if (t.id === truck.id) {
+                return {
+                  ...t,
+                  gpsStatus: 'Connected',
+                  gpsLastHandshake: timestamp,
+                  gpsLat: lat,
+                  gpsLng: lng,
+                  gpsSpeed: speed,
+                  gpsIdlingMins: idlingMins,
+                  lat,
+                  lng
+                };
+              }
+              return t;
+            });
           }
         }
       }

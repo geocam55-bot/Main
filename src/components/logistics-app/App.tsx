@@ -124,27 +124,31 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       map.set(key, truck);
     } else {
       const existing = map.get(key)!;
-      const existingHasGps = !!(existing.gpsDeviceId && existing.gpsDeviceId !== 'DISABLED');
-      const newHasGps = !!(truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED');
+      const driverName = (truck.driver && truck.driver.toLowerCase() !== 'no driver') ? truck.driver : (existing.driver || truck.driver);
+      const branchId = truck.branchId || existing.branchId;
 
-      if (!existingHasGps && newHasGps) {
-        map.set(key, { ...existing, ...truck });
-      } else if (existingHasGps && newHasGps) {
-        map.set(key, { ...existing, ...truck });
-      } else if (existingHasGps && !newHasGps) {
-        map.set(key, { ...truck, ...existing });
-      } else {
-        map.set(key, {
-          ...existing,
-          ...truck,
-          driver: (existing.driver && existing.driver.toLowerCase() !== 'no driver') ? existing.driver : truck.driver,
-          branchId: existing.branchId || truck.branchId,
-          lat: truck.lat ?? existing.lat,
-          lng: truck.lng ?? existing.lng,
-          gpsLat: truck.gpsLat ?? existing.gpsLat,
-          gpsLng: truck.gpsLng ?? existing.gpsLng
-        });
-      }
+      // Preserve newer live telemetry values if available
+      const gpsLat = truck.gpsLat !== undefined && !isNaN(truck.gpsLat) ? truck.gpsLat : existing.gpsLat;
+      const gpsLng = truck.gpsLng !== undefined && !isNaN(truck.gpsLng) ? truck.gpsLng : existing.gpsLng;
+      const lat = truck.lat !== undefined && !isNaN(truck.lat) ? truck.lat : existing.lat;
+      const lng = truck.lng !== undefined && !isNaN(truck.lng) ? truck.lng : existing.lng;
+      const gpsSpeed = typeof truck.gpsSpeed === 'number' ? truck.gpsSpeed : existing.gpsSpeed;
+      const gpsIdlingMins = typeof truck.gpsIdlingMins === 'number' ? truck.gpsIdlingMins : existing.gpsIdlingMins;
+      const gpsLastHandshake = (truck.gpsLastHandshake && existing.gpsLastHandshake && truck.gpsLastHandshake < existing.gpsLastHandshake) ? existing.gpsLastHandshake : (truck.gpsLastHandshake || existing.gpsLastHandshake);
+
+      map.set(key, {
+        ...existing,
+        ...truck,
+        driver: driverName,
+        branchId,
+        gpsLat,
+        gpsLng,
+        lat,
+        lng,
+        gpsSpeed,
+        gpsIdlingMins,
+        gpsLastHandshake
+      });
     }
   }
 
@@ -393,7 +397,7 @@ export default function App() {
         setActiveTab('scanner');
       }
     } else if (role === 'User') {
-      if (!['dashboard', 'queue'].includes(activeTab)) {
+      if (!['dashboard', 'queue', 'delivery-board', 'document-import'].includes(activeTab)) {
         setActiveTab('dashboard');
       }
     }
@@ -960,13 +964,9 @@ export default function App() {
     const tenantId = currentTenant.id;
 
     const loadState = async () => {
-      // Prevent fetching if a mutation/save/delete is in progress or occurred very recently
+      // Prevent fetching only if an active sync POST request is currently in flight
       if (syncStatusRef.current === 'SYNCING') {
         console.log("[Sync Lock] Skipping database state polling during active synchronization.");
-        return;
-      }
-      if (Date.now() - lastMutationTimeRef.current < 15000) {
-        console.log("[Sync Lock] Skipping database state polling to allow recent updates to fully commit.");
         return;
       }
 
@@ -994,12 +994,6 @@ export default function App() {
           } else {
             throw apiErr;
           }
-        }
-
-        if (Date.now() - lastMutationTimeRef.current < 15000) {
-          console.log("[Sync Lock] Ignoring incoming state fetch response to preserve recent user mutations.");
-          setSyncStatus('IDLE');
-          return;
         }
 
         if (data.supabaseActive) {
@@ -2262,6 +2256,21 @@ export default function App() {
                                 {deliveries.length}
                               </span>
                             )}
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setActiveTab('delivery-board');
+                              setIsMobileNavOpen(false);
+                            }}
+                            className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer ${
+                              activeTab === 'delivery-board'
+                                ? 'bg-blue-800 text-white shadow-sm'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <CalendarIcon className="h-4 w-4 text-blue-500" />
+                            <span>Delivery Board</span>
                           </button>
 
                           <button

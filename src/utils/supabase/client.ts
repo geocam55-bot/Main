@@ -4,6 +4,44 @@ import type { Database } from '../../src/types/database.types';
 
 let supabaseClient: ReturnType<typeof createSupabaseClient<Database>> | null = null;
 
+export function clearStaleAuthTokens() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth-token'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+    }
+  } catch (e) {
+    // Ignore localStorage access errors
+  }
+}
+
+export function handleAuthError(error: any): boolean {
+  if (!error) return false;
+  const msg = typeof error === 'string' ? error : error.message || error.error_description || (error.toString ? error.toString() : '');
+  if (
+    msg.includes('Refresh Token') ||
+    msg.includes('refresh_token') ||
+    msg.includes('Invalid Refresh Token') ||
+    msg.includes('Refresh Token Not Found') ||
+    msg.includes('JWTPayload') ||
+    msg.includes('jwt expired')
+  ) {
+    console.warn('[Supabase Auth] Cleared invalid/stale refresh token:', msg);
+    clearStaleAuthTokens();
+    if (supabaseClient) {
+      supabaseClient.auth.signOut().catch(() => {});
+    }
+    return true;
+  }
+  return false;
+}
+
 export function getSupabaseUrl() {
   let envUrl: string | undefined;
   try {

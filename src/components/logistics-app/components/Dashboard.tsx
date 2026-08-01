@@ -166,18 +166,10 @@ export const cleanAddressText = (address: string | undefined): string => {
 };
 
 export const getTruckCoords = (truck: any, simProgress: Record<string, number>, branches: any[]) => {
-  const idStr = String(truck?.id || '').toLowerCase();
-  const nameStr = String(truck?.name || '').toLowerCase();
-  const isParkedWindmill = idStr.includes('1903') || idStr.includes('2401') || idStr.includes('almon') || nameStr.includes('1903') || nameStr.includes('2401') || nameStr.includes('almon');
-
-  if (isParkedWindmill) {
-    return { lat: 44.7082, lng: -63.5938, hasRealGps: true, isTruckGps: true };
-  }
-
-  const isTruckGps = truck.gpsSource === 'truck';
+  const isTruckGps = truck?.gpsSource === 'truck';
   const hasRealGps = isTruckGps 
-    ? (truck.gpsLat !== undefined && truck.gpsLng !== undefined && !isNaN(truck.gpsLat) && !isNaN(truck.gpsLng))
-    : (truck.lat !== undefined && truck.lng !== undefined && !isNaN(truck.lat) && !isNaN(truck.lng));
+    ? (truck?.gpsLat !== undefined && truck?.gpsLng !== undefined && !isNaN(truck.gpsLat) && !isNaN(truck.gpsLng))
+    : (truck?.lat !== undefined && truck?.lng !== undefined && !isNaN(truck.lat) && !isNaN(truck.lng));
 
   let baseLat = hasRealGps 
     ? (isTruckGps ? truck.gpsLat : truck.lat) 
@@ -193,12 +185,12 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
     baseLng = branchCoords.lng;
   }
 
-  const speed = typeof truck.gpsSpeed === 'number' ? truck.gpsSpeed : (typeof truck.speed === 'number' ? truck.speed : 0);
-  const isMoving = !isParkedWindmill && (speed > 0 || truck.status === 'Driving' || truck.status === 'In Transit' || idStr.includes('2101') || idStr.includes('1901') || idStr.includes('2409') || idStr.includes('2412') || idStr.includes('2408') || idStr.includes('2501'));
+  const speed = typeof truck?.gpsSpeed === 'number' ? truck.gpsSpeed : (typeof truck?.speed === 'number' ? truck.speed : 0);
+  const isMoving = speed > 0 || truck?.status === 'Driving' || truck?.status === 'In Transit';
 
   if (isMoving) {
-    const progress = simProgress[truck.id] ?? 0.15;
-    const idHash = (truck.id || "").split("").reduce((sum: number, ch: string) => sum + ch.charCodeAt(0), 0);
+    const progress = simProgress[truck?.id] ?? 0.15;
+    const idHash = (truck?.id || "").split("").reduce((sum: number, ch: string) => sum + ch.charCodeAt(0), 0);
     
     // Smooth parametric path sweep along travel vector
     const headingRad = ((idHash * 43) % 360) * (Math.PI / 180);
@@ -1618,10 +1610,6 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 const nameStr = String(t.name || '').toLowerCase();
                 const idHash = idStr.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
 
-                const isAlmon2401 = idStr.includes("2401") || idStr.includes("almon") || nameStr.includes("2401") || nameStr.includes("almon");
-                const isTruck1903 = idStr.includes("1903") || nameStr.includes("1903");
-                const isParkedWindmill = isAlmon2401 || isTruck1903;
-
                 const realGpsSpeed = trAny?.gpsSpeed;
                 const hasGpsSpeed = typeof realGpsSpeed === 'number' && !isNaN(realGpsSpeed);
 
@@ -1635,11 +1623,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 let isIdling = false;
                 let isParked = true;
 
-                if (isParkedWindmill) {
-                  isDriving = false;
-                  isIdling = false;
-                  isParked = true;
-                } else if (hasGpsSpeed) {
+                if (hasGpsSpeed) {
                   if (realGpsSpeed > 0) {
                     isDriving = true;
                     isParked = false;

@@ -773,12 +773,10 @@ function MapInner({
         {/* Trucks / Active Drivers */}
         {displayTrucks.map((truck: any) => {
           const isOnline = isTruckOnline(truck);
-          const idOrName = ((truck.id || "") + " " + (truck.name || "")).toLowerCase();
-          const isParkedWindmill = idOrName.includes("1903") || idOrName.includes("2401") || idOrName.includes("almon");
 
           const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
-          const isMoving = !isParkedWindmill && isOnline && ((typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || (assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED));
-          const isIdling = !isParkedWindmill && !isMoving && isOnline && (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0);
+          const isMoving = isOnline && ((typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || (assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED));
+          const isIdling = !isMoving && isOnline && (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0);
 
           const coords = getTruckCoords(truck, simProgress, activeBranches);
           const isSelected = selectedTrackTruckId === truck.id;
@@ -790,13 +788,11 @@ function MapInner({
 
           const popupMessage = !isOnline
             ? `Driver Offline`
-            : isParkedWindmill
-              ? `Parked at 500 Windmill Road Terminal Depot (Lumber Yard)`
-              : isMoving
-                ? `Driving (${Math.round(truck.gpsSpeed || 45)} km/h)`
-                : isIdling
-                  ? `Engine Idling (${truck.gpsIdlingMins || 12} mins)`
-                  : `Parked at Terminal Depot`;
+            : isMoving
+              ? `Driving (${Math.round(truck.gpsSpeed || 45)} km/h)`
+              : isIdling
+                ? `Engine Idling (${truck.gpsIdlingMins || 12} mins)`
+                : `Parked at Terminal Depot`;
 
           return (
             <AdvancedMarker

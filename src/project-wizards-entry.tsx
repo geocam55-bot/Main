@@ -5,7 +5,7 @@ import { SpaceAccessNotice } from './components/SpaceAccessNotice';
 import { ThemeProvider } from './components/ThemeProvider';
 import { Toaster } from './components/ui/sonner';
 import ErrorBoundary from './components/ErrorBoundary';
-import { createClient } from './utils/supabase/client';
+import { createClient, handleAuthError } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
@@ -64,7 +64,13 @@ function ProjectWizardsApp() {
     }, 3000);
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        handleAuthError(error);
+        setLoading(false);
+        clearTimeout(loadSafetyTimer);
+        return;
+      }
       setSession(session);
       if (session?.user) {
         loadProfile(session).finally(() => {
@@ -74,6 +80,10 @@ function ProjectWizardsApp() {
         setLoading(false);
         clearTimeout(loadSafetyTimer);
       }
+    }).catch((err) => {
+      handleAuthError(err);
+      setLoading(false);
+      clearTimeout(loadSafetyTimer);
     });
 
     // Listen for auth changes

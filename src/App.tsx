@@ -13,7 +13,7 @@ import { DailyBriefingPopup } from './components/DailyBriefingPopup';
 import { Toaster } from './components/ui/sonner';
 import ErrorBoundary, { ErrorBoundaryFallback } from './components/ErrorBoundary';
 import { toast } from 'sonner@2.0.3';
-import { createClient } from './utils/supabase/client';
+import { createClient, clearStaleAuthTokens, handleAuthError } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import { getTheme } from './utils/themes';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
@@ -417,6 +417,7 @@ export function AppContent() {
     // Check active session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
+        handleAuthError(error);
         handleLogout();
         setLoading(false);
         clearTimeout(loadSafetyTimer);
@@ -432,7 +433,8 @@ export function AppContent() {
         setLoading(false);
         clearTimeout(loadSafetyTimer);
       }
-    }).catch(() => {
+    }).catch((err) => {
+      handleAuthError(err);
       setLoading(false);
       clearTimeout(loadSafetyTimer);
     });
@@ -442,6 +444,7 @@ export function AppContent() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        clearStaleAuthTokens();
         // Clear state immediately
         setSession(null);
         setUser(null);

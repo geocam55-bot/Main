@@ -5,7 +5,7 @@ import { SpaceAccessNotice } from './components/SpaceAccessNotice';
 import { ThemeProvider } from './components/ThemeProvider';
 import { Toaster } from './components/ui/sonner';
 import ErrorBoundary from './components/ErrorBoundary';
-import { createClient } from './utils/supabase/client';
+import { createClient, handleAuthError } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
@@ -64,7 +64,13 @@ function InsightsApp() {
       setLoading(false);
     }, 3000);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        handleAuthError(error);
+        setLoading(false);
+        clearTimeout(loadSafetyTimer);
+        return;
+      }
       setSession(session);
       setAccessToken(session?.access_token);
       if (session?.user) {
@@ -75,6 +81,10 @@ function InsightsApp() {
         setLoading(false);
         clearTimeout(loadSafetyTimer);
       }
+    }).catch((err) => {
+      handleAuthError(err);
+      setLoading(false);
+      clearTimeout(loadSafetyTimer);
     });
 
     const {
