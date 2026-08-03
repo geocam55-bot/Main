@@ -28,6 +28,7 @@ interface MemberLoginProps {
 export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -247,6 +248,10 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
         // Failed to update last_login – non-critical
       }
 
+      localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_session_active', 'true');
+
       onLogin(user, activeSignIn.session.access_token);
     } catch (err: any) {
       setError(err.message || 'Sign in failed. Please try again.');
@@ -391,6 +396,19 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <label htmlFor="member-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-foreground select-none">
+                <input
+                  id="member-keep-logged-in"
+                  type="checkbox"
+                  checked={keepLoggedIn}
+                  onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span className="font-medium text-xs sm:text-sm">Keep me logged in</span>
+              </label>
             </div>
 
             {error && (

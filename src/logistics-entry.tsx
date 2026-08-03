@@ -56,6 +56,14 @@ function LogisticsEntryApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(() => {
     try {
+      const isSessionActive = sessionStorage.getItem('prospaces_session_active');
+      const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
+      if (!isSessionActive && keepLoggedIn === 'false') {
+        localStorage.removeItem('prospaces_cached_user');
+        localStorage.removeItem('prospaces_active_user');
+        localStorage.removeItem('prospaces_active_tenant');
+        return null;
+      }
       const cached = localStorage.getItem('prospaces_cached_user');
       const parsed = cached ? JSON.parse(cached) : null;
       if (parsed) {

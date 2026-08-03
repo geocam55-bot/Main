@@ -551,37 +551,37 @@ export function DeliveryBoard({
     <div className="flex flex-col h-full bg-[#f8fafc] text-slate-800 min-h-screen font-sans">
       
       {/* TOP BAR / CONTROL HEADER */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-30 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-3 max-w-5xl mx-auto">
+      <header className="bg-white border-b border-slate-200 px-3 sm:px-4 py-2.5 sm:py-3 sticky top-0 z-30 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 max-w-5xl mx-auto">
           
           {/* Title & View Mode Switcher */}
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-50 border border-blue-100 rounded-xl text-blue-700">
-              <CalendarIcon className="h-5 w-5" />
+          <div className="flex items-center space-x-2.5">
+            <div className="p-1.5 sm:p-2 bg-blue-50 border border-blue-100 rounded-xl text-blue-700 shrink-0">
+              <CalendarIcon className="h-4 sm:h-5 w-4 sm:w-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="text-base font-extrabold text-slate-900">Delivery Board</h1>
-                <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                  ProSpaces Logistics
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <h1 className="text-sm sm:text-base font-extrabold text-slate-900">Delivery Board</h1>
+                <span className="bg-blue-100 text-blue-800 text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full uppercase">
+                  ProSpaces
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] sm:text-xs text-slate-500 hidden sm:block">
                 Visual slot capacity & scheduling per store
               </p>
             </div>
           </div>
 
           {/* Controls */}
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             
             {/* Store Picker Dropdown */}
-            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-2.5 py-1.5">
-              <Store className="h-3.5 w-3.5 text-slate-500 mr-1.5" />
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-2 py-1.5 sm:px-2.5">
+              <Store className="h-3.5 w-3.5 text-slate-500 mr-1 shrink-0" />
               <select
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent text-[11px] sm:text-xs font-bold text-slate-700 focus:outline-none cursor-pointer pr-1"
               >
                 <option value="ALL">All Stores</option>
                 {branches.map(b => (
@@ -593,22 +593,22 @@ export function DeliveryBoard({
             </div>
 
             {/* View Modes */}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="flex bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200">
               <button
                 onClick={() => setViewMode('week')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all min-h-[32px] ${
                   viewMode === 'week' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Week View
+                Week
               </button>
               <button
                 onClick={() => setViewMode('day')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all min-h-[32px] ${
                   viewMode === 'day' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Day Detail
+                Day
               </button>
             </div>
 
@@ -624,24 +624,24 @@ export function DeliveryBoard({
                   setFormPmCap(activeConfig.pmMaxCap);
                   setShowConfigModal(true);
                 }}
-                className="flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all"
+                className="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold transition-all min-h-[32px]"
               >
-                <Settings className="h-3.5 w-3.5" />
-                <span>Store Setup</span>
+                <Settings className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">Store Setup</span>
               </button>
             )}
 
             {/* Unassigned Freight Drawer Toggle */}
             <button
               onClick={() => setShowFreightPool(!showFreightPool)}
-              className={`relative flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+              className={`relative flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all border min-h-[32px] ${
                 showFreightPool
                   ? 'bg-amber-100 text-amber-900 border-amber-300'
                   : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
               }`}
             >
-              <Package className="h-3.5 w-3.5 text-amber-600" />
-              <span>Freight Pool</span>
+              <Package className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+              <span>Freight</span>
               {unassignedFreight.length > 0 && (
                 <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
                   {unassignedFreight.length}
@@ -655,30 +655,30 @@ export function DeliveryBoard({
       </header>
 
       {/* MAIN CONTAINER */}
-      <div className="flex-1 max-w-5xl w-full mx-auto p-4 flex gap-4 overflow-hidden">
+      <div className="flex-1 max-w-5xl w-full mx-auto p-2.5 sm:p-4 flex flex-col md:flex-row gap-4 overflow-x-hidden overflow-y-auto">
         
         {/* BOARD VIEW CANVAS */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+        <div className="flex-1 space-y-4 min-w-0">
 
           {/* ==================== WEEK SUMMARY VIEW (MOCKUP 1 EXACT RECREATION) ==================== */}
           {viewMode === 'week' && (
             <div className="space-y-3">
               
               {/* Date Header with Arrows & Filter */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center space-x-1.5 sm:space-x-2">
                   <button
                     onClick={handlePrev}
-                    className="p-1.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 transition-all shadow-2xs cursor-pointer"
+                    className="p-2 sm:p-1.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 transition-all shadow-2xs cursor-pointer active:scale-95 min-h-[36px] min-w-[36px] flex items-center justify-center"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <span className="text-sm font-extrabold text-slate-900 px-1">
+                  <span className="text-xs sm:text-sm font-extrabold text-slate-900 px-0.5 sm:px-1">
                     Week of {currentWeekDays[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {currentWeekDays[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
                   <button
                     onClick={handleNext}
-                    className="p-1.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 transition-all shadow-2xs cursor-pointer"
+                    className="p-2 sm:p-1.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 transition-all shadow-2xs cursor-pointer active:scale-95 min-h-[36px] min-w-[36px] flex items-center justify-center"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>
@@ -687,7 +687,7 @@ export function DeliveryBoard({
                 <div className="relative">
                   <button
                     onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs min-h-[36px]"
                   >
                     <Filter className="h-3.5 w-3.5 text-slate-500" />
                     <span>Filter</span>
@@ -741,22 +741,28 @@ export function DeliveryBoard({
                         setCurrentDate(dayDate);
                         setViewMode('day');
                       }}
-                      className={`bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all cursor-pointer flex items-center justify-between group ${
+                      className={`bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 group ${
                         !isDeliveryDay ? 'bg-slate-50/50' : ''
                       }`}
                     >
                       {/* Left: Day Label */}
-                      <div className="w-20 shrink-0">
-                        <div className={`text-sm font-black ${isDeliveryDay ? 'text-slate-900' : 'text-slate-500'}`}>{dayName}</div>
-                        <div className="text-xs text-slate-400 font-medium">{monthDay}</div>
+                      <div className="w-full sm:w-20 shrink-0 flex sm:flex-col items-center sm:items-start justify-between">
+                        <div className="flex items-baseline space-x-1.5 sm:space-x-0 sm:block">
+                          <div className={`text-sm font-black ${isDeliveryDay ? 'text-slate-900' : 'text-slate-500'}`}>{dayName}</div>
+                          <div className="text-xs text-slate-400 font-medium">{monthDay}</div>
+                        </div>
+                        <div className="sm:hidden text-xs font-bold text-blue-600 flex items-center space-x-1">
+                          <span>View Detail</span>
+                          <ChevronRightIcon className="h-3.5 w-3.5" />
+                        </div>
                       </div>
 
                       {/* Middle: AM & PM Progress Rows */}
-                      <div className="flex-1 mx-4 space-y-2">
+                      <div className="flex-1 w-full mx-0 sm:mx-2 space-y-2">
                         
                         {/* AM Row */}
-                        <div className="flex items-center space-x-3">
-                          <span className="text-xs font-extrabold text-slate-400 w-6">AM</span>
+                        <div className="flex items-center space-x-2.5 sm:space-x-3">
+                          <span className="text-xs font-extrabold text-slate-400 w-6 shrink-0">AM</span>
                           {!isDeliveryDay ? (
                             <div className="flex items-center space-x-2">
                               <span className="text-[11px] font-black px-2 py-0.5 rounded-md border flex items-center space-x-1 shadow-2xs bg-slate-100 text-slate-600 border-slate-300">
@@ -799,8 +805,8 @@ export function DeliveryBoard({
                         </div>
 
                         {/* PM Row */}
-                        <div className="flex items-center space-x-3">
-                          <span className="text-xs font-extrabold text-slate-400 w-6">PM</span>
+                        <div className="flex items-center space-x-2.5 sm:space-x-3">
+                          <span className="text-xs font-extrabold text-slate-400 w-6 shrink-0">PM</span>
                           {!isDeliveryDay ? (
                             <div className="flex items-center space-x-2">
                               <span className="text-[11px] font-black px-2 py-0.5 rounded-md border flex items-center space-x-1 shadow-2xs bg-slate-100 text-slate-600 border-slate-300">
@@ -847,9 +853,10 @@ export function DeliveryBoard({
                       </div>
 
                       {/* Right: Slot Counts & Chevron */}
-                      <div className="flex items-center space-x-3 shrink-0">
-                        <div className="text-right text-xs font-bold space-y-1">
+                      <div className="flex items-center justify-between sm:justify-end space-x-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                        <div className="text-left sm:text-right text-xs font-bold flex sm:block space-x-3 sm:space-x-0 space-y-0 sm:space-y-1">
                           <div>
+                            <span className="text-[10px] font-normal text-slate-400 inline sm:hidden mr-1">AM:</span>
                             {!isDeliveryDay || (amRule && amRule.closureType === 'CLOSED_ALL') ? (
                               <span className="text-slate-400 font-extrabold">--</span>
                             ) : (
@@ -857,6 +864,7 @@ export function DeliveryBoard({
                             )}
                           </div>
                           <div>
+                            <span className="text-[10px] font-normal text-slate-400 inline sm:hidden mr-1">PM:</span>
                             {!isDeliveryDay || (pmRule && pmRule.closureType === 'CLOSED_ALL') ? (
                               <span className="text-slate-400 font-extrabold">--</span>
                             ) : (
@@ -867,7 +875,7 @@ export function DeliveryBoard({
                           </div>
                         </div>
 
-                        <ChevronRightIcon className="h-4 w-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                        <ChevronRightIcon className="hidden sm:block h-4 w-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
                       </div>
 
                     </div>
@@ -1168,70 +1176,72 @@ export function DeliveryBoard({
 
         {/* ==================== UNASSIGNED FREIGHT DRAWER ==================== */}
         {showFreightPool && (
-          <aside className="w-80 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col shadow-lg shrink-0 h-fit">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-              <div className="flex items-center space-x-2">
-                <Package className="h-4 w-4 text-amber-600" />
-                <h3 className="text-xs font-black text-slate-900 uppercase">Unassigned Freight</h3>
-              </div>
-              <button
-                onClick={() => setShowFreightPool(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="text-[11px] text-slate-500 mb-3">
-              Unassigned freight pool waiting to be scheduled into Delivery Board slots.
-            </p>
-
-            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-              {unassignedFreight.length === 0 ? (
-                <div className="p-6 text-center border border-dashed border-slate-200 rounded-xl">
-                  <CheckCircle2 className="h-6 w-6 text-emerald-500 mx-auto mb-1" />
-                  <p className="text-xs font-bold text-slate-700">All Orders Scheduled!</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">No pending orders in freight pool.</p>
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-end p-2 sm:p-4 md:p-0 md:static md:z-auto md:bg-transparent md:backdrop-blur-none animate-in fade-in duration-150">
+            <aside className="w-full max-w-sm md:w-80 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col shadow-2xl md:shadow-lg shrink-0 h-full max-h-[85vh] md:max-h-none md:h-fit my-auto md:my-0">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3 shrink-0">
+                <div className="flex items-center space-x-2">
+                  <Package className="h-4 w-4 text-amber-600" />
+                  <h3 className="text-xs font-black text-slate-900 uppercase">Unassigned Freight</h3>
                 </div>
-              ) : (
-                unassignedFreight.map(freight => (
-                  <div
-                    key={freight.id}
-                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 hover:border-amber-400 transition-all"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-xs font-black text-amber-800 font-mono">{freight.invoiceNumber || freight.id}</span>
-                        <div className="text-xs font-bold text-slate-900">{freight.customerName}</div>
-                      </div>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
-                        {freight.deliveryCategory || 'Retail'}
-                      </span>
-                    </div>
+                <button
+                  onClick={() => setShowFreightPool(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg min-h-[32px] min-w-[32px] flex items-center justify-center"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
 
-                    <div className="text-[11px] text-slate-500 flex items-center">
-                      <MapPin className="h-3 w-3 mr-1 text-slate-400 shrink-0" />
-                      <span className="truncate">{freight.deliveryAddress}</span>
-                    </div>
+              <p className="text-[11px] text-slate-500 mb-3 shrink-0">
+                Unassigned freight pool waiting to be scheduled into Delivery Board slots.
+              </p>
 
-                    <button
-                      onClick={() => {
-                        setShowScheduleModal({
-                          freight,
-                          date: formatDateStr(currentDate),
-                          slot: 'AM'
-                        });
-                      }}
-                      className="w-full py-1.5 bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center space-x-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Assign to Board</span>
-                    </button>
+              <div className="space-y-2 overflow-y-auto pr-1 flex-1 max-h-[500px]">
+                {unassignedFreight.length === 0 ? (
+                  <div className="p-6 text-center border border-dashed border-slate-200 rounded-xl">
+                    <CheckCircle2 className="h-6 w-6 text-emerald-500 mx-auto mb-1" />
+                    <p className="text-xs font-bold text-slate-700">All Orders Scheduled!</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">No pending orders in freight pool.</p>
                   </div>
-                ))
-              )}
-            </div>
-          </aside>
+                ) : (
+                  unassignedFreight.map(freight => (
+                    <div
+                      key={freight.id}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 hover:border-amber-400 transition-all"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="text-xs font-black text-amber-800 font-mono">{freight.invoiceNumber || freight.id}</span>
+                          <div className="text-xs font-bold text-slate-900">{freight.customerName}</div>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
+                          {freight.deliveryCategory || 'Retail'}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 flex items-center">
+                        <MapPin className="h-3 w-3 mr-1 text-slate-400 shrink-0" />
+                        <span className="truncate">{freight.deliveryAddress}</span>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setShowScheduleModal({
+                            freight,
+                            date: formatDateStr(currentDate),
+                            slot: 'AM'
+                          });
+                        }}
+                        className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center space-x-1 min-h-[36px]"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Assign to Board</span>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </aside>
+          </div>
         )}
 
       </div>
@@ -1529,50 +1539,50 @@ export function DeliveryBoard({
 
       {/* TRUCK ORDERS SUMMARY MODAL */}
       {selectedTruckSummary && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
             {/* Modal Header */}
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2.5 bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300">
-                  <TruckIcon className="h-5 w-5" />
+            <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+                <div className="p-2 sm:p-2.5 bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300 shrink-0">
+                  <TruckIcon className="h-4 sm:h-5 w-4 sm:w-5" />
                 </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h3 className="text-sm font-extrabold text-white">{selectedTruckSummary.truckName} Manifest Summary</h3>
-                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                <div className="min-w-0">
+                  <div className="flex items-center space-x-2 flex-wrap">
+                    <h3 className="text-xs sm:text-sm font-extrabold text-white truncate">{selectedTruckSummary.truckName} Manifest</h3>
+                    <span className="text-[9px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
                       {selectedTruckSummary.slot} Block
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300 font-medium flex items-center space-x-2 mt-0.5">
-                    <span>👤 Driver: <strong className="text-white">{selectedTruckSummary.driverName}</strong></span>
+                  <p className="text-[11px] sm:text-xs text-slate-300 font-medium flex items-center space-x-2 mt-0.5 truncate">
+                    <span>Driver: <strong className="text-white">{selectedTruckSummary.driverName}</strong></span>
                     <span>•</span>
-                    <span>📅 {selectedTruckSummary.dateStr}</span>
+                    <span>{selectedTruckSummary.dateStr}</span>
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedTruckSummary(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Summary KPI Strip */}
-            <div className="bg-slate-50 border-b border-slate-200 p-3 grid grid-cols-3 gap-3 shrink-0">
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Orders / Stops</span>
-                <span className="text-base font-black text-slate-900">{selectedTruckSummary.deliveries.length}</span>
+            <div className="bg-slate-50 border-b border-slate-200 p-2.5 sm:p-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 shrink-0">
+              <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Orders / Stops</span>
+                <span className="text-sm sm:text-base font-black text-slate-900">{selectedTruckSummary.deliveries.length}</span>
               </div>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Category Mix</span>
+              <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Category Mix</span>
                 <span className="text-xs font-bold text-slate-700">
                   {selectedTruckSummary.deliveries.filter(d => d.deliveryCategory === 'Retail').length} Retail / {selectedTruckSummary.deliveries.filter(d => d.deliveryCategory === 'Pro').length} Pro
                 </span>
               </div>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Est. Total Weight</span>
+              <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Est. Total Weight</span>
                 <span className="text-xs font-bold text-slate-700">
                   {selectedTruckSummary.deliveries.reduce((sum, d) => sum + (parseFloat((d.weight || '').replace(/[^0-9.]/g, '')) || 0), 0) > 0
                     ? `${selectedTruckSummary.deliveries.reduce((sum, d) => sum + (parseFloat((d.weight || '').replace(/[^0-9.]/g, '')) || 0), 0).toLocaleString()} lbs`

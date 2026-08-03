@@ -51,6 +51,14 @@ interface LoginScreenProps {
 export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLanding }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
+
+  const handleCompleteLogin = (tenant: Tenant, user: User) => {
+    localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+    sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+    sessionStorage.setItem('prospaces_session_active', 'true');
+    onLoginSuccess(tenant, user);
+  };
   
   // Registration parameters
   const [customName, setCustomName] = useState('');
@@ -315,7 +323,7 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
         }
         if (result.found) {
           // Real user found in live Supabase Database!
-          onLoginSuccess(result.tenant || resolvedTenant, result.user);
+          handleCompleteLogin(result.tenant || resolvedTenant, result.user);
         } else {
           // No user found - let's prompt register flow so they can insert a real database record!
           setIsRegistering(true);
@@ -389,7 +397,7 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
         }
 
         // Complete the login successfully in offline local cache mode!
-        onLoginSuccess(fallbackTenant, fallbackUser);
+        handleCompleteLogin(fallbackTenant, fallbackUser);
       }
     } catch (err: any) {
       console.error(err);
@@ -505,7 +513,7 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
       }
 
       if (result && (result.success || result.user)) {
-        onLoginSuccess(result.tenant || resolvedTenant, result.user);
+        handleCompleteLogin(result.tenant || resolvedTenant, result.user);
       } else {
         throw new Error(result?.error || "Failed to commit registration.");
       }
@@ -805,6 +813,19 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
                       placeholder="Enter your password"
                       className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-base md:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all font-normal shadow-sm"
                     />
+                  </div>
+                  {/* Keep me logged in option */}
+                  <div className="flex items-center justify-between pt-1 text-left">
+                    <label htmlFor="logistics-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 hover:text-slate-900 transition-colors select-none">
+                      <input
+                        id="logistics-keep-logged-in"
+                        type="checkbox"
+                        checked={keepLoggedIn}
+                        onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span>Keep me logged in</span>
+                    </label>
                   </div>
                 </div>
                 {/* Sign In Button */}

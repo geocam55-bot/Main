@@ -32,6 +32,7 @@ interface MarketingLoginProps {
 export function MarketingLogin({ onLogin }: MarketingLoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -217,6 +218,10 @@ export function MarketingLogin({ onLogin }: MarketingLoginProps) {
         window.location.href = '/';
         return;
       }
+
+      localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_session_active', 'true');
 
       onLogin(user, activeSignIn.session.access_token);
     } catch (err: any) {
@@ -445,6 +450,19 @@ export function MarketingLogin({ onLogin }: MarketingLoginProps) {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <label htmlFor="mkt-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 select-none">
+                <input
+                  id="mkt-keep-logged-in"
+                  type="checkbox"
+                  checked={keepLoggedIn}
+                  onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                />
+                <span className="font-medium text-xs sm:text-sm">Keep me logged in</span>
+              </label>
             </div>
 
             {error && (

@@ -258,8 +258,26 @@ function DesktopOnlyPlanner({ children }: { children: React.ReactNode }) {
 
 export function AppContent() {
   const [session, setSession] = useState<Session | null>(null);
+
+  // Check if user chose NOT to keep logged in and the browser tab/process was terminated
+  const shouldForceLogoff = () => {
+    try {
+      const isSessionActive = sessionStorage.getItem('prospaces_session_active');
+      const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
+      if (!isSessionActive && keepLoggedIn === 'false') {
+        return true;
+      }
+    } catch {
+      // Ignore
+    }
+    return false;
+  };
+
   const [user, setUser] = useState<User | null>(() => {
     try {
+      if (shouldForceLogoff()) {
+        return null;
+      }
       const cached = localStorage.getItem('prospaces_cached_user');
       return cached ? JSON.parse(cached) : null;
     } catch {
@@ -268,6 +286,9 @@ export function AppContent() {
   });
   const [organization, setOrganization] = useState<Organization | null>(() => {
     try {
+      if (shouldForceLogoff()) {
+        return null;
+      }
       const cached = localStorage.getItem('prospaces_cached_organization');
       return cached ? JSON.parse(cached) : null;
     } catch {
@@ -413,6 +434,27 @@ export function AppContent() {
     const loadSafetyTimer = setTimeout(() => {
       setLoading(false);
     }, 3000);
+
+    const isSessionActive = sessionStorage.getItem('prospaces_session_active');
+    const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
+
+    if (!isSessionActive && keepLoggedIn === 'false') {
+      // User closed browser/tab without 'Keep me logged in' checked
+      localStorage.removeItem('prospaces_cached_user');
+      localStorage.removeItem('prospaces_cached_organization');
+      localStorage.removeItem('prospaces_keep_logged_in');
+      localStorage.removeItem('prospaces_active_user');
+      localStorage.removeItem('prospaces_active_tenant');
+      setUser(null);
+      setOrganization(null);
+      setSession(null);
+      setLoading(false);
+      clearTimeout(loadSafetyTimer);
+      supabase.auth.signOut().catch(() => {});
+      return;
+    }
+
+    sessionStorage.setItem('prospaces_session_active', 'true');
 
     // Check active session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
@@ -701,8 +743,15 @@ export function AppContent() {
       setOrganization(null);
       setCurrentView('member-login');
       setSession(null);
-      // Clear persisted view so user doesn't land on a protected page after logout
+      // Clear persisted view and auth session state so user is logged off completely
       sessionStorage.removeItem('prospaces_current_view');
+      sessionStorage.removeItem('prospaces_session_active');
+      sessionStorage.removeItem('prospaces_keep_logged_in');
+      localStorage.removeItem('prospaces_cached_user');
+      localStorage.removeItem('prospaces_cached_organization');
+      localStorage.removeItem('prospaces_keep_logged_in');
+      localStorage.removeItem('prospaces_active_user');
+      localStorage.removeItem('prospaces_active_tenant');
       // Reset email preloader cache
       try {
         resetEmailPreloader();

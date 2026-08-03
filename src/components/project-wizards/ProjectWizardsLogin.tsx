@@ -33,6 +33,7 @@ interface ProjectWizardsLoginProps {
 export function ProjectWizardsLogin({ onLogin }: ProjectWizardsLoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -237,6 +238,10 @@ export function ProjectWizardsLogin({ onLogin }: ProjectWizardsLoginProps) {
       } catch {
         // non-critical
       }
+
+      localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_session_active', 'true');
 
       // Route to correct destination
       if (destination === 'crm') {
@@ -476,6 +481,19 @@ export function ProjectWizardsLogin({ onLogin }: ProjectWizardsLoginProps) {
                   )}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <label htmlFor="pw-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 select-none">
+                <input
+                  id="pw-keep-logged-in"
+                  type="checkbox"
+                  checked={keepLoggedIn}
+                  onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="font-medium text-xs sm:text-sm">Keep me logged in</span>
+              </label>
             </div>
 
             {error && (

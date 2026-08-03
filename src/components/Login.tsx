@@ -26,6 +26,7 @@ interface LoginProps {
 export function Login({ onLogin, onBack }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [name, setName] = useState('');
   const [role, setRole] = useState<UserRole>('USER');
   const [invitationToken, setInvitationToken] = useState('');
@@ -312,6 +313,10 @@ export function Login({ onLogin, onBack }: LoginProps) {
         // Ignore
       }
 
+      localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_session_active', 'true');
+
       onLogin(user, signInData.session.access_token);
     } catch (err: any) {
       // Handle retry-success from auto-confirm flow: re-run the sign-in success path
@@ -379,6 +384,9 @@ export function Login({ onLogin, onBack }: LoginProps) {
             organizationId: profile?.organization_id,
             avatar_url: profile?.avatar_url,
           };
+          localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+          sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+          sessionStorage.setItem('prospaces_session_active', 'true');
           onLogin(user, retrySignIn.session.access_token);
           return;
         } catch (retryErr: any) {
@@ -676,6 +684,18 @@ export function Login({ onLogin, onBack }: LoginProps) {
                       }}
                       required
                     />
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <label htmlFor="signin-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-slate-200 select-none">
+                      <input
+                        id="signin-keep-logged-in"
+                        type="checkbox"
+                        checked={keepLoggedIn}
+                        onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                      />
+                      <span className="font-medium text-xs sm:text-sm">Keep me logged in</span>
+                    </label>
                   </div>
                   {error && (
                     <Alert variant="destructive">
