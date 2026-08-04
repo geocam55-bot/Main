@@ -419,7 +419,7 @@ export default function App() {
         setActiveTab('scanner');
       }
     } else if (role === 'User') {
-      if (!['dashboard', 'queue', 'delivery-board', 'document-import'].includes(activeTab)) {
+      if (!['dashboard', 'queue', 'delivery-board'].includes(activeTab)) {
         setActiveTab('dashboard');
       }
     }
@@ -2405,20 +2405,22 @@ export default function App() {
                             <span>Delivery Board</span>
                           </button>
 
-                          <button
-                            onClick={() => {
-                              setActiveTab('document-import');
-                              setIsMobileNavOpen(false);
-                            }}
-                            className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer ${
-                              activeTab === 'document-import'
-                                ? 'bg-blue-800 text-white shadow-sm'
-                                : 'text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            <FileDown className="h-4 w-4 text-indigo-500" />
-                            <span>Doc Import</span>
-                          </button>
+                          {!isNavUser && (
+                            <button
+                              onClick={() => {
+                                setActiveTab('document-import');
+                                setIsMobileNavOpen(false);
+                              }}
+                              className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer ${
+                                activeTab === 'document-import'
+                                  ? 'bg-blue-800 text-white shadow-sm'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <FileDown className="h-4 w-4 text-indigo-500" />
+                              <span>Doc Import</span>
+                            </button>
+                          )}
                         </>
                       )}
 
@@ -2612,15 +2614,17 @@ export default function App() {
                         <span>Delivery Board</span>
                       </button>
 
-                      <button
-                        onClick={() => { setActiveTab('document-import'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'document-import' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                      >
-                        <FileDown className="h-4 w-4 text-indigo-600" />
-                        <span>Doc Import</span>
-                      </button>
+                      {!isNavUser && (
+                        <button
+                          onClick={() => { setActiveTab('document-import'); setActiveNavDropdown(null); }}
+                          className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                            activeTab === 'document-import' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          }`}
+                        >
+                          <FileDown className="h-4 w-4 text-indigo-600" />
+                          <span>Doc Import</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
