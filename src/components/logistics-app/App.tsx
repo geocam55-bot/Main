@@ -119,16 +119,33 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
   for (const truck of trucksList) {
     if (!truck || !truck.id) continue;
     
-    const key = String(truck.id).toLowerCase().trim();
+    const idKey = String(truck.id).toLowerCase().trim();
+    const nameKey = String(truck.name || truck.id).toLowerCase().trim();
 
-    if (!map.has(key)) {
-      map.set(key, truck);
+    let existingKey: string | undefined;
+    if (map.has(idKey)) {
+      existingKey = idKey;
     } else {
-      const existing = map.get(key)!;
-      const driverName = (truck.driver && truck.driver.toLowerCase() !== 'no driver') ? truck.driver : (existing.driver || truck.driver);
+      for (const [k, v] of map.entries()) {
+        const vNameKey = String(v.name || v.id).toLowerCase().trim();
+        const vIdKey = String(v.id).toLowerCase().trim();
+        if (vNameKey === nameKey || vIdKey === nameKey || vNameKey === idKey) {
+          existingKey = k;
+          break;
+        }
+      }
+    }
+
+    if (!existingKey) {
+      map.set(idKey, truck);
+    } else {
+      const existing = map.get(existingKey)!;
+      const driverName = (truck.driver && truck.driver.toLowerCase() !== 'no driver' && truck.driver.toLowerCase() !== 'unassigned') 
+        ? truck.driver 
+        : ((existing.driver && existing.driver.toLowerCase() !== 'no driver' && existing.driver.toLowerCase() !== 'unassigned') ? existing.driver : 'No Driver');
+      
       const branchId = truck.branchId || existing.branchId;
 
-      // Preserve newer live telemetry values if available
       const gpsLat = truck.gpsLat !== undefined && !isNaN(truck.gpsLat) ? truck.gpsLat : existing.gpsLat;
       const gpsLng = truck.gpsLng !== undefined && !isNaN(truck.gpsLng) ? truck.gpsLng : existing.gpsLng;
       const lat = truck.lat !== undefined && !isNaN(truck.lat) ? truck.lat : existing.lat;
@@ -137,9 +154,10 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       const gpsIdlingMins = typeof truck.gpsIdlingMins === 'number' ? truck.gpsIdlingMins : existing.gpsIdlingMins;
       const gpsLastHandshake = (truck.gpsLastHandshake && existing.gpsLastHandshake && truck.gpsLastHandshake < existing.gpsLastHandshake) ? existing.gpsLastHandshake : (truck.gpsLastHandshake || existing.gpsLastHandshake);
 
-      map.set(key, {
+      map.set(existingKey, {
         ...existing,
         ...truck,
+        id: existing.id.startsWith('TRUCK-') ? truck.id : existing.id,
         driver: driverName,
         branchId,
         gpsLat,
@@ -153,7 +171,29 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
     }
   }
 
-  return Array.from(map.values());
+  // ENFORCE STRICT UNIQUE DRIVER ASSIGNMENT PER VEHICLE
+  // Each driver can be assigned to at most one vehicle at a time.
+  const assignedDriversSeen = new Set<string>();
+  const result: Truck[] = [];
+
+  for (const truck of map.values()) {
+    const drv = truck.driver ? truck.driver.trim() : 'No Driver';
+    const drvNorm = drv.toLowerCase();
+
+    if (drvNorm !== 'no driver' && drvNorm !== 'unassigned' && drvNorm !== 'driver' && drvNorm !== '') {
+      if (assignedDriversSeen.has(drvNorm)) {
+        // Driver is already assigned to a previous vehicle in the fleet list
+        result.push({ ...truck, driver: 'No Driver' });
+      } else {
+        assignedDriversSeen.add(drvNorm);
+        result.push({ ...truck, driver: drv });
+      }
+    } else {
+      result.push({ ...truck, driver: 'No Driver' });
+    }
+  }
+
+  return result;
 }
 
 export default function App() {

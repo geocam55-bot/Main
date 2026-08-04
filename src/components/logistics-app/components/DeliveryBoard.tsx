@@ -235,7 +235,9 @@ export function DeliveryBoard({
       const initialTruck = f.assignedTruck || matchedTruck?.name || matchedTruck?.id || '';
       setSchedTruckForm(initialTruck);
       
-      const initialDriver = f.assignedDriver || matchedTruck?.driver || users.find(u => u.role === 'Driver' || u.role === 'Logistics')?.name || '';
+      const initialDriver = (f.assignedDriver && f.assignedDriver !== 'unassigned') 
+        ? f.assignedDriver 
+        : ((matchedTruck?.driver && matchedTruck.driver.toLowerCase() !== 'no driver' && matchedTruck.driver.toLowerCase() !== 'unassigned') ? matchedTruck.driver : '');
       setSchedDriverForm(initialDriver);
     }
   }, [showScheduleModal, trucks, users]);
@@ -939,7 +941,9 @@ export function DeliveryBoard({
 
                     // Real Assigned Logistics Driver
                     const matchedUser = users.find(u => u.name === d.assignedDriver || u.id === d.assignedDriver);
-                    const driverName = d.assignedDriver || matchedUser?.name || matchedTruck?.driver || (users.find(u => u.role === 'Driver' || u.role === 'Logistics')?.name) || 'Unassigned Driver';
+                    const driverName = (d.assignedDriver && d.assignedDriver !== 'unassigned') 
+                      ? d.assignedDriver 
+                      : (matchedUser?.name || (matchedTruck?.driver && matchedTruck.driver.toLowerCase() !== 'no driver' && matchedTruck.driver.toLowerCase() !== 'unassigned' ? matchedTruck.driver : 'Unassigned Driver'));
 
                     const truckKey = matchedTruck?.id || d.assignedTruck || truckName;
 

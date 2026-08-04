@@ -4647,9 +4647,15 @@ async function syncFleetCompleteTelemetry
             baseLat = 44.6855; baseLng = -63.5825;
           }
 
-          const idHash = (item.id || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+          const idStr = item.id || truck.id || truck.name || "";
+          let idHash = 0;
+          for (let i = 0; i < idStr.length; i++) {
+            idHash = (idHash * 37 + idStr.charCodeAt(i)) & 0x7fffffff;
+          }
+
           const timeStep = Math.floor(Date.now() / 15000);
-          const stateCycle = (idHash + timeStep) % 10;
+          const truckPhase = (idHash % 10 + 10) % 10;
+          const stateCycle = (truckPhase + timeStep * 3) % 10;
 
           const now = new Date();
           const currentUtcHour = now.getUTCHours();
@@ -4675,11 +4681,11 @@ async function syncFleetCompleteTelemetry
               lngOffset = (progress - 0.5) * 0.02;
             } else if (stateCycle < 6) {
               // Driving / In Transit on active Maritime route (60% of time)
-              speed = 38 + ((idHash * 7 + timeStep * 13) % 48); // 38 to 86 km/h
+              speed = 34 + ((idHash * 17 + timeStep * 13) % 49); // 34 to 82 km/h
               idlingMins = 0;
               engineStatus = true;
 
-              const progress = ((idHash + timeStep) % 120) / 120;
+              const progress = ((idHash + timeStep * 5) % 120) / 120;
               const travelDir = (idHash % 2 === 0) ? 1 : -1;
               const isDartmouth = baseLng >= -63.5850;
 
@@ -4689,7 +4695,7 @@ async function syncFleetCompleteTelemetry
             } else if (stateCycle < 8) {
               // Engine Idling at job site / stop (20% of time)
               speed = 0;
-              idlingMins = 4 + ((timeStep * 3 + idHash) % 20);
+              idlingMins = 3 + ((idHash * 11 + timeStep * 7) % 38);
               engineStatus = true;
             } else {
               // Parked at depot (20% of time)
