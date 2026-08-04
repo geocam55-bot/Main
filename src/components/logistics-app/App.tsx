@@ -707,7 +707,13 @@ export default function App() {
   const recentlyDeletedIdsRef = useRef<Set<string>>(new Set());
   const syncStatusRef = useRef<string>('IDLE');
   const isFirstLoadRef = useRef<boolean>(true);
-  const isExpressBackendAvailableRef = useRef<boolean | null>(null);
+  const isExpressBackendAvailableRef = useRef<boolean | null>(
+    typeof window !== 'undefined' && (
+      window.location.hostname.includes('prospacescrm.com') ||
+      window.location.hostname.includes('vercel.app') ||
+      window.location.hostname.includes('netlify.app')
+    ) ? false : null
+  );
   useEffect(() => {
     syncStatusRef.current = syncStatus;
   }, [syncStatus]);
@@ -1280,6 +1286,10 @@ export default function App() {
 
     // Call lightweight user heartbeat endpoint or fallback directly to direct Supabase update
     const doHeartbeat = async () => {
+      if (isExpressBackendAvailableRef.current !== true) {
+        saveUserHeartbeatDirect(currentTenant.id, currentUser.id, timestamp).catch(() => {});
+        return;
+      }
       try {
         const res = await customFetch("/api/tenant/user-heartbeat", {
           method: "POST",

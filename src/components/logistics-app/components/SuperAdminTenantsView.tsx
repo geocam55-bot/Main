@@ -50,6 +50,12 @@ interface SuperAdminTenantsViewProps {
   } | null;
 }
 
+const isStaticHost = () => typeof window !== 'undefined' && (
+  window.location.hostname.includes('prospacescrm.com') ||
+  window.location.hostname.includes('vercel.app') ||
+  window.location.hostname.includes('netlify.app')
+);
+
 export default function SuperAdminTenantsView({
   tenants,
   onAddTenant,
@@ -121,6 +127,14 @@ export default function SuperAdminTenantsView({
     setLoadingUsers(true);
     setError(null);
     try {
+      if (isStaticHost()) {
+        const directData = await fetchTenantStateDirect(tenantId);
+        if (directData && directData.supabaseActive && directData.users) {
+          setTenantUsers(directData.users);
+          localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(directData.users));
+          return;
+        }
+      }
       const res = await customFetch(`/api/tenant/state?tenantId=${tenantId}`);
       if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
         const data = await res.json();
@@ -292,23 +306,13 @@ export default function SuperAdminTenantsView({
     try {
       // 1. Fetch target tenant's active collections so we preserve deliveries/trucks/branches
       let fullState = { deliveries: [], trucks: [], branches: [], users: [] };
-      try {
-        const res = await customFetch(`/api/tenant/state?tenantId=${selectedTenantId}`);
-        if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
-          fullState = await res.json();
-        } else {
-          throw new Error("Non-JSON or offline");
-        }
-      } catch (err) {
+      if (isStaticHost()) {
         try {
           const directData = await fetchTenantStateDirect(selectedTenantId);
           if (directData && directData.supabaseActive) {
             fullState = directData as any;
-          } else {
-            throw err;
           }
         } catch (dErr) {
-          console.debug("Using fallback browser local storage caches in offline active mode");
           const ld = localStorage.getItem(`prospaces_deliveries_tenant_${selectedTenantId}`);
           const lt = localStorage.getItem(`prospaces_trucks_tenant_${selectedTenantId}`);
           const lb = localStorage.getItem(`prospaces_branches_tenant_${selectedTenantId}`);
@@ -317,6 +321,34 @@ export default function SuperAdminTenantsView({
           if (lt) fullState.trucks = JSON.parse(lt);
           if (lb) fullState.branches = JSON.parse(lb);
           if (lu) fullState.users = JSON.parse(lu);
+        }
+      } else {
+        try {
+          const res = await customFetch(`/api/tenant/state?tenantId=${selectedTenantId}`);
+          if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
+            fullState = await res.json();
+          } else {
+            throw new Error("Non-JSON or offline");
+          }
+        } catch (err) {
+          try {
+            const directData = await fetchTenantStateDirect(selectedTenantId);
+            if (directData && directData.supabaseActive) {
+              fullState = directData as any;
+            } else {
+              throw err;
+            }
+          } catch (dErr) {
+            console.debug("Using fallback browser local storage caches in offline active mode");
+            const ld = localStorage.getItem(`prospaces_deliveries_tenant_${selectedTenantId}`);
+            const lt = localStorage.getItem(`prospaces_trucks_tenant_${selectedTenantId}`);
+            const lb = localStorage.getItem(`prospaces_branches_tenant_${selectedTenantId}`);
+            const lu = localStorage.getItem(`prospaces_users_tenant_${selectedTenantId}`);
+            if (ld) fullState.deliveries = JSON.parse(ld);
+            if (lt) fullState.trucks = JSON.parse(lt);
+            if (lb) fullState.branches = JSON.parse(lb);
+            if (lu) fullState.users = JSON.parse(lu);
+          }
         }
       }
 
@@ -355,22 +387,24 @@ export default function SuperAdminTenantsView({
 
       // 2. Commit states back safely
       let saveSuccess = false;
-      try {
-        const res = await customFetch("/api/tenant/save-state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tenantId: selectedTenantId,
-            deliveries: fullState.deliveries,
-            trucks: fullState.trucks,
-            branches: fullState.branches,
-            users: updatedUsers
-          })
-        });
-        if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
-          saveSuccess = true;
-        }
-      } catch (sErr) {}
+      if (!isStaticHost()) {
+        try {
+          const res = await customFetch("/api/tenant/save-state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tenantId: selectedTenantId,
+              deliveries: fullState.deliveries,
+              trucks: fullState.trucks,
+              branches: fullState.branches,
+              users: updatedUsers
+            })
+          });
+          if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
+            saveSuccess = true;
+          }
+        } catch (sErr) {}
+      }
 
       if (!saveSuccess) {
         try {
@@ -408,42 +442,67 @@ export default function SuperAdminTenantsView({
     try {
       // Fetch full state for sync
       let fullState = { deliveries: [], trucks: [], branches: [], users: [] };
-      try {
-        const res = await customFetch(`/api/tenant/state?tenantId=${selectedTenantId}`);
-        fullState = await res.json();
-      } catch (err) {
-        const ld = localStorage.getItem(`prospaces_deliveries_tenant_${selectedTenantId}`);
-        const lt = localStorage.getItem(`prospaces_trucks_tenant_${selectedTenantId}`);
-        const lb = localStorage.getItem(`prospaces_branches_tenant_${selectedTenantId}`);
-        const lu = localStorage.getItem(`prospaces_users_tenant_${selectedTenantId}`);
-        if (ld) fullState.deliveries = JSON.parse(ld);
-        if (lt) fullState.trucks = JSON.parse(lt);
-        if (lb) fullState.branches = JSON.parse(lb);
-        if (lu) fullState.users = JSON.parse(lu);
+      if (isStaticHost()) {
+        try {
+          const directData = await fetchTenantStateDirect(selectedTenantId);
+          if (directData && directData.supabaseActive) {
+            fullState = directData as any;
+          }
+        } catch (dErr) {
+          const ld = localStorage.getItem(`prospaces_deliveries_tenant_${selectedTenantId}`);
+          const lt = localStorage.getItem(`prospaces_trucks_tenant_${selectedTenantId}`);
+          const lb = localStorage.getItem(`prospaces_branches_tenant_${selectedTenantId}`);
+          const lu = localStorage.getItem(`prospaces_users_tenant_${selectedTenantId}`);
+          if (ld) fullState.deliveries = JSON.parse(ld);
+          if (lt) fullState.trucks = JSON.parse(lt);
+          if (lb) fullState.branches = JSON.parse(lb);
+          if (lu) fullState.users = JSON.parse(lu);
+        }
+      } else {
+        try {
+          const res = await customFetch(`/api/tenant/state?tenantId=${selectedTenantId}`);
+          fullState = await res.json();
+        } catch (err) {
+          const ld = localStorage.getItem(`prospaces_deliveries_tenant_${selectedTenantId}`);
+          const lt = localStorage.getItem(`prospaces_trucks_tenant_${selectedTenantId}`);
+          const lb = localStorage.getItem(`prospaces_branches_tenant_${selectedTenantId}`);
+          const lu = localStorage.getItem(`prospaces_users_tenant_${selectedTenantId}`);
+          if (ld) fullState.deliveries = JSON.parse(ld);
+          if (lt) fullState.trucks = JSON.parse(lt);
+          if (lb) fullState.branches = JSON.parse(lb);
+          if (lu) fullState.users = JSON.parse(lu);
+        }
       }
 
       const updatedUsers = (fullState.users || []).filter((u: any) => u.id !== userId);
 
-      // Save state
-      try {
-        await customFetch("/api/tenant/save-state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tenantId: selectedTenantId,
-            deliveries: fullState.deliveries,
-            trucks: fullState.trucks,
-            branches: fullState.branches,
-            users: updatedUsers
-          })
-        });
+      // Save state and delete permanently
+      if (isStaticHost()) {
+        try {
+          await saveTenantStateDirect(selectedTenantId, fullState.deliveries, fullState.trucks, fullState.branches, updatedUsers);
+          await deleteRecordDirect('users', userId, selectedTenantId);
+        } catch (dErr) {}
+      } else {
+        try {
+          await customFetch("/api/tenant/save-state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tenantId: selectedTenantId,
+              deliveries: fullState.deliveries,
+              trucks: fullState.trucks,
+              branches: fullState.branches,
+              users: updatedUsers
+            })
+          });
 
-        // Delete permanently on database level
-        await customFetch(`/api/tenant/delete-record?table=users&id=${userId}&tenantId=${selectedTenantId}`, {
-          method: 'DELETE'
-        });
-      } catch (err) {
-        console.warn("Could not remove live user record, deleted using local browser caching.");
+          // Delete permanently on database level
+          await customFetch(`/api/tenant/delete-record?table=users&id=${userId}&tenantId=${selectedTenantId}`, {
+            method: 'DELETE'
+          });
+        } catch (err) {
+          console.warn("Could not remove live user record, deleted using local browser caching.");
+        }
       }
 
       localStorage.setItem(`prospaces_users_tenant_${selectedTenantId}`, JSON.stringify(updatedUsers));
