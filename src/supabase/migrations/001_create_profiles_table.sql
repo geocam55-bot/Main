@@ -20,6 +20,27 @@ CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
 -- Enable Row Level Security
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Helper functions to fetch current user's role and organization safely from public.profiles
+CREATE OR REPLACE FUNCTION public.get_current_user_role()
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT role FROM public.profiles WHERE id = auth.uid();
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_current_user_org()
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT organization_id FROM public.profiles WHERE id = auth.uid();
+$$;
+
 -- Policy: Users can view their own profile
 CREATE POLICY "Users can view own profile"
 ON public.profiles FOR SELECT
@@ -30,68 +51,42 @@ CREATE POLICY "Users can update own profile"
 ON public.profiles FOR UPDATE
 USING (auth.uid() = id);
 
--- Policy: Admins can view profiles in their organization
-CREATE POLICY "Admins can view organization profiles"
+-- Policy: Users can view profiles in their organization (no user_metadata reference)
+CREATE POLICY "Users can view org profiles"
 ON public.profiles FOR SELECT
 USING (
-  EXISTS (
-    SELECT 1 FROM auth.users
-    WHERE auth.users.id = auth.uid()
-    AND (
-      auth.users.raw_user_meta_data->>'role' = 'admin'
-      OR auth.users.raw_user_meta_data->>'role' = 'super_admin'
-    )
-    AND (
-      auth.users.raw_user_meta_data->>'role' = 'super_admin'
-      OR auth.users.raw_user_meta_data->>'organizationId' = organization_id
-    )
+  auth.uid() = id
+  OR public.get_current_user_role() = 'super_admin'
+  OR (
+    public.get_current_user_org() IS NOT NULL
+    AND public.get_current_user_org() = organization_id
   )
 );
 
--- Policy: Admins can update profiles in their organization
-CREATE POLICY "Admins can update organization profiles"
-ON public.profiles FOR UPDATE
+-- Policy: Super admins can view all profiles
+CREATE POLICY "Super admins can view all"
+ON public.profiles FOR SELECT
 USING (
-  EXISTS (
-    SELECT 1 FROM auth.users
-    WHERE auth.users.id = auth.uid()
-    AND (
-      auth.users.raw_user_meta_data->>'role' = 'admin'
-      OR auth.users.raw_user_meta_data->>'role' = 'super_admin'
-    )
-    AND (
-      auth.users.raw_user_meta_data->>'role' = 'super_admin'
-      OR auth.users.raw_user_meta_data->>'organizationId' = organization_id
-    )
-  )
+  public.get_current_user_role() = 'super_admin'
 );
 
--- Policy: Admins can insert profiles in their organization
-CREATE POLICY "Admins can insert organization profiles"
-ON public.profiles FOR INSERT
+-- Policy: Admins can manage org profiles
+CREATE POLICY "Admins can manage org profiles"
+ON public.profiles FOR ALL
+USING (
+  public.get_current_user_role() = 'super_admin'
+  OR (
+    public.get_current_user_role() IN ('admin', 'super_admin')
+    AND public.get_current_user_org() IS NOT NULL
+    AND public.get_current_user_org() = organization_id
+  )
+)
 WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM auth.users
-    WHERE auth.users.id = auth.uid()
-    AND (
-      auth.users.raw_user_meta_data->>'role' = 'admin'
-      OR auth.users.raw_user_meta_data->>'role' = 'super_admin'
-    )
-    AND (
-      auth.users.raw_user_meta_data->>'role' = 'super_admin'
-      OR auth.users.raw_user_meta_data->>'organizationId' = organization_id
-    )
-  )
-);
-
--- Policy: Super admins can delete any profile
-CREATE POLICY "Super admins can delete profiles"
-ON public.profiles FOR DELETE
-USING (
-  EXISTS (
-    SELECT 1 FROM auth.users
-    WHERE auth.users.id = auth.uid()
-    AND auth.users.raw_user_meta_data->>'role' = 'super_admin'
+  public.get_current_user_role() = 'super_admin'
+  OR (
+    public.get_current_user_role() IN ('admin', 'super_admin')
+    AND public.get_current_user_org() IS NOT NULL
+    AND public.get_current_user_org() = organization_id
   )
 );
 
