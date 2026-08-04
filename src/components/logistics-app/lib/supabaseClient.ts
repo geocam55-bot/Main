@@ -79,6 +79,51 @@ export function deserializeFromPhone(user: any): any {
   };
 }
 
+function sanitizeGpsCoordinates(lat: number, lng: number): { lat: number; lng: number } {
+  if (isNaN(lat) || isNaN(lng)) return { lat: 44.68550, lng: -63.58250 };
+
+  // 1. Eastern Passage / Shearwater / Eisner Cove / Halifax Outer Harbour Channel Water
+  if (lat >= 44.5800 && lat <= 44.6550 && lng >= -63.5850 && lng <= -63.5200) {
+    if (lng >= -63.5450) {
+      return { lat: Math.min(lat, 44.6300), lng: -63.5180 };
+    } else if (lng >= -63.5650) {
+      return { lat: Math.max(lat, 44.6550), lng: -63.5480 };
+    } else {
+      return { lat, lng: -63.5880 };
+    }
+  }
+
+  // 2. Halifax Inner Harbour & The Narrows Water Channel
+  if (lat >= 44.6400 && lat <= 44.6850 && lng >= -63.6100 && lng <= -63.5650) {
+    if (lng >= -63.5850) {
+      return { lat: Math.max(lat, 44.68550), lng: -63.58250 };
+    } else {
+      return { lat, lng: -63.60200 };
+    }
+  }
+
+  // 3. Bedford Basin Water
+  if (lat >= 44.6750 && lat <= 44.7300 && lng >= -63.6800 && lng <= -63.6050) {
+    if (lng <= -63.6400) {
+      return { lat, lng: -63.6820 };
+    } else {
+      return { lat, lng: -63.5980 };
+    }
+  }
+
+  // 4. Northwest Arm Water
+  if (lat >= 44.6200 && lat <= 44.6450 && lng >= -63.6100 && lng <= -63.5900) {
+    return { lat, lng: -63.6150 };
+  }
+
+  // 5. Hard bounds fallback for Nova Scotia Region
+  if (lat < 44.4000 || lat > 46.5000 || lng < -64.5000 || lng > -62.0000) {
+    return { lat: 44.68550, lng: -63.58250 };
+  }
+
+  return { lat, lng };
+}
+
 export function serializeToType(
   type: string | undefined,
   registrationDueDate: string | undefined,
@@ -230,6 +275,18 @@ export function deserializeType(truck: any): any {
     lng = -63.5825;
     gpsLat = 44.6855;
     gpsLng = -63.5825;
+  }
+
+  if (lat !== undefined && lng !== undefined) {
+    const san = sanitizeGpsCoordinates(lat, lng);
+    lat = san.lat;
+    lng = san.lng;
+  }
+
+  if (gpsLat !== undefined && gpsLng !== undefined) {
+    const sanGps = sanitizeGpsCoordinates(gpsLat, gpsLng);
+    gpsLat = sanGps.lat;
+    gpsLng = sanGps.lng;
   }
 
   return {

@@ -175,16 +175,54 @@ export const cleanAddressText = (address: string | undefined): string => {
 
 export const sanitizeGpsCoordinates = (lat: number, lng: number): { lat: number; lng: number } => {
   if (isNaN(lat) || isNaN(lng)) return { lat: 44.68550, lng: -63.58250 };
-  // Check if coordinates land in Halifax Harbour / Bedford Basin water channel
-  if (lat >= 44.6300 && lat <= 44.7150 && lng >= -63.6000 && lng <= -63.5650) {
+
+  // 1. Eastern Passage / Shearwater / Eisner Cove / Halifax Outer Harbour Channel Water
+  // Lat 44.5800 to 44.6550, Lng -63.5850 to -63.5200 (Targeting Eastern Passage water body)
+  if (lat >= 44.5800 && lat <= 44.6550 && lng >= -63.5850 && lng <= -63.5200) {
+    if (lng >= -63.5450) {
+      // Snap east to Eastern Passage / Shearwater land (Main Rd / Hines Rd corridor)
+      return { lat: Math.min(lat, 44.6300), lng: -63.5180 };
+    } else if (lng >= -63.5650) {
+      // Snap north-east to Woodside / Dartmouth Pleasant St land
+      return { lat: Math.max(lat, 44.6550), lng: -63.5480 };
+    } else {
+      // Snap west to Halifax Peninsula land (Point Pleasant / Barrington St)
+      return { lat, lng: -63.5880 };
+    }
+  }
+
+  // 2. Halifax Inner Harbour & The Narrows Water Channel
+  if (lat >= 44.6400 && lat <= 44.6850 && lng >= -63.6100 && lng <= -63.5650) {
     if (lng >= -63.5850) {
-      // Shift east onto Dartmouth land (Windmill Rd corridor)
+      // Snap east to Dartmouth land (Windmill Rd corridor)
       return { lat: Math.max(lat, 44.68550), lng: -63.58250 };
     } else {
-      // Shift west onto Halifax Peninsula land (Almon St / Robie St)
+      // Snap west to Halifax Peninsula land (Almon St / Robie St)
       return { lat, lng: -63.60200 };
     }
   }
+
+  // 3. Bedford Basin Water
+  if (lat >= 44.6750 && lat <= 44.7300 && lng >= -63.6800 && lng <= -63.6050) {
+    if (lng <= -63.6400) {
+      // Bedford Highway land
+      return { lat, lng: -63.6820 };
+    } else {
+      // Dartmouth / Burnside land
+      return { lat, lng: -63.5980 };
+    }
+  }
+
+  // 4. Northwest Arm Water
+  if (lat >= 44.6200 && lat <= 44.6450 && lng >= -63.6100 && lng <= -63.5900) {
+    return { lat, lng: -63.6150 };
+  }
+
+  // 5. Hard bounds fallback for Nova Scotia Region
+  if (lat < 44.4000 || lat > 46.5000 || lng < -64.5000 || lng > -62.0000) {
+    return { lat: 44.68550, lng: -63.58250 };
+  }
+
   return { lat, lng };
 };
 

@@ -260,6 +260,59 @@ function extractVehicleNumber(str: string | undefined | null): string | null {
   return match ? match[0] : null;
 }
 
+function sanitizeGpsCoordinates(lat: number, lng: number): { lat: number; lng: number } {
+  if (isNaN(lat) || isNaN(lng)) return { lat: 44.68550, lng: -63.58250 };
+
+  // 1. Eastern Passage / Shearwater / Eisner Cove / Halifax Outer Harbour Channel Water
+  // Lat 44.5800 to 44.6550, Lng -63.5850 to -63.5200 (Targeting Eastern Passage water body)
+  if (lat >= 44.5800 && lat <= 44.6550 && lng >= -63.5850 && lng <= -63.5200) {
+    if (lng >= -63.5450) {
+      // Snap east to Eastern Passage / Shearwater land (Main Rd / Hines Rd corridor)
+      return { lat: Math.min(lat, 44.6300), lng: -63.5180 };
+    } else if (lng >= -63.5650) {
+      // Snap north-east to Woodside / Dartmouth Pleasant St land
+      return { lat: Math.max(lat, 44.6550), lng: -63.5480 };
+    } else {
+      // Snap west to Halifax Peninsula land (Point Pleasant / Barrington St)
+      return { lat, lng: -63.5880 };
+    }
+  }
+
+  // 2. Halifax Inner Harbour & The Narrows Water Channel
+  if (lat >= 44.6400 && lat <= 44.6850 && lng >= -63.6100 && lng <= -63.5650) {
+    if (lng >= -63.5850) {
+      // Snap east to Dartmouth land (Windmill Rd corridor)
+      return { lat: Math.max(lat, 44.68550), lng: -63.58250 };
+    } else {
+      // Snap west to Halifax Peninsula land (Almon St / Robie St)
+      return { lat, lng: -63.60200 };
+    }
+  }
+
+  // 3. Bedford Basin Water
+  if (lat >= 44.6750 && lat <= 44.7300 && lng >= -63.6800 && lng <= -63.6050) {
+    if (lng <= -63.6400) {
+      // Bedford Highway land
+      return { lat, lng: -63.6820 };
+    } else {
+      // Dartmouth / Burnside land
+      return { lat, lng: -63.5980 };
+    }
+  }
+
+  // 4. Northwest Arm Water
+  if (lat >= 44.6200 && lat <= 44.6450 && lng >= -63.6100 && lng <= -63.5900) {
+    return { lat, lng: -63.6150 };
+  }
+
+  // 5. Hard bounds fallback for Nova Scotia Region
+  if (lat < 44.4000 || lat > 46.5000 || lng < -64.5000 || lng > -62.0000) {
+    return { lat: 44.68550, lng: -63.58250 };
+  }
+
+  return { lat, lng };
+}
+
 function serializeToType(
   type: string | undefined,
   registrationDueDate: string | undefined,
@@ -411,6 +464,18 @@ function deserializeType(truck: any): any {
     lng = -63.5825;
     gpsLat = 44.6855;
     gpsLng = -63.5825;
+  }
+
+  if (lat !== undefined && lng !== undefined) {
+    const san = sanitizeGpsCoordinates(lat, lng);
+    lat = san.lat;
+    lng = san.lng;
+  }
+
+  if (gpsLat !== undefined && gpsLng !== undefined) {
+    const sanGps = sanitizeGpsCoordinates(gpsLat, gpsLng);
+    gpsLat = sanGps.lat;
+    gpsLng = sanGps.lng;
   }
 
   return {
@@ -4562,10 +4627,26 @@ async function syncFleetCompleteTelemetry
           const idOrName = ((truck.id || "") + " " + (truck.name || "")).toLowerCase();
           const isTruck1903 = idOrName.includes("1903");
           const isAlmon2401 = idOrName.includes("2401") || idOrName.includes("almon");
+          const is2101 = idOrName.includes("2101");
+          const isElmsdale = idOrName.includes("elmsdale") || truck.branchId === 'DC-ELMSDALE';
+          const isPei = idOrName.includes("pei") || truck.branchId === '01075';
 
-          let currentLat = typeof truck.gpsLat === 'number' && !isNaN(truck.gpsLat) ? truck.gpsLat : (typeof truck.lat === 'number' && !isNaN(truck.lat) ? truck.lat : 44.6855);
-          let currentLng = typeof truck.gpsLng === 'number' && !isNaN(truck.gpsLng) ? truck.gpsLng : (typeof truck.lng === 'number' && !isNaN(truck.lng) ? truck.lng : -63.5825);
-          
+          // Fixed base depot anchor coords (non-accumulating origin)
+          let baseLat = 44.6855; // Windmill HQ default
+          let baseLng = -63.5825;
+
+          if (isAlmon2401) {
+            baseLat = 44.6536; baseLng = -63.6011;
+          } else if (is2101) {
+            baseLat = 44.8770; baseLng = -63.5410;
+          } else if (isElmsdale) {
+            baseLat = 44.9752; baseLng = -63.5042;
+          } else if (isPei) {
+            baseLat = 46.2382; baseLng = -63.1311;
+          } else if (truck.branchId === 'DC-WINAMILL' || isTruck1903) {
+            baseLat = 44.6855; baseLng = -63.5825;
+          }
+
           const idHash = (item.id || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
           const timeStep = Math.floor(Date.now() / 15000);
           const stateCycle = (idHash + timeStep) % 10;
@@ -4581,28 +4662,30 @@ async function syncFleetCompleteTelemetry
           let speed = 0;
           let idlingMins = 0;
           let engineStatus = false;
-          let deltaLat = 0;
-          let deltaLng = 0;
+          let latOffset = 0;
+          let lngOffset = 0;
 
           if (!isStoreClosed && !isNoDriver) {
-            if (idOrName.includes("2101")) {
+            if (is2101) {
               speed = 110 + (timeStep % 15);
               idlingMins = 0;
               engineStatus = true;
-              deltaLat = -0.0015;
-              deltaLng = -0.0012;
-              if (currentLat < 44.65 || currentLat > 45.10) {
-                currentLat = 44.8770;
-                currentLng = -63.5410;
-              }
+              const progress = (timeStep % 80) / 80;
+              latOffset = (progress - 0.5) * 0.04;
+              lngOffset = (progress - 0.5) * 0.02;
             } else if (stateCycle < 6) {
               // Driving / In Transit on active Maritime route (60% of time)
               speed = 38 + ((idHash * 7 + timeStep * 13) % 48); // 38 to 86 km/h
               idlingMins = 0;
               engineStatus = true;
-              const heading = ((idHash * 31 + timeStep * 17) % 360) * (Math.PI / 180);
-              deltaLat = Math.sin(heading) * 0.0014;
-              deltaLng = Math.cos(heading) * 0.0014;
+
+              const progress = ((idHash + timeStep) % 120) / 120;
+              const travelDir = (idHash % 2 === 0) ? 1 : -1;
+              const isDartmouth = baseLng >= -63.5850;
+
+              // Smooth parametric path sweep along land road corridor
+              latOffset = Math.sin(progress * 2 * Math.PI) * 0.010 * travelDir;
+              lngOffset = Math.cos(progress * 2 * Math.PI) * 0.003 * (isDartmouth ? 1 : -1);
             } else if (stateCycle < 8) {
               // Engine Idling at job site / stop (20% of time)
               speed = 0;
@@ -4619,27 +4702,13 @@ async function syncFleetCompleteTelemetry
             speed = 0;
             idlingMins = 0;
             engineStatus = false;
-            deltaLat = 0;
-            deltaLng = 0;
           }
 
-          if (currentLat < 44.4 || currentLat > 45.3 || currentLng < -64.2 || currentLng > -62.8) {
-            currentLat = 44.6855;
-            currentLng = -63.5825;
-          }
+          const rawLat = Number((baseLat + latOffset).toFixed(6));
+          const rawLng = Number((baseLng + lngOffset).toFixed(6));
 
-          let targetLat = Number((currentLat + deltaLat).toFixed(6));
-          let targetLng = Number((currentLng + deltaLng).toFixed(6));
-
-          // Sanitize coordinates to prevent vehicles drifting into Halifax Harbour water
-          if (targetLat >= 44.6300 && targetLat <= 44.7150 && targetLng >= -63.6000 && targetLng <= -63.5650) {
-            if (targetLng >= -63.5850) {
-              targetLat = Math.max(targetLat, 44.6855);
-              targetLng = -63.5825;
-            } else {
-              targetLng = -63.6020;
-            }
-          }
+          // Strict Nova Scotia water body & bounds sanitization
+          const sanitized = sanitizeGpsCoordinates(rawLat, rawLng);
 
           return {
             id: truck.gpsDeviceId || `FC-${truck.id}`,
@@ -4647,8 +4716,8 @@ async function syncFleetCompleteTelemetry
             latestData: {
                timestamp: new Date().toISOString(),
                gps: {
-                 latitude: targetLat,
-                 longitude: targetLng,
+                 latitude: sanitized.lat,
+                 longitude: sanitized.lng,
                  speed
                },
                canBus: {
@@ -4668,8 +4737,14 @@ async function syncFleetCompleteTelemetry
       for (const v of liveData.vehicles) {
         const gpsDeviceId = v.id;
         const vehicleName = v.name || v.id;
-        const lat = v.latestData?.gps?.latitude;
-        const lng = v.latestData?.gps?.longitude;
+        let lat = v.latestData?.gps?.latitude;
+        let lng = v.latestData?.gps?.longitude;
+
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          const sanitized = sanitizeGpsCoordinates(lat, lng);
+          lat = sanitized.lat;
+          lng = sanitized.lng;
+        }
         const speed = v.latestData?.gps?.speed || 0;
         const engineIdleTime = v.latestData?.canBus?.engineIdleTime;
         let idlingMins = 0;
