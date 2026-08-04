@@ -707,6 +707,7 @@ export default function App() {
   const recentlyDeletedIdsRef = useRef<Set<string>>(new Set());
   const syncStatusRef = useRef<string>('IDLE');
   const isFirstLoadRef = useRef<boolean>(true);
+  const isExpressBackendAvailableRef = useRef<boolean | null>(null);
   useEffect(() => {
     syncStatusRef.current = syncStatus;
   }, [syncStatus]);
@@ -889,6 +890,20 @@ export default function App() {
   };
 
   const checkSupabaseStatus = async () => {
+    if (isExpressBackendAvailableRef.current === false) {
+      const direct = await checkSupabaseStatusDirect();
+      const fallbackState = {
+        configured: !!direct.active,
+        connected: !!direct.success,
+        isServiceRoleKeyAnon: true,
+        error: direct.error || direct.details || null,
+        url: "Default",
+        schemaSql: ""
+      };
+      setSupabaseStatus(fallbackState);
+      return fallbackState;
+    }
+
     try {
       const res = await customFetch("/api/supabase-status");
       if (!res.ok) {
@@ -899,12 +914,14 @@ export default function App() {
         throw new Error("Server returned non-JSON content.");
       }
       const data = await res.json();
+      isExpressBackendAvailableRef.current = true;
       setSupabaseStatus(data);
       if (data.configured && data.anonKey) {
         initializeFrontendSupabase(data.url, data.anonKey);
       }
       return data;
     } catch (e: any) {
+      isExpressBackendAvailableRef.current = false;
       console.debug("Express endpoint /api/supabase-status offline. Using direct client lookup:", e.message || e);
       const direct = await checkSupabaseStatusDirect();
       const fallbackState = {
@@ -935,6 +952,24 @@ export default function App() {
     localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(u));
 
     setSyncStatus('SYNCING');
+
+    if (isExpressBackendAvailableRef.current === false) {
+      try {
+        const directResult = await saveTenantStateDirect(tenantId, d, t, b, u);
+        setSyncStatus('IDLE');
+        if (directResult.supabaseActive) {
+          setLastSyncTime(`${new Date().toLocaleTimeString()} (Direct Sync Connected)`);
+        } else {
+          setLastSyncTime(`${new Date().toLocaleTimeString()} (Saved Locally Only)`);
+        }
+      } catch (directErr) {
+        console.error("Direct Supabase write fallback failed as well:", directErr);
+        setSyncStatus('ERROR');
+        setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Cache Saved)`);
+      }
+      return;
+    }
+
     try {
       const res = await customFetch('/api/tenant/save-state', {
         method: 'POST',
@@ -964,6 +999,7 @@ export default function App() {
       }
       throw new Error(`Server returned ${res.status}`);
     } catch (e) {
+      isExpressBackendAvailableRef.current = false;
       console.debug("Express backend save-state offline, trying direct client-side save fallback");
       try {
         const directResult = await saveTenantStateDirect(tenantId, d, t, b, u);
@@ -1004,23 +1040,33 @@ export default function App() {
         checkSupabaseStatus().catch(() => {});
 
         let data: any;
-        try {
-          const res = await customFetch(`/api/tenant/state?tenantId=${tenantId}&_t=${Date.now()}`);
-          if (!res.ok) {
-            throw new Error(`Server returned error status ${res.status}`);
-          }
-          const contentType = res.headers.get("content-type") || "";
-          if (!contentType.includes("application/json")) {
-            throw new Error("non-JSON response");
-          }
-          data = await res.json();
-        } catch (apiErr) {
-          console.debug("Express backend endpoint /api/tenant/state offline or 404. Trying direct client lookup");
+        if (isExpressBackendAvailableRef.current === false) {
           const directData = await fetchTenantStateDirect(tenantId);
           if (directData && directData.supabaseActive) {
             data = directData;
           } else {
-            throw apiErr;
+            throw new Error("Direct client state fetch unavailable");
+          }
+        } else {
+          try {
+            const res = await customFetch(`/api/tenant/state?tenantId=${tenantId}&_t=${Date.now()}`);
+            if (!res.ok) {
+              throw new Error(`Server returned error status ${res.status}`);
+            }
+            const contentType = res.headers.get("content-type") || "";
+            if (!contentType.includes("application/json")) {
+              throw new Error("non-JSON response");
+            }
+            data = await res.json();
+          } catch (apiErr) {
+            isExpressBackendAvailableRef.current = false;
+            console.debug("Express backend endpoint /api/tenant/state offline or 404. Trying direct client lookup");
+            const directData = await fetchTenantStateDirect(tenantId);
+            if (directData && directData.supabaseActive) {
+              data = directData;
+            } else {
+              throw apiErr;
+            }
           }
         }
 
@@ -1370,13 +1416,22 @@ export default function App() {
         // Run connectivity diagnostics on mount to initialize the frontend Supabase client early
         checkSupabaseStatus().catch(() => {});
 
+        if (isExpressBackendAvailableRef.current === false) {
+          const directTenants = await fetchTenantsDirect();
+          if (directTenants && directTenants.length > 0) {
+            setAllTenants(directTenants);
+            localStorage.setItem('prospaces_all_tenants', JSON.stringify(directTenants));
+          }
+          return;
+        }
+
         const res = await customFetch("/api/tenants");
         if (!res.ok) {
           throw new Error(`Server returned non-ok status: ${res.status}`);
         }
         const contentType = res.headers.get("content-type") || "";
         if (!contentType.includes("application/json")) {
-          throw new Error("Server returned non-JSON content. You might be accessing the application via a static host (like Vercel) instead of the full-stack container environment.");
+          throw new Error("Server returned non-JSON content.");
         }
         const data = await res.json();
         if (data.tenants) {
@@ -1384,6 +1439,7 @@ export default function App() {
           localStorage.setItem('prospaces_all_tenants', JSON.stringify(data.tenants));
         }
       } catch (err: any) {
+        isExpressBackendAvailableRef.current = false;
         console.debug("Failed retrieving tenants from API, trying direct client lookup:", err.message || err);
         try {
           const directTenants = await fetchTenantsDirect();
@@ -1508,6 +1564,14 @@ export default function App() {
   const deleteRecordWithFallback = async (table: string, id: string, tenantId: string) => {
     lastMutationTimeRef.current = Date.now();
     recentlyDeletedIdsRef.current.add(id);
+    if (isExpressBackendAvailableRef.current === false) {
+      try {
+        await deleteRecordDirect(table, id, tenantId);
+      } catch (directErr) {
+        console.error("Direct Supabase record deletion failed as well:", directErr);
+      }
+      return;
+    }
     try {
       const res = await customFetch(`/api/tenant/delete-record?table=${table}&id=${id}&tenantId=${tenantId}`, { method: 'DELETE' });
       if (!res.ok) {
@@ -1516,6 +1580,7 @@ export default function App() {
       const data = await res.json();
       if (data.supabaseActive === false) throw new Error("Supabase is unconfigured on server.");
     } catch (err) {
+      isExpressBackendAvailableRef.current = false;
       console.warn(`API record deletion failed, attempting direct Supabase query fallback:`, err);
       try {
         await deleteRecordDirect(table, id, tenantId);
@@ -1692,6 +1757,22 @@ export default function App() {
       
       // Call the live API to wipe database records permanently
       setSyncStatus('SYNCING');
+
+      if (isExpressBackendAvailableRef.current === false) {
+        try {
+          await clearAllDirect(tenantId);
+          await saveTenantStateDirect(tenantId, emptyDeliveries, emptyTrucks, emptyBranches, preservedUsers);
+          setSyncStatus('SUCCESS');
+          setLastSyncTime(`${new Date().toLocaleTimeString()} (Direct Clean Sync Completed)`);
+          alert("All operational and test data has been successfully deleted from Supabase!");
+        } catch (directErr) {
+          console.error("Direct clear operation failed:", directErr);
+          setSyncStatus('ERROR');
+          alert("Could not clear live tables directly. Verify Supabase schema and network connection.");
+        }
+        return;
+      }
+
       try {
         const res = await customFetch("/api/tenant/clear-all", {
           method: "POST",
@@ -1710,6 +1791,7 @@ export default function App() {
           throw new Error("API returned failed response");
         }
       } catch (err) {
+        isExpressBackendAvailableRef.current = false;
         console.error("Failed to delete live records via API, fallback to manual syncing:", err);
         try {
           await clearAllDirect(tenantId);
