@@ -306,7 +306,8 @@ export function initializeFrontendSupabase(url: string, key: string) {
     try {
       cachedClient = createClient(cleanUrl, cleanKey, {
         auth: {
-          persistSession: false
+          persistSession: false,
+          storageKey: 'prospaces_logistics_auth_token'
         }
       });
       currentUrl = cleanUrl;
@@ -364,7 +365,8 @@ export function getFrontendSupabase() {
   try {
     cachedClient = createClient(url, key, {
       auth: {
-        persistSession: false
+        persistSession: false,
+        storageKey: 'prospaces_logistics_auth_token'
       }
     });
     currentUrl = url;
@@ -373,6 +375,44 @@ export function getFrontendSupabase() {
   } catch (e) {
     console.error("Failed to initialize frontend Supabase client:", e);
     return null;
+  }
+}
+
+export async function saveUserHeartbeatDirect(tenantId: string, userId: string, lastActive: string) {
+  const supabase = getFrontendSupabase();
+  if (!supabase) return { supabaseActive: false };
+  try {
+    const { data: userData, error: fetchErr } = await supabase
+      .from("users")
+      .select("*")
+      .eq("tenantId", tenantId)
+      .eq("id", userId);
+
+    if (fetchErr || !userData || userData.length === 0) {
+      return { supabaseActive: false, error: "User not found" };
+    }
+
+    const user = deserializeFromPhone(userData[0]);
+    const updatedPhone = serializeToPhone(
+      user.phone,
+      user.password,
+      user.status,
+      user.driverLicenseExpire,
+      lastActive,
+      user.resetRequest,
+      user.avatarUrl
+    );
+
+    const { error: updateErr } = await supabase
+      .from("users")
+      .update({ phone: updatedPhone })
+      .eq("tenantId", tenantId)
+      .eq("id", userId);
+
+    if (updateErr) throw updateErr;
+    return { supabaseActive: true };
+  } catch (err) {
+    return { supabaseActive: false, error: err };
   }
 }
 

@@ -180,10 +180,10 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
           signal: controller.signal
         });
         clearTimeout(timeoutId);
-        if (response.ok) {
+        if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
           result = await response.json();
         } else {
-          console.warn(`Server authentication returned non-ok status: ${response.status}`);
+          console.debug(`Server authentication returned status: ${response.status}`);
         }
       } catch (fetchErr: any) {
         console.warn("Backend auth fetch exception, falling back to client mode:", fetchErr);

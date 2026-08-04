@@ -15,6 +15,7 @@ import {
   deleteTenantDirect, 
   fetchTenantStateDirect, 
   saveTenantStateDirect, 
+  saveUserHeartbeatDirect,
   deleteRecordDirect, 
   clearAllDirect,
   deserializeType
@@ -379,13 +380,16 @@ export default function App() {
 
         const res = await fetch("/api/supabase-status");
         if (res.ok) {
-          const data = await res.json();
-          if (data.configured && data.anonKey) {
-            initializeFrontendSupabase(data.url, data.anonKey);
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            const data = await res.json();
+            if (data.configured && data.anonKey) {
+              initializeFrontendSupabase(data.url, data.anonKey);
+            }
           }
         }
       } catch (err) {
-        console.error("Startup check failed:", err);
+        console.debug("Startup check direct mode:", err);
       } finally {
         setIsDbInitializing(false);
         setLoadTrigger(prev => prev + 1);
@@ -892,7 +896,7 @@ export default function App() {
       }
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
-        throw new Error("Server returned non-JSON content. You might be accessing the application via a static host (like Vercel) instead of the full-stack container environment.");
+        throw new Error("Server returned non-JSON content.");
       }
       const data = await res.json();
       setSupabaseStatus(data);
@@ -901,7 +905,7 @@ export default function App() {
       }
       return data;
     } catch (e: any) {
-      console.warn("Express endpoint /api/supabase-status offline. Trying direct client lookup:", e.message || e);
+      console.debug("Express endpoint /api/supabase-status offline. Using direct client lookup:", e.message || e);
       const direct = await checkSupabaseStatusDirect();
       const fallbackState = {
         configured: !!direct.active,
@@ -946,18 +950,21 @@ export default function App() {
         })
       });
       if (res.ok) {
-        const body = await res.json();
-        setSyncStatus('IDLE');
-        if (body.supabaseActive) {
-          setLastSyncTime(new Date().toLocaleTimeString());
-        } else {
-          setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Cache Saved)`);
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const body = await res.json();
+          setSyncStatus('IDLE');
+          if (body.supabaseActive) {
+            setLastSyncTime(new Date().toLocaleTimeString());
+          } else {
+            setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Cache Saved)`);
+          }
+          return;
         }
-      } else {
-        throw new Error(`Server returned ${res.status}`);
       }
+      throw new Error(`Server returned ${res.status}`);
     } catch (e) {
-      console.warn("Express backend save-state offline, trying direct client-side save fallback:", e);
+      console.debug("Express backend save-state offline, trying direct client-side save fallback");
       try {
         const directResult = await saveTenantStateDirect(tenantId, d, t, b, u);
         setSyncStatus('IDLE');
@@ -1008,7 +1015,7 @@ export default function App() {
           }
           data = await res.json();
         } catch (apiErr) {
-          console.warn("Express backend endpoint /api/tenant/state offline or 404. Trying direct client lookup:", apiErr);
+          console.debug("Express backend endpoint /api/tenant/state offline or 404. Trying direct client lookup");
           const directData = await fetchTenantStateDirect(tenantId);
           if (directData && directData.supabaseActive) {
             data = directData;
@@ -1225,18 +1232,30 @@ export default function App() {
     const updatedUsers = currentUsers.map(u => u.id === currentUser.id ? { ...u, lastActive: timestamp } : u);
     setUsers(updatedUsers);
 
-    // Call lightweight user heartbeat endpoint instead of full syncStateToSupabase to prevent overwriting shared states like deliveries
-    customFetch("/api/tenant/user-heartbeat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tenantId: currentTenant.id,
-        userId: currentUser.id,
-        lastActive: timestamp
-      })
-    }).catch(err => {
-      console.warn("User heartbeat lightweight sync failed:", err);
-    });
+    // Call lightweight user heartbeat endpoint or fallback directly to direct Supabase update
+    const doHeartbeat = async () => {
+      try {
+        const res = await customFetch("/api/tenant/user-heartbeat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenantId: currentTenant.id,
+            userId: currentUser.id,
+            lastActive: timestamp
+          })
+        });
+        if (res.ok) {
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            return;
+          }
+        }
+        await saveUserHeartbeatDirect(currentTenant.id, currentUser.id, timestamp);
+      } catch (err) {
+        saveUserHeartbeatDirect(currentTenant.id, currentUser.id, timestamp).catch(() => {});
+      }
+    };
+    doHeartbeat();
   }, [currentUser, currentTenant, loadTrigger]);
 
   // Auto-heal/reconcile state to ensure logged-in user and driver vehicles are always present and properly linked
@@ -1365,7 +1384,7 @@ export default function App() {
           localStorage.setItem('prospaces_all_tenants', JSON.stringify(data.tenants));
         }
       } catch (err: any) {
-        console.warn("Failed retrieving tenants from API, trying direct client lookup:", err.message || err);
+        console.debug("Failed retrieving tenants from API, trying direct client lookup:", err.message || err);
         try {
           const directTenants = await fetchTenantsDirect();
           if (directTenants && directTenants.length > 0) {

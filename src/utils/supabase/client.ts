@@ -80,6 +80,7 @@ export function createClient() {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      storageKey: 'prospaces_main_auth_token',
     },
   });
 

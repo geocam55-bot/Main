@@ -117,11 +117,13 @@ export default function SuperAdminTenantsView({
     setError(null);
     try {
       const res = await customFetch(`/api/tenant/state?tenantId=${tenantId}`);
-      const data = await res.json();
-      setTenantUsers(data.users || []);
-      
-      // Keep offline/local cache synced
-      localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(data.users || []));
+      if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
+        const data = await res.json();
+        setTenantUsers(data.users || []);
+        localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(data.users || []));
+      } else {
+        throw new Error(`Non-JSON or status ${res.status}`);
+      }
     } catch (err) {
       console.warn("Retrying offline user credentials from browser cache:", err);
       const cached = localStorage.getItem(`prospaces_users_tenant_${tenantId}`);
