@@ -4,8 +4,10 @@ import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser } from '
 import { 
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
-  Truck as TruckIcon, MoreVertical, Edit, Trash2, Plus, X, ExternalLink 
+  Truck as TruckIcon, MoreVertical, Edit, Trash2, Plus, X, ExternalLink,
+  List, LayoutGrid
 } from 'lucide-react';
+import DragDropFreightBoard from './DragDropFreightBoard';
 
 interface DeliveryQueueProps {
   deliveries: DeliveryRecord[];
@@ -411,6 +413,7 @@ export const getDeliveryDatesYYYYMMDD = (record: DeliveryRecord) => {
 
 export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDelivery, onDeleteDelivery, branches, users }: DeliveryQueueProps) {
   const BRANCHES = branches || [];
+  const [boardViewMode, setBoardViewMode] = useState<'standard' | 'dragdrop'>('dragdrop');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL');
   const [selectedDateFilter, setSelectedDateFilter] = useState(() => {
@@ -827,8 +830,37 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
           <p className="text-xs text-gray-500">Search and track live status profiles of active customer deliveries across regional hubs</p>
         </div>
 
-        {/* Filter selections */}
-        <div className="flex flex-col sm:flex-row gap-2 max-w-xl w-full md:w-auto items-stretch sm:items-center">
+        {/* View Mode Toggle & Filter selections */}
+        <div className="flex flex-col sm:flex-row gap-2 max-w-2xl w-full md:w-auto items-stretch sm:items-center">
+          
+          {/* Mode Selector Toggle: Standard List vs Drag & Drop Board */}
+          <div className="bg-slate-100 p-1 rounded-xl border border-slate-200/80 flex items-center shrink-0">
+            <button
+              type="button"
+              onClick={() => setBoardViewMode('standard')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer ${
+                boardViewMode === 'standard'
+                  ? 'bg-white text-blue-900 shadow-sm border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <List className="h-3.5 w-3.5" />
+              <span>List View</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBoardViewMode('dragdrop')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center space-x-1.5 transition-all cursor-pointer ${
+                boardViewMode === 'dragdrop'
+                  ? 'bg-slate-900 text-amber-400 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <TruckIcon className="h-3.5 w-3.5 text-amber-500" />
+              <span>Drag & Drop Freight Board</span>
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={handleOpenAddModal}
@@ -839,97 +871,112 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
             <span>Add Delivery</span>
           </button>
 
-          {/* Search box */}
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search Customer, Barcode, Inv..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 text-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-            />
-          </div>
+          {boardViewMode === 'standard' && (
+            <>
+              {/* Search box */}
+              <div className="relative flex-1 sm:w-56">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search Customer, Barcode, Inv..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white border border-slate-200 pl-9 pr-3 py-2 text-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                />
+              </div>
 
-          {/* Datepicker Filter */}
-          <div className="relative">
-            <input 
-              type="date"
-              value={selectedDateFilter}
-              onChange={(e) => setSelectedDateFilter(e.target.value)}
-              className="border border-slate-200 px-3 py-2 text-xs rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono w-full sm:w-auto"
-              title="Filter deliveries by date (Delivered Date for completed, or Registration Date for pending)"
-            />
-            {selectedDateFilter && (
-              <button
-                type="button"
-                onClick={() => setSelectedDateFilter('')}
-                className="absolute right-7 top-2 text-[10px] font-bold text-red-500 hover:text-red-700 bg-white px-1 rounded"
+              {/* Datepicker Filter */}
+              <div className="relative">
+                <input 
+                  type="date"
+                  value={selectedDateFilter}
+                  onChange={(e) => setSelectedDateFilter(e.target.value)}
+                  className="border border-slate-200 px-3 py-2 text-xs rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono w-full sm:w-auto"
+                  title="Filter deliveries by date (Delivered Date for completed, or Registration Date for pending)"
+                />
+                {selectedDateFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDateFilter('')}
+                    className="absolute right-7 top-2 text-[10px] font-bold text-red-500 hover:text-red-700 bg-white px-1 rounded"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Branch selector */}
+              <select
+                value={selectedBranchFilter}
+                onChange={(e) => setSelectedBranchFilter(e.target.value)}
+                className="border border-slate-200 px-3 py-2 text-xs rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Branch selector */}
-          <select
-            value={selectedBranchFilter}
-            onChange={(e) => setSelectedBranchFilter(e.target.value)}
-            className="border border-slate-200 px-3 py-2 text-xs rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="ALL">All Depot Stations</option>
-            {BRANCHES.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
+                <option value="ALL">All Depot Stations</option>
+                {BRANCHES.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-100 flex overflow-x-auto space-x-6 pb-px">
-        <button
-          onClick={() => setActiveTab('ALL')}
-          className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'ALL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
-        >
-          🗂️ All Deliveries ({deliveries.length})
-        </button>
-        <button
-          onClick={() => setActiveTab(DeliveryStatus.REGISTERED)}
-          className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.REGISTERED ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
-        >
-          1️⃣ Registered ({deliveries.filter(d => d.status === DeliveryStatus.REGISTERED).length})
-        </button>
-        <button
-          onClick={() => setActiveTab(DeliveryStatus.PICKED_AND_LOADED)}
-          className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.PICKED_AND_LOADED ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
-        >
-          2️⃣ Loaded on Truck ({deliveries.filter(d => d.status === DeliveryStatus.PICKED_AND_LOADED).length})
-        </button>
-        <button
-          onClick={() => setActiveTab(DeliveryStatus.DELIVERED)}
-          className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.DELIVERED ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
-        >
-          3️⃣ Completed ({deliveries.filter(d => d.status === DeliveryStatus.DELIVERED).length})
-        </button>
-        <button
-          onClick={() => setActiveTab(DeliveryStatus.RETURNED)}
-          className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.RETURNED ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
-        >
-          ⚠️ Returns / Blocked ({deliveries.filter(d => d.status === DeliveryStatus.RETURNED).length})
-        </button>
-      </div>
-
-      {/* Main Board queue */}
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <div className="bg-slate-50 border border-dashed border-slate-200 text-center py-12 text-gray-500 rounded-xl">
-            <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-semibold">No records match the current filter criteria</p>
-            <p className="text-xs">Try adjusting your branch selection, state tab, or search string.</p>
+      {/* Main Freight Board View (Drag & Drop or Standard List) */}
+      {boardViewMode === 'dragdrop' ? (
+        <DragDropFreightBoard
+          deliveries={deliveries}
+          trucks={trucks}
+          onAddOrUpdateDelivery={onAddOrUpdateDelivery}
+          branches={BRANCHES}
+          users={users}
+        />
+      ) : (
+        <>
+          {/* Tabs */}
+          <div className="border-b border-gray-100 flex overflow-x-auto space-x-6 pb-px">
+            <button
+              onClick={() => setActiveTab('ALL')}
+              className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'ALL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+            >
+              🗂️ All Deliveries ({deliveries.length})
+            </button>
+            <button
+              onClick={() => setActiveTab(DeliveryStatus.REGISTERED)}
+              className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.REGISTERED ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+            >
+              1️⃣ Registered ({deliveries.filter(d => d.status === DeliveryStatus.REGISTERED).length})
+            </button>
+            <button
+              onClick={() => setActiveTab(DeliveryStatus.PICKED_AND_LOADED)}
+              className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.PICKED_AND_LOADED ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+            >
+              2️⃣ Loaded on Truck ({deliveries.filter(d => d.status === DeliveryStatus.PICKED_AND_LOADED).length})
+            </button>
+            <button
+              onClick={() => setActiveTab(DeliveryStatus.DELIVERED)}
+              className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.DELIVERED ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+            >
+              3️⃣ Completed ({deliveries.filter(d => d.status === DeliveryStatus.DELIVERED).length})
+            </button>
+            <button
+              onClick={() => setActiveTab(DeliveryStatus.RETURNED)}
+              className={`pb-3 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === DeliveryStatus.RETURNED ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+            >
+              ⚠️ Returns / Blocked ({deliveries.filter(d => d.status === DeliveryStatus.RETURNED).length})
+            </button>
           </div>
-        ) : (
-          filtered.map(delivery => {
-            const isExpanded = expandedRecord === delivery.id;
+
+          {/* Main Board queue */}
+          <div className="space-y-3">
+            {filtered.length === 0 ? (
+              <div className="bg-slate-50 border border-dashed border-slate-200 text-center py-12 text-gray-500 rounded-xl">
+                <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-semibold">No records match the current filter criteria</p>
+                <p className="text-xs">Try adjusting your branch selection, state tab, or search string.</p>
+              </div>
+            ) : (
+              filtered.map(delivery => {
+                const isExpanded = expandedRecord === delivery.id;
             const docType = getEffectiveDocumentType(delivery);
             const isSupplierPickup = docType === 'Supplier Pickup';
             const isCreditDoc = docType === 'Credit';
@@ -1473,6 +1520,8 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
           })
         )}
       </div>
+      </>
+      )}
 
       {/* Add / Edit Delivery Ticket Modal */}
       {isModalOpen && (
