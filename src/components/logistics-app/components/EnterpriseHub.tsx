@@ -195,7 +195,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
       receiverName: d.customerName,
       relationshipToCustomer: 'Customer',
       gpsLatitude: 44.6488,
-      gpsLongitude: -63.5752,
+      gpsLongitude: -63.5880,
       timestamp: d.deliveredAt || d.registeredAt,
       notes: d.destinationNotes || '',
       signature: d.customerSignature,
@@ -215,7 +215,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
   const [newCust, setNewCust] = useState<Partial<Customer>>({
     customerNumber: '', customerType: 'Commercial', companyName: '', firstName: '', lastName: '',
     email: '', mobilePhone: '', alternatePhone: '', address1: '', address2: '', city: 'Dartmouth',
-    provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5752,
+    provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5880,
     specialInstructions: '', creditLimit: 25000, isActive: true
   });
 
@@ -311,7 +311,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
           postalCode: c.PostalCode || '',
           country: c.Country || '',
           latitude: Number(c.Latitude || 44.6488),
-          longitude: Number(c.Longitude || -63.5752),
+          longitude: Number(c.Longitude || -63.5880),
           specialInstructions: c.SpecialInstructions || '',
           creditLimit: Number(c.CreditLimit || 0),
           isActive: c.IsActive ?? true,
@@ -590,7 +590,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
         PostalCode: newCust.postalCode,
         Country: newCust.country,
         Latitude: newCust.latitude || 44.6488,
-        Longitude: newCust.longitude || -63.5752,
+        Longitude: newCust.longitude || -63.5880,
         SpecialInstructions: newCust.specialInstructions || '',
         CreditLimit: newCust.creditLimit || 0,
         IsActive: newCust.isActive ?? true
@@ -625,7 +625,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
       setNewCust({
         customerNumber: '', customerType: 'Commercial', companyName: '', firstName: '', lastName: '',
         email: '', mobilePhone: '', alternatePhone: '', address1: '', address2: '', city: 'Dartmouth',
-        provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5752,
+        provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5880,
         specialInstructions: '', creditLimit: 25000, isActive: true
       });
     } catch (err: any) {
@@ -1389,7 +1389,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
                 setNewCust({
                   customerNumber: '', customerType: 'Commercial', companyName: '', firstName: '', lastName: '',
                   email: '', mobilePhone: '', alternatePhone: '', address1: '', address2: '', city: 'Dartmouth',
-                  provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5752,
+                  provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5880,
                   specialInstructions: '', creditLimit: 25000, isActive: true
                 });
                 setShowAddCustomer(!showAddCustomer);
@@ -1469,7 +1469,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
                     setNewCust({
                       customerNumber: '', customerType: 'Commercial', companyName: '', firstName: '', lastName: '',
                       email: '', mobilePhone: '', alternatePhone: '', address1: '', address2: '', city: 'Dartmouth',
-                      provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5752,
+                      provinceState: 'NS', postalCode: '', country: 'Canada', latitude: 44.6488, longitude: -63.5880,
                       specialInstructions: '', creditLimit: 25000, isActive: true
                     });
                   }} 

@@ -60,20 +60,20 @@ const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   '01075': { lat: 44.70417, lng: -63.85807 },
   '01065': { lat: 44.65360, lng: -63.60110 },
   '01070': { lat: 44.979223, lng: -63.504250 },
-  'DC-WINAMILL': { lat: 44.70820, lng: -63.59380 },
-  'WINAMILL': { lat: 44.70820, lng: -63.59380 },
+  'DC-WINAMILL': { lat: 44.68550, lng: -63.58250 },
+  'WINAMILL': { lat: 44.68550, lng: -63.58250 },
 
   // Specific Street & Hubley Matches
   'SPARROW LANE': { lat: 44.6642, lng: -63.8560 },
   'HUBLEY': { lat: 44.6601, lng: -63.8580 },
 
   // Nova Scotia Communities & Regional Locations
-  'WINDMILL': { lat: 44.7082, lng: -63.5938 },
+  'WINDMILL': { lat: 44.68550, lng: -63.58250 },
   'TANTALLON': { lat: 44.70417, lng: -63.85807 },
   'TIMBERLEA': { lat: 44.6465, lng: -63.7431 },
   'DARTMOUTH': { lat: 44.6636, lng: -63.5683 },
   'BRIDGEWATER': { lat: 44.3789, lng: -64.5126 },
-  'HALIFAX': { lat: 44.6488, lng: -63.5752 },
+  'HALIFAX': { lat: 44.6488, lng: -63.5880 },
   'CHAIN LAKE': { lat: 44.6295, lng: -63.6651 },
   '137 CHAIN LAKE': { lat: 44.6295, lng: -63.6651 },
   'ELMSDALE': { lat: 44.979223, lng: -63.504250 },
@@ -173,6 +173,21 @@ export const cleanAddressText = (address: string | undefined): string => {
     .trim();
 };
 
+export const sanitizeGpsCoordinates = (lat: number, lng: number): { lat: number; lng: number } => {
+  if (isNaN(lat) || isNaN(lng)) return { lat: 44.68550, lng: -63.58250 };
+  // Check if coordinates land in Halifax Harbour / Bedford Basin water channel
+  if (lat >= 44.6300 && lat <= 44.7150 && lng >= -63.6000 && lng <= -63.5650) {
+    if (lng >= -63.5850) {
+      // Shift east onto Dartmouth land (Windmill Rd corridor)
+      return { lat: Math.max(lat, 44.68550), lng: -63.58250 };
+    } else {
+      // Shift west onto Halifax Peninsula land (Almon St / Robie St)
+      return { lat, lng: -63.60200 };
+    }
+  }
+  return { lat, lng };
+};
+
 export const getTruckCoords = (truck: any, simProgress: Record<string, number>, branches: any[]) => {
   const isTruckGps = truck?.gpsSource === 'truck';
   const hasRealGps = isTruckGps 
@@ -181,10 +196,10 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
 
   let baseLat = hasRealGps 
     ? (isTruckGps ? truck.gpsLat : truck.lat) 
-    : 44.6488;
+    : 44.68550;
   let baseLng = hasRealGps 
     ? (isTruckGps ? truck.gpsLng : truck.lng) 
-    : -63.5752;
+    : -63.58250;
 
   const homeBranch = branches.find(b => isTruckAssignedToBranch(truck, b));
   if (!hasRealGps && homeBranch) {
@@ -192,6 +207,11 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
     baseLat = branchCoords.lat;
     baseLng = branchCoords.lng;
   }
+
+  // Ensure base coordinates stay on land
+  const sanitizedBase = sanitizeGpsCoordinates(baseLat, baseLng);
+  baseLat = sanitizedBase.lat;
+  baseLng = sanitizedBase.lng;
 
   const isNoDriver = !truck?.driver || truck?.driver.toLowerCase() === 'no driver' || truck?.driver.toLowerCase() === 'unassigned';
   const nowDate = new Date();
@@ -208,15 +228,20 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
     const progress = simProgress[truck?.id] ?? 0.15;
     const idHash = (truck?.id || "").split("").reduce((sum: number, ch: string) => sum + ch.charCodeAt(0), 0);
     
-    // Smooth parametric path sweep along travel vector
-    const headingRad = ((idHash * 43) % 360) * (Math.PI / 180);
-    const sweepRange = 0.015; // ~1.5 km movement sweep along route
-    const latOffset = Math.sin(progress * 2 * Math.PI) * sweepRange * Math.cos(headingRad);
-    const lngOffset = Math.cos(progress * 2 * Math.PI) * sweepRange * Math.sin(headingRad);
+    // Smooth parametric path sweep along land road corridor
+    const travelDir = (idHash % 2 === 0) ? 1 : -1;
+    const isDartmouth = baseLng >= -63.5850;
+    const sweepRange = 0.012; // ~1.2 km movement sweep along route
+    const latOffset = Math.sin(progress * 2 * Math.PI) * sweepRange * travelDir;
+    const lngOffset = Math.cos(progress * 2 * Math.PI) * 0.003 * (isDartmouth ? 1 : -1);
+
+    const rawLat = Number((baseLat + latOffset).toFixed(6));
+    const rawLng = Number((baseLng + lngOffset).toFixed(6));
+    const sanitized = sanitizeGpsCoordinates(rawLat, rawLng);
 
     return {
-      lat: Number((baseLat + latOffset).toFixed(6)),
-      lng: Number((baseLng + lngOffset).toFixed(6)),
+      lat: sanitized.lat,
+      lng: sanitized.lng,
       hasRealGps: true,
       isTruckGps
     };
@@ -288,10 +313,11 @@ export const isTruckAssignedToBranch = (truck: any, branch: any): boolean => {
 export const getBranchCoordinates = (id: string, name: string, address?: string): { x: number; y: number; lat: number; lng: number } => {
   const combinedStr = `${name || ''} ${address || ''}`.trim();
   const gps = getGpsForLocation(id, combinedStr);
-  const lat = gps ? gps.lat : 44.70820; // Fallback to central Windmill HQ for branch depot nodes
-  const lng = gps ? gps.lng : -63.59380;
-  const coords = getPercentCoordsFromGps(lat, lng);
-  return { x: coords.x, y: coords.y, lat, lng };
+  const rawLat = gps ? gps.lat : 44.68550; // Fallback to central Windmill HQ for branch depot nodes
+  const rawLng = gps ? gps.lng : -63.58250;
+  const sanitized = sanitizeGpsCoordinates(rawLat, rawLng);
+  const coords = getPercentCoordsFromGps(sanitized.lat, sanitized.lng);
+  return { x: coords.x, y: coords.y, lat: sanitized.lat, lng: sanitized.lng };
 };
 
 export const getDeliveryCoordinates = (id: string, address: string, originX?: number, originY?: number): { x: number; y: number; lat: number; lng: number } | null => {
@@ -521,7 +547,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
   const [showEngineSettings, setShowEngineSettings] = useState<boolean>(false);
   
   // Real-time sitting still Dispatcher HQ Location (defaults to Halifax City Hall / Atlantic Canada)
-  const [hqCoords, setHqCoords] = useState<{ lat: number, lng: number }>({ lat: 44.6488, lng: -63.5752 });
+  const [hqCoords, setHqCoords] = useState<{ lat: number, lng: number }>({ lat: 44.6488, lng: -63.5880 });
   const [isWatchingGps, setIsWatchingGps] = useState<boolean>(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'off' | 'searching' | 'locked'>('off');
@@ -716,7 +742,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
     if (hasCaliforniaBranch) {
       setHqCoords({ lat: 37.3382, lng: -121.8863 }); // California default HQ
     } else {
-      setHqCoords({ lat: 44.6488, lng: -63.5752 }); // Halifax Atlantic Canada default HQ
+      setHqCoords({ lat: 44.6488, lng: -63.5880 }); // Halifax Atlantic Canada default HQ
     }
   }, [activeBranches, selectedTruck]);
 
@@ -812,7 +838,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
         setGpsError(null);
       } else {
         // Position isn't within general Canada Nova Scotia - bridge elements dynamically so they can still see it!
-        setHqCoords({ lat: 44.6488, lng: -63.5752 }); // Halifax Center fallback
+        setHqCoords({ lat: 44.6488, lng: -63.5880 }); // Halifax Center fallback
         setGpsError("Bridges enabled: Your real location is outside Nova Scotia. Active dispatch point set at Halifax Harbor.");
       }
       setGpsStatus('locked');
@@ -825,7 +851,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
     const errorHandler = (err: GeolocationPositionError) => {
       console.warn("Geolocation permission error:", err);
       setGpsError("Access restricted. Active Dispatch Center set at central Halifax City Hall.");
-      setHqCoords({ lat: 44.6488, lng: -63.5752 }); // Fallback
+      setHqCoords({ lat: 44.6488, lng: -63.5880 }); // Fallback
       setGpsStatus('locked');
       setSysLogs(prev => [
         `[${new Date().toLocaleTimeString()}] Dynamic GPS fallback active. Tracking seated dispatcher beacon.`,
@@ -1267,7 +1293,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(matchedTruck, b));
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name) 
-                    : { lat: 44.6488, lng: -63.5752 };
+                    : { lat: 44.6488, lng: -63.5880 };
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = orig.lat + 0.003; destLng = orig.lng + 0.003;
                 }
@@ -1326,7 +1352,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name) 
-                    : { lat: 44.6488, lng: -63.5752 };
+                    : { lat: 44.6488, lng: -63.5880 };
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = orig.lat + 0.003; destLng = orig.lng + 0.003;
                 }
@@ -1524,7 +1550,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   const homeBranch = activeBranches.find(b => isTruckAssignedToBranch(truck, b));
                   const orig = homeBranch 
                     ? getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address) 
-                    : { lat: 44.6488, lng: -63.5752 };
+                    : { lat: 44.6488, lng: -63.5880 };
                   origLat = orig.lat; origLng = orig.lng;
                   destLat = orig.lat + 0.003; destLng = orig.lng + 0.003;
                   isMoving = false;
@@ -3055,8 +3081,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                                     type="button"
                                     onClick={() => {
                                       setActiveActionMenuTruckId(null);
-                                      const lat = truckRow.gpsLat || truckRow.lat || 44.6488;
-                                      const lng = truckRow.gpsLng || truckRow.lng || -63.5752;
+                                      const { lat, lng } = getTruckCoords(truckRow, simProgress, activeBranches);
                                       const nearby = activeBranches.map(b => {
                                         const coords = getBranchCoordinates(b.id, b.name, b.address);
                                         const dist = Math.sqrt(Math.pow(coords.lat - lat, 2) + Math.pow(coords.lng - lng, 2)) * 111;
@@ -3115,8 +3140,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                                       setViewingCoordinatesTruckId(truckRow.id);
                                       setViewingDetailsTruckId(null);
                                       setViewingTripsTruckId(null);
-                                      const lat = truckRow.gpsLat || truckRow.lat || 44.6488;
-                                      const lng = truckRow.gpsLng || truckRow.lng || -63.5752;
+                                      const { lat, lng } = getTruckCoords(truckRow, simProgress, activeBranches);
                                       const coordStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                                       navigator.clipboard.writeText(coordStr);
                                       setToastMessage(`Coords copied: ${coordStr}`);

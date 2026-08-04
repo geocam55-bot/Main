@@ -226,10 +226,10 @@ export function deserializeType(truck: any): any {
 
   const is1903 = (truck.id || "").includes("1903") || (truck.name || "").includes("1903") || (gpsDeviceName || "").includes("1903");
   if (is1903 && lat === undefined) {
-    lat = 44.7082;
-    lng = -63.5938;
-    gpsLat = 44.7082;
-    gpsLng = -63.5938;
+    lat = 44.6855;
+    lng = -63.5825;
+    gpsLat = 44.6855;
+    gpsLng = -63.5825;
   }
 
   return {

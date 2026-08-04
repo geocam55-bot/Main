@@ -429,8 +429,8 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
       gpsSimIccid: simIccid,
       gpsStatus: 'Connected',
       gpsLastHandshake: new Date().toISOString(),
-      gpsLat: targetTruck.gpsLat || targetTruck.lat || 44.6488,
-      gpsLng: targetTruck.gpsLng || targetTruck.lng || -63.5752
+      gpsLat: targetTruck.gpsLat || targetTruck.lat || 44.68550,
+      gpsLng: targetTruck.gpsLng || targetTruck.lng || -63.58250
     };
 
     onUpdateTruck(updatedTruck);
@@ -962,7 +962,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                 <button
                   type="button"
                   onClick={async () => {
-                    setCalSuccessMsg("Audit Complete: All 21 vehicles verified transmitting live telematics. 2401 ALMON F-15 confirmed parked at 500 Windmill Road Terminal Depot (44.70820, -63.59380).");
+                    setCalSuccessMsg("Audit Complete: All 21 vehicles verified transmitting live telematics. 2401 ALMON F-15 confirmed parked at 500 Windmill Road Terminal Depot (44.68550, -63.58250).");
                     setTimeout(() => setCalSuccessMsg(""), 8000);
                   }}
                   className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 transition-colors cursor-pointer shadow-xs"
@@ -978,7 +978,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
               <div className="flex items-center space-x-2 font-medium">
                 <MapPin className="h-4 w-4 text-amber-600 shrink-0" />
                 <span>
-                  <strong>2401 ALMON F-15 (Joshua Campbell):</strong> Parked & verified at <strong>500 Windmill Road Terminal Depot</strong> (Lat: 44.70820, Lng: -63.59380)
+                  <strong>2401 ALMON F-15 (Joshua Campbell):</strong> Parked & verified at <strong>500 Windmill Road Terminal Depot</strong> (Lat: 44.68550, Lng: -63.58250)
                 </span>
               </div>
               <span className="px-2 py-0.5 bg-emerald-600 text-white font-extrabold text-[10px] uppercase rounded-md tracking-wider shrink-0 ml-2">
@@ -1006,12 +1006,12 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                     const is1903 = idOrName.includes('1903');
                     const is2101 = idOrName.includes('2101');
 
-                    let displayLat = isUsingTruckGps ? (truck.gpsLat ?? truck.lat ?? 44.7082) : (truck.lat ?? truck.gpsLat ?? 44.7082);
-                    let displayLng = isUsingTruckGps ? (truck.gpsLng ?? truck.lng ?? -63.5938) : (truck.lng ?? truck.gpsLng ?? -63.5938);
+                    let displayLat = isUsingTruckGps ? (truck.gpsLat ?? truck.lat ?? 44.6855) : (truck.lat ?? truck.gpsLat ?? 44.6855);
+                    let displayLng = isUsingTruckGps ? (truck.gpsLng ?? truck.lng ?? -63.5825) : (truck.lng ?? truck.gpsLng ?? -63.5825);
 
                     if (is2401Almon || is1903) {
-                      displayLat = 44.7082;
-                      displayLng = -63.5938;
+                      displayLat = 44.6855;
+                      displayLng = -63.5825;
                     }
 
                     let locationLabel = "In Transit / Field Location";
@@ -1248,7 +1248,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                       type="number"
                       step="any"
                       required
-                      placeholder="e.g. 44.70820"
+                      placeholder="e.g. 44.68550"
                       value={calLat}
                       onChange={(e) => {
                         setCalLat(e.target.value);
@@ -1263,7 +1263,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                       type="number"
                       step="any"
                       required
-                      placeholder="e.g. -63.59380"
+                      placeholder="e.g. -63.58250"
                       value={calLng}
                       onChange={(e) => {
                         setCalLng(e.target.value);

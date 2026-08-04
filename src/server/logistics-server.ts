@@ -407,10 +407,10 @@ function deserializeType(truck: any): any {
 
   const is1903 = (truck.id || "").includes("1903") || (truck.name || "").includes("1903") || (gpsDeviceName || "").includes("1903");
   if (is1903 && lat === undefined) {
-    lat = 44.7082;
-    lng = -63.5938;
-    gpsLat = 44.7082;
-    gpsLng = -63.5938;
+    lat = 44.6855;
+    lng = -63.5825;
+    gpsLat = 44.6855;
+    gpsLng = -63.5825;
   }
 
   return {
@@ -793,7 +793,7 @@ on conflict (id) do nothing;
 
 -- Seed GPS Setup data for the trucks (TRUCK-87 and TRUCK-28)
 insert into gps_units_setup (id, "tenantId", "deviceId", "deviceName", "simIccid", status, "assignedTruckId", "lastHandshake", "lastLatitude", "lastLongitude") values
-('GPS-IMEI-874812', 'prospaces', 'GPS-DEV-87', 'CalAmp LMU-3030 Premium', '8901410327981234567', 'Connected', 'TRUCK-87', '2026-07-01 06:00:00', 44.7082, -63.5938),
+('GPS-IMEI-874812', 'prospaces', 'GPS-DEV-87', 'CalAmp LMU-3030 Premium', '8901410327981234567', 'Connected', 'TRUCK-87', '2026-07-01 06:00:00', 44.6855, -63.5825),
 ('GPS-IMEI-281932', 'prospaces', 'GPS-DEV-28', 'Sierra Wireless RV50X', '8901410327981234568', 'Connected', 'TRUCK-28', '2026-07-01 06:02:15', 44.6295, -63.6651)
 on conflict (id) do nothing;
 
@@ -801,7 +801,7 @@ on conflict (id) do nothing;
 insert into gps_tracking_history (id, "tenantId", "deviceId", latitude, longitude, speed, heading, "recordedAt", "ignitionStatus") values
 (gen_random_uuid(), 'prospaces', 'GPS-DEV-87', 44.7050, -63.5950, 45.2, 180.0, '2026-07-01 05:50:00', true),
 (gen_random_uuid(), 'prospaces', 'GPS-DEV-87', 44.7065, -63.5942, 32.5, 175.5, '2026-07-01 05:55:00', true),
-(gen_random_uuid(), 'prospaces', 'GPS-DEV-87', 44.7082, -63.5938, 0.0, 175.5, '2026-07-01 06:00:00', false)
+(gen_random_uuid(), 'prospaces', 'GPS-DEV-87', 44.6855, -63.5825, 0.0, 175.5, '2026-07-01 06:00:00', false)
 on conflict (id) do nothing;
 
 -- Seed GPS tracking history points for GPS-DEV-28
@@ -1321,7 +1321,7 @@ async function runSelfHealingOnce() {
 
         // 4b. Ensure default trucks in prospaces tenant have GPS Hardware Serial / Device ID configured and correct positions
         const DEFAULT_FLEET_TRUCKS = [
-          { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "Joshua Campbell", branchId: "DC-WINAMILL", lat: 44.7082, lng: -63.5938, speed: 0, idling: 0 },
+          { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "Joshua Campbell", branchId: "DC-WINAMILL", lat: 44.6536, lng: -63.6011, speed: 0, idling: 0 },
           { id: "2409 - Elmsdale F150", name: "2409 - Elmsdale F150", model: "2024 Ford F-150 XLT 4x4", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 58, idling: 0 },
           { id: "2412 - MTN RANGER", name: "2412 - MTN RANGER", model: "2024 Ford Ranger XLT 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 52, idling: 0 },
           { id: "2408 - MTN F150 OSR", name: "2408 - MTN F150 OSR", model: "2024 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6310, lng: -63.6620, speed: 64, idling: 0 },
@@ -1339,7 +1339,7 @@ async function runSelfHealingOnce() {
           { id: "1902 - MTN HH", name: "1902 - MTN HH", model: "2019 Freightliner M2 106 Highway Hauler", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 0, idling: 28 },
           { id: "1702 - Elmsdale HH", name: "1702 - Elmsdale HH", model: "2017 Freightliner M2 106 Heavy Hauler", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 75, idling: 0 },
           { id: "701 - Elmsdale T/A Flatdeck", name: "701 - Elmsdale T/A Flatdeck", model: "2020 Peterbilt 337 Tandem-Axle Flatbed", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 50, idling: 0 },
-          { id: "1903 - Elmsdale Windows", name: "1903 - Elmsdale Windows", model: "2019 Ford F-550 Glass & Window Transport Rack", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.7082, lng: -63.5938, speed: 0, idling: 0 },
+          { id: "1903 - Elmsdale Windows", name: "1903 - Elmsdale Windows", model: "2019 Ford F-550 Glass & Window Transport Rack", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6855, lng: -63.5825, speed: 0, idling: 0 },
           { id: "PEI F550 Box", name: "PEI F550 Box", model: "2022 Ford F-550 Super Duty 16ft Box Truck", driver: "No Driver", branchId: "01075", lat: 46.2382, lng: -63.1311, speed: 55, idling: 0 },
           { id: "PEI WS BOOM", name: "PEI WS BOOM", model: "2023 Western Star 4700 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "01075", lat: 46.2382, lng: -63.1311, speed: 0, idling: 25 }
         ];
@@ -1409,8 +1409,8 @@ async function runSelfHealingOnce() {
             const matchedFt = DEFAULT_FLEET_TRUCKS.find(ft => ft.id === t.id || ft.name === t.name);
 
             // Set realistic initial position / telematics
-            let initialLat = (typeof deserialized.gpsLat === 'number' && !isNaN(deserialized.gpsLat)) ? deserialized.gpsLat : ((matchedFt ? matchedFt.lat : deserialized.lat) || (is2101 ? 44.8770 : 44.7082));
-            let initialLng = (typeof deserialized.gpsLng === 'number' && !isNaN(deserialized.gpsLng)) ? deserialized.gpsLng : ((matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5938));
+            let initialLat = (typeof deserialized.gpsLat === 'number' && !isNaN(deserialized.gpsLat)) ? deserialized.gpsLat : ((matchedFt ? matchedFt.lat : deserialized.lat) || (is2101 ? 44.8770 : 44.6855));
+            let initialLng = (typeof deserialized.gpsLng === 'number' && !isNaN(deserialized.gpsLng)) ? deserialized.gpsLng : ((matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5825));
 
             const defaultDeviceId = deserialized.gpsDeviceId || `FC-${t.id}`;
             const defaultSerialNumber = deserialized.gpsSerialNumber || `SN-FC${Math.floor(100000 + Math.random() * 900000)}`;
@@ -4563,8 +4563,8 @@ async function syncFleetCompleteTelemetry
           const isTruck1903 = idOrName.includes("1903");
           const isAlmon2401 = idOrName.includes("2401") || idOrName.includes("almon");
 
-          let currentLat = typeof truck.gpsLat === 'number' && !isNaN(truck.gpsLat) ? truck.gpsLat : (typeof truck.lat === 'number' && !isNaN(truck.lat) ? truck.lat : 44.6488);
-          let currentLng = typeof truck.gpsLng === 'number' && !isNaN(truck.gpsLng) ? truck.gpsLng : (typeof truck.lng === 'number' && !isNaN(truck.lng) ? truck.lng : -63.5752);
+          let currentLat = typeof truck.gpsLat === 'number' && !isNaN(truck.gpsLat) ? truck.gpsLat : (typeof truck.lat === 'number' && !isNaN(truck.lat) ? truck.lat : 44.6855);
+          let currentLng = typeof truck.gpsLng === 'number' && !isNaN(truck.gpsLng) ? truck.gpsLng : (typeof truck.lng === 'number' && !isNaN(truck.lng) ? truck.lng : -63.5825);
           
           const idHash = (item.id || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
           const timeStep = Math.floor(Date.now() / 15000);
@@ -4624,12 +4624,22 @@ async function syncFleetCompleteTelemetry
           }
 
           if (currentLat < 44.4 || currentLat > 45.3 || currentLng < -64.2 || currentLng > -62.8) {
-            currentLat = 44.6488 + ((idHash % 8) * 0.02);
-            currentLng = -63.5752 - ((idHash % 8) * 0.02);
+            currentLat = 44.6855;
+            currentLng = -63.5825;
           }
 
-          const targetLat = Number((currentLat + deltaLat).toFixed(6));
-          const targetLng = Number((currentLng + deltaLng).toFixed(6));
+          let targetLat = Number((currentLat + deltaLat).toFixed(6));
+          let targetLng = Number((currentLng + deltaLng).toFixed(6));
+
+          // Sanitize coordinates to prevent vehicles drifting into Halifax Harbour water
+          if (targetLat >= 44.6300 && targetLat <= 44.7150 && targetLng >= -63.6000 && targetLng <= -63.5650) {
+            if (targetLng >= -63.5850) {
+              targetLat = Math.max(targetLat, 44.6855);
+              targetLng = -63.5825;
+            } else {
+              targetLng = -63.6020;
+            }
+          }
 
           return {
             id: truck.gpsDeviceId || `FC-${truck.id}`,

@@ -354,7 +354,7 @@ export default function GoogleMapContainer({
 
   const initialCenter = hasCaliforniaBranch
     ? { lat: 37.3382, lng: -121.8863 }
-    : { lat: 44.6488, lng: -63.5752 };
+    : { lat: 44.6488, lng: -63.5880 };
 
   // Determine Google Maps Type ID
   let googleMapTypeId: 'roadmap' | 'satellite' | 'hybrid' | 'terrain' = 'roadmap';
@@ -444,8 +444,8 @@ function MapInner({
     const isTruck1903 = (trackEventsTruck?.id || "").includes("1903") || (trackEventsTruck?.name || "").includes("1903");
     const isWindmill = isTruck1903 || trackEventsTruck?.branchId === 'DC-WINAMILL';
 
-    const startLat = isWindmill ? 44.7082 : 44.9752;
-    const startLng = isWindmill ? -63.5938 : -63.5042;
+    const startLat = isWindmill ? 44.6855 : 44.9752;
+    const startLng = isWindmill ? -63.5825 : -63.5042;
     const startLabel = isWindmill ? '500 Windmill Road Terminal Depot' : 'Elmsdale Terminal Depot';
     const endLabel = isWindmill ? '500 Windmill Road Terminal Return' : 'Elmsdale Terminal Return';
 
@@ -630,7 +630,7 @@ function MapInner({
       const orig = getBranchCoordinates(assignedDelivery.originBranch, matchedOrigBranch?.name || '', matchedOrigBranch?.address);
       const dest = getDeliveryCoordinates(assignedDelivery.id, assignedDelivery.deliveryAddress, orig.x, orig.y);
       origLat = isNaN(orig.lat) ? 44.6488 : orig.lat;
-      origLng = isNaN(orig.lng) ? -63.5752 : orig.lng;
+      origLng = isNaN(orig.lng) ? -63.5880 : orig.lng;
       destLat = dest && !isNaN(dest.lat) ? dest.lat : 0;
       destLng = dest && !isNaN(dest.lng) ? dest.lng : 0;
     }
