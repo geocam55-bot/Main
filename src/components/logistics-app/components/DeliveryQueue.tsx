@@ -16,6 +16,8 @@ interface DeliveryQueueProps {
   onDeleteDelivery: (id: string) => void;
   branches?: Branch[];
   users: AppUser[];
+  manualFullTrucks?: Record<string, boolean>;
+  onUpdateManualFullTrucks?: (updated: Record<string, boolean>) => void;
 }
 
 // Helper to determine document type normalized
@@ -411,7 +413,16 @@ export const getDeliveryDatesYYYYMMDD = (record: DeliveryRecord) => {
   };
 };
 
-export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDelivery, onDeleteDelivery, branches, users }: DeliveryQueueProps) {
+export default function DeliveryQueue({ 
+  deliveries, 
+  trucks, 
+  onAddOrUpdateDelivery, 
+  onDeleteDelivery, 
+  branches, 
+  users,
+  manualFullTrucks,
+  onUpdateManualFullTrucks
+}: DeliveryQueueProps) {
   const BRANCHES = branches || [];
   const [boardViewMode, setBoardViewMode] = useState<'standard' | 'dragdrop'>('dragdrop');
   const [searchQuery, setSearchQuery] = useState('');
@@ -929,6 +940,8 @@ export default function DeliveryQueue({ deliveries, trucks, onAddOrUpdateDeliver
           onAddOrUpdateDelivery={onAddOrUpdateDelivery}
           branches={BRANCHES}
           users={users}
+          manualFullTrucks={manualFullTrucks}
+          onUpdateManualFullTrucks={onUpdateManualFullTrucks}
         />
       ) : (
         <>

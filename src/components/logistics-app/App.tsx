@@ -761,6 +761,35 @@ export default function App() {
   const [lastFetchError, setLastFetchError] = useState<string | null>(null);
   const [loadTrigger, setLoadTrigger] = useState<number>(0);
 
+  // Persistent Manual Full Trucks state for Freight Board and Delivery Board
+  const [manualFullTrucks, setManualFullTrucks] = useState<Record<string, boolean>>(() => {
+    try {
+      const tenantId = currentTenant?.id || 'default';
+      const saved = localStorage.getItem(`prospaces_manual_full_trucks_${tenantId}`);
+      if (saved) return JSON.parse(saved);
+      const globalSaved = localStorage.getItem('prospaces_manual_full_trucks');
+      return globalSaved ? JSON.parse(globalSaved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Keep manualFullTrucks in sync when tenant changes or branches reload from database
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+    const tenantId = currentTenant.id;
+    try {
+      const saved = localStorage.getItem(`prospaces_manual_full_trucks_${tenantId}`);
+      if (saved) {
+        setManualFullTrucks(JSON.parse(saved));
+        return;
+      }
+    } catch (e) {}
+    if (branches && branches.length > 0 && (branches[0] as any)?.manualFullTrucks) {
+      setManualFullTrucks((branches[0] as any).manualFullTrucks);
+    }
+  }, [currentTenant?.id, branches]);
+
   const handleForceRefreshLive = async () => {
     if (!currentTenant) return;
     const tenantId = currentTenant.id;
@@ -1753,6 +1782,25 @@ export default function App() {
       localStorage.setItem(`prospaces_store_configs_${currentTenant.id}`, JSON.stringify(configs));
     } catch (e) {}
     await syncStateToSupabase(currentTenant.id, deliveries, trucks, updatedBranches, users);
+  };
+
+  const handleUpdateManualFullTrucks = async (updated: Record<string, boolean>) => {
+    setManualFullTrucks(updated);
+    if (!currentTenant) return;
+    const tenantId = currentTenant.id;
+    try {
+      localStorage.setItem(`prospaces_manual_full_trucks_${tenantId}`, JSON.stringify(updated));
+      localStorage.setItem('prospaces_manual_full_trucks', JSON.stringify(updated));
+    } catch (e) {}
+
+    let updatedBranches = [...branches];
+    if (updatedBranches.length === 0) {
+      updatedBranches = [{ id: 'ALL', name: 'All Stores', type: 'STORE', address: 'Main Center', manualFullTrucks: updated } as any];
+    } else {
+      updatedBranches = updatedBranches.map((b, idx) => idx === 0 ? { ...b, manualFullTrucks: updated } : b);
+    }
+    setBranches(updatedBranches);
+    await syncStateToSupabase(tenantId, deliveries, trucks, updatedBranches, users);
   };
 
   // User handlers
@@ -2920,6 +2968,8 @@ export default function App() {
               onDeleteDelivery={handleDeleteDelivery}
               branches={branches}
               users={users}
+              manualFullTrucks={manualFullTrucks}
+              onUpdateManualFullTrucks={handleUpdateManualFullTrucks}
             />
           )}
           {activeTab === 'delivery-board' && (
@@ -2934,6 +2984,8 @@ export default function App() {
               onAddDelivery={handleAddOrUpdateDelivery}
               onUpdateClosureRules={handleUpdateClosureRules}
               onUpdateStoreConfigs={handleUpdateStoreConfigs}
+              manualFullTrucks={manualFullTrucks}
+              onUpdateManualFullTrucks={handleUpdateManualFullTrucks}
             />
           )}
           {activeTab === 'stores' && (

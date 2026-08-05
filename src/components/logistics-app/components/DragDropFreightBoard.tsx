@@ -1,10 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { DeliveryRecord, DeliveryStatus, Truck, Branch, User as AppUser } from '../types';
+import type { DeliveryRecord, Truck, Branch, User as AppUser } from '../types';
+import { DeliveryStatus } from '../types';
 import { 
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
-  ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check
+  ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
+  Calendar, Sun, Moon, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { isTruckAssignedToBranch } from './Dashboard';
 
 interface DragDropFreightBoardProps {
   deliveries: DeliveryRecord[];
@@ -13,6 +16,8 @@ interface DragDropFreightBoardProps {
   branches?: Branch[];
   users?: AppUser[];
   onCloseModal?: () => void;
+  manualFullTrucks?: Record<string, boolean>;
+  onUpdateManualFullTrucks?: (updated: Record<string, boolean>) => void;
 }
 
 // Helper to estimate or parse weight in lbs from string
@@ -40,13 +45,13 @@ export function parseDeliveryWeightLbs(delivery: DeliveryRecord): number {
 
 // Helper to determine truck max weight capacity in lbs
 export function getTruckMaxCapacityLbs(truck: Truck): number {
+  if (!truck) return 8000;
+
   // 1. Direct capacityWeightKg field from truck table
   if (truck.capacityWeightKg && truck.capacityWeightKg > 0) {
-    // If entered directly in lbs (e.g. >= 2000), return as-is
     if (truck.capacityWeightKg >= 2000) {
       return Math.round(truck.capacityWeightKg);
     }
-    // Otherwise convert Kg -> Lbs (1 kg = 2.20462 lbs)
     return Math.round(truck.capacityWeightKg * 2.20462);
   }
 
@@ -64,12 +69,22 @@ export function getTruckMaxCapacityLbs(truck: Truck): number {
     }
   }
 
-  // 3. Model/type based fallback if table entry is unset
-  const nameLower = (truck.name + ' ' + truck.type + ' ' + (truck.model || '')).toLowerCase();
-  if (nameLower.includes('boom') || nameLower.includes('crane')) return 12000;
-  if (nameLower.includes('heavy') || nameLower.includes('flatbed') || nameLower.includes('curtain')) return 10000;
-  if (nameLower.includes('f150') || nameLower.includes('pickup')) return 3500;
-  if (nameLower.includes('reefer') || nameLower.includes('dry van')) return 8000;
+  // 3. Check custom properties if attached
+  if ((truck as any).capacityLbs && Number((truck as any).capacityLbs) > 0) {
+    return Math.round(Number((truck as any).capacityLbs));
+  }
+  if ((truck as any).truckCapacity && Number((truck as any).truckCapacity) > 0) {
+    const cap = Number((truck as any).truckCapacity);
+    return cap < 2000 ? Math.round(cap * 2.20462) : Math.round(cap);
+  }
+
+  // 4. Model/type based fallback if table entry is unset
+  const nameLower = ((truck.name || '') + ' ' + (truck.type || '') + ' ' + (truck.model || '')).toLowerCase();
+  if (nameLower.includes('boom') || nameLower.includes('crane') || nameLower.includes('western star')) return 12000;
+  if (nameLower.includes('flatdeck') || nameLower.includes('flatbed') || nameLower.includes('heavy') || nameLower.includes('curtain') || nameLower.includes('hauler') || nameLower.includes('tandem')) return 10000;
+  if (nameLower.includes('f550') || nameLower.includes('f-550') || nameLower.includes('window') || nameLower.includes('glass')) return 6000;
+  if (nameLower.includes('f150') || nameLower.includes('f-150') || nameLower.includes('ranger') || nameLower.includes('pickup')) return 3500;
+  if (nameLower.includes('reefer') || nameLower.includes('dry van') || nameLower.includes('box')) return 8000;
   return 8000;
 }
 
@@ -152,10 +167,13 @@ export default function DragDropFreightBoard({
   trucks,
   onAddOrUpdateDelivery,
   branches = [],
-  users = []
+  users = [],
+  manualFullTrucks,
+  onUpdateManualFullTrucks
 }: DragDropFreightBoardProps) {
-  // Local state for manually marked FULL trucks
-  const [fullTruckIds, setFullTruckIds] = useState<Record<string, boolean>>({});
+  // Manual FULL trucks from parent or local fallback
+  const [localFullTruckIds, setLocalFullTruckIds] = useState<Record<string, boolean>>({});
+  const fullTruckIds = manualFullTrucks !== undefined ? manualFullTrucks : localFullTruckIds;
   
   // Drag over target truck ID
   const [dragOverTruckId, setDragOverTruckId] = useState<string | null>(null);
@@ -163,8 +181,15 @@ export default function DragDropFreightBoard({
   // Currently dragged delivery ID
   const [draggedDeliveryId, setDraggedDeliveryId] = useState<string | null>(null);
 
-  // Selected store / branch filter for unassigned deliveries
+  // Selected store / branch filter (applies to BOTH trucks and deliveries)
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>('ALL');
+
+  // Date selection state for loading multiple days
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [showAllDates, setShowAllDates] = useState<boolean>(false);
+
+  // Shift selection state (ALL | AM | PM)
+  const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | 'AM' | 'PM'>('ALL');
 
   // Search filter for deliveries
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -172,30 +197,71 @@ export default function DragDropFreightBoard({
   // Mobile/Click assign modal state
   const [assigningDelivery, setAssigningDelivery] = useState<DeliveryRecord | null>(null);
 
+  // Assign & Picker Prompt Modal state
+  const [assignPrompt, setAssignPrompt] = useState<{
+    delivery: DeliveryRecord;
+    truck: Truck;
+    depot: string;
+    date: string;
+    slot: 'AM' | 'PM';
+    picker: string;
+  } | null>(null);
+
+  // Override to show ALL unassigned pool across all dates & stores
+  const [showAllUnassigned, setShowAllUnassigned] = useState<boolean>(false);
+
   // Expanded truck details ID
   const [expandedTruckId, setExpandedTruckId] = useState<string | null>(null);
 
-  // Filter trucks (excluding deleted or inactive)
-  const activeTrucks = useMemo(() => {
-    return trucks.filter(t => t.isActive !== false);
-  }, [trucks]);
+  // Date navigation handlers
+  const handlePrevDay = () => {
+    const current = new Date(selectedDate + 'T00:00:00');
+    current.setDate(current.getDate() - 1);
+    setSelectedDate(current.toISOString().split('T')[0]);
+    setShowAllDates(false);
+  };
+
+  const handleNextDay = () => {
+    const current = new Date(selectedDate + 'T00:00:00');
+    current.setDate(current.getDate() + 1);
+    setSelectedDate(current.toISOString().split('T')[0]);
+    setShowAllDates(false);
+  };
+
+  const handleToday = () => {
+    setSelectedDate(new Date().toISOString().split('T')[0]);
+    setShowAllDates(false);
+  };
+
+  // Formatted display string for selected date
+  const formattedDateLabel = useMemo(() => {
+    if (showAllDates) return 'All Delivery Dates';
+    if (!selectedDate) return 'All Dates';
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    return dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }, [selectedDate, showAllDates]);
 
   // Extract unique tenant store list from tenant branches & deliveries
   const tenantStores = useMemo(() => {
-    const storeMap = new Map<string, { id: string; name: string }>();
-
-    // 1. Map from tenant branches
+    // 1. If tenant branches exist, use them as the primary source of truth for Stores and DCs
     if (branches && branches.length > 0) {
+      const storeMap = new Map<string, { id: string; name: string }>();
       branches.forEach(b => {
-        const displayName = formatBranchDisplayName(b);
-        storeMap.set(displayName.toUpperCase(), { id: b.id, name: displayName });
+        const displayName = formatBranchDisplayName(b, branches);
+        const key = displayName.toUpperCase();
+        if (!storeMap.has(key)) {
+          storeMap.set(key, { id: b.id, name: displayName });
+        }
       });
+      return Array.from(storeMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    // 2. Map from deliveries/trucks if any additional origin branches exist
+    // 2. Fallback only if branches list is not loaded yet or empty
+    const storeMap = new Map<string, { id: string; name: string }>();
     deliveries.forEach(d => {
       if (d.originBranch) {
-        const displayName = formatBranchDisplayName(d.originBranch);
+        const displayName = formatBranchDisplayName(d.originBranch, branches);
         const key = displayName.toUpperCase();
         if (!storeMap.has(key)) {
           storeMap.set(key, { id: d.originBranch, name: displayName });
@@ -203,37 +269,47 @@ export default function DragDropFreightBoard({
       }
     });
 
-    // Fallback default Nova Scotia stores if tenant store list is small
-    const defaults = ['TANTALLON', 'ELMSDALE', 'HALIFAX', 'WINMILL', 'ALMON', 'HEBBVILLE', 'BRIDGEWATER'];
-    defaults.forEach(d => {
-      if (!storeMap.has(d)) {
-        storeMap.set(d, { id: d, name: d });
-      }
-    });
-
     return Array.from(storeMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [branches, deliveries]);
 
-  // Unassigned deliveries (no assignedTruck or assignedTruck is 'unassigned' or 'No Truck')
+  // Filter trucks by active status and selected store filter (applies to BOTH trucks and deliveries)
+  const activeTrucks = useMemo(() => {
+    let list = trucks.filter(t => t.isActive !== false);
+
+    if (selectedStoreFilter !== 'ALL') {
+      const storeObj = (branches || []).find(b =>
+        b.id === selectedStoreFilter ||
+        b.name === selectedStoreFilter ||
+        b.id.toUpperCase() === selectedStoreFilter.toUpperCase() ||
+        b.name.toUpperCase() === selectedStoreFilter.toUpperCase()
+      ) || { id: selectedStoreFilter, name: selectedStoreFilter };
+
+      list = list.filter(t => isTruckAssignedToBranch(t, storeObj));
+    }
+
+    return list;
+  }, [trucks, selectedStoreFilter, branches]);
+
+  // Total System Unassigned Orders across all dates & stores (excluding DELIVERED / RETURNED)
+  const totalSystemUnassigned = useMemo(() => {
+    return deliveries.filter(d => {
+      const trk = (d.assignedTruck || '').trim().toLowerCase();
+      const isUnassigned = !trk || trk === 'unassigned' || trk === 'no truck' || trk === 'none';
+      return isUnassigned && d.status !== DeliveryStatus.DELIVERED && d.status !== DeliveryStatus.RETURNED;
+    });
+  }, [deliveries]);
+
+  // Unassigned deliveries filtered by Store, Date, Shift, and Search query (with Show All override)
   const unassignedDeliveries = useMemo(() => {
     return deliveries.filter(d => {
-      const isUnassigned = !d.assignedTruck || d.assignedTruck === 'unassigned' || d.assignedTruck === 'No Truck' || d.assignedTruck === '';
+      const trk = (d.assignedTruck || '').trim().toLowerCase();
+      const isUnassigned = !trk || trk === 'unassigned' || trk === 'no truck' || trk === 'none';
       if (!isUnassigned) return false;
 
       // Filter out completed delivered/returned
       if (d.status === DeliveryStatus.DELIVERED || d.status === DeliveryStatus.RETURNED) return false;
 
-      // Store filter
-      if (selectedStoreFilter !== 'ALL') {
-        const targetUpper = selectedStoreFilter.toUpperCase();
-        const originUpper = formatBranchDisplayName(d.originBranch || '').toUpperCase();
-        const addrUpper = (d.deliveryAddress || '').toUpperCase();
-        const matchesOrigin = originUpper.includes(targetUpper);
-        const matchesAddr = addrUpper.includes(targetUpper);
-        if (!matchesOrigin && !matchesAddr) return false;
-      }
-
-      // Search filter
+      // Search query filter (always active if typed)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesId = d.id.toLowerCase().includes(q);
@@ -243,9 +319,47 @@ export default function DragDropFreightBoard({
         if (!matchesId && !matchesCustomer && !matchesInv && !matchesAddress) return false;
       }
 
+      // If user toggled "Show All Unassigned Pool", show all unassigned items regardless of date/store
+      if (showAllUnassigned) return true;
+
+      // 1. Store filter (applies to BOTH trucks and deliveries)
+      if (selectedStoreFilter !== 'ALL') {
+        const targetStoreUpper = selectedStoreFilter.toUpperCase();
+        const storeObj = branches.find(b => b.id === selectedStoreFilter || b.name === selectedStoreFilter);
+        const targetId = storeObj ? storeObj.id : selectedStoreFilter;
+        const targetNameUpper = storeObj ? storeObj.name.toUpperCase() : targetStoreUpper;
+
+        const originBranchObj = branches.find(b => b.id === d.originBranch || b.name === d.originBranch);
+        const originId = originBranchObj ? originBranchObj.id : d.originBranch;
+        const originNameUpper = originBranchObj ? originBranchObj.name.toUpperCase() : formatBranchDisplayName(d.originBranch || '', branches).toUpperCase();
+        const addrUpper = (d.deliveryAddress || '').toUpperCase();
+
+        const matchesBranchId = originId === targetId;
+        const matchesOriginName = originNameUpper.includes(targetNameUpper) || targetNameUpper.includes(originNameUpper) || originNameUpper.includes(targetStoreUpper);
+        const matchesAddress = addrUpper.includes(targetNameUpper) || addrUpper.includes(targetStoreUpper);
+
+        if (!matchesBranchId && !matchesOriginName && !matchesAddress) return false;
+      }
+
+      // 2. Date filter (unless showAllDates is toggled)
+      if (!showAllDates && selectedDate) {
+        const dDate = d.scheduledDate || (d.registeredAt ? d.registeredAt.split('T')[0] : '');
+        // Keep delivery if date matches selectedDate OR if date is empty
+        if (dDate && dDate !== selectedDate) {
+          return false;
+        }
+      }
+
+      // 3. Shift filter (ALL / AM / PM)
+      if (selectedShiftFilter !== 'ALL') {
+        const slot = (d.scheduledSlot || 'AM').toUpperCase();
+        if (selectedShiftFilter === 'AM' && slot !== 'AM' && slot !== 'MORNING') return false;
+        if (selectedShiftFilter === 'PM' && slot !== 'PM' && slot !== 'AFTERNOON') return false;
+      }
+
       return true;
     });
-  }, [deliveries, selectedStoreFilter, searchQuery]);
+  }, [deliveries, selectedStoreFilter, selectedDate, showAllDates, selectedShiftFilter, searchQuery, branches, showAllUnassigned]);
 
   // Deliveries grouped by truck
   const deliveriesByTruck = useMemo(() => {
@@ -255,13 +369,30 @@ export default function DragDropFreightBoard({
     });
 
     deliveries.forEach(d => {
-      if (!d.assignedTruck || d.assignedTruck === 'unassigned' || d.assignedTruck === 'No Truck') return;
+      const trk = (d.assignedTruck || '').trim().toLowerCase();
+      if (!trk || trk === 'unassigned' || trk === 'no truck' || trk === 'none') return;
       if (d.status === DeliveryStatus.DELIVERED || d.status === DeliveryStatus.RETURNED) return;
+
+      // 1. Date filter (unless showAllDates is toggled)
+      if (!showAllDates && selectedDate) {
+        const dDate = d.scheduledDate || (d.registeredAt ? d.registeredAt.split('T')[0] : '');
+        if (dDate && dDate !== selectedDate) {
+          return;
+        }
+      }
+
+      // 2. Shift filter (ALL / AM / PM)
+      if (selectedShiftFilter !== 'ALL') {
+        const slot = (d.scheduledSlot || 'AM').toUpperCase();
+        if (selectedShiftFilter === 'AM' && slot !== 'AM' && slot !== 'MORNING') return;
+        if (selectedShiftFilter === 'PM' && slot !== 'PM' && slot !== 'AFTERNOON') return;
+      }
 
       // Match by truck ID or truck Name
       const matchedTruck = activeTrucks.find(t => 
-        t.id.toLowerCase().trim() === d.assignedTruck?.toLowerCase().trim() ||
-        t.name.toLowerCase().trim() === d.assignedTruck?.toLowerCase().trim()
+        t.id.toLowerCase().trim() === trk ||
+        t.name.toLowerCase().trim() === trk ||
+        (t.truckNumber && t.truckNumber.toLowerCase().trim() === trk)
       );
 
       if (matchedTruck) {
@@ -271,15 +402,15 @@ export default function DragDropFreightBoard({
     });
 
     return map;
-  }, [deliveries, activeTrucks]);
+  }, [deliveries, activeTrucks, selectedDate, showAllDates, selectedShiftFilter]);
 
   // Group unassigned deliveries by Shift (AM / PM)
   const amDeliveries = useMemo(() => {
-    return unassignedDeliveries.filter(d => d.scheduledSlot === 'AM' || !d.scheduledSlot || d.scheduledSlot as string === 'Morning');
+    return unassignedDeliveries.filter(d => d.scheduledSlot === 'AM' || !d.scheduledSlot || (d.scheduledSlot as string) === 'Morning');
   }, [unassignedDeliveries]);
 
   const pmDeliveries = useMemo(() => {
-    return unassignedDeliveries.filter(d => d.scheduledSlot === 'PM' || d.scheduledSlot as string === 'Afternoon');
+    return unassignedDeliveries.filter(d => d.scheduledSlot === 'PM' || (d.scheduledSlot as string) === 'Afternoon');
   }, [unassignedDeliveries]);
 
   // Drag handlers
@@ -309,44 +440,82 @@ export default function DragDropFreightBoard({
     }
   };
 
-  // Assign delivery to truck
-  const assignDeliveryToTruck = (deliveryId: string, truck: Truck) => {
+  // Step 1: Initiate assignment flow -> Prompts for Depot, Truck, Schedule, & Picker
+  const initiateAssignment = (deliveryId: string, truck: Truck) => {
     const delivery = deliveries.find(d => d.id === deliveryId);
     if (!delivery) return;
+
+    // Derive default depot from truck branch or delivery origin
+    const truckBranchObj = branches.find(b => b.id === truck.branchId || b.name === truck.branchId);
+    const defaultDepot = truckBranchObj 
+      ? truckBranchObj.name 
+      : (formatBranchDisplayName(truck.branchId || '', branches) || delivery.originBranch || 'Windmill DC');
+
+    const defaultDate = selectedDate || delivery.scheduledDate || new Date().toISOString().split('T')[0];
+    const defaultSlot: 'AM' | 'PM' = selectedShiftFilter !== 'ALL' 
+      ? selectedShiftFilter 
+      : (delivery.scheduledSlot === 'PM' ? 'PM' : 'AM');
+
+    const defaultPicker = delivery.assignedPicker || '';
+
+    setAssignPrompt({
+      delivery,
+      truck,
+      depot: defaultDepot,
+      date: defaultDate,
+      slot: defaultSlot,
+      picker: defaultPicker
+    });
+  };
+
+  // Step 2: Confirm assignment with Depot, Truck, Schedule, & Picker updated
+  const confirmAssignment = () => {
+    if (!assignPrompt) return;
+    const { delivery, truck, depot, date, slot, picker } = assignPrompt;
 
     const updatedDriver = (truck.driver && truck.driver.toLowerCase() !== 'no driver' && truck.driver.toLowerCase() !== 'unassigned') 
       ? truck.driver 
       : (delivery.assignedDriver || 'Unassigned');
 
+    const matchedBranch = branches.find(b => b.name.toUpperCase() === depot.toUpperCase() || b.id === depot);
+    const finalDepot = matchedBranch ? matchedBranch.name : depot;
+
     const updated: DeliveryRecord = {
       ...delivery,
-      assignedTruck: truck.name || truck.id,
+      originBranch: finalDepot, // 1) Depot updated!
+      assignedTruck: truck.name || truck.id, // 2) Truck updated!
       assignedDriver: updatedDriver,
+      scheduledDate: date, // 3) Delivery Board Date updated!
+      scheduledSlot: slot, // 3) Delivery Board AM/PM Slot updated!
+      assignedPicker: picker.trim() || 'Unassigned', // 4) Picker updated!
       status: DeliveryStatus.PICKED_AND_LOADED,
       history: [
         ...(delivery.history || []),
         {
           status: DeliveryStatus.PICKED_AND_LOADED,
           timestamp: new Date().toISOString(),
-          location: truck.branchId || delivery.originBranch || 'Depot',
-          operator: 'Dispatcher',
-          notes: `Loaded onto ${truck.name} via Drag & Drop Freight Board`
+          location: finalDepot,
+          operator: picker.trim() || 'Dispatcher',
+          notes: `Assigned & loaded onto ${truck.name} for ${date} (${slot}) at ${finalDepot}. Picker: ${picker.trim() || 'Unassigned'}`
         }
       ]
     };
 
     onAddOrUpdateDelivery(updated);
-    setDragOverTruckId(null);
-    setDraggedDeliveryId(null);
+    setAssignPrompt(null);
     setAssigningDelivery(null);
+    setDraggedDeliveryId(null);
+    setDragOverTruckId(null);
   };
 
-  // Unload / Remove delivery from truck back to unassigned
+  // Unload / Remove delivery from truck back to unassigned freight pool
   const unloadDelivery = (delivery: DeliveryRecord) => {
     const updated: DeliveryRecord = {
       ...delivery,
       assignedTruck: 'unassigned',
+      assignedDriver: '',
       status: DeliveryStatus.REGISTERED,
+      scheduledDate: selectedDate || delivery.scheduledDate, // Set date to currently selected board date so it remains visible immediately!
       history: [
         ...(delivery.history || []),
         {
@@ -354,7 +523,7 @@ export default function DragDropFreightBoard({
           timestamp: new Date().toISOString(),
           location: delivery.originBranch || 'Depot',
           operator: 'Dispatcher',
-          notes: 'Unloaded from truck back to Unassigned Freight Pool'
+          notes: `Unloaded from truck back to Unassigned Freight Pool for ${selectedDate || 'Dispatch'}`
         }
       ]
     };
@@ -362,12 +531,63 @@ export default function DragDropFreightBoard({
     onAddOrUpdateDelivery(updated);
   };
 
-  // Toggle truck manual FULL status
+  // Check if a truck is manually marked FULL for current date and active shift filter (AM / PM / ALL)
+  const isTruckManuallyFull = (truckId: string): boolean => {
+    const dateKey = showAllDates ? 'ALL_DATES' : (selectedDate || 'TODAY');
+    
+    if (selectedShiftFilter === 'ALL') {
+      return !!(
+        fullTruckIds[`${truckId}_${dateKey}_ALL`] ||
+        (fullTruckIds[`${truckId}_${dateKey}_AM`] && fullTruckIds[`${truckId}_${dateKey}_PM`]) ||
+        fullTruckIds[truckId]
+      );
+    } else if (selectedShiftFilter === 'AM') {
+      return !!(
+        fullTruckIds[`${truckId}_${dateKey}_AM`] ||
+        fullTruckIds[`${truckId}_${dateKey}_ALL`]
+      );
+    } else { // 'PM'
+      return !!(
+        fullTruckIds[`${truckId}_${dateKey}_PM`] ||
+        fullTruckIds[`${truckId}_${dateKey}_ALL`]
+      );
+    }
+  };
+
+  // Toggle truck manual FULL status scoped by shift (AM / PM / ALL) and date
   const toggleTruckFullStatus = (truckId: string) => {
-    setFullTruckIds(prev => ({
-      ...prev,
-      [truckId]: !prev[truckId]
-    }));
+    const dateKey = showAllDates ? 'ALL_DATES' : (selectedDate || 'TODAY');
+    const shiftKey = selectedShiftFilter;
+    const isCurrentlyFull = isTruckManuallyFull(truckId);
+    const targetVal = !isCurrentlyFull;
+
+    const next = { ...fullTruckIds };
+    if (shiftKey === 'ALL') {
+      next[`${truckId}_${dateKey}_ALL`] = targetVal;
+      next[`${truckId}_${dateKey}_AM`] = targetVal;
+      next[`${truckId}_${dateKey}_PM`] = targetVal;
+      if (targetVal) {
+        next[truckId] = true;
+      } else {
+        delete next[truckId];
+        delete next[`${truckId}_${dateKey}_ALL`];
+        delete next[`${truckId}_${dateKey}_AM`];
+        delete next[`${truckId}_${dateKey}_PM`];
+      }
+    } else {
+      next[`${truckId}_${dateKey}_${shiftKey}`] = targetVal;
+      if (!targetVal) {
+        delete next[`${truckId}_${dateKey}_${shiftKey}`];
+        delete next[`${truckId}_${dateKey}_ALL`];
+        delete next[truckId];
+      }
+    }
+
+    if (onUpdateManualFullTrucks) {
+      onUpdateManualFullTrucks(next);
+    } else {
+      setLocalFullTruckIds(next);
+    }
   };
 
   return (
@@ -401,6 +621,170 @@ export default function DragDropFreightBoard({
         </div>
       </div>
 
+      {/* Dispatch Board Controls Bar: Store Filter, Date Picker, AM/PM Shift Filter */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3 font-sans">
+        
+        {/* Row 1: Store & DC Selection (Filters BOTH Trucks and Deliveries) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+          <div className="flex items-center space-x-2">
+            <MapPin className="h-4 w-4 text-amber-500 shrink-0" />
+            <span className="text-xs font-black font-mono text-slate-700 uppercase tracking-wider">
+              STORE / DC FILTER:
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono hidden md:inline">
+              (Filters both Fleet Vehicles & Freight Pool)
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setSelectedStoreFilter('ALL')}
+              className={`px-3 py-1 rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap ${
+                selectedStoreFilter === 'ALL'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              ALL STORES ({tenantStores.length || 4})
+            </button>
+            {tenantStores.map(store => (
+              <button
+                key={store.id}
+                type="button"
+                onClick={() => setSelectedStoreFilter(store.name)}
+                className={`px-3 py-1 rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap ${
+                  selectedStoreFilter.toUpperCase() === store.name.toUpperCase()
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                {store.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Row 2: Date Selector (Multi-Day Loading) & Shift Filter (AM/PM) */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          {/* Date Selector Controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center space-x-1.5 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-xl">
+              <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
+              <span className="text-[11px] font-bold font-mono text-slate-700 uppercase">
+                LOAD DATE:
+              </span>
+            </div>
+
+            {/* Date Nav Buttons */}
+            <div className="flex items-center space-x-1 bg-white border border-slate-200 rounded-xl p-1 shadow-2xs">
+              <button
+                type="button"
+                onClick={handlePrevDay}
+                className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                title="Previous Day"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setShowAllDates(false);
+                }}
+                className="bg-transparent text-xs font-bold font-mono text-slate-900 focus:outline-none cursor-pointer px-1"
+              />
+
+              <button
+                type="button"
+                onClick={handleNextDay}
+                className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                title="Next Day"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleToday}
+              className="px-2.5 py-1 rounded-xl text-xs font-bold font-mono bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
+            >
+              Today
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowAllDates(!showAllDates)}
+              className={`px-3 py-1 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                showAllDates
+                  ? 'bg-amber-500 text-slate-950 shadow-xs font-black'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+              }`}
+            >
+              {showAllDates ? '★ Showing All Dates' : 'Show All Dates'}
+            </button>
+
+            <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">
+              {formattedDateLabel}
+            </span>
+          </div>
+
+          {/* AM/PM Shift Filter Buttons */}
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-bold font-mono text-slate-500 uppercase tracking-wider shrink-0 flex items-center space-x-1">
+              <Clock className="h-3.5 w-3.5 text-slate-400" />
+              <span>SHIFT:</span>
+            </span>
+
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setSelectedShiftFilter('ALL')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                  selectedShiftFilter === 'ALL'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ALL SHIFTS
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedShiftFilter('AM')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1 ${
+                  selectedShiftFilter === 'AM'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Sun className="h-3.5 w-3.5 text-amber-900" />
+                <span>AM MORNING</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedShiftFilter('PM')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1 ${
+                  selectedShiftFilter === 'PM'
+                    ? 'bg-blue-600 text-white shadow-xs font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Moon className="h-3.5 w-3.5 text-blue-200" />
+                <span>PM AFTERNOON</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
       {/* Main Grid: Left = Registered Trucks, Right = Unassigned Deliveries */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
@@ -423,7 +807,7 @@ export default function DragDropFreightBoard({
               const maxCapacity = getTruckMaxCapacityLbs(truck);
               const fillPct = Math.min(100, Math.round((loadedWeight / maxCapacity) * 100));
 
-              const isManualFull = fullTruckIds[truck.id];
+              const isManualFull = isTruckManuallyFull(truck.id);
               const isFull = isManualFull || fillPct >= 100;
 
               const isDragTarget = dragOverTruckId === truck.id;
@@ -448,7 +832,7 @@ export default function DragDropFreightBoard({
                     e.preventDefault();
                     const deliveryId = e.dataTransfer.getData('text/plain') || draggedDeliveryId;
                     if (deliveryId) {
-                      assignDeliveryToTruck(deliveryId, truck);
+                      initiateAssignment(deliveryId, truck);
                     }
                   }}
                   className={`relative rounded-xl border p-4 transition-all duration-200 ${
@@ -497,12 +881,12 @@ export default function DragDropFreightBoard({
                         {isFull ? (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black font-mono tracking-wider bg-amber-500 text-slate-950 uppercase shadow-xs flex items-center space-x-1 shrink-0">
                             <Lock className="h-3 w-3" />
-                            <span>FULL</span>
+                            <span>FULL {selectedShiftFilter !== 'ALL' ? `(${selectedShiftFilter})` : ''}</span>
                           </span>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono tracking-wider bg-slate-100 text-slate-700 border border-slate-200 uppercase flex items-center space-x-1 shrink-0">
                             <Unlock className="h-3 w-3 text-emerald-600" />
-                            <span>OPEN</span>
+                            <span>OPEN {selectedShiftFilter !== 'ALL' ? `(${selectedShiftFilter})` : ''}</span>
                           </span>
                         )}
                       </div>
@@ -552,9 +936,11 @@ export default function DragDropFreightBoard({
                           ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                           : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
                       }`}
-                      title={isManualFull ? "Reopen truck for additional deliveries" : "Mark truck full to lock capacity"}
+                      title={isManualFull ? `Reopen truck for ${selectedShiftFilter !== 'ALL' ? selectedShiftFilter : 'all'} shift deliveries` : `Mark truck full for ${selectedShiftFilter !== 'ALL' ? selectedShiftFilter : 'all'} shift`}
                     >
-                      {isManualFull ? 'Re-open Capacity' : 'Mark Truck Full'}
+                      {isManualFull 
+                        ? `Re-open ${selectedShiftFilter !== 'ALL' ? `${selectedShiftFilter} ` : ''}Capacity` 
+                        : `Mark Truck Full${selectedShiftFilter !== 'ALL' ? ` (${selectedShiftFilter})` : ''}`}
                     </button>
 
                     {/* Expand Loaded List Toggle */}
@@ -617,42 +1003,16 @@ export default function DragDropFreightBoard({
         {/* RIGHT COLUMN: UNASSIGNED DELIVERIES (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
           
-          {/* Header & Tenant Stores Filter Chips */}
+          {/* Header & Quick Search */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black text-slate-600 uppercase tracking-widest font-mono flex items-center space-x-2">
                 <Package className="h-4 w-4 text-amber-500" />
                 <span>UNASSIGNED DELIVERIES ({unassignedDeliveries.length})</span>
               </h3>
-            </div>
-
-            {/* Tenant Store Filter Bar */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1.5 scrollbar-none">
-              <button
-                type="button"
-                onClick={() => setSelectedStoreFilter('ALL')}
-                className={`px-3 py-1 rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap ${
-                  selectedStoreFilter === 'ALL'
-                    ? 'bg-amber-500 text-slate-950 shadow-xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
-                }`}
-              >
-                ALL STORES
-              </button>
-              {tenantStores.map(store => (
-                <button
-                  key={store.id}
-                  type="button"
-                  onClick={() => setSelectedStoreFilter(store.name)}
-                  className={`px-3 py-1 rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap ${
-                    selectedStoreFilter.toUpperCase() === store.name.toUpperCase()
-                      ? 'bg-amber-500 text-slate-950 shadow-xs'
-                      : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
-                  }`}
-                >
-                  {store.name}
-                </button>
-              ))}
+              <span className="text-[10px] text-slate-400 font-mono">
+                {selectedShiftFilter !== 'ALL' ? `${selectedShiftFilter} Shift` : 'All Shifts'}
+              </span>
             </div>
 
             {/* Quick Search */}
@@ -666,6 +1026,37 @@ export default function DragDropFreightBoard({
                 className="w-full bg-white border border-slate-200 pl-9 pr-3 py-1.5 text-xs rounded-xl font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 shadow-2xs"
               />
             </div>
+
+            {/* Unassigned Pool Override Banner */}
+            {totalSystemUnassigned.length > unassignedDeliveries.length && !showAllUnassigned && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between font-mono animate-fade-in shadow-2xs">
+                <span className="text-[11px]">
+                  ⚠️ <strong>{totalSystemUnassigned.length - unassignedDeliveries.length}</strong> unassigned orders on other dates/stores.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllUnassigned(true)}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider shrink-0 cursor-pointer transition-colors"
+                >
+                  Show All Pool ({totalSystemUnassigned.length})
+                </button>
+              </div>
+            )}
+
+            {showAllUnassigned && (
+              <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-center justify-between font-mono animate-fade-in shadow-2xs">
+                <span className="text-[11px]">
+                  ★ Showing <strong>ALL {unassignedDeliveries.length}</strong> system unassigned orders.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllUnassigned(false)}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider shrink-0 cursor-pointer transition-colors"
+                >
+                  Reset Date Filter
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Unassigned Deliveries List Container */}
@@ -675,7 +1066,7 @@ export default function DragDropFreightBoard({
               <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 space-y-2 shadow-2xs">
                 <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
                 <p className="text-xs font-mono font-bold text-slate-800">All Freight Dispatched!</p>
-                <p className="text-[11px] text-slate-500">There are no unassigned delivery tickets for the selected store.</p>
+                <p className="text-[11px] text-slate-500">There are no unassigned delivery tickets matching the active filters.</p>
               </div>
             ) : (
               <>
@@ -770,7 +1161,7 @@ export default function DragDropFreightBoard({
                   <button
                     key={truck.id}
                     type="button"
-                    onClick={() => assignDeliveryToTruck(assigningDelivery.id, truck)}
+                    onClick={() => initiateAssignment(assigningDelivery.id, truck)}
                     className="w-full text-left bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 p-3 rounded-xl flex items-center justify-between transition-all cursor-pointer group"
                   >
                     <div>
@@ -785,7 +1176,7 @@ export default function DragDropFreightBoard({
                       <span className="text-[11px] font-bold text-slate-700 block">
                         {loadedWeight.toLocaleString()} / {maxCapacity.toLocaleString()} lbs
                       </span>
-                      <span className="text-[9px] text-blue-600 font-bold">Load Freight →</span>
+                      <span className="text-[9px] text-blue-600 font-bold">Configure & Load →</span>
                     </div>
                   </button>
                 );
@@ -799,6 +1190,190 @@ export default function DragDropFreightBoard({
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ASSIGN FREIGHT & PICKER PROMPT MODAL */}
+      {assignPrompt && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[210] flex items-center justify-center p-4 animate-fade-in select-text">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                  <TruckIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-mono font-black text-slate-900 text-base">Dispatch Ticket & Select Picker</h4>
+                  <p className="text-xs text-slate-500">
+                    Assigning #{assignPrompt.delivery.id} to {assignPrompt.truck.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAssignPrompt(null)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Delivery Overview Box */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
+              <div className="flex justify-between font-mono font-bold">
+                <span className="text-blue-600">{assignPrompt.delivery.id}</span>
+                <span className="text-emerald-600">{parseDeliveryWeightLbs(assignPrompt.delivery).toLocaleString()} lbs</span>
+              </div>
+              <p className="font-semibold text-slate-800">{assignPrompt.delivery.customerName || 'Customer'}</p>
+              <p className="text-slate-500 text-[11px] truncate">{assignPrompt.delivery.deliveryAddress}</p>
+            </div>
+
+            {/* Form Fields: Depot, Date, Slot, Picker */}
+            <div className="space-y-4">
+              {/* 1. Depot Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 font-mono mb-1">
+                  1. Dispatch Depot / Origin Store
+                </label>
+                <select
+                  value={assignPrompt.depot}
+                  onChange={(e) => setAssignPrompt({ ...assignPrompt, depot: e.target.value })}
+                  className="w-full bg-white border border-slate-200 px-3 py-2 text-xs rounded-xl font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
+                >
+                  {tenantStores.map(store => (
+                    <option key={store.id} value={store.name}>
+                      {store.name}
+                    </option>
+                  ))}
+                  {branches.length === 0 && (
+                    <>
+                      <option value="Windmill DC">Windmill DC</option>
+                      <option value="Tantallon Depot">Tantallon Depot</option>
+                      <option value="Dartmouth Hub">Dartmouth Hub</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* 2. Schedule Date & AM/PM Shift */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 font-mono mb-1">
+                    2. Scheduled Delivery Date
+                  </label>
+                  <input
+                    type="date"
+                    value={assignPrompt.date}
+                    onChange={(e) => setAssignPrompt({ ...assignPrompt, date: e.target.value })}
+                    className="w-full bg-white border border-slate-200 px-3 py-1.5 text-xs rounded-xl font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 font-mono mb-1">
+                    Delivery Shift Slot
+                  </label>
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setAssignPrompt({ ...assignPrompt, slot: 'AM' })}
+                      className={`flex-1 py-1.5 rounded-xl font-mono font-bold text-xs border transition-all cursor-pointer ${
+                        assignPrompt.slot === 'AM'
+                          ? 'bg-amber-50 text-amber-700 border-amber-300 ring-2 ring-amber-400/30'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      ★ AM Shift
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssignPrompt({ ...assignPrompt, slot: 'PM' })}
+                      className={`flex-1 py-1.5 rounded-xl font-mono font-bold text-xs border transition-all cursor-pointer ${
+                        assignPrompt.slot === 'PM'
+                          ? 'bg-blue-50 text-blue-700 border-blue-300 ring-2 ring-blue-400/30'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      ☪ PM Shift
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Assign Picker (Prompt) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 font-mono">
+                    3. Warehouse Picker Name
+                  </label>
+                  <span className="text-[10px] text-emerald-600 font-mono font-bold">Required / Recommended</span>
+                </div>
+
+                {/* User Dropdown Select if users exist */}
+                {users && users.length > 0 && (
+                  <select
+                    value={assignPrompt.picker}
+                    onChange={(e) => setAssignPrompt({ ...assignPrompt, picker: e.target.value })}
+                    className="w-full bg-white border border-slate-200 px-3 py-2 text-xs rounded-xl font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs mb-2"
+                  >
+                    <option value="">-- Select Picker from Staff List --</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} ({u.role || 'Warehouse'})
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Custom Picker Text Input */}
+                <input
+                  type="text"
+                  placeholder="Type picker name (e.g. Dave Miller)..."
+                  value={assignPrompt.picker}
+                  onChange={(e) => setAssignPrompt({ ...assignPrompt, picker: e.target.value })}
+                  className="w-full bg-white border border-slate-200 px-3 py-2 text-xs rounded-xl font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
+                />
+
+                {/* Quick Picker Preset Chips */}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="text-[10px] text-slate-400 font-mono self-center mr-1">Quick Select:</span>
+                  {['Dave Miller', 'Sarah Jenkins', 'Mike Ross', 'Alex T.', 'Unassigned'].map((pName) => (
+                    <button
+                      key={pName}
+                      type="button"
+                      onClick={() => setAssignPrompt({ ...assignPrompt, picker: pName })}
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold border cursor-pointer transition-colors ${
+                        assignPrompt.picker === pName
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {pName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 flex items-center justify-end space-x-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setAssignPrompt(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmAssignment}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold font-mono flex items-center space-x-1.5 shadow-md shadow-emerald-600/20 cursor-pointer transition-all"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Confirm & Dispatch Freight</span>
               </button>
             </div>
           </div>
