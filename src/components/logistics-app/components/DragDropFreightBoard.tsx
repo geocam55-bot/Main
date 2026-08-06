@@ -658,14 +658,42 @@ export default function DragDropFreightBoard({
 
     const weekRangeLabel = `Week of ${firstWeekDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${lastWeekDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
+    // Helper functions for week view filtering
+    const isMatchingWeekStore = (d: DeliveryRecord) => {
+      if (selectedStoreFilter === 'ALL') return true;
+      const targetStoreUpper = selectedStoreFilter.toUpperCase();
+      const storeObj = branches.find(b => b.id === selectedStoreFilter || b.name === selectedStoreFilter);
+      const targetId = storeObj ? storeObj.id : selectedStoreFilter;
+      const targetNameUpper = storeObj ? storeObj.name.toUpperCase() : targetStoreUpper;
+
+      const originBranchObj = branches.find(b => b.id === d.originBranch || b.name === d.originBranch);
+      const originId = originBranchObj ? originBranchObj.id : d.originBranch;
+      const originNameUpper = originBranchObj ? originBranchObj.name.toUpperCase() : formatBranchDisplayName(d.originBranch || '', branches).toUpperCase();
+      const addrUpper = (d.deliveryAddress || '').toUpperCase();
+
+      const matchesBranchId = originId === targetId;
+      const matchesOriginName = originNameUpper.includes(targetNameUpper) || targetNameUpper.includes(originNameUpper) || originNameUpper.includes(targetStoreUpper);
+      const matchesAddress = addrUpper.includes(targetNameUpper) || addrUpper.includes(targetStoreUpper);
+
+      return matchesBranchId || matchesOriginName || matchesAddress;
+    };
+
+    const isMatchingWeekShift = (d: DeliveryRecord) => {
+      if (selectedShiftFilter === 'ALL') return true;
+      const slot = (d.scheduledSlot || 'AM').toUpperCase();
+      if (selectedShiftFilter === 'AM') return slot === 'AM' || slot === 'MORNING';
+      if (selectedShiftFilter === 'PM') return slot === 'PM' || slot === 'AFTERNOON';
+      return true;
+    };
+
     return (
       <div className="space-y-6">
         {/* Week View Controls & Navigation */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-4 font-sans">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            
-            {/* Week Navigation */}
-            <div className="flex items-center space-x-2">
+          
+          {/* Row 1: Week Date Navigation */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handlePrevWeek}
@@ -698,11 +726,129 @@ export default function DragDropFreightBoard({
               </button>
             </div>
 
-            {/* Quick Info */}
+            {/* Quick Summary Pill */}
             <div className="flex items-center space-x-2 text-xs font-mono font-bold text-slate-600">
               <span className="px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200">
                 Store: <strong className="text-slate-900">{selectedStoreFilter === 'ALL' ? 'All Depot Stations' : selectedStoreFilter}</strong>
               </span>
+              <span className="px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200">
+                Shift: <strong className="text-slate-900">{selectedShiftFilter === 'ALL' ? 'All Shifts (AM+PM)' : `${selectedShiftFilter} Shift`}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Row 2: Quick Switchers for 1) STORES and 2) AM/PM SHIFT */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-1">
+            
+            {/* 1) STORES QUICK SWITCHER */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-black font-mono text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Store className="h-3.5 w-3.5 text-amber-500" />
+                  <span>1) QUICK SWITCH STORE / DEPOT</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono font-semibold">
+                  {tenantStores.length} Stores Available
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                {/* Store Dropdown Select */}
+                <select
+                  value={selectedStoreFilter}
+                  onChange={(e) => setSelectedStoreFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 hover:border-slate-400 text-slate-900 text-xs font-mono font-bold rounded-xl px-3 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500 min-w-[160px]"
+                >
+                  <option value="ALL">All Depot Stations ({tenantStores.length})</option>
+                  {tenantStores.map(st => (
+                    <option key={st.id} value={st.id}>{st.name}</option>
+                  ))}
+                </select>
+
+                {/* Quick Store Pill Buttons (Scrollable) */}
+                <div className="flex items-center space-x-1.5 overflow-x-auto scrollbar-thin py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStoreFilter('ALL')}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      selectedStoreFilter === 'ALL'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    ALL DEPOTS
+                  </button>
+                  {tenantStores.map(st => (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setSelectedStoreFilter(st.id)}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        selectedStoreFilter === st.id || selectedStoreFilter === st.name
+                          ? 'bg-slate-900 text-white font-black shadow-2xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {st.name.replace(/^(DC|Depot|Store)\s*/i, '')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 2) AM/PM SHIFT QUICK SWITCHER */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-black font-mono text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Clock className="h-3.5 w-3.5 text-blue-500" />
+                  <span>2) QUICK SWITCH SHIFT (AM / PM)</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono font-semibold">
+                  Shift Capacity Filter
+                </span>
+              </div>
+
+              {/* Segmented AM/PM Switcher Buttons */}
+              <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setSelectedShiftFilter('ALL')}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer active:scale-95 ${
+                    selectedShiftFilter === 'ALL'
+                      ? 'bg-slate-900 text-white font-extrabold shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Clock className="h-3.5 w-3.5 text-slate-300" />
+                  <span>ALL SHIFTS</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedShiftFilter('AM')}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer active:scale-95 ${
+                    selectedShiftFilter === 'AM'
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-amber-50/50'
+                  }`}
+                >
+                  <Sun className="h-3.5 w-3.5 text-amber-600" />
+                  <span>AM SHIFT</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedShiftFilter('PM')}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer active:scale-95 ${
+                    selectedShiftFilter === 'PM'
+                      ? 'bg-indigo-600 text-white font-black shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-indigo-50/50'
+                  }`}
+                >
+                  <Moon className="h-3.5 w-3.5 text-indigo-300" />
+                  <span>PM SHIFT</span>
+                </button>
+              </div>
             </div>
 
           </div>
@@ -716,9 +862,10 @@ export default function DragDropFreightBoard({
             const dayName = dayObj.toLocaleDateString('en-US', { weekday: 'short' });
             const dayNum = dayObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-            // Deliveries scheduled on dateStr
+            // Deliveries scheduled on dateStr matching selected store & shift
             const dayDeliveries = deliveries.filter(d => {
-              if (selectedStoreFilter !== 'ALL' && d.originBranch !== selectedStoreFilter) return false;
+              if (!isMatchingWeekStore(d)) return false;
+              if (!isMatchingWeekShift(d)) return false;
               const dDate = d.scheduledDate ? d.scheduledDate.split('T')[0] : (d.registeredAt ? d.registeredAt.split('T')[0] : '');
               return dDate === dateStr;
             });
@@ -847,7 +994,7 @@ export default function DragDropFreightBoard({
               <span>FLEET WEEKLY DISPATCH MATRIX</span>
             </h3>
             <span className="text-xs text-slate-500 font-mono">
-              Click any cell to jump to that truck & day
+              Filtered by: {selectedStoreFilter === 'ALL' ? 'All Stores' : selectedStoreFilter} • {selectedShiftFilter === 'ALL' ? 'All Shifts' : `${selectedShiftFilter} Shift`}
             </span>
           </div>
 
@@ -883,7 +1030,8 @@ export default function DragDropFreightBoard({
                       const isToday = dateStr === todayStr;
 
                       const truckDayDelivs = deliveries.filter(deliv => {
-                        if (selectedStoreFilter !== 'ALL' && deliv.originBranch !== selectedStoreFilter) return false;
+                        if (!isMatchingWeekStore(deliv)) return false;
+                        if (!isMatchingWeekShift(deliv)) return false;
                         const delivDate = deliv.scheduledDate ? deliv.scheduledDate.split('T')[0] : (deliv.registeredAt ? deliv.registeredAt.split('T')[0] : '');
                         return deliv.assignedTruck === truck.id && delivDate === dateStr;
                       });
