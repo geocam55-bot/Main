@@ -18,6 +18,7 @@ interface DragDropFreightBoardProps {
   onCloseModal?: () => void;
   manualFullTrucks?: Record<string, boolean>;
   onUpdateManualFullTrucks?: (updated: Record<string, boolean>) => void;
+  isViewOnly?: boolean;
 }
 
 // Helper to estimate or parse weight in lbs from string
@@ -169,7 +170,8 @@ export default function DragDropFreightBoard({
   branches = [],
   users = [],
   manualFullTrucks,
-  onUpdateManualFullTrucks
+  onUpdateManualFullTrucks,
+  isViewOnly = false
 }: DragDropFreightBoardProps) {
   // Manual FULL trucks from parent or local fallback
   const [localFullTruckIds, setLocalFullTruckIds] = useState<Record<string, boolean>>({});
@@ -636,11 +638,11 @@ export default function DragDropFreightBoard({
             </span>
           </div>
 
-          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          <div className="flex items-center space-x-1.5 overflow-x-auto touch-pan-x pb-1 sm:pb-0 scrollbar-none w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setSelectedStoreFilter('ALL')}
-              className={`px-3 py-1 rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-3 py-1.5 min-h-[34px] rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                 selectedStoreFilter === 'ALL'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
@@ -653,7 +655,7 @@ export default function DragDropFreightBoard({
                 key={store.id}
                 type="button"
                 onClick={() => setSelectedStoreFilter(store.name)}
-                className={`px-3 py-1 rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap ${
+                className={`px-3 py-1.5 min-h-[34px] rounded-full text-[10px] font-black font-mono uppercase transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                   selectedStoreFilter.toUpperCase() === store.name.toUpperCase()
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
@@ -734,17 +736,17 @@ export default function DragDropFreightBoard({
           </div>
 
           {/* AM/PM Shift Filter Buttons */}
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             <span className="text-xs font-bold font-mono text-slate-500 uppercase tracking-wider shrink-0 flex items-center space-x-1">
               <Clock className="h-3.5 w-3.5 text-slate-400" />
               <span>SHIFT:</span>
             </span>
 
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto overflow-x-auto touch-pan-x scrollbar-none">
               <button
                 type="button"
                 onClick={() => setSelectedShiftFilter('ALL')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                className={`px-3 py-1.5 min-h-[34px] rounded-lg text-xs font-bold font-mono transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                   selectedShiftFilter === 'ALL'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -756,7 +758,7 @@ export default function DragDropFreightBoard({
               <button
                 type="button"
                 onClick={() => setSelectedShiftFilter('AM')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1 ${
+                className={`px-3 py-1.5 min-h-[34px] rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1 whitespace-nowrap active:scale-95 ${
                   selectedShiftFilter === 'AM'
                     ? 'bg-amber-500 text-slate-950 shadow-xs font-black'
                     : 'text-slate-600 hover:text-slate-900'
@@ -769,7 +771,7 @@ export default function DragDropFreightBoard({
               <button
                 type="button"
                 onClick={() => setSelectedShiftFilter('PM')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1 ${
+                className={`px-3 py-1.5 min-h-[34px] rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1 whitespace-nowrap active:scale-95 ${
                   selectedShiftFilter === 'PM'
                     ? 'bg-blue-600 text-white shadow-xs font-black'
                     : 'text-slate-600 hover:text-slate-900'
@@ -928,20 +930,24 @@ export default function DragDropFreightBoard({
 
                   {/* Card Bottom Actions Row */}
                   <div className="mt-3 border-t border-slate-100 pt-2.5 flex items-center justify-between text-xs">
-                    <button
-                      type="button"
-                      onClick={() => toggleTruckFullStatus(truck.id)}
-                      className={`text-[10px] font-bold font-mono px-3 py-1 rounded-lg border transition-all cursor-pointer ${
-                        isManualFull
-                          ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
-                      }`}
-                      title={isManualFull ? `Reopen truck for ${selectedShiftFilter !== 'ALL' ? selectedShiftFilter : 'all'} shift deliveries` : `Mark truck full for ${selectedShiftFilter !== 'ALL' ? selectedShiftFilter : 'all'} shift`}
-                    >
-                      {isManualFull 
-                        ? `Re-open ${selectedShiftFilter !== 'ALL' ? `${selectedShiftFilter} ` : ''}Capacity` 
-                        : `Mark Truck Full${selectedShiftFilter !== 'ALL' ? ` (${selectedShiftFilter})` : ''}`}
-                    </button>
+                    {!isViewOnly ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleTruckFullStatus(truck.id)}
+                        className={`text-[10px] font-bold font-mono px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+                          isManualFull
+                            ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                        }`}
+                        title={isManualFull ? `Reopen truck for ${selectedShiftFilter !== 'ALL' ? selectedShiftFilter : 'all'} shift deliveries` : `Mark truck full for ${selectedShiftFilter !== 'ALL' ? selectedShiftFilter : 'all'} shift`}
+                      >
+                        {isManualFull 
+                          ? `Re-open ${selectedShiftFilter !== 'ALL' ? `${selectedShiftFilter} ` : ''}Capacity` 
+                          : `Mark Truck Full${selectedShiftFilter !== 'ALL' ? ` (${selectedShiftFilter})` : ''}`}
+                      </button>
+                    ) : (
+                      <div />
+                    )}
 
                     {/* Expand Loaded List Toggle */}
                     {loadedDeliveries.length > 0 ? (
@@ -1087,6 +1093,7 @@ export default function DragDropFreightBoard({
                           onDragEnd={handleDragEnd}
                           onAssignClick={() => setAssigningDelivery(delivery)}
                           isBeingDragged={draggedDeliveryId === delivery.id}
+                          isViewOnly={isViewOnly}
                         />
                       ))}
                     </div>
@@ -1110,6 +1117,7 @@ export default function DragDropFreightBoard({
                           onDragEnd={handleDragEnd}
                           onAssignClick={() => setAssigningDelivery(delivery)}
                           isBeingDragged={draggedDeliveryId === delivery.id}
+                          isViewOnly={isViewOnly}
                         />
                       ))}
                     </div>
@@ -1390,13 +1398,15 @@ function UnassignedDeliveryCard({
   onDragStart,
   onDragEnd,
   onAssignClick,
-  isBeingDragged
+  isBeingDragged,
+  isViewOnly = false
 }: {
   delivery: DeliveryRecord;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragEnd: () => void;
   onAssignClick: () => void;
   isBeingDragged: boolean;
+  isViewOnly?: boolean;
 }) {
   const weightLbs = parseDeliveryWeightLbs(delivery);
   const isUrgent = delivery.deliveryCategory === 'Pro' || delivery.destinationNotes?.toLowerCase().includes('urgent') || delivery.destinationNotes?.toLowerCase().includes('priority');
@@ -1409,11 +1419,13 @@ function UnassignedDeliveryCard({
 
   return (
     <div
-      draggable
-      onDragStart={(e) => onDragStart(e, delivery.id)}
+      draggable={!isViewOnly}
+      onDragStart={(e) => !isViewOnly && onDragStart(e, delivery.id)}
       onDragEnd={onDragEnd}
-      onClick={onAssignClick}
-      className={`relative bg-white border rounded-xl p-3.5 flex flex-col justify-between transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-[1.02] shadow-2xs ${
+      onClick={isViewOnly ? undefined : onAssignClick}
+      className={`relative bg-white border rounded-xl p-3.5 flex flex-col justify-between transition-all duration-200 ${
+        isViewOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing hover:scale-[1.02]'
+      } shadow-2xs ${
         isBeingDragged
           ? 'opacity-40 border-amber-500 bg-amber-50'
           : isUrgent
@@ -1452,9 +1464,25 @@ function UnassignedDeliveryCard({
         <span className="text-xs font-extrabold text-emerald-600">
           {weightLbs.toLocaleString()} lbs
         </span>
-        <span className="text-[10px] font-bold text-slate-500 flex items-center space-x-1">
-          <span>{slot === 'AM' ? '★ AM' : '☪ PM'}</span>
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className="text-[10px] font-bold text-slate-500">
+            {slot === 'AM' ? '★ AM' : '☪ PM'}
+          </span>
+          {!isViewOnly && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignClick();
+              }}
+              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-[10px] font-bold font-mono tracking-wide uppercase transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center space-x-1"
+              title="Tap to assign to a vehicle"
+            >
+              <span>Assign</span>
+              <ArrowRight className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

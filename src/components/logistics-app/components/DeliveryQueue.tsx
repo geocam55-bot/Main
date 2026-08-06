@@ -16,6 +16,7 @@ interface DeliveryQueueProps {
   onDeleteDelivery: (id: string) => void;
   branches?: Branch[];
   users: AppUser[];
+  currentUser?: AppUser;
   manualFullTrucks?: Record<string, boolean>;
   onUpdateManualFullTrucks?: (updated: Record<string, boolean>) => void;
 }
@@ -420,10 +421,14 @@ export default function DeliveryQueue({
   onDeleteDelivery, 
   branches, 
   users,
+  currentUser,
   manualFullTrucks,
   onUpdateManualFullTrucks
 }: DeliveryQueueProps) {
   const BRANCHES = branches || [];
+  const userRoleNorm = (currentUser?.role || '').trim().toLowerCase();
+  const isDispatcherOrAdmin = ['admin', 'super_admin', 'dispatcher'].includes(userRoleNorm);
+  const isViewOnly = !isDispatcherOrAdmin;
   const [boardViewMode, setBoardViewMode] = useState<'standard' | 'dragdrop'>('dragdrop');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL');
@@ -872,15 +877,17 @@ export default function DeliveryQueue({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOpenAddModal}
-            className="flex items-center justify-center space-x-1 bg-blue-850 hover:bg-blue-900 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-sm cursor-pointer shrink-0"
-            id="add-delivery-ticket-btn"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Delivery</span>
-          </button>
+          {!isViewOnly && (
+            <button
+              type="button"
+              onClick={handleOpenAddModal}
+              className="flex items-center justify-center space-x-1 bg-blue-850 hover:bg-blue-900 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-sm cursor-pointer shrink-0"
+              id="add-delivery-ticket-btn"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Delivery</span>
+            </button>
+          )}
 
           {boardViewMode === 'standard' && (
             <>
@@ -942,6 +949,7 @@ export default function DeliveryQueue({
           users={users}
           manualFullTrucks={manualFullTrucks}
           onUpdateManualFullTrucks={onUpdateManualFullTrucks}
+          isViewOnly={isViewOnly}
         />
       ) : (
         <>
@@ -1255,17 +1263,19 @@ export default function DeliveryQueue({
 
                     <div className="flex items-center space-x-2 relative" onClick={(e) => e.stopPropagation()}>
                       {/* Action Menu dropdown trigger */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveDropdownId(activeDropdownId === delivery.id ? null : delivery.id);
-                        }}
-                        className="p-1 px-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors focus:outline-none"
-                        title="Delivery Actions Menu"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                      {!isViewOnly && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDropdownId(activeDropdownId === delivery.id ? null : delivery.id);
+                          }}
+                          className="p-1 px-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors focus:outline-none"
+                          title="Delivery Actions Menu"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      )}
                       
                       {/* Dropdown element */}
                       {activeDropdownId === delivery.id && (

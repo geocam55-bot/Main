@@ -449,16 +449,22 @@ export default function App() {
   // Fallback state redirect for restricted role views
   useEffect(() => {
     if (!currentUser) return;
-    const role = currentUser.role;
-    if (role === 'Driver') {
+    const roleNorm = (currentUser.role || '').trim().toLowerCase();
+    const isAdmin = ['admin', 'super_admin'].includes(roleNorm);
+    const isDispatcher = roleNorm === 'dispatcher';
+    const isDriver = roleNorm === 'driver';
+    const isPicker = roleNorm === 'picker';
+    const isUser = !isAdmin && !isDispatcher && !isDriver && !isPicker;
+
+    if (isDriver) {
       if (!['epod', 'inspections', 'fuel', 'scanner'].includes(activeTab)) {
         setActiveTab('epod');
       }
-    } else if (role === 'Picker') {
+    } else if (isPicker) {
       if (activeTab !== 'scanner') {
         setActiveTab('scanner');
       }
-    } else if (role === 'User') {
+    } else if (isUser) {
       if (!['dashboard', 'queue', 'delivery-board'].includes(activeTab)) {
         setActiveTab('dashboard');
       }
@@ -1103,9 +1109,9 @@ export default function App() {
     const tenantId = currentTenant.id;
 
     const loadState = async () => {
-      // Prevent fetching only if an active sync POST request is currently in flight
-      if (syncStatusRef.current === 'SYNCING') {
-        console.log("[Sync Lock] Skipping database state polling during active synchronization.");
+      // Prevent fetching if an active sync POST request is in flight or if a user mutation was made in the last 5 seconds
+      if (syncStatusRef.current === 'SYNCING' || (Date.now() - lastMutationTimeRef.current < 5000)) {
+        console.log("[Sync Lock] Skipping database state polling during active synchronization or recent mutation.");
         return;
       }
 
@@ -1152,10 +1158,20 @@ export default function App() {
           const filteredBranches = (data.branches || []).filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id));
           const filteredUsers = (data.users || []).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
 
+          const dedupedTrucks = deduplicateTrucks(filteredTrucks);
+          const dedupedUsers = deduplicateUsers(filteredUsers);
+
           setDeliveries(filteredDeliveries);
-          setTrucks(deduplicateTrucks(filteredTrucks));
+          setTrucks(dedupedTrucks);
           setBranches(filteredBranches);
-          setUsers(deduplicateUsers(filteredUsers));
+          setUsers(dedupedUsers);
+
+          // Keep localStorage updated with fresh live database state
+          localStorage.setItem(`prospaces_deliveries_tenant_${tenantId}`, JSON.stringify(filteredDeliveries));
+          localStorage.setItem(`prospaces_trucks_tenant_${tenantId}`, JSON.stringify(dedupedTrucks));
+          localStorage.setItem(`prospaces_branches_tenant_${tenantId}`, JSON.stringify(filteredBranches));
+          localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(dedupedUsers));
+
           setLastSyncTime(new Date().toLocaleTimeString());
           setDbActive(true);
           setSyncStatus('IDLE');
@@ -2191,7 +2207,7 @@ export default function App() {
   const isNavDispatcher = userRoleNormalized === 'dispatcher';
   const isNavDriver = userRoleNormalized === 'driver';
   const isNavPicker = userRoleNormalized === 'picker';
-  const isNavUser = userRoleNormalized === 'user';
+  const isNavUser = !isNavAdmin && !isNavDispatcher && !isNavDriver && !isNavPicker;
 
   // Combined checks for view space accessibility
   const showDispatcherSpace = isNavAdmin || isNavDispatcher || isNavUser;
@@ -2968,6 +2984,7 @@ export default function App() {
               onDeleteDelivery={handleDeleteDelivery}
               branches={branches}
               users={users}
+              currentUser={currentUser}
               manualFullTrucks={manualFullTrucks}
               onUpdateManualFullTrucks={handleUpdateManualFullTrucks}
             />

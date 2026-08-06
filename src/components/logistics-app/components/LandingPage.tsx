@@ -205,12 +205,6 @@ export default function LandingPage({
                 <span>&larr;</span>
                 <span>ProSpaces CRM Hero</span>
               </button>
-              <button 
-                onClick={onBookDemo}
-                className="px-5 py-2.5 bg-[#FF5A1F] hover:bg-[#E54B13] text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer hover:-translate-y-0.5 duration-150"
-              >
-                Access Portal
-              </button>
             </div>
 
             {/* Mobile Menu Button */}
@@ -261,12 +255,6 @@ export default function LandingPage({
                     className="w-full py-2.5 bg-slate-100 text-slate-800 font-bold text-sm rounded-xl text-center"
                   >
                     &larr; Return to ProSpaces CRM Hero
-                  </button>
-                  <button 
-                    onClick={onBookDemo}
-                    className="w-full py-2.5 bg-[#FF5A1F] text-white font-bold text-sm rounded-xl text-center shadow-sm"
-                  >
-                    Access Portal
                   </button>
                 </div>
               </div>

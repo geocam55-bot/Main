@@ -528,7 +528,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
       )
     : deliveries;
 
-  const displayTrucks = trucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED');
+  const displayTrucks = trucks.filter(t => t.isActive !== false);
 
   const isDriverOnline = (driverName: string): boolean => {
     if (!driverName) return false;
@@ -1073,7 +1073,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
               </div>
 
               {/* TomTom Map Engine Settings Popup overlay */}
-              {showEngineSettings && mapEngine === 'tomtom' && (
+              {showEngineSettings && mapEngine === 'tomtom' && ['Admin', 'SUPER_ADMIN', 'Dispatcher'].includes(currentUser?.role || '') && (
                 <div className="absolute top-14 right-3 w-72 bg-slate-900/95 backdrop-blur-md text-white rounded-xl border border-slate-800 p-4 shadow-xl z-20 animate-fade-in font-sans space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-amber-400">

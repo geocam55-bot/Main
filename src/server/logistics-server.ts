@@ -2843,232 +2843,186 @@ app.use((req, res, next) => {
       });
 
       // 1. Branches
-      if (branches !== undefined) {
-        if (sanitizedBranches.length > 0) {
-          const { error } = await supabase.from("branches").upsert(sanitizedBranches);
-          if (error) throw new Error(`Branches Sync Error: ${error.message}`);
-
-          const branchIds = sanitizedBranches.map((b: any) => `"${String(b.id).replace(/"/g, '""')}"`);
-          const { error: deleteErr } = await supabase
-            .from("branches")
-            .delete()
-            .eq("tenantId", tenantId)
-            .not("id", "in", `(${branchIds.join(",")})`);
-          if (deleteErr) {
-            console.warn("Non-blocking branches sync deletion failed:", deleteErr.message);
-          }
-        } else {
-          await supabase.from("branches").delete().eq("tenantId", tenantId);
-        }
+      if (branches !== undefined && sanitizedBranches.length > 0) {
+        const { error } = await supabase.from("branches").upsert(sanitizedBranches);
+        if (error) throw new Error(`Branches Sync Error: ${error.message}`);
       }
 
       // 2. Trucks
-      if (trucks !== undefined) {
-        if (sanitizedTrucks.length > 0) {
-          try {
-            // Fetch existing DB trucks to preserve live server telematics coordinates
-            const { data: existingDbTrucks } = await supabase.from("trucks").select("*").eq("tenantId", tenantId);
-            const existingTruckMap = new Map<string, any>();
-            if (existingDbTrucks) {
-              for (const ex of existingDbTrucks) {
-                const deserialized = deserializeType(ex);
-                existingTruckMap.set(String(ex.id).toLowerCase(), { ...ex, ...deserialized });
-              }
+      if (trucks !== undefined && sanitizedTrucks.length > 0) {
+        try {
+          // Fetch existing DB trucks to preserve live server telematics coordinates
+          const { data: existingDbTrucks } = await supabase.from("trucks").select("*").eq("tenantId", tenantId);
+          const existingTruckMap = new Map<string, any>();
+          if (existingDbTrucks) {
+            for (const ex of existingDbTrucks) {
+              const deserialized = deserializeType(ex);
+              existingTruckMap.set(String(ex.id).toLowerCase(), { ...ex, ...deserialized });
             }
-
-            const trucksToUpsert = sanitizedTrucks.map((t: any) => {
-              const ex = existingTruckMap.get(String(t.id).toLowerCase());
-
-              const gpsLat = (typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (ex?.gpsLat ?? t.gpsLat ?? ex?.lat ?? t.lat);
-              const gpsLng = (typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (ex?.gpsLng ?? t.gpsLng ?? ex?.lng ?? t.lng);
-              const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : (ex?.lat ?? t.lat ?? gpsLat);
-              const lng = (typeof t.lng === 'number' && !isNaN(t.lng)) ? t.lng : (ex?.lng ?? t.lng ?? gpsLng);
-              const gpsSpeed = (typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : (ex?.gpsSpeed ?? t.gpsSpeed);
-              const gpsIdlingMins = (typeof t.gpsIdlingMins === 'number' && !isNaN(t.gpsIdlingMins)) ? t.gpsIdlingMins : (ex?.gpsIdlingMins ?? t.gpsIdlingMins);
-              const gpsLastHandshake = (ex?.gpsLastHandshake && t.gpsLastHandshake && ex.gpsLastHandshake > t.gpsLastHandshake) ? ex.gpsLastHandshake : (t.gpsLastHandshake || ex?.gpsLastHandshake);
-
-              return {
-                id: t.id,
-                tenantId: t.tenantId,
-                name: t.name,
-                type: serializeToType(
-                  t.type,
-                  t.registrationDueDate,
-                  lat,
-                  lng,
-                  t.gpsSource || 'truck',
-                  t.gpsDeviceId || ex?.gpsDeviceId,
-                  t.gpsSerialNumber || ex?.gpsSerialNumber,
-                  t.gpsDeviceName || ex?.gpsDeviceName,
-                  t.gpsSimIccid || ex?.gpsSimIccid,
-                  t.gpsStatus || ex?.gpsStatus || 'Connected',
-                  gpsLastHandshake,
-                  gpsLat,
-                  gpsLng,
-                  gpsSpeed,
-                  gpsIdlingMins
-                ),
-                driver: t.driver,
-                branchId: t.branchId,
-                registrationDueDate: t.registrationDueDate || null,
-                
-                // Map camelCase frontend fields to snake_case backend columns
-                truck_number: t.truckNumber || null,
-                vin: t.vin || null,
-                license_plate: t.licensePlate || null,
-                make: t.make || null,
-                model: t.model || null,
-                year: t.year || null,
-                color: t.color || null,
-                capacity_weight_kg: t.capacityWeightKg || null,
-                capacity_volume_m3: t.capacityVolumeM3 || null,
-                fuel_type: t.fuelType || null,
-                current_mileage: t.currentMileage || null,
-                last_service_date: t.lastServiceDate || null,
-                next_service_due_date: t.nextServiceDueDate || null,
-                insurance_policy_number: t.insurancePolicyNumber || null,
-                insurance_expiry_date: t.insuranceExpiryDate || null
-              };
-            });
-
-            // Iterative retry loop that dynamically strips missing columns from Supabase trucks table
-            let currentTruckPayload = trucksToUpsert;
-            let truckAttempts = 0;
-            while (truckAttempts < 25) {
-              truckAttempts++;
-              const { error: dbErr } = await supabase.from("trucks").upsert(currentTruckPayload);
-              if (!dbErr) break;
-
-              const errMsg = dbErr.message || String(dbErr);
-              console.log(`[Trucks Sync] Adjusting trucks payload (Attempt ${truckAttempts}):`, errMsg);
-
-              const isMissingColumnError = (
-                dbErr.code === "42703" ||
-                dbErr.code === "PGRST204" ||
-                (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
-              ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
-
-              if (isMissingColumnError) {
-                const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
-                let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
-
-                if (colToStrip) {
-                  console.log(`[Trucks Sync] Stripping missing column '${colToStrip}' and retrying...`);
-                  currentTruckPayload = currentTruckPayload.map((t: any) => {
-                    const copy = { ...t };
-                    delete copy[colToStrip];
-                    return copy;
-                  });
-                } else {
-                  console.log(`[Trucks Sync] Fallback: stripping all extended truck columns...`);
-                  currentTruckPayload = currentTruckPayload.map((t: any) => ({
-                    id: t.id,
-                    tenantId: t.tenantId,
-                    name: t.name,
-                    type: t.type,
-                    driver: t.driver,
-                    branchId: t.branchId
-                  }));
-                }
-              } else {
-                throw dbErr;
-              }
-            }
-
-            const truckIds = sanitizedTrucks.map((t: any) => String(t.id).trim()).filter(Boolean);
-            if (truckIds.length > 0) {
-              const { error: deleteErr } = await supabase
-                .from("trucks")
-                .delete()
-                .eq("tenantId", tenantId)
-                .not("id", "in", `(${truckIds.join(",")})`);
-              if (deleteErr) {
-                console.warn("Non-blocking trucks sync deletion failed:", deleteErr.message);
-              }
-            }
-          } catch (dbErr: any) {
-            throw new Error(`Trucks Sync Error: ${dbErr.message}`);
           }
-        } else {
-          await supabase.from("trucks").delete().eq("tenantId", tenantId);
+
+          const trucksToUpsert = sanitizedTrucks.map((t: any) => {
+            const ex = existingTruckMap.get(String(t.id).toLowerCase());
+
+            const gpsLat = (typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (ex?.gpsLat ?? t.gpsLat ?? ex?.lat ?? t.lat);
+            const gpsLng = (typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (ex?.gpsLng ?? t.gpsLng ?? ex?.lng ?? t.lng);
+            const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : (ex?.lat ?? t.lat ?? gpsLat);
+            const lng = (typeof t.lng === 'number' && !isNaN(t.lng)) ? t.lng : (ex?.lng ?? t.lng ?? gpsLng);
+            const gpsSpeed = (typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : (ex?.gpsSpeed ?? t.gpsSpeed);
+            const gpsIdlingMins = (typeof t.gpsIdlingMins === 'number' && !isNaN(t.gpsIdlingMins)) ? t.gpsIdlingMins : (ex?.gpsIdlingMins ?? t.gpsIdlingMins);
+            const gpsLastHandshake = (ex?.gpsLastHandshake && t.gpsLastHandshake && ex.gpsLastHandshake > t.gpsLastHandshake) ? ex.gpsLastHandshake : (t.gpsLastHandshake || ex?.gpsLastHandshake);
+
+            return {
+              id: t.id,
+              tenantId: t.tenantId,
+              name: t.name,
+              type: serializeToType(
+                t.type,
+                t.registrationDueDate,
+                lat,
+                lng,
+                t.gpsSource || 'truck',
+                t.gpsDeviceId || ex?.gpsDeviceId,
+                t.gpsSerialNumber || ex?.gpsSerialNumber,
+                t.gpsDeviceName || ex?.gpsDeviceName,
+                t.gpsSimIccid || ex?.gpsSimIccid,
+                t.gpsStatus || ex?.gpsStatus || 'Connected',
+                gpsLastHandshake,
+                gpsLat,
+                gpsLng,
+                gpsSpeed,
+                gpsIdlingMins
+              ),
+              driver: t.driver,
+              branchId: t.branchId,
+              registrationDueDate: t.registrationDueDate || null,
+              
+              // Map camelCase frontend fields to snake_case backend columns
+              truck_number: t.truckNumber || null,
+              vin: t.vin || null,
+              license_plate: t.licensePlate || null,
+              make: t.make || null,
+              model: t.model || null,
+              year: t.year || null,
+              color: t.color || null,
+              capacity_weight_kg: t.capacityWeightKg || null,
+              capacity_volume_m3: t.capacityVolumeM3 || null,
+              fuel_type: t.fuelType || null,
+              current_mileage: t.currentMileage || null,
+              last_service_date: t.lastServiceDate || null,
+              next_service_due_date: t.nextServiceDueDate || null,
+              insurance_policy_number: t.insurancePolicyNumber || null,
+              insurance_expiry_date: t.insuranceExpiryDate || null
+            };
+          });
+
+          // Iterative retry loop that dynamically strips missing columns from Supabase trucks table
+          let currentTruckPayload = trucksToUpsert;
+          let truckAttempts = 0;
+          while (truckAttempts < 25) {
+            truckAttempts++;
+            const { error: dbErr } = await supabase.from("trucks").upsert(currentTruckPayload);
+            if (!dbErr) break;
+
+            const errMsg = dbErr.message || String(dbErr);
+            console.log(`[Trucks Sync] Adjusting trucks payload (Attempt ${truckAttempts}):`, errMsg);
+
+            const isMissingColumnError = (
+              dbErr.code === "42703" ||
+              dbErr.code === "PGRST204" ||
+              (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+            ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+
+            if (isMissingColumnError) {
+              const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
+              let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
+
+              if (colToStrip) {
+                console.log(`[Trucks Sync] Stripping missing column '${colToStrip}' and retrying...`);
+                currentTruckPayload = currentTruckPayload.map((t: any) => {
+                  const copy = { ...t };
+                  delete copy[colToStrip];
+                  return copy;
+                });
+              } else {
+                console.log(`[Trucks Sync] Fallback: stripping all extended truck columns...`);
+                currentTruckPayload = currentTruckPayload.map((t: any) => ({
+                  id: t.id,
+                  tenantId: t.tenantId,
+                  name: t.name,
+                  type: t.type,
+                  driver: t.driver,
+                  branchId: t.branchId
+                }));
+              }
+            } else {
+              throw dbErr;
+            }
+          }
+        } catch (dbErr: any) {
+          throw new Error(`Trucks Sync Error: ${dbErr.message}`);
         }
       }
 
       // 3. Users
-      if (users !== undefined) {
-        if (sanitizedUsers.length > 0) {
-          try {
-            const usersToUpsert = sanitizedUsers.map((u: any) => {
-              return {
-                id: u.id,
-                tenantId: u.tenantId,
-                name: u.name,
-                email: u.email,
-                role: u.role,
-                phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl),
-                associatedStoreId: u.associatedStoreId || null
-              };
-            });
+      if (users !== undefined && sanitizedUsers.length > 0) {
+        try {
+          const usersToUpsert = sanitizedUsers.map((u: any) => {
+            return {
+              id: u.id,
+              tenantId: u.tenantId,
+              name: u.name,
+              email: u.email,
+              role: u.role,
+              phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl),
+              associatedStoreId: u.associatedStoreId || null
+            };
+          });
 
-            let currentUserPayload = usersToUpsert;
-            let userAttempts = 0;
-            while (userAttempts < 10) {
-              userAttempts++;
-              const { error: dbErr } = await supabase.from("users").upsert(currentUserPayload);
-              if (!dbErr) break;
+          let currentUserPayload = usersToUpsert;
+          let userAttempts = 0;
+          while (userAttempts < 10) {
+            userAttempts++;
+            const { error: dbErr } = await supabase.from("users").upsert(currentUserPayload);
+            if (!dbErr) break;
 
-              const errMsg = dbErr.message || String(dbErr);
-              console.log(`[Users Sync] Adjusting users payload (Attempt ${userAttempts}):`, errMsg);
+            const errMsg = dbErr.message || String(dbErr);
+            console.log(`[Users Sync] Adjusting users payload (Attempt ${userAttempts}):`, errMsg);
 
-              const isMissingColumnError = (
-                dbErr.code === "42703" ||
-                dbErr.code === "PGRST204" ||
-                (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
-              ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+            const isMissingColumnError = (
+              dbErr.code === "42703" ||
+              dbErr.code === "PGRST204" ||
+              (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+            ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
 
-              if (isMissingColumnError) {
-                const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
-                let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
+            if (isMissingColumnError) {
+              const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
+              let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
 
-                if (colToStrip) {
-                  console.log(`[Users Sync] Stripping missing column '${colToStrip}' and retrying...`);
-                  currentUserPayload = currentUserPayload.map((u: any) => {
-                    const copy = { ...u };
-                    delete copy[colToStrip];
-                    return copy;
-                  });
-                } else {
-                  console.log(`[Users Sync] Fallback: stripping extended user columns...`);
-                  currentUserPayload = currentUserPayload.map((u: any) => ({
-                    id: u.id,
-                    tenantId: u.tenantId,
-                    name: u.name,
-                    email: u.email,
-                    role: u.role,
-                    phone: u.phone
-                  }));
-                }
+              if (colToStrip) {
+                console.log(`[Users Sync] Stripping missing column '${colToStrip}' and retrying...`);
+                currentUserPayload = currentUserPayload.map((u: any) => {
+                  const copy = { ...u };
+                  delete copy[colToStrip];
+                  return copy;
+                });
               } else {
-                throw dbErr;
+                console.log(`[Users Sync] Fallback: stripping extended user columns...`);
+                currentUserPayload = currentUserPayload.map((u: any) => ({
+                  id: u.id,
+                  tenantId: u.tenantId,
+                  name: u.name,
+                  email: u.email,
+                  role: u.role,
+                  phone: u.phone
+                }));
               }
+            } else {
+              throw dbErr;
             }
-
-            const userIds = sanitizedUsers.map((u: any) => String(u.id).trim()).filter(Boolean);
-            if (userIds.length > 0) {
-              const { error: deleteErr } = await supabase
-                .from("users")
-                .delete()
-                .eq("tenantId", tenantId)
-                .not("id", "in", `(${userIds.join(",")})`);
-              if (deleteErr) {
-                console.warn("Non-blocking users sync deletion failed:", deleteErr.message);
-              }
-            }
-          } catch (dbErr: any) {
-            throw new Error(`Users Sync Error: ${dbErr.message}`);
           }
-        } else {
-          await supabase.from("users").delete().eq("tenantId", tenantId);
+        } catch (dbErr: any) {
+          throw new Error(`Users Sync Error: ${dbErr.message}`);
         }
       }
 
@@ -3155,21 +3109,6 @@ app.use((req, res, next) => {
         if (!success) {
           throw new Error(`Deliveries Sync failed after maximum retries due to persistent schema mismatch. Last error: ${lastErrMsg}`);
         }
-
-        // Delete any deliveries for this tenant that are NOT in sanitizedDeliveries
-        const deliveryIds = sanitizedDeliveries.map((d: any) => String(d.id).trim()).filter(Boolean);
-        if (deliveryIds.length > 0) {
-          const { error: deleteErr } = await supabase
-            .from("deliveries")
-            .delete()
-            .eq("tenantId", tenantId)
-            .not("id", "in", `(${deliveryIds.join(",")})`);
-          if (deleteErr) {
-            console.warn("Non-blocking deliveries sync deletion failed:", deleteErr.message);
-          }
-        }
-      } else if (deliveries !== undefined) {
-        await supabase.from("deliveries").delete().eq("tenantId", tenantId);
       }
 
       // Enforce defensive deletes from memory before finishing the save-state flow
