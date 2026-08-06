@@ -35,6 +35,7 @@ import UserProfileModal, { renderUserAvatarHelper } from './components/UserProfi
 import GpsSetup from './components/GpsSetup';
 import EnterpriseHub from './components/EnterpriseHub';
 import { DeliveryBoard } from './components/DeliveryBoard';
+import { rolloverUncompletedDeliveries } from './lib/schedulingUtils';
 import { 
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
@@ -1153,10 +1154,13 @@ export default function App() {
 
         if (data.supabaseActive) {
           // Populate React state directly from live Supabase Tables and filter out recently deleted IDs
-          const filteredDeliveries = (data.deliveries || []).filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id));
+          const rawDeliveries = (data.deliveries || []).filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id));
           const filteredTrucks = (data.trucks || []).filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
           const filteredBranches = (data.branches || []).filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id));
           const filteredUsers = (data.users || []).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
+
+          // Auto-rollover uncompleted past deliveries to the first available slot in the next day
+          const { updatedDeliveries: filteredDeliveries, movedCount } = rolloverUncompletedDeliveries(rawDeliveries, filteredBranches);
 
           const dedupedTrucks = deduplicateTrucks(filteredTrucks);
           const dedupedUsers = deduplicateUsers(filteredUsers);
@@ -1165,6 +1169,12 @@ export default function App() {
           setTrucks(dedupedTrucks);
           setBranches(filteredBranches);
           setUsers(dedupedUsers);
+
+          // If uncompleted deliveries were automatically rolled over, sync the updated schedule to Supabase
+          if (movedCount > 0) {
+            console.log(`[Auto-Rollover] Moved ${movedCount} uncompleted past deliveries to the first available slot in the next day.`);
+            syncStateToSupabase(tenantId, filteredDeliveries, dedupedTrucks, filteredBranches, dedupedUsers);
+          }
 
           // Keep localStorage updated with fresh live database state
           localStorage.setItem(`prospaces_deliveries_tenant_${tenantId}`, JSON.stringify(filteredDeliveries));

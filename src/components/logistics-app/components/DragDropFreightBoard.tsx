@@ -5,9 +5,10 @@ import {
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
   ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
-  Calendar, Sun, Moon, ChevronLeft, ChevronRight
+  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap
 } from 'lucide-react';
 import { isTruckAssignedToBranch } from './Dashboard';
+import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/schedulingUtils';
 
 interface DragDropFreightBoardProps {
   deliveries: DeliveryRecord[];
@@ -233,6 +234,63 @@ export default function DragDropFreightBoard({
   const handleToday = () => {
     setSelectedDate(new Date().toISOString().split('T')[0]);
     setShowAllDates(false);
+  };
+
+  // View mode state: 'day' | 'week'
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+
+  // Week view anchor date
+  const [weekAnchorDate, setWeekAnchorDate] = useState<Date>(() => new Date());
+
+  // Rollover notification notice
+  const [rolloverNotice, setRolloverNotice] = useState<string | null>(null);
+
+  // Compute 7 days of the week (Monday start)
+  const getWeekDays = (refDate: Date) => {
+    const start = new Date(refDate);
+    const day = start.getDay();
+    const diff = start.getDate() - day + (day === 0 ? -6 : 1);
+    start.setDate(diff);
+
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const next = new Date(start);
+      next.setDate(start.getDate() + i);
+      days.push(next);
+    }
+    return days;
+  };
+
+  const currentWeekDays = useMemo(() => getWeekDays(weekAnchorDate), [weekAnchorDate]);
+
+  const handlePrevWeek = () => {
+    const next = new Date(weekAnchorDate);
+    next.setDate(next.getDate() - 7);
+    setWeekAnchorDate(next);
+  };
+
+  const handleNextWeek = () => {
+    const next = new Date(weekAnchorDate);
+    next.setDate(next.getDate() + 7);
+    setWeekAnchorDate(next);
+  };
+
+  const handleThisWeek = () => {
+    setWeekAnchorDate(new Date());
+  };
+
+  // Trigger manual auto-rollover of uncompleted past deliveries to first available slot in next day
+  const handleTriggerRollover = () => {
+    const { updatedDeliveries, movedCount } = rolloverUncompletedDeliveries(deliveries, branches || []);
+    if (movedCount > 0) {
+      updatedDeliveries.forEach(d => {
+        onAddOrUpdateDelivery(d);
+      });
+      setRolloverNotice(`⚡ Moved ${movedCount} uncompleted delivery order(s) to the first available slot in the next day.`);
+    } else {
+      setRolloverNotice('✓ All uncompleted deliveries are already scheduled in valid upcoming slots.');
+    }
+    setTimeout(() => setRolloverNotice(null), 6000);
   };
 
   // Formatted display string for selected date
@@ -592,6 +650,278 @@ export default function DragDropFreightBoard({
     }
   };
 
+  // Week View Renderer for Freight Board
+  const renderWeekView = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const firstWeekDay = currentWeekDays[0];
+    const lastWeekDay = currentWeekDays[6];
+
+    const weekRangeLabel = `Week of ${firstWeekDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${lastWeekDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+    return (
+      <div className="space-y-6">
+        {/* Week View Controls & Navigation */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-4 font-sans">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            
+            {/* Week Navigation */}
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={handlePrevWeek}
+                className="p-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-xl transition-all cursor-pointer"
+                title="Previous Week"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <div className="px-4 py-2 bg-slate-900 text-white rounded-xl font-mono text-xs font-black tracking-wide flex items-center space-x-2">
+                <Calendar className="h-4 w-4 text-amber-400" />
+                <span>{weekRangeLabel}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNextWeek}
+                className="p-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-xl transition-all cursor-pointer"
+                title="Next Week"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleThisWeek}
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 rounded-xl text-xs font-black font-mono tracking-wider transition-all cursor-pointer shadow-2xs"
+              >
+                THIS WEEK
+              </button>
+            </div>
+
+            {/* Quick Info */}
+            <div className="flex items-center space-x-2 text-xs font-mono font-bold text-slate-600">
+              <span className="px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200">
+                Store: <strong className="text-slate-900">{selectedStoreFilter === 'ALL' ? 'All Depot Stations' : selectedStoreFilter}</strong>
+              </span>
+            </div>
+
+          </div>
+        </div>
+
+        {/* 7-Day Columns Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+          {currentWeekDays.map((dayObj) => {
+            const dateStr = dayObj.toISOString().split('T')[0];
+            const isToday = dateStr === todayStr;
+            const dayName = dayObj.toLocaleDateString('en-US', { weekday: 'short' });
+            const dayNum = dayObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+            // Deliveries scheduled on dateStr
+            const dayDeliveries = deliveries.filter(d => {
+              if (selectedStoreFilter !== 'ALL' && d.originBranch !== selectedStoreFilter) return false;
+              const dDate = d.scheduledDate ? d.scheduledDate.split('T')[0] : (d.registeredAt ? d.registeredAt.split('T')[0] : '');
+              return dDate === dateStr;
+            });
+
+            const unassignedForDay = dayDeliveries.filter(d => !d.assignedTruck || d.assignedTruck === 'UNASSIGNED' || d.assignedTruck === 'NONE');
+            const assignedForDay = dayDeliveries.filter(d => d.assignedTruck && d.assignedTruck !== 'UNASSIGNED' && d.assignedTruck !== 'NONE');
+
+            // Unique trucks loaded on this day
+            const trucksForDay = Array.from(new Set(assignedForDay.map(d => d.assignedTruck)));
+
+            return (
+              <div 
+                key={dateStr}
+                className={`bg-white border rounded-2xl p-3.5 flex flex-col justify-between space-y-3 transition-all ${
+                  isToday 
+                    ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/20 shadow-md' 
+                    : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                }`}
+              >
+                {/* Day Header */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black font-mono text-slate-800 uppercase tracking-wider">
+                      {dayName}
+                    </span>
+                    {isToday && (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-black font-mono bg-blue-600 text-white uppercase tracking-widest">
+                        TODAY
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm font-extrabold text-slate-900 mt-0.5">
+                    {dayNum}
+                  </div>
+
+                  {/* Summary Badges */}
+                  <div className="mt-2.5 flex flex-wrap gap-1.5 font-mono text-[10px]">
+                    <span className="px-2 py-1 rounded-md bg-amber-100 text-amber-800 border border-amber-200/80 font-bold">
+                      Unassigned: {unassignedForDay.length}
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-blue-100 text-blue-800 border border-blue-200/80 font-bold">
+                      Assigned: {assignedForDay.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Trucks Loaded on this day */}
+                <div className="space-y-2 border-t border-slate-100 pt-2.5 flex-1">
+                  <div className="text-[10px] font-black font-mono text-slate-500 uppercase tracking-wider">
+                    FLEET TRUCKS ({trucksForDay.length})
+                  </div>
+
+                  {trucksForDay.length === 0 ? (
+                    <div className="text-[11px] text-slate-400 font-mono italic py-2">
+                      No trucks scheduled
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-[160px] overflow-y-auto scrollbar-thin">
+                      {trucksForDay.map(truckId => {
+                        const truckObj = trucks.find(t => t.id === truckId);
+                        const truckName = truckObj ? truckObj.name : truckId;
+                        const truckDelivs = assignedForDay.filter(d => d.assignedTruck === truckId);
+                        const totalWeight = truckDelivs.reduce((sum, d) => sum + parseDeliveryWeightLbs(d), 0);
+
+                        return (
+                          <div key={truckId} className="bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-[11px] space-y-1">
+                            <div className="flex items-center justify-between font-extrabold text-slate-800">
+                              <span className="truncate">{truckName}</span>
+                              <span className="text-blue-600">{truckDelivs.length} delivs</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 flex items-center justify-between">
+                              <span>{totalWeight.toLocaleString()} lbs</span>
+                              <span className="text-emerald-600 font-bold">LOADED</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Deliveries Preview */}
+                <div className="border-t border-slate-100 pt-2 space-y-1">
+                  <div className="text-[10px] font-black font-mono text-slate-500 uppercase tracking-wider">
+                    TOTAL ORDERS ({dayDeliveries.length})
+                  </div>
+                  {dayDeliveries.length > 0 && (
+                    <div className="space-y-1 max-h-[120px] overflow-y-auto scrollbar-thin">
+                      {dayDeliveries.slice(0, 4).map(d => (
+                        <div key={d.id} className="text-[10px] bg-white border border-slate-200 rounded-lg p-1.5 truncate text-slate-700 font-mono">
+                          <span className="font-bold text-blue-600 mr-1">#{d.epicorSalesOrder || d.id}</span>
+                          <span>{d.customerName || d.deliveryAddress || 'Delivery Item'}</span>
+                        </div>
+                      ))}
+                      {dayDeliveries.length > 4 && (
+                        <div className="text-[10px] text-slate-500 font-mono text-center pt-0.5">
+                          +{dayDeliveries.length - 4} more orders...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Action button to switch to Day View for this date */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDate(dateStr);
+                    setViewMode('day');
+                  }}
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 active:bg-black text-white rounded-xl text-xs font-bold font-mono uppercase transition-all cursor-pointer shadow-xs active:scale-95 flex items-center justify-center space-x-1.5"
+                >
+                  <span>INSPECT / DISPATCH DAY</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Fleet Weekly Dispatch Matrix */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black font-mono text-slate-900 uppercase tracking-wider flex items-center space-x-2">
+              <TruckIcon className="h-4 w-4 text-blue-600" />
+              <span>FLEET WEEKLY DISPATCH MATRIX</span>
+            </h3>
+            <span className="text-xs text-slate-500 font-mono">
+              Click any cell to jump to that truck & day
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left font-mono text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 text-[11px] uppercase tracking-wider">
+                  <th className="p-3 font-black">VEHICLE / TRUCK</th>
+                  {currentWeekDays.map(d => {
+                    const dateStr = d.toISOString().split('T')[0];
+                    const isToday = dateStr === todayStr;
+                    return (
+                      <th key={dateStr} className={`p-3 font-black text-center ${isToday ? 'bg-blue-100 text-blue-900' : ''}`}>
+                        {d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {activeTrucks.map(truck => (
+                  <tr key={truck.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-3 font-bold text-slate-800 whitespace-nowrap border-r border-slate-100">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span className="font-extrabold">{truck.name}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-normal">{truck.driverName || 'Unassigned Driver'}</div>
+                    </td>
+
+                    {currentWeekDays.map(d => {
+                      const dateStr = d.toISOString().split('T')[0];
+                      const isToday = dateStr === todayStr;
+
+                      const truckDayDelivs = deliveries.filter(deliv => {
+                        if (selectedStoreFilter !== 'ALL' && deliv.originBranch !== selectedStoreFilter) return false;
+                        const delivDate = deliv.scheduledDate ? deliv.scheduledDate.split('T')[0] : (deliv.registeredAt ? deliv.registeredAt.split('T')[0] : '');
+                        return deliv.assignedTruck === truck.id && delivDate === dateStr;
+                      });
+
+                      const totalWeight = truckDayDelivs.reduce((sum, deliv) => sum + parseDeliveryWeightLbs(deliv), 0);
+
+                      return (
+                        <td 
+                          key={dateStr}
+                          onClick={() => {
+                            setSelectedDate(dateStr);
+                            setViewMode('day');
+                          }}
+                          className={`p-3 text-center cursor-pointer transition-colors border-r border-slate-100 hover:bg-blue-50/60 ${
+                            isToday ? 'bg-blue-50/30' : ''
+                          }`}
+                        >
+                          {truckDayDelivs.length > 0 ? (
+                            <div className="inline-flex flex-col items-center bg-blue-100 text-blue-900 border border-blue-200 px-2.5 py-1 rounded-xl text-[11px] font-black shadow-2xs">
+                              <span>{truckDayDelivs.length} delivs</span>
+                              <span className="text-[9px] font-normal text-blue-700">{totalWeight.toLocaleString()} lbs</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-xs">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-slate-50 text-slate-900 rounded-2xl border border-slate-200/90 shadow-lg p-4 sm:p-6 select-none font-sans space-y-6">
       
@@ -605,26 +935,91 @@ export default function DragDropFreightBoard({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Drag a delivery onto a truck to load it or click a card to assign
+            Drag a delivery onto a truck to load it or switch to Week View to analyze upcoming capacity
           </p>
         </div>
 
-        {/* Counter Summary Stats */}
-        <div className="flex items-center space-x-6 bg-white border border-slate-200/90 px-4 py-2.5 rounded-xl font-mono shadow-xs">
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">TRUCKS</span>
-            <span className="text-lg font-black text-blue-600">{activeTrucks.length}</span>
+        {/* Header Controls: View Mode Switcher & Rollover Action */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Day / Week View Mode Segmented Controls */}
+          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('day')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1.5 active:scale-95 ${
+                viewMode === 'day'
+                  ? 'bg-slate-900 text-white shadow-2xs font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5 text-amber-400" />
+              <span>DAY VIEW</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('week')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center space-x-1.5 active:scale-95 ${
+                viewMode === 'week'
+                  ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="h-3.5 w-3.5 text-blue-200" />
+              <span>WEEK VIEW</span>
+            </button>
           </div>
-          <div className="h-4 w-px bg-slate-200"></div>
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">UNASSIGNED</span>
-            <span className="text-lg font-black text-amber-600">{unassignedDeliveries.length}</span>
+
+          {/* Auto-Rollover Button */}
+          <button
+            type="button"
+            onClick={handleTriggerRollover}
+            className="px-3.5 py-2 rounded-xl text-xs font-black font-mono bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 border border-amber-600 transition-all cursor-pointer shadow-xs active:scale-95 flex items-center space-x-1.5"
+            title="Move uncompleted past deliveries to the first available slot in the next day"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>⚡ ROLL OVER INCOMPLETE</span>
+          </button>
+
+          {/* Counter Summary Stats */}
+          <div className="hidden sm:flex items-center space-x-4 bg-white border border-slate-200/90 px-3.5 py-1.5 rounded-xl font-mono shadow-2xs">
+            <div className="flex items-center space-x-1.5">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TRUCKS</span>
+              <span className="text-base font-black text-blue-600">{activeTrucks.length}</span>
+            </div>
+            <div className="h-3.5 w-px bg-slate-200"></div>
+            <div className="flex items-center space-x-1.5">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">UNASSIGNED</span>
+              <span className="text-base font-black text-amber-600">{unassignedDeliveries.length}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Dispatch Board Controls Bar: Store Filter, Date Picker, AM/PM Shift Filter */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3 font-sans">
+      {/* Rollover Banner Notification */}
+      {rolloverNotice && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 rounded-xl p-3 text-xs font-mono font-bold flex items-center justify-between shadow-2xs animate-fade-in">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>{rolloverNotice}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setRolloverNotice(null)}
+            className="text-amber-700 hover:text-amber-900 font-black px-2 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Main Board View: Week View vs Day View */}
+      {viewMode === 'week' ? (
+        renderWeekView()
+      ) : (
+        <>
+          {/* Dispatch Board Controls Bar: Store Filter, Date Picker, AM/PM Shift Filter */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3 font-sans">
         
         {/* Row 1: Store & DC Selection (Filters BOTH Trucks and Deliveries) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
@@ -1131,6 +1526,8 @@ export default function DragDropFreightBoard({
         </div>
 
       </div>
+        </>
+      )}
 
       {/* MOBILE / TOUCH CLICK ASSIGN MODAL */}
       {assigningDelivery && (
