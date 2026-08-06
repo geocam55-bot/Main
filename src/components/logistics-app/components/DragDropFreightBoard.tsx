@@ -500,6 +500,82 @@ export default function DragDropFreightBoard({
     }
   };
 
+  // Toggle delivery shift slot between AM and PM
+  const handleToggleShiftSlot = (delivery: DeliveryRecord) => {
+    const currentSlot = (delivery.scheduledSlot as string)?.toUpperCase();
+    const newSlot: 'AM' | 'PM' = (currentSlot === 'PM' || currentSlot === 'AFTERNOON') ? 'AM' : 'PM';
+    
+    const updated: DeliveryRecord = {
+      ...delivery,
+      scheduledSlot: newSlot,
+      history: [
+        ...(delivery.history || []),
+        {
+          status: delivery.status || DeliveryStatus.REGISTERED,
+          timestamp: new Date().toISOString(),
+          location: delivery.originBranch || 'Depot',
+          operator: 'Dispatcher',
+          notes: `Shift slot changed to ${newSlot}`
+        }
+      ]
+    };
+
+    onAddOrUpdateDelivery(updated);
+  };
+
+  // Automatic Drag & Drop Assignment directly to Truck
+  const handleAutoDropAssign = (deliveryId: string, truck: Truck, targetDate?: string) => {
+    const delivery = deliveries.find(d => d.id === deliveryId);
+    if (!delivery) return;
+
+    // Preserve delivery's explicit shift slot if set (PM vs AM), otherwise check shift filter
+    const currentSlot = (delivery.scheduledSlot as string)?.toUpperCase();
+    let finalSlot: 'AM' | 'PM' = 'AM';
+    if (currentSlot === 'PM' || currentSlot === 'AFTERNOON') {
+      finalSlot = 'PM';
+    } else if (currentSlot === 'AM' || currentSlot === 'MORNING') {
+      finalSlot = 'AM';
+    } else if (selectedShiftFilter === 'PM') {
+      finalSlot = 'PM';
+    } else {
+      finalSlot = 'AM';
+    }
+
+    const truckBranchObj = branches.find(b => b.id === truck.branchId || b.name === truck.branchId);
+    const finalDepot = truckBranchObj 
+      ? truckBranchObj.name 
+      : (formatBranchDisplayName(truck.branchId || '', branches) || delivery.originBranch || 'Windmill DC');
+
+    const finalDate = targetDate || selectedDate || delivery.scheduledDate || new Date().toISOString().split('T')[0];
+    const updatedDriver = (truck.driver && truck.driver.toLowerCase() !== 'no driver' && truck.driver.toLowerCase() !== 'unassigned') 
+      ? truck.driver 
+      : (delivery.assignedDriver || 'Unassigned');
+
+    const updated: DeliveryRecord = {
+      ...delivery,
+      originBranch: finalDepot,
+      assignedTruck: truck.name || truck.id,
+      assignedDriver: updatedDriver,
+      scheduledDate: finalDate,
+      scheduledSlot: finalSlot,
+      status: DeliveryStatus.PICKED_AND_LOADED,
+      history: [
+        ...(delivery.history || []),
+        {
+          status: DeliveryStatus.PICKED_AND_LOADED,
+          timestamp: new Date().toISOString(),
+          location: finalDepot,
+          operator: 'Dispatcher',
+          notes: `Assigned & loaded onto ${truck.name} for ${finalDate} (${finalSlot}) at ${finalDepot}.`
+        }
+      ]
+    };
+
+    onAddOrUpdateDelivery(updated);
+    setDraggedDeliveryId(null);
+    setDragOverTruckId(null);
+  };
+
   // Step 1: Initiate assignment flow -> Prompts for Depot, Truck, Schedule, & Picker
   const initiateAssignment = (deliveryId: string, truck: Truck) => {
     const delivery = deliveries.find(d => d.id === deliveryId);
@@ -512,9 +588,18 @@ export default function DragDropFreightBoard({
       : (formatBranchDisplayName(truck.branchId || '', branches) || delivery.originBranch || 'Windmill DC');
 
     const defaultDate = selectedDate || delivery.scheduledDate || new Date().toISOString().split('T')[0];
-    const defaultSlot: 'AM' | 'PM' = selectedShiftFilter !== 'ALL' 
-      ? selectedShiftFilter 
-      : (delivery.scheduledSlot === 'PM' ? 'PM' : 'AM');
+    
+    const currentSlot = (delivery.scheduledSlot as string)?.toUpperCase();
+    let defaultSlot: 'AM' | 'PM' = 'AM';
+    if (currentSlot === 'PM' || currentSlot === 'AFTERNOON') {
+      defaultSlot = 'PM';
+    } else if (currentSlot === 'AM' || currentSlot === 'MORNING') {
+      defaultSlot = 'AM';
+    } else if (selectedShiftFilter === 'PM') {
+      defaultSlot = 'PM';
+    } else {
+      defaultSlot = 'AM';
+    }
 
     const defaultPicker = delivery.assignedPicker || '';
 
@@ -1377,7 +1462,7 @@ export default function DragDropFreightBoard({
                     e.preventDefault();
                     const deliveryId = e.dataTransfer.getData('text/plain') || draggedDeliveryId;
                     if (deliveryId) {
-                      initiateAssignment(deliveryId, truck);
+                      handleAutoDropAssign(deliveryId, truck);
                     }
                   }}
                   className={`relative rounded-xl border p-4 transition-all duration-200 ${
@@ -1517,7 +1602,12 @@ export default function DragDropFreightBoard({
                         {loadedDeliveries.map(item => (
                           <div 
                             key={item.id} 
-                            className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between text-xs shadow-2xs"
+                            draggable={!isViewOnly}
+                            onDragStart={(e) => !isViewOnly && handleDragStart(e, item.id)}
+                            onDragEnd={handleDragEnd}
+                            className={`bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between text-xs shadow-2xs ${
+                              !isViewOnly ? 'cursor-grab active:cursor-grabbing hover:border-blue-400' : ''
+                            }`}
                           >
                             <div className="min-w-0 pr-2">
                               <span className="font-mono font-bold text-blue-600 block truncate">{item.id}</span>
@@ -1635,6 +1725,7 @@ export default function DragDropFreightBoard({
                           onDragStart={handleDragStart}
                           onDragEnd={handleDragEnd}
                           onAssignClick={() => setAssigningDelivery(delivery)}
+                          onToggleShiftSlot={handleToggleShiftSlot}
                           isBeingDragged={draggedDeliveryId === delivery.id}
                           isViewOnly={isViewOnly}
                         />
@@ -1659,6 +1750,7 @@ export default function DragDropFreightBoard({
                           onDragStart={handleDragStart}
                           onDragEnd={handleDragEnd}
                           onAssignClick={() => setAssigningDelivery(delivery)}
+                          onToggleShiftSlot={handleToggleShiftSlot}
                           isBeingDragged={draggedDeliveryId === delivery.id}
                           isViewOnly={isViewOnly}
                         />
@@ -1943,6 +2035,7 @@ function UnassignedDeliveryCard({
   onDragStart,
   onDragEnd,
   onAssignClick,
+  onToggleShiftSlot,
   isBeingDragged,
   isViewOnly = false
 }: {
@@ -1950,12 +2043,14 @@ function UnassignedDeliveryCard({
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragEnd: () => void;
   onAssignClick: () => void;
+  onToggleShiftSlot?: (delivery: DeliveryRecord) => void;
   isBeingDragged: boolean;
   isViewOnly?: boolean;
 }) {
   const weightLbs = parseDeliveryWeightLbs(delivery);
   const isUrgent = delivery.deliveryCategory === 'Pro' || delivery.destinationNotes?.toLowerCase().includes('urgent') || delivery.destinationNotes?.toLowerCase().includes('priority');
-  const slot = delivery.scheduledSlot === 'PM' ? 'PM' : 'AM';
+  const currentSlot = (delivery.scheduledSlot as string)?.toUpperCase();
+  const slot: 'AM' | 'PM' = (currentSlot === 'PM' || currentSlot === 'AFTERNOON') ? 'PM' : 'AM';
 
   // Origin / dest summary
   const customerSummary = delivery.customerName || 'Customer';
@@ -2010,9 +2105,27 @@ function UnassignedDeliveryCard({
           {weightLbs.toLocaleString()} lbs
         </span>
         <div className="flex items-center space-x-2">
-          <span className="text-[10px] font-bold text-slate-500">
-            {slot === 'AM' ? '★ AM' : '☪ PM'}
-          </span>
+          {!isViewOnly && onToggleShiftSlot ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleShiftSlot(delivery);
+              }}
+              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                slot === 'AM'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                  : 'bg-indigo-100 text-indigo-900 border-indigo-300 hover:bg-indigo-200'
+              }`}
+              title="Click to toggle between AM and PM shift slot"
+            >
+              {slot === 'AM' ? '★ AM' : '☪ PM'}
+            </button>
+          ) : (
+            <span className="text-[10px] font-bold text-slate-500">
+              {slot === 'AM' ? '★ AM' : '☪ PM'}
+            </span>
+          )}
           {!isViewOnly && (
             <button
               type="button"
