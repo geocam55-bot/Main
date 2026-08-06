@@ -194,6 +194,9 @@ export default function DragDropFreightBoard({
   // Shift selection state (ALL | AM | PM)
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | 'AM' | 'PM'>('ALL');
 
+  // Drag over state for unassigned shift drop targets
+  const [dragOverUnassignedSlot, setDragOverUnassignedSlot] = useState<'AM' | 'PM' | 'GENERAL' | null>(null);
+
   // Search filter for deliveries
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -466,11 +469,18 @@ export default function DragDropFreightBoard({
 
   // Group unassigned deliveries by Shift (AM / PM)
   const amDeliveries = useMemo(() => {
-    return unassignedDeliveries.filter(d => d.scheduledSlot === 'AM' || !d.scheduledSlot || (d.scheduledSlot as string) === 'Morning');
+    return unassignedDeliveries.filter(d => {
+      const slotRaw = (d.scheduledSlot || (d as any).scheduled_slot || (d as any).shift || '').toString().toUpperCase();
+      if (slotRaw === 'PM' || slotRaw.includes('AFTERNOON')) return false;
+      return true;
+    });
   }, [unassignedDeliveries]);
 
   const pmDeliveries = useMemo(() => {
-    return unassignedDeliveries.filter(d => d.scheduledSlot === 'PM' || (d.scheduledSlot as string) === 'Afternoon');
+    return unassignedDeliveries.filter(d => {
+      const slotRaw = (d.scheduledSlot || (d as any).scheduled_slot || (d as any).shift || '').toString().toUpperCase();
+      return slotRaw === 'PM' || slotRaw.includes('AFTERNOON');
+    });
   }, [unassignedDeliveries]);
 
   // Drag handlers
@@ -483,6 +493,7 @@ export default function DragDropFreightBoard({
   const handleDragEnd = () => {
     setDraggedDeliveryId(null);
     setDragOverTruckId(null);
+    setDragOverUnassignedSlot(null);
   };
 
   const handleDragOver = (e: React.DragEvent, truckId: string) => {
@@ -500,9 +511,63 @@ export default function DragDropFreightBoard({
     }
   };
 
+  // Move or unload a delivery to the Unassigned Freight Pool (optionally targeting AM or PM)
+  const handleUnassignDrop = (deliveryId: string, targetSlot?: 'AM' | 'PM') => {
+    const delivery = deliveries.find(d => d.id === deliveryId);
+    if (!delivery) return;
+
+    const slotRaw = (
+      delivery.scheduledSlot || 
+      (delivery as any).scheduled_slot || 
+      (delivery as any).shift || 
+      ''
+    ).toString().toUpperCase();
+
+    let finalSlot: 'AM' | 'PM' = 'AM';
+    if (targetSlot) {
+      finalSlot = targetSlot;
+    } else if (slotRaw.includes('PM') || slotRaw.includes('AFTERNOON') || slotRaw === 'PM') {
+      finalSlot = 'PM';
+    } else if (selectedShiftFilter === 'PM') {
+      finalSlot = 'PM';
+    } else {
+      finalSlot = 'AM';
+    }
+
+    const updated: DeliveryRecord = {
+      ...delivery,
+      assignedTruck: 'unassigned',
+      assignedDriver: '',
+      status: DeliveryStatus.REGISTERED,
+      scheduledDate: selectedDate || delivery.scheduledDate || new Date().toISOString().split('T')[0],
+      scheduledSlot: finalSlot,
+      history: [
+        ...(delivery.history || []),
+        {
+          status: DeliveryStatus.REGISTERED,
+          timestamp: new Date().toISOString(),
+          location: delivery.originBranch || 'Depot',
+          operator: 'Dispatcher',
+          notes: `Moved to Unassigned Freight Pool (${finalSlot} Shift) for ${selectedDate || 'Dispatch'}`
+        }
+      ]
+    };
+
+    onAddOrUpdateDelivery(updated);
+    setDraggedDeliveryId(null);
+    setDragOverTruckId(null);
+    setDragOverUnassignedSlot(null);
+  };
+
   // Toggle delivery shift slot between AM and PM
   const handleToggleShiftSlot = (delivery: DeliveryRecord) => {
-    const currentSlot = (delivery.scheduledSlot as string)?.toUpperCase();
+    const currentSlot = (
+      delivery.scheduledSlot || 
+      (delivery as any).scheduled_slot || 
+      (delivery as any).shift || 
+      ''
+    ).toString().toUpperCase();
+
     const newSlot: 'AM' | 'PM' = (currentSlot === 'PM' || currentSlot === 'AFTERNOON') ? 'AM' : 'PM';
     
     const updated: DeliveryRecord = {
@@ -529,11 +594,17 @@ export default function DragDropFreightBoard({
     if (!delivery) return;
 
     // Preserve delivery's explicit shift slot if set (PM vs AM), otherwise check shift filter
-    const currentSlot = (delivery.scheduledSlot as string)?.toUpperCase();
+    const slotRaw = (
+      delivery.scheduledSlot || 
+      (delivery as any).scheduled_slot || 
+      (delivery as any).shift || 
+      ''
+    ).toString().toUpperCase();
+
     let finalSlot: 'AM' | 'PM' = 'AM';
-    if (currentSlot === 'PM' || currentSlot === 'AFTERNOON') {
+    if (slotRaw.includes('PM') || slotRaw.includes('AFTERNOON') || slotRaw === 'PM') {
       finalSlot = 'PM';
-    } else if (currentSlot === 'AM' || currentSlot === 'MORNING') {
+    } else if (slotRaw.includes('AM') || slotRaw.includes('MORNING') || slotRaw === 'AM') {
       finalSlot = 'AM';
     } else if (selectedShiftFilter === 'PM') {
       finalSlot = 'PM';
