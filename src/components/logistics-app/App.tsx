@@ -34,7 +34,6 @@ import SuperAdminTenantsView from './components/SuperAdminTenantsView';
 import UserProfileModal, { renderUserAvatarHelper } from './components/UserProfileModal';
 import GpsSetup from './components/GpsSetup';
 import EnterpriseHub from './components/EnterpriseHub';
-import { DeliveryBoard } from './components/DeliveryBoard';
 import { rolloverUncompletedDeliveries } from './lib/schedulingUtils';
 import { 
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
@@ -466,7 +465,7 @@ export default function App() {
         setActiveTab('scanner');
       }
     } else if (isUser) {
-      if (!['dashboard', 'queue', 'delivery-board'].includes(activeTab)) {
+      if (!['dashboard', 'queue'].includes(activeTab)) {
         setActiveTab('dashboard');
       }
     }
@@ -2504,21 +2503,6 @@ export default function App() {
                             )}
                           </button>
 
-                          <button
-                            onClick={() => {
-                              setActiveTab('delivery-board');
-                              setIsMobileNavOpen(false);
-                            }}
-                            className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer ${
-                              activeTab === 'delivery-board'
-                                ? 'bg-blue-800 text-white shadow-sm'
-                                : 'text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            <CalendarIcon className="h-4 w-4 text-blue-500" />
-                            <span>Delivery Board</span>
-                          </button>
-
                           {!isNavUser && (
                             <button
                               onClick={() => {
@@ -2716,16 +2700,6 @@ export default function App() {
                       >
                         <ClipboardList className="h-4 w-4" />
                         <span>Freight Board</span>
-                      </button>
-
-                      <button
-                        onClick={() => { setActiveTab('delivery-board'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'delivery-board' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                      >
-                        <CalendarIcon className="h-4 w-4 text-blue-600" />
-                        <span>Delivery Board</span>
                       </button>
 
                       {!isNavUser && (
@@ -2995,22 +2969,6 @@ export default function App() {
               branches={branches}
               users={users}
               currentUser={currentUser}
-              manualFullTrucks={manualFullTrucks}
-              onUpdateManualFullTrucks={handleUpdateManualFullTrucks}
-            />
-          )}
-          {activeTab === 'delivery-board' && (
-            <DeliveryBoard
-              deliveries={deliveries}
-              branches={branches}
-              trucks={trucks}
-              users={users}
-              currentUser={currentUser}
-              currentTenant={currentTenant}
-              onUpdateDelivery={handleAddOrUpdateDelivery}
-              onAddDelivery={handleAddOrUpdateDelivery}
-              onUpdateClosureRules={handleUpdateClosureRules}
-              onUpdateStoreConfigs={handleUpdateStoreConfigs}
               manualFullTrucks={manualFullTrucks}
               onUpdateManualFullTrucks={handleUpdateManualFullTrucks}
             />
