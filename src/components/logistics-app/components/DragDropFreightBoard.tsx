@@ -5,7 +5,7 @@ import {
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
   ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
-  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap
+  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store
 } from 'lucide-react';
 import { isTruckAssignedToBranch } from './Dashboard';
 import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/schedulingUtils';
