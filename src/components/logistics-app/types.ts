@@ -114,6 +114,7 @@ export interface Truck {
   type: string;
   driver: string;
   branchId: string; // Associated branch/DC (e.g. WINDMILL_DC or 01075_TANTALLON)
+  imageUrl?: string; // Custom image URL, base64 photo data URI, or preset SVG
   vin?: string;
   userField1?: string;
   userField2?: string;

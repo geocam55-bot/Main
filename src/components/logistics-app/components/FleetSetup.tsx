@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Truck, Branch, User } from '../types';
-import { Truck as TruckIcon, Plus, Trash2, Edit2, Shield, Info, ChevronRight, FileCheck, AlertTriangle, Calendar } from 'lucide-react';
+import { Truck as TruckIcon, Plus, Trash2, Edit2, Shield, Info, ChevronRight, FileCheck, AlertTriangle, Calendar, Upload, Image as ImageIcon, Camera, Check, X, Database } from 'lucide-react';
 import { isTruckAssignedToBranch } from './Dashboard';
+import { TRUCK_IMAGE_PRESETS, getTruckImage } from '../lib/truckImages';
 
 interface FleetSetupProps {
   trucks: Truck[];
@@ -63,6 +64,28 @@ export default function FleetSetup({
   const [nextServiceDueDate, setNextServiceDueDate] = useState('');
   const [insurancePolicyNumber, setInsurancePolicyNumber] = useState('');
   const [insuranceExpiryDate, setInsuranceExpiryDate] = useState('');
+  const [truckImageUrl, setTruckImageUrl] = useState<string>('');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Selected image file size is too large. Please select an image under 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setTruckImageUrl(result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Get trucks assigned to the currently selected branch
   const isAll = selectedBranchId === 'ALL' || !selectedBranchId;
@@ -111,6 +134,7 @@ export default function FleetSetup({
     setNextServiceDueDate('');
     setInsurancePolicyNumber('');
     setInsuranceExpiryDate('');
+    setTruckImageUrl('');
     
     setTargetBranchId(selectedBranchId === 'ALL' ? (branches[0]?.id || '') : (selectedBranchId || branches[0]?.id || ''));
     setIsAdding(true);
@@ -127,6 +151,7 @@ export default function FleetSetup({
     setVin(truck.vin || '');
     setUserField1(truck.userField1 || '');
     setUserField2(truck.userField2 || '');
+    setTruckImageUrl(truck.imageUrl || '');
     
     // Set Commercial details
     setTruckNumber(truck.truckNumber || '');
@@ -168,6 +193,7 @@ export default function FleetSetup({
       vin: vin.trim() || undefined,
       userField1: userField1.trim() || undefined,
       userField2: userField2.trim() || undefined,
+      imageUrl: truckImageUrl.trim() || undefined,
       
       // Commercial Logistics
       truckNumber: truckNumber.trim() || undefined,
@@ -668,6 +694,100 @@ export default function FleetSetup({
                   </div>
                 </div>
 
+                {/* Truck Vehicle Image & Preset Graphic Selector */}
+                <div className="p-3.5 bg-slate-100/70 border border-slate-200 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Truck Image & Vehicle Photo</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium">Select fleet preset graphic, upload photo file, or paste image URL</span>
+                  </div>
+
+                  {/* Live Image Preview & Selector Controls */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                    {/* Preview Box */}
+                    <div className="sm:col-span-4 relative bg-white rounded-lg overflow-hidden border border-slate-300 aspect-[16/9] flex items-center justify-center p-2 group shadow-sm">
+                      <img 
+                        src={truckImageUrl ? truckImageUrl : getTruckImage({ type: truckType, name: truckName })} 
+                        alt="Truck Preview" 
+                        className="w-full h-full object-contain scale-110"
+                      />
+                      {truckImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setTruckImageUrl('')}
+                          className="absolute top-1.5 right-1.5 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors cursor-pointer shadow-md"
+                          title="Clear custom image (reset to auto preset)"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                      <div className="absolute bottom-1 left-1.5 px-1.5 py-0.5 bg-slate-900/80 rounded text-[9px] font-mono text-slate-200 border border-white/10">
+                        {truckImageUrl ? 'Custom Image' : 'Preset Category'}
+                      </div>
+                    </div>
+
+                    {/* Presets & Custom File Upload */}
+                    <div className="sm:col-span-8 space-y-2">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Fleet Category Presets:</label>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {TRUCK_IMAGE_PRESETS.map((preset) => {
+                            const isSelected = truckImageUrl === preset.svgDataUri || (!truckImageUrl && getTruckImage({ type: truckType, name: truckName }) === preset.svgDataUri);
+                            return (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                onClick={() => setTruckImageUrl(preset.svgDataUri)}
+                                className={`p-1 rounded-lg border text-left transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                                  isSelected 
+                                    ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-500/30' 
+                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-100'
+                                }`}
+                                title={preset.description}
+                              >
+                                <div className="w-full aspect-[4/3] bg-white rounded border border-slate-200 overflow-hidden p-0.5 flex items-center justify-center">
+                                  <img src={preset.svgDataUri} alt={preset.name} className="w-full h-full object-contain scale-110" />
+                                </div>
+                                <span className="text-[9px] font-bold text-slate-800 truncate w-full text-center">{preset.name.split(' ')[0]}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <input 
+                          type="file" 
+                          ref={fileInputRef} 
+                          accept="image/*" 
+                          onChange={handleImageFileUpload} 
+                          className="hidden" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Upload Image...</span>
+                        </button>
+
+                        <div className="flex-1">
+                          <input 
+                            type="text" 
+                            placeholder="Or paste image URL (https://...)" 
+                            value={truckImageUrl.startsWith('data:') ? '' : truckImageUrl} 
+                            onChange={(e) => setTruckImageUrl(e.target.value)}
+                            className="w-full border bg-white border-slate-200 px-2.5 py-1.5 rounded text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-[11px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex space-x-2 pt-1.5 border-t border-slate-200/50">
                   <button 
                     type="submit"
@@ -713,9 +833,13 @@ export default function FleetSetup({
                     className="border border-slate-100 rounded-xl p-3.5 bg-white flex items-center justify-between gap-4 shadow-sm hover:border-slate-200/80 transition-all"
                   >
                     <div className="flex items-center space-x-3.5">
-                      {/* Truck Icon Slate */}
-                      <div className="bg-blue-50 text-blue-700 p-2.5 rounded-lg border border-blue-100">
-                        <TruckIcon className="h-5 w-5" />
+                      {/* Truck Image Thumbnail */}
+                      <div className="w-16 h-12 bg-white rounded-lg border border-slate-200 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                        <img 
+                          src={getTruckImage(truck)} 
+                          alt={truck.name} 
+                          className="w-full h-full object-contain scale-110" 
+                        />
                       </div>
 
                       <div>

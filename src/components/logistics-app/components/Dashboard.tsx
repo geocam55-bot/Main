@@ -3,6 +3,7 @@ import GoogleMapContainer from './GoogleMapContainer';
 import { DeliveryRecord, DeliveryStatus, Branch, Truck as TruckType, User as UserType } from '../types';
 import { renderUserAvatarHelper } from './UserProfileModal';
 import { getTruckSpecs } from '../truckSpecs';
+import { getTruckImage } from '../lib/truckImages';
 import { 
   Truck as TruckIcon, 
   CheckCircle2, 
@@ -1861,6 +1862,21 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                       >
                         <X className="h-4 w-4" />
                       </button>
+                    </div>
+
+                    {/* Truck Vehicle Image Display Card */}
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm group">
+                      <div className="aspect-[16/9] w-full bg-white flex items-center justify-center overflow-hidden">
+                        <img 
+                          src={getTruckImage(selectedTruckRow)} 
+                          alt={selectedTruckRow?.name || 'Truck Photo'} 
+                          className="w-full h-full object-contain p-2 scale-110 transition-transform duration-500 group-hover:scale-115"
+                        />
+                      </div>
+                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-slate-900/85 backdrop-blur-md text-[10px] font-bold text-white border border-slate-700 flex items-center gap-1.5 shadow-sm">
+                        <TruckIcon className="w-3 h-3 text-emerald-400" />
+                        <span>{selectedTruckRow?.type || 'Fleet Vehicle'}</span>
+                      </div>
                     </div>
 
                     {/* Accordion list */}

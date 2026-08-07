@@ -5,10 +5,11 @@ import {
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
   ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
-  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store
+  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink
 } from 'lucide-react';
 import { isTruckAssignedToBranch } from './Dashboard';
 import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/schedulingUtils';
+import { getTruckImage } from '../lib/truckImages';
 
 interface DragDropFreightBoardProps {
   deliveries: DeliveryRecord[];
@@ -101,17 +102,78 @@ export function formatBranchDisplayName(branchOrId: string | Branch, branches: B
   return branchOrId.replace(/^01075_/, '').trim() || 'Depot';
 }
 
-// Vector SVG Truck Graphic showing cab, trailer, wheels, and fluid vertical cargo fill
-function TruckGraphic({ fillPct, isFull, truckId }: { fillPct: number; isFull: boolean; truckId: string }) {
+// Truck Display Graphic Component showing fleet vehicle image/preset with live cargo fill level
+function TruckGraphic({ 
+  fillPct, 
+  isFull, 
+  truckId, 
+  truck, 
+  onPreviewImage 
+}: { 
+  fillPct: number; 
+  isFull: boolean; 
+  truckId: string; 
+  truck?: Truck; 
+  onPreviewImage?: (truck: Truck) => void;
+}) {
   const patternId = `hazardPattern_${truckId.replace(/[^a-zA-Z0-9]/g, '_')}`;
-  
-  // Trailer dimensions inside SVG (viewBox="0 0 210 68")
-  const innerX = 54;
+
+  if (truck) {
+    const imageSrc = getTruckImage(truck);
+    return (
+      <div 
+        onClick={() => onPreviewImage?.(truck)}
+        className="relative group rounded-xl overflow-hidden bg-white border border-slate-300 w-full sm:w-52 aspect-[16/9] flex flex-col justify-between p-1 shadow-sm hover:border-blue-500 hover:shadow-md transition-all cursor-pointer select-none"
+        title="Click to view high-res truck vehicle photo & specs"
+      >
+        {/* Truck Photo / Preset Vector SVG */}
+        <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-1 bg-white">
+          <img 
+            src={imageSrc} 
+            alt={truck.name || 'Truck'} 
+            className="w-full h-full object-contain filter drop-shadow-sm scale-110 transition-transform duration-300 group-hover:scale-115"
+          />
+
+          {/* Top Floating Equipment Category Tag */}
+          <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full bg-slate-900/85 backdrop-blur-md border border-slate-700 text-[9px] font-mono font-bold text-slate-100 flex items-center gap-1 shadow-xs">
+            <TruckIcon className="w-2.5 h-2.5 text-emerald-400" />
+            <span className="truncate max-w-[85px]">{truck.type || 'Fleet Vehicle'}</span>
+          </div>
+
+          {/* Hover Overlay Action */}
+          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-[11px] font-bold backdrop-blur-[1px]">
+            <Maximize2 className="w-3.5 h-3.5 text-blue-300" />
+            <span>View Image</span>
+          </div>
+        </div>
+
+        {/* Integrated Bottom Cargo Fill Bar */}
+        <div className="w-full bg-slate-900/90 rounded-md p-1 border border-slate-800 flex items-center gap-1.5 shrink-0">
+          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden relative">
+            <div 
+              className={`h-full transition-all duration-500 rounded-full ${
+                isFull 
+                  ? 'bg-amber-500 bg-[linear-gradient(45deg,rgba(0,0,0,0.15)_25%,transparent_25%,transparent_50%,rgba(0,0,0,0.15)_50%,rgba(0,0,0,0.15)_75%,transparent_75%,transparent)] bg-[length:12px_12px]' 
+                  : fillPct > 80 
+                  ? 'bg-amber-500' 
+                  : fillPct > 0 
+                  ? 'bg-emerald-500' 
+                  : 'bg-blue-500'
+              }`}
+              style={{ width: `${Math.min(100, Math.max(isFull ? 100 : 5, fillPct))}%` }}
+            />
+          </div>
+          <span className={`text-[9px] font-mono font-black shrink-0 ${isFull ? 'text-amber-400' : 'text-slate-300'}`}>
+            {isFull ? '100% FULL' : `${fillPct}%`}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback Vector SVG Truck Graphic
   const innerY = 10;
-  const innerW = 142;
   const innerH = 38;
-  
-  // Calculate vertical fill height from bottom
   const fillH = Math.max(0, Math.round((innerH * fillPct) / 100));
   const fillY = innerY + (innerH - fillH);
 
@@ -119,44 +181,30 @@ function TruckGraphic({ fillPct, isFull, truckId }: { fillPct: number; isFull: b
     <div className="relative w-full max-w-[220px] py-1 select-none">
       <svg viewBox="0 0 210 68" className="w-full h-auto filter drop-shadow-xs overflow-visible">
         <defs>
-          {/* Diagonal Hazard Stripe Pattern for FULL trucks */}
           <pattern id={patternId} width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width="8" height="16" fill="#f59e0b" />
             <rect x="8" width="8" height="16" fill="#b45309" />
           </pattern>
         </defs>
 
-        {/* Truck Front Cab */}
         <rect x="8" y="14" width="38" height="34" rx="6" fill="#334155" stroke="#1e293b" strokeWidth="1.5" />
-        {/* Cab Windshield Window */}
         <rect x="22" y="18" width="18" height="15" rx="3" fill="#38bdf8" />
         <path d="M 22 18 L 34 18 C 37 18, 39 20, 39 23 L 39 31 C 39 33, 37 33, 34 33 L 22 33 Z" fill="#7dd3fc" opacity="0.8" />
 
-        {/* Trailer Container Main Frame */}
         <rect x="52" y="8" width="146" height="42" rx="7" fill="#1e293b" stroke="#475569" strokeWidth="2.5" />
 
-        {/* Trailer Cargo Fill */}
         {isFull ? (
-          /* Full trailer with hazard diagonal warning stripes */
           <rect x="55" y="11" width="140" height="36" rx="5" fill={`url(#${patternId})`} />
         ) : fillPct > 0 ? (
-          /* Partial load vertical fill level in solid amber/gold */
           <rect x="55" y={fillY + 1} width="140" height={Math.max(3, fillH - 2)} rx={fillPct >= 90 ? 5 : 2} fill="#f59e0b" />
         ) : (
-          /* Empty trailer accent cyan line at bottom */
           <rect x="55" y={innerY + innerH - 4} width="140" height="4" rx="2" fill="#06b6d4" />
         )}
 
-        {/* Wheels & Tires */}
-        {/* Front Cab Wheel */}
         <circle cx="26" cy="52" r="8" fill="#0f172a" stroke="#475569" strokeWidth="2.5" />
         <circle cx="26" cy="52" r="3" fill="#cbd5e1" />
-
-        {/* Trailer Front Wheel */}
         <circle cx="82" cy="52" r="8" fill="#0f172a" stroke="#475569" strokeWidth="2.5" />
         <circle cx="82" cy="52" r="3" fill="#cbd5e1" />
-
-        {/* Trailer Rear Wheel */}
         <circle cx="170" cy="52" r="8" fill="#0f172a" stroke="#475569" strokeWidth="2.5" />
         <circle cx="170" cy="52" r="3" fill="#cbd5e1" />
       </svg>
@@ -202,6 +250,9 @@ export default function DragDropFreightBoard({
 
   // Mobile/Click assign modal state
   const [assigningDelivery, setAssigningDelivery] = useState<DeliveryRecord | null>(null);
+
+  // High-res Truck Image & Specs Lightbox Modal state
+  const [previewTruck, setPreviewTruck] = useState<Truck | null>(null);
 
   // Assign & Picker Prompt Modal state
   const [assignPrompt, setAssignPrompt] = useState<{
@@ -534,12 +585,17 @@ export default function DragDropFreightBoard({
       finalSlot = 'AM';
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const finalDate = (selectedDate && selectedDate >= todayStr) 
+      ? selectedDate 
+      : ((delivery.scheduledDate && delivery.scheduledDate.split('T')[0] >= todayStr) ? delivery.scheduledDate : todayStr);
+
     const updated: DeliveryRecord = {
       ...delivery,
       assignedTruck: 'unassigned',
       assignedDriver: '',
       status: DeliveryStatus.REGISTERED,
-      scheduledDate: selectedDate || delivery.scheduledDate || new Date().toISOString().split('T')[0],
+      scheduledDate: finalDate,
       scheduledSlot: finalSlot,
       history: [
         ...(delivery.history || []),
@@ -570,8 +626,14 @@ export default function DragDropFreightBoard({
 
     const newSlot: 'AM' | 'PM' = (currentSlot === 'PM' || currentSlot === 'AFTERNOON') ? 'AM' : 'PM';
     
+    const todayStr = new Date().toISOString().split('T')[0];
+    const finalDate = (selectedDate && selectedDate >= todayStr) 
+      ? selectedDate 
+      : ((delivery.scheduledDate && delivery.scheduledDate.split('T')[0] >= todayStr) ? delivery.scheduledDate : todayStr);
+
     const updated: DeliveryRecord = {
       ...delivery,
+      scheduledDate: finalDate,
       scheduledSlot: newSlot,
       history: [
         ...(delivery.history || []),
@@ -617,7 +679,10 @@ export default function DragDropFreightBoard({
       ? truckBranchObj.name 
       : (formatBranchDisplayName(truck.branchId || '', branches) || delivery.originBranch || 'Windmill DC');
 
-    const finalDate = targetDate || selectedDate || delivery.scheduledDate || new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    let finalDate = targetDate || selectedDate || delivery.scheduledDate || todayStr;
+    if (finalDate < todayStr) finalDate = todayStr;
+
     const updatedDriver = (truck.driver && truck.driver.toLowerCase() !== 'no driver' && truck.driver.toLowerCase() !== 'unassigned') 
       ? truck.driver 
       : (delivery.assignedDriver || 'Unassigned');
@@ -658,7 +723,9 @@ export default function DragDropFreightBoard({
       ? truckBranchObj.name 
       : (formatBranchDisplayName(truck.branchId || '', branches) || delivery.originBranch || 'Windmill DC');
 
-    const defaultDate = selectedDate || delivery.scheduledDate || new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    let defaultDate = selectedDate || delivery.scheduledDate || todayStr;
+    if (defaultDate < todayStr) defaultDate = todayStr;
     
     const currentSlot = (delivery.scheduledSlot as string)?.toUpperCase();
     let defaultSlot: 'AM' | 'PM' = 'AM';
@@ -1560,9 +1627,15 @@ export default function DragDropFreightBoard({
                   {/* Top Graphic + Main Specs Row */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     
-                    {/* SVG Vector Truck Graphic */}
+                    {/* Vehicle Photo / Equipment Graphic Card */}
                     <div className="shrink-0">
-                      <TruckGraphic fillPct={fillPct} isFull={isFull} truckId={truck.id} />
+                      <TruckGraphic 
+                        fillPct={fillPct} 
+                        isFull={isFull} 
+                        truckId={truck.id} 
+                        truck={truck} 
+                        onPreviewImage={(t) => setPreviewTruck(t)} 
+                      />
                     </div>
 
                     {/* Truck Specs & Driver info */}
@@ -1780,53 +1853,113 @@ export default function DragDropFreightBoard({
               </div>
             ) : (
               <>
-                {/* ⭐ AM DELIVERIES GROUP */}
-                {amDeliveries.length > 0 && (
-                  <div className="space-y-2.5">
-                    <div className="flex items-center space-x-1.5 text-[11px] font-black font-mono text-amber-600 uppercase tracking-wider">
-                      <span>★</span>
-                      <span>AM DELIVERIES ({amDeliveries.length})</span>
+                {/* ⭐ AM DELIVERIES GROUP / DROP BOARD */}
+                {(selectedShiftFilter === 'ALL' || selectedShiftFilter === 'AM') && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverUnassignedSlot !== 'AM') setDragOverUnassignedSlot('AM');
+                    }}
+                    onDragLeave={() => setDragOverUnassignedSlot(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const id = e.dataTransfer.getData('text/plain') || draggedDeliveryId;
+                      if (id) handleUnassignDrop(id, 'AM');
+                    }}
+                    className={`space-y-2.5 p-3 rounded-2xl border transition-all duration-200 ${
+                      dragOverUnassignedSlot === 'AM'
+                        ? 'border-amber-500 bg-amber-50/90 ring-2 ring-amber-500/50 shadow-md'
+                        : 'border-slate-200/80 bg-slate-50/50 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5 text-[11px] font-black font-mono text-amber-600 uppercase tracking-wider">
+                        <span>★</span>
+                        <span>AM MORNING FREIGHT BOARD ({amDeliveries.length})</span>
+                      </div>
+                      {dragOverUnassignedSlot === 'AM' && (
+                        <span className="text-[10px] font-mono font-bold text-amber-800 animate-pulse bg-amber-200 px-2 py-0.5 rounded">
+                          DROP TO MOVE TO AM
+                        </span>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {amDeliveries.map((delivery) => (
-                        <UnassignedDeliveryCard
-                          key={delivery.id}
-                          delivery={delivery}
-                          onDragStart={handleDragStart}
-                          onDragEnd={handleDragEnd}
-                          onAssignClick={() => setAssigningDelivery(delivery)}
-                          onToggleShiftSlot={handleToggleShiftSlot}
-                          isBeingDragged={draggedDeliveryId === delivery.id}
-                          isViewOnly={isViewOnly}
-                        />
-                      ))}
-                    </div>
+                    {amDeliveries.length === 0 ? (
+                      <div className="p-4 text-center border-2 border-dashed border-amber-200 rounded-xl bg-amber-50/40 text-amber-800 text-xs font-mono">
+                        Drop freight tickets here to assign to AM Morning Shift
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {amDeliveries.map((delivery) => (
+                          <UnassignedDeliveryCard
+                            key={delivery.id}
+                            delivery={delivery}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                            onAssignClick={() => setAssigningDelivery(delivery)}
+                            onToggleShiftSlot={handleToggleShiftSlot}
+                            isBeingDragged={draggedDeliveryId === delivery.id}
+                            isViewOnly={isViewOnly}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* 🌙 PM DELIVERIES GROUP */}
-                {pmDeliveries.length > 0 && (
-                  <div className="space-y-2.5 pt-2">
-                    <div className="flex items-center space-x-1.5 text-[11px] font-black font-mono text-blue-600 uppercase tracking-wider">
-                      <span>☪</span>
-                      <span>PM DELIVERIES ({pmDeliveries.length})</span>
+                {/* 🌙 PM DELIVERIES GROUP / DROP BOARD */}
+                {(selectedShiftFilter === 'ALL' || selectedShiftFilter === 'PM') && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverUnassignedSlot !== 'PM') setDragOverUnassignedSlot('PM');
+                    }}
+                    onDragLeave={() => setDragOverUnassignedSlot(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const id = e.dataTransfer.getData('text/plain') || draggedDeliveryId;
+                      if (id) handleUnassignDrop(id, 'PM');
+                    }}
+                    className={`space-y-2.5 p-3 rounded-2xl border transition-all duration-200 ${
+                      dragOverUnassignedSlot === 'PM'
+                        ? 'border-blue-500 bg-blue-50/90 ring-2 ring-blue-500/50 shadow-md'
+                        : 'border-slate-200/80 bg-slate-50/50 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5 text-[11px] font-black font-mono text-blue-600 uppercase tracking-wider">
+                        <span>☪</span>
+                        <span>PM AFTERNOON FREIGHT BOARD ({pmDeliveries.length})</span>
+                      </div>
+                      {dragOverUnassignedSlot === 'PM' && (
+                        <span className="text-[10px] font-mono font-bold text-blue-800 animate-pulse bg-blue-200 px-2 py-0.5 rounded">
+                          DROP TO MOVE TO PM
+                        </span>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {pmDeliveries.map((delivery) => (
-                        <UnassignedDeliveryCard
-                          key={delivery.id}
-                          delivery={delivery}
-                          onDragStart={handleDragStart}
-                          onDragEnd={handleDragEnd}
-                          onAssignClick={() => setAssigningDelivery(delivery)}
-                          onToggleShiftSlot={handleToggleShiftSlot}
-                          isBeingDragged={draggedDeliveryId === delivery.id}
-                          isViewOnly={isViewOnly}
-                        />
-                      ))}
-                    </div>
+                    {pmDeliveries.length === 0 ? (
+                      <div className="p-4 text-center border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/40 text-blue-800 text-xs font-mono">
+                        Drop freight tickets here to assign to PM Afternoon Shift
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {pmDeliveries.map((delivery) => (
+                          <UnassignedDeliveryCard
+                            key={delivery.id}
+                            delivery={delivery}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                            onAssignClick={() => setAssigningDelivery(delivery)}
+                            onToggleShiftSlot={handleToggleShiftSlot}
+                            isBeingDragged={draggedDeliveryId === delivery.id}
+                            isViewOnly={isViewOnly}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -2092,6 +2225,121 @@ export default function DragDropFreightBoard({
                 <span>Confirm & Dispatch Freight</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* High-res Truck Vehicle Image & Specs Lightbox Modal */}
+      {previewTruck && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl text-slate-100 flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl">
+                  <TruckIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-mono font-black text-base text-white flex items-center gap-2">
+                    <span>{previewTruck.name}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-normal border border-slate-700">
+                      {previewTruck.type || 'Fleet Transport'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Depot: {formatBranchDisplayName(previewTruck.branchId)} {previewTruck.vin ? `· VIN: ${previewTruck.vin}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreviewTruck(null)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {/* Large Vehicle Graphic / Photo Frame */}
+              <div className="bg-white border border-slate-300 rounded-xl p-4 flex items-center justify-center aspect-[16/9] relative overflow-hidden shadow-sm group">
+                <img 
+                  src={getTruckImage(previewTruck)} 
+                  alt={previewTruck.name} 
+                  className="w-full h-full object-contain filter drop-shadow-md scale-110" 
+                />
+                <div className="absolute top-2 right-2 px-2 py-1 rounded bg-slate-900/90 border border-slate-700 text-[10px] font-mono text-slate-300">
+                  {previewTruck.imageUrl ? 'Custom Fleet Photo' : 'Equipment Category Spec'}
+                </div>
+              </div>
+
+              {/* Truck Specs Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
+                  <span className="text-[10px] text-slate-400 uppercase block font-semibold">Assigned Driver</span>
+                  <span className="font-bold text-white text-sm truncate block mt-0.5">
+                    {previewTruck.driver || 'Unassigned'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
+                  <span className="text-[10px] text-slate-400 uppercase block font-semibold">Max Weight Cap</span>
+                  <span className="font-bold text-amber-400 text-sm block mt-0.5">
+                    {getTruckMaxCapacityLbs(previewTruck).toLocaleString()} lbs
+                  </span>
+                </div>
+
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
+                  <span className="text-[10px] text-slate-400 uppercase block font-semibold">Cargo Volume</span>
+                  <span className="font-bold text-blue-400 text-sm block mt-0.5">
+                    {previewTruck.capacityVolumeM3 || 'Standard'} {previewTruck.capacityVolumeM3 ? 'm³' : ''}
+                  </span>
+                </div>
+
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3">
+                  <span className="text-[10px] text-slate-400 uppercase block font-semibold">Commercial Plate</span>
+                  <span className="font-bold text-emerald-400 text-sm block mt-0.5">
+                    {previewTruck.licensePlate || previewTruck.truckNumber || 'PRO-FLEET'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Vehicle User Fields & Notes if available */}
+              {(previewTruck.userField1 || previewTruck.userField2) && (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5 text-xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Equipment Custom Specifications</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-300 font-mono text-[11px]">
+                    {previewTruck.userField1 && (
+                      <div className="bg-slate-900 px-2.5 py-1.5 rounded border border-slate-800">
+                        <span className="text-slate-500 mr-1.5">Spec 1:</span>
+                        <span className="font-semibold text-slate-200">{previewTruck.userField1}</span>
+                      </div>
+                    )}
+                    {previewTruck.userField2 && (
+                      <div className="bg-slate-900 px-2.5 py-1.5 rounded border border-slate-800">
+                        <span className="text-slate-500 mr-1.5">Spec 2:</span>
+                        <span className="font-semibold text-slate-200">{previewTruck.userField2}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewTruck(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold font-mono transition-colors cursor-pointer"
+              >
+                Close Vehicle Preview
+              </button>
+            </div>
+
           </div>
         </div>
       )}

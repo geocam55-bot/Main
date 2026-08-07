@@ -139,11 +139,15 @@ export function serializeToType(
   gpsLat?: number,
   gpsLng?: number,
   gpsSpeed?: number,
-  gpsIdlingMins?: number
+  gpsIdlingMins?: number,
+  imageUrl?: string
 ): string {
   // Strip out any existing ||tag:value metadata from type to prevent duplicate tag accumulation
   const baseType = (type || "").split("||")[0].trim() || "Commercial Truck";
   let res = baseType;
+  if (imageUrl) {
+    res += ` ||imageUrl:${encodeURIComponent(imageUrl)}`;
+  }
   if (registrationDueDate) {
     res += ` ||regdue:${registrationDueDate}`;
   }
@@ -196,6 +200,7 @@ export function deserializeType(truck: any): any {
 
   // Check direct DB columns / object properties first
   let registrationDueDate = truck.registrationDueDate || truck.registration_due_date || "";
+  let imageUrl: string | undefined = truck.imageUrl || truck.image_url || truck.image || undefined;
   let lat: number | undefined = truck.lat !== undefined ? truck.lat : undefined;
   let lng: number | undefined = truck.lng !== undefined ? truck.lng : undefined;
   let gpsSource: 'mobile' | 'truck' | undefined = truck.gpsSource || truck.gps_source || undefined;
@@ -229,6 +234,9 @@ export function deserializeType(truck: any): any {
 
   const regdue = getLastMatch(/\|\|regdue:([^|]+)/g);
   if (regdue) registrationDueDate = regdue;
+
+  const imgMatch = getLastMatch(/\|\|imageUrl:([^|]+)/g);
+  if (imgMatch) imageUrl = safeDecode(imgMatch);
 
   const latStr = getLastMatch(/\|\|lat:([^|]+)/g);
   if (latStr && !isNaN(parseFloat(latStr))) lat = parseFloat(latStr);
@@ -292,6 +300,7 @@ export function deserializeType(truck: any): any {
   return {
     ...truck,
     type: cleanType,
+    imageUrl: imageUrl || truck.image_url || truck.imageUrl,
     registrationDueDate,
     ...(lat !== undefined && !isNaN(lat) ? { lat } : {}),
     ...(lng !== undefined && !isNaN(lng) ? { lng } : {}),
@@ -588,8 +597,8 @@ export async function fetchTenantStateDirect(tenantId: string) {
     const documentType = d.documentType || meta.documentType;
     const weight = d.weight || meta.weight;
     const orderTotal = d.orderTotal || meta.orderTotal;
-    const scheduledDate = d.scheduledDate || d.scheduled_date || meta.scheduledDate;
-    const scheduledSlot = d.scheduledSlot || d.scheduled_slot || meta.scheduledSlot;
+    const scheduledDate = d.scheduledDate || meta.scheduledDate || d.scheduled_date;
+    const scheduledSlot = d.scheduledSlot || meta.scheduledSlot || d.scheduled_slot;
     const deliveryCategory = d.deliveryCategory || d.delivery_category || meta.deliveryCategory;
     const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
 
@@ -722,10 +731,12 @@ export async function saveTenantStateDirect(
       t.gpsLat,
       t.gpsLng,
       t.gpsSpeed,
-      t.gpsIdlingMins
+      t.gpsIdlingMins,
+      t.imageUrl
     ),
     driver: t.driver,
-    branchId: t.branchId
+    branchId: t.branchId,
+    image_url: t.imageUrl || null
   }));
 
   const mappedBranches = uniqueBranches.map(b => {
@@ -789,7 +800,7 @@ export async function saveTenantStateDirect(
       orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
       customer: String(d.customerName || d.customer || "N/A"),
       destination: String(d.deliveryAddress || d.destination || "N/A"),
-      scheduled_date: String(d.registeredAt || d.date || new Date().toISOString()),
+      scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
       assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
       assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
       status: String(d.status || "REGISTERED"),

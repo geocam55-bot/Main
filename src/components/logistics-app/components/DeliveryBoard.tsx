@@ -40,6 +40,7 @@ import {
   ClosureType 
 } from '../types';
 import { isTruckAssignedToBranch } from './Dashboard';
+import { getTruckImage } from '../lib/truckImages';
 
 // Helper to calculate truck max capacity in lbs
 function getTruckMaxCapacityLbs(truck: Truck): number {
@@ -88,9 +89,64 @@ function parseWeightLbs(weightStr?: string | number): number {
   return isNaN(num) || num <= 0 ? 850 : Math.round(num);
 }
 
-// Vector SVG Truck Graphic showing cab, trailer, wheels, and cargo fill level
-function TruckGraphic({ fillPct, isFull, truckId }: { fillPct: number; isFull: boolean; truckId: string }) {
+// Truck Display Graphic Component showing fleet vehicle image/preset with live cargo fill level
+function TruckGraphic({ 
+  fillPct, 
+  isFull, 
+  truckId, 
+  truck 
+}: { 
+  fillPct: number; 
+  isFull: boolean; 
+  truckId: string; 
+  truck?: Truck; 
+}) {
   const patternId = `hazardPattern_db_${truckId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+  if (truck) {
+    const imageSrc = getTruckImage(truck);
+    return (
+      <div className="relative group rounded-xl overflow-hidden bg-white border border-slate-300 w-full sm:w-48 aspect-[16/9] flex flex-col justify-between p-1 shadow-sm transition-all select-none">
+        {/* Truck Photo / Preset Vector SVG */}
+        <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-1 bg-white">
+          <img 
+            src={imageSrc} 
+            alt={truck.name || 'Truck'} 
+            className="w-full h-full object-contain filter drop-shadow-sm scale-110"
+          />
+
+          {/* Top Floating Equipment Category Tag */}
+          <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full bg-slate-900/85 backdrop-blur-md border border-slate-700 text-[9px] font-mono font-bold text-slate-100 flex items-center gap-1 shadow-xs">
+            <TruckIcon className="w-2.5 h-2.5 text-emerald-400" />
+            <span className="truncate max-w-[80px]">{truck.type || 'Carrier'}</span>
+          </div>
+        </div>
+
+        {/* Integrated Bottom Cargo Fill Bar */}
+        <div className="w-full bg-slate-900/90 rounded-md p-1 border border-slate-800 flex items-center gap-1.5 shrink-0">
+          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden relative">
+            <div 
+              className={`h-full transition-all duration-500 rounded-full ${
+                isFull 
+                  ? 'bg-amber-500 bg-[linear-gradient(45deg,rgba(0,0,0,0.15)_25%,transparent_25%,transparent_50%,rgba(0,0,0,0.15)_50%,rgba(0,0,0,0.15)_75%,transparent_75%,transparent)] bg-[length:12px_12px]' 
+                  : fillPct > 80 
+                  ? 'bg-amber-500' 
+                  : fillPct > 0 
+                  ? 'bg-emerald-500' 
+                  : 'bg-blue-500'
+              }`}
+              style={{ width: `${Math.min(100, Math.max(isFull ? 100 : 5, fillPct))}%` }}
+            />
+          </div>
+          <span className={`text-[9px] font-mono font-black shrink-0 ${isFull ? 'text-amber-400' : 'text-slate-300'}`}>
+            {isFull ? '100%' : `${fillPct}%`}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback Vector SVG Graphic
   const innerY = 10;
   const innerH = 38;
   const fillH = Math.max(0, Math.round((innerH * fillPct) / 100));
@@ -106,15 +162,12 @@ function TruckGraphic({ fillPct, isFull, truckId }: { fillPct: number; isFull: b
           </pattern>
         </defs>
 
-        {/* Truck Front Cab */}
         <rect x="8" y="14" width="38" height="34" rx="6" fill="#334155" stroke="#1e293b" strokeWidth="1.5" />
         <rect x="22" y="18" width="18" height="15" rx="3" fill="#38bdf8" />
         <path d="M 22 18 L 34 18 C 37 18, 39 20, 39 23 L 39 31 C 39 33, 37 33, 34 33 L 22 33 Z" fill="#7dd3fc" opacity="0.8" />
 
-        {/* Trailer Container Frame */}
         <rect x="52" y="8" width="146" height="42" rx="7" fill="#1e293b" stroke="#475569" strokeWidth="2.5" />
 
-        {/* Trailer Cargo Fill */}
         {isFull ? (
           <rect x="55" y="11" width="140" height="36" rx="5" fill={`url(#${patternId})`} />
         ) : fillPct > 0 ? (
@@ -123,7 +176,6 @@ function TruckGraphic({ fillPct, isFull, truckId }: { fillPct: number; isFull: b
           <rect x="55" y={innerY + innerH - 4} width="140" height="4" rx="2" fill="#06b6d4" />
         )}
 
-        {/* Wheels & Tires */}
         <circle cx="26" cy="52" r="8" fill="#0f172a" stroke="#475569" strokeWidth="2.5" />
         <circle cx="26" cy="52" r="3" fill="#cbd5e1" />
         <circle cx="82" cy="52" r="8" fill="#0f172a" stroke="#475569" strokeWidth="2.5" />
@@ -1258,9 +1310,9 @@ export function DeliveryBoard({
                                 }`}
                               >
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                  {/* SVG Truck Graphic */}
+                                  {/* Truck Image Graphic Card */}
                                   <div className="shrink-0">
-                                    <TruckGraphic fillPct={fillPct} isFull={isFull} truckId={`AM_${truck.id}`} />
+                                    <TruckGraphic fillPct={fillPct} isFull={isFull} truckId={`AM_${truck.id}`} truck={truck} />
                                   </div>
 
                                   {/* Truck info & driver */}
@@ -1517,9 +1569,9 @@ export function DeliveryBoard({
                                 }`}
                               >
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                  {/* SVG Truck Graphic */}
+                                  {/* Truck Image Graphic Card */}
                                   <div className="shrink-0">
-                                    <TruckGraphic fillPct={fillPct} isFull={isFull} truckId={`PM_${truck.id}`} />
+                                    <TruckGraphic fillPct={fillPct} isFull={isFull} truckId={`PM_${truck.id}`} truck={truck} />
                                   </div>
 
                                   {/* Truck info & driver */}

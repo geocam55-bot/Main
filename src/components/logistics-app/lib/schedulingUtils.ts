@@ -95,14 +95,24 @@ export function findNextAvailableSlot(
         d.status !== DeliveryStatus.RETURNED
       ).length;
 
-      // First check AM slot
-      if (!isAmClosed && amCount < amMax) {
-        return { date: candidateDateStr, slot: 'AM' };
-      }
+      // Determine preferred slot based on delivery's current scheduledSlot (if set to PM, prefer PM)
+      const currentSlot = (delivery.scheduledSlot || (delivery as any).scheduled_slot || (delivery as any).shift || '').toString().toUpperCase();
+      const preferPm = currentSlot === 'PM' || currentSlot.includes('AFTERNOON');
 
-      // Then check PM slot
-      if (!isPmClosed && pmCount < pmMax) {
-        return { date: candidateDateStr, slot: 'PM' };
+      if (preferPm) {
+        if (!isPmClosed && pmCount < pmMax) {
+          return { date: candidateDateStr, slot: 'PM' };
+        }
+        if (!isAmClosed && amCount < amMax) {
+          return { date: candidateDateStr, slot: 'AM' };
+        }
+      } else {
+        if (!isAmClosed && amCount < amMax) {
+          return { date: candidateDateStr, slot: 'AM' };
+        }
+        if (!isPmClosed && pmCount < pmMax) {
+          return { date: candidateDateStr, slot: 'PM' };
+        }
       }
     }
 

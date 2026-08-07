@@ -1076,6 +1076,7 @@ ALTER TABLE trucks ADD COLUMN IF NOT EXISTS maintenance_status varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS safety_inspection_status varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS user_field_1 varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS user_field_2 varchar;
+ALTER TABLE trucks ADD COLUMN IF NOT EXISTS image_url text;
 
 -- Upgrade Users
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_number varchar;
@@ -2525,8 +2526,8 @@ app.use((req, res, next) => {
           const documentType = d.documentType || meta.documentType;
           const weight = d.weight || meta.weight;
           const orderTotal = d.orderTotal || meta.orderTotal;
-          const scheduledDate = d.scheduledDate || d.scheduled_date || meta.scheduledDate;
-          const scheduledSlot = d.scheduledSlot || d.scheduled_slot || meta.scheduledSlot;
+          const scheduledDate = d.scheduledDate || meta.scheduledDate || d.scheduled_date;
+          const scheduledSlot = d.scheduledSlot || meta.scheduledSlot || d.scheduled_slot;
           const deliveryCategory = d.deliveryCategory || d.delivery_category || meta.deliveryCategory;
           const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
 
@@ -2832,7 +2833,7 @@ app.use((req, res, next) => {
           orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
           customer: String(d.customerName || d.customer || "N/A"),
           destination: String(d.deliveryAddress || d.destination || "N/A"),
-          scheduled_date: String(d.registeredAt || d.date || new Date().toISOString()),
+          scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
           assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
           assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
           status: String(d.status || "REGISTERED"),

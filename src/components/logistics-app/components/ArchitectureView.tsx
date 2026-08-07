@@ -94,6 +94,7 @@ create table if not exists trucks (
   driver text not null,
   "branchId" text not null,
   "registrationDueDate" text,
+  image_url text,
   
   -- Expanded commercial fleet tracking & specs
   truck_number varchar,
