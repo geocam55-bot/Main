@@ -41,6 +41,7 @@ import {
 } from '../types';
 import { isTruckAssignedToBranch } from './Dashboard';
 import { getTruckImage } from '../lib/truckImages';
+import { getTruckGpsInfo } from './DragDropFreightBoard';
 
 // Helper to calculate truck max capacity in lbs
 function getTruckMaxCapacityLbs(truck: Truck): number {
@@ -1286,6 +1287,7 @@ export function DeliveryBoard({
 
                             const branchObj = branches.find(b => b.id === truck.branchId);
                             const depotName = branchObj ? (branchObj.name || branchObj.id) : (truck.branchId || 'Windmill DC');
+                            const gpsInfo = getTruckGpsInfo(truck, branches);
 
                             return (
                               <div
@@ -1317,29 +1319,50 @@ export function DeliveryBoard({
 
                                   {/* Truck info & driver */}
                                   <div className="flex-1 min-w-0 space-y-1">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center space-x-2 truncate">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center space-x-2 truncate min-w-0">
                                         <span className="font-mono font-black text-sm text-slate-900 truncate">
                                           {truck.name}
                                         </span>
-                                        <span className="text-slate-400 font-mono">•</span>
-                                        <span className="text-xs font-semibold text-slate-500 truncate">
+                                        <span className="text-slate-400 font-mono hidden sm:inline">•</span>
+                                        <span className="text-xs font-semibold text-slate-500 truncate hidden sm:inline">
                                           {truck.type || truck.model || 'Commercial Carrier'}
                                         </span>
                                       </div>
 
-                                      {/* Status Badge */}
-                                      {isFull ? (
-                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black font-mono bg-amber-500 text-slate-950 uppercase shadow-2xs flex items-center space-x-1 shrink-0">
-                                          <Lock className="h-3 w-3" />
-                                          <span>FULL</span>
-                                        </span>
-                                      ) : (
-                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-100 text-slate-700 border border-slate-200 uppercase flex items-center space-x-1 shrink-0">
-                                          <Unlock className="h-3 w-3 text-emerald-600" />
-                                          <span>OPEN</span>
-                                        </span>
-                                      )}
+                                      {/* Top Right Controls: Live GPS Badge + Status Badge */}
+                                      <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+                                        {/* Live GPS Location Badge */}
+                                        <div 
+                                          className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-900 text-slate-100 rounded-lg border border-slate-700 shadow-2xs font-mono text-[10px]"
+                                          title={`GPS Live Position: ${gpsInfo.locationName} (${gpsInfo.coordinatesText})`}
+                                        >
+                                          <span className="relative flex h-2 w-2 shrink-0">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                          </span>
+                                          <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                                          <span className="font-bold text-white max-w-[120px] sm:max-w-[170px] truncate">
+                                            {gpsInfo.locationName}
+                                          </span>
+                                          <span className="text-slate-400 font-mono text-[9px] border-l border-slate-700 pl-1.5 hidden xl:inline">
+                                            {gpsInfo.coordinatesText}
+                                          </span>
+                                        </div>
+
+                                        {/* Status Badge */}
+                                        {isFull ? (
+                                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-black font-mono bg-amber-500 text-slate-950 uppercase shadow-2xs flex items-center space-x-1 shrink-0">
+                                            <Lock className="h-3 w-3" />
+                                            <span>FULL</span>
+                                          </span>
+                                        ) : (
+                                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono bg-slate-100 text-slate-700 border border-slate-200 uppercase flex items-center space-x-1 shrink-0">
+                                            <Unlock className="h-3 w-3 text-emerald-600" />
+                                            <span>OPEN</span>
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
 
                                     <p className="text-xs text-slate-600 truncate">
@@ -1545,6 +1568,7 @@ export function DeliveryBoard({
 
                             const branchObj = branches.find(b => b.id === truck.branchId);
                             const depotName = branchObj ? (branchObj.name || branchObj.id) : (truck.branchId || 'Windmill DC');
+                            const gpsInfo = getTruckGpsInfo(truck, branches);
 
                             return (
                               <div
@@ -1576,29 +1600,50 @@ export function DeliveryBoard({
 
                                   {/* Truck info & driver */}
                                   <div className="flex-1 min-w-0 space-y-1">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center space-x-2 truncate">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center space-x-2 truncate min-w-0">
                                         <span className="font-mono font-black text-sm text-slate-900 truncate">
                                           {truck.name}
                                         </span>
-                                        <span className="text-slate-400 font-mono">•</span>
-                                        <span className="text-xs font-semibold text-slate-500 truncate">
+                                        <span className="text-slate-400 font-mono hidden sm:inline">•</span>
+                                        <span className="text-xs font-semibold text-slate-500 truncate hidden sm:inline">
                                           {truck.type || truck.model || 'Commercial Carrier'}
                                         </span>
                                       </div>
 
-                                      {/* Status Badge */}
-                                      {isFull ? (
-                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black font-mono bg-amber-500 text-slate-950 uppercase shadow-2xs flex items-center space-x-1 shrink-0">
-                                          <Lock className="h-3 w-3" />
-                                          <span>FULL</span>
-                                        </span>
-                                      ) : (
-                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-100 text-slate-700 border border-slate-200 uppercase flex items-center space-x-1 shrink-0">
-                                          <Unlock className="h-3 w-3 text-emerald-600" />
-                                          <span>OPEN</span>
-                                        </span>
-                                      )}
+                                      {/* Top Right Controls: Live GPS Badge + Status Badge */}
+                                      <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+                                        {/* Live GPS Location Badge */}
+                                        <div 
+                                          className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-900 text-slate-100 rounded-lg border border-slate-700 shadow-2xs font-mono text-[10px]"
+                                          title={`GPS Live Position: ${gpsInfo.locationName} (${gpsInfo.coordinatesText})`}
+                                        >
+                                          <span className="relative flex h-2 w-2 shrink-0">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                          </span>
+                                          <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                                          <span className="font-bold text-white max-w-[120px] sm:max-w-[170px] truncate">
+                                            {gpsInfo.locationName}
+                                          </span>
+                                          <span className="text-slate-400 font-mono text-[9px] border-l border-slate-700 pl-1.5 hidden xl:inline">
+                                            {gpsInfo.coordinatesText}
+                                          </span>
+                                        </div>
+
+                                        {/* Status Badge */}
+                                        {isFull ? (
+                                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-black font-mono bg-amber-500 text-slate-950 uppercase shadow-2xs flex items-center space-x-1 shrink-0">
+                                            <Lock className="h-3 w-3" />
+                                            <span>FULL</span>
+                                          </span>
+                                        ) : (
+                                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono bg-slate-100 text-slate-700 border border-slate-200 uppercase flex items-center space-x-1 shrink-0">
+                                            <Unlock className="h-3 w-3 text-emerald-600" />
+                                            <span>OPEN</span>
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
 
                                     <p className="text-xs text-slate-600 truncate">

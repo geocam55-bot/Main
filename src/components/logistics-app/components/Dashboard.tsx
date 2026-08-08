@@ -229,6 +229,14 @@ export const sanitizeGpsCoordinates = (lat: number, lng: number): { lat: number;
 
 export const getTruckCoords = (truck: any, simProgress: Record<string, number>, branches: any[]) => {
   const isTruckGps = truck?.gpsSource === 'truck';
+  const idOrName = ((truck?.id || '') + ' ' + (truck?.name || '') + ' ' + (truck?.homeDepot || '')).toLowerCase();
+  const is2401Almon = idOrName.includes('2401') || idOrName.includes('almon');
+  const is1903 = idOrName.includes('1903');
+  const is2101Windmill = idOrName.includes('2101') || idOrName.includes('windmill');
+  const isElmsdale = !is2401Almon && !is2101Windmill && (is1903 || idOrName.includes('elmsdale') || idOrName.includes('03485'));
+  const isChainMtn = idOrName.includes('chain') || idOrName.includes('mountain') || idOrName.includes('2412') || idOrName.includes('2408') || idOrName.includes('2404');
+  const isPei = idOrName.includes('pei') || idOrName.includes('charlottetown') || idOrName.includes('01075');
+
   const hasRealGps = isTruckGps 
     ? (truck?.gpsLat !== undefined && truck?.gpsLng !== undefined && !isNaN(truck.gpsLat) && !isNaN(truck.gpsLng))
     : (truck?.lat !== undefined && truck?.lng !== undefined && !isNaN(truck.lat) && !isNaN(truck.lng));
@@ -240,11 +248,28 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
     ? (isTruckGps ? truck.gpsLng : truck.lng) 
     : -63.58250;
 
-  const homeBranch = branches.find(b => isTruckAssignedToBranch(truck, b));
-  if (!hasRealGps && homeBranch) {
-    const branchCoords = getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address);
-    baseLat = branchCoords.lat;
-    baseLng = branchCoords.lng;
+  if (is2401Almon && (!hasRealGps || baseLat === 44.9792 || baseLat === 44.6536)) {
+    baseLat = 44.68550;
+    baseLng = -63.58250;
+  } else if ((is1903 || isElmsdale) && (!hasRealGps || baseLat === 44.6855 || baseLat === 44.6536)) {
+    baseLat = 44.979223;
+    baseLng = -63.504250;
+  } else if (is2101Windmill && (!hasRealGps || baseLat === 44.9792)) {
+    baseLat = 44.68550;
+    baseLng = -63.58250;
+  } else if (isChainMtn && (!hasRealGps || baseLat === 44.9792 || baseLat === 44.6855)) {
+    baseLat = 44.6295;
+    baseLng = -63.6651;
+  } else if (isPei && (!hasRealGps || baseLat < 45.5)) {
+    baseLat = 46.2382;
+    baseLng = -63.1311;
+  } else if (!hasRealGps) {
+    const homeBranch = branches.find(b => isTruckAssignedToBranch(truck, b));
+    if (homeBranch) {
+      const branchCoords = getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address);
+      baseLat = branchCoords.lat;
+      baseLng = branchCoords.lng;
+    }
   }
 
   // Ensure base coordinates stay on land
@@ -1800,7 +1825,8 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 
                 const truckIdStr = selectedTruckRow?.id || '2401';
                 const idHash = truckIdStr.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-                const branchName = activeBranches.find(b => b.id === selectedTruckRow?.branchId)?.name || 'ProSpaces Elmsdale';
+                const homeBranchObj = activeBranches.find(b => isTruckAssignedToBranch(selectedTruckRow, b));
+                const branchName = homeBranchObj?.name || selectedTruckRow?.homeDepot || 'RONA Almon #03490';
 
                 const spec = getTruckSpecs(selectedTruckRow?.id || selectedTruckRow?.name);
                 const trAny = selectedTruckRow as any;
@@ -2169,8 +2195,9 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 );
                 
                 const idHash = (selectedTruckRow?.id || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-                const oBranch = activeBranches.find(b => b.id === selectedTruckRow?.branchId) || activeBranches[0];
-                const branchAddrStr = oBranch ? oBranch.address : '500 Windmill Rd, Dartmouth, NS B3B 1B3, Canada';
+                const oBranch = activeBranches.find(b => isTruckAssignedToBranch(selectedTruckRow, b)) || activeBranches[0];
+                const is2401Almon = (selectedTruckRow?.id || '' + selectedTruckRow?.name || '').toLowerCase().includes('2401') || (selectedTruckRow?.id || '' + selectedTruckRow?.name || '').toLowerCase().includes('almon');
+                const branchAddrStr = oBranch ? oBranch.address : (is2401Almon ? '3300 Almon St, Halifax, NS B3K 1T8, Canada' : '500 Windmill Rd, Dartmouth, NS B3B 1B3, Canada');
 
                 const completedDels = truckDeliveries.filter(d => d.status === DeliveryStatus.DELIVERED);
                 const activeDels = truckDeliveries.filter(d => d.status === DeliveryStatus.PICKED_AND_LOADED || d.status === DeliveryStatus.REGISTERED);
@@ -2187,8 +2214,8 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                       type: 'Business',
                       startTime: '06:44 AM',
                       endTime: '07:18 AM',
-                      startAddress: '500 Windmill Road, Dartmouth, NS, B3B 1B3, Canada',
-                      endAddress: 'Rona Elmsdale, NS, Canada',
+                      startAddress: branchAddrStr,
+                      endAddress: is2401Almon ? '3300 Almon St, Halifax, NS, B3K 1T8, Canada' : (isTruck1903 ? 'Rona Elmsdale, NS, Canada' : '500 Windmill Road, Dartmouth, NS, B3B 1B3, Canada'),
                       driverName: activeDriver,
                       distanceKm: 42.14,
                       durationMins: 34,
@@ -2207,7 +2234,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                       type: 'Business',
                       startTime: '07:42 AM',
                       endTime: '08:11 AM',
-                      startAddress: 'Rona Elmsdale, NS, Canada',
+                      startAddress: is2401Almon ? '3300 Almon St, Halifax, NS, B3K 1T8, Canada' : (isTruck1903 ? 'Rona Elmsdale, NS, Canada' : '500 Windmill Road, Dartmouth, NS, B3B 1B3, Canada'),
                       endAddress: '2148 Indian Rd, East Hants, NS, B0N 2H0, Canada',
                       driverName: activeDriver,
                       distanceKm: 21.56,

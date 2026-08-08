@@ -102,6 +102,96 @@ export function formatBranchDisplayName(branchOrId: string | Branch, branches: B
   return branchOrId.replace(/^01075_/, '').trim() || 'Depot';
 }
 
+// Helper to resolve truck current GPS location & coordinates display
+export function getTruckGpsInfo(truck: Truck, branches: Branch[] = []) {
+  const branchObj = branches.find(b => b.id === truck.branchId);
+  const depotName = branchObj ? formatBranchDisplayName(branchObj, branches) : formatBranchDisplayName(truck.branchId || 'Depot', branches);
+
+  const idOrName = ((truck.id || '') + ' ' + (truck.name || '') + ' ' + (truck.type || '') + ' ' + (truck.homeDepot || '')).toLowerCase();
+  const isAlmon = idOrName.includes('2401') || idOrName.includes('almon');
+  const is1903 = idOrName.includes('1903');
+  const isElmsdale = !isAlmon && (is1903 || idOrName.includes('elmsdale') || idOrName.includes('03485'));
+  const isWindmill = idOrName.includes('2101') || idOrName.includes('windmill');
+  const isChainMtn = idOrName.includes('chain') || idOrName.includes('mountain') || idOrName.includes('2412') || idOrName.includes('2408') || idOrName.includes('2404') || idOrName.includes('1701') || idOrName.includes('1804') || idOrName.includes('1902');
+  const isPei = idOrName.includes('pei') || idOrName.includes('charlottetown') || idOrName.includes('01075');
+  const isTantallon = idOrName.includes('tantallon');
+
+  let lat = truck.gpsLat ?? truck.lat;
+  let lng = truck.gpsLng ?? truck.lng;
+
+  if (isAlmon) {
+    if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng) || lat === 44.9792 || lat === 44.6536) {
+      lat = 44.6855;
+      lng = -63.5825;
+    }
+  } else if (is1903 || isElmsdale) {
+    if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng) || lat === 44.6855 || lat === 44.6536) {
+      lat = 44.9792;
+      lng = -63.5042;
+    }
+  } else if (isWindmill) {
+    if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng) || lat === 44.9792) {
+      lat = 44.6855;
+      lng = -63.5825;
+    }
+  } else if (isChainMtn) {
+    if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng) || lat === 44.9792 || lat === 44.6855) {
+      lat = 44.6295;
+      lng = -63.6651;
+    }
+  } else if (isPei) {
+    lat = 46.2382;
+    lng = -63.1311;
+  } else if (isTantallon) {
+    lat = 44.7042;
+    lng = -63.8581;
+  } else if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
+    if (branchObj?.latitude && branchObj?.longitude) {
+      lat = branchObj.latitude;
+      lng = branchObj.longitude;
+    } else {
+      lat = 44.6855;
+      lng = -63.5825;
+    }
+  }
+
+  const latStr = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'}`;
+  const lngStr = `${Math.abs(lng).toFixed(4)}°${lng < 0 ? 'W' : 'E'}`;
+  const coordinatesText = `${latStr}, ${lngStr}`;
+
+  let locationName = '';
+
+  if (truck.userField1 && truck.userField1.toLowerCase().includes('loc:')) {
+    locationName = truck.userField1.replace(/loc:/i, '').trim();
+  } else if (is1903) {
+    locationName = 'XFGW+38 Elmsdale, NS (RONA Elmsdale #03485)';
+  } else if (isElmsdale) {
+    locationName = 'RONA Elmsdale Store Yard';
+  } else if (isAlmon) {
+    locationName = '500 Windmill Road Terminal Depot (Dartmouth)';
+  } else if (isWindmill) {
+    locationName = '500 Windmill Rd Depot';
+  } else if (isChainMtn) {
+    locationName = 'Chain Lake / Mountain Depot Yard';
+  } else if (isPei) {
+    locationName = 'Charlottetown Store Yard';
+  } else if (isTantallon) {
+    locationName = 'Tantallon Store Yard';
+  } else if (depotName && depotName !== 'Depot') {
+    locationName = `${depotName} Yard`;
+  } else {
+    locationName = 'Terminal Yard';
+  }
+
+  return {
+    lat,
+    lng,
+    coordinatesText,
+    locationName,
+    speedText: truck.gpsSpeed && truck.gpsSpeed > 0 ? `${truck.gpsSpeed} km/h` : null
+  };
+}
+
 // Truck Display Graphic Component showing fleet vehicle image/preset with live cargo fill level
 function TruckGraphic({ 
   fillPct, 
@@ -1587,6 +1677,9 @@ export default function DragDropFreightBoard({
                 ? truck.driver 
                 : 'No Driver Assigned';
 
+              // Live GPS Location details
+              const gpsInfo = getTruckGpsInfo(truck, branches);
+
               // Build route string (e.g. Hebbville → Bridgewater)
               const firstDest = loadedDeliveries.length > 0 ? (loadedDeliveries[0].deliveryAddress?.split(',')[0] || 'Destination') : 'Regional Route';
               const routeText = `${depotName} → ${firstDest}`;
@@ -1640,29 +1733,50 @@ export default function DragDropFreightBoard({
 
                     {/* Truck Specs & Driver info */}
                     <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2 truncate">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center space-x-2 truncate min-w-0">
                           <span className="font-mono font-black text-sm text-slate-900 truncate">
                             {truck.name}
                           </span>
-                          <span className="text-slate-400 font-mono">·</span>
-                          <span className="text-xs font-semibold text-slate-500 truncate">
+                          <span className="text-slate-400 font-mono hidden sm:inline">·</span>
+                          <span className="text-xs font-semibold text-slate-500 truncate hidden sm:inline">
                             {truck.type || truck.model || 'Commercial Carrier'}
                           </span>
                         </div>
 
-                        {/* Status Badge (OPEN / FULL) */}
-                        {isFull ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black font-mono tracking-wider bg-amber-500 text-slate-950 uppercase shadow-xs flex items-center space-x-1 shrink-0">
-                            <Lock className="h-3 w-3" />
-                            <span>FULL {selectedShiftFilter !== 'ALL' ? `(${selectedShiftFilter})` : ''}</span>
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono tracking-wider bg-slate-100 text-slate-700 border border-slate-200 uppercase flex items-center space-x-1 shrink-0">
-                            <Unlock className="h-3 w-3 text-emerald-600" />
-                            <span>OPEN {selectedShiftFilter !== 'ALL' ? `(${selectedShiftFilter})` : ''}</span>
-                          </span>
-                        )}
+                        {/* Top Right Controls: Live GPS Badge + Status Badge */}
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+                          {/* Live GPS Location Badge */}
+                          <div 
+                            className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-900 text-slate-100 rounded-lg border border-slate-700 shadow-2xs font-mono text-[10px]"
+                            title={`GPS Live Telematics: ${gpsInfo.locationName} (${gpsInfo.coordinatesText})${gpsInfo.speedText ? ` · Speed: ${gpsInfo.speedText}` : ''}`}
+                          >
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span className="font-bold text-white max-w-[120px] sm:max-w-[170px] truncate">
+                              {gpsInfo.locationName}
+                            </span>
+                            <span className="text-slate-400 font-mono text-[9px] border-l border-slate-700 pl-1.5 hidden xl:inline">
+                              {gpsInfo.coordinatesText}
+                            </span>
+                          </div>
+
+                          {/* Status Badge (OPEN / FULL) */}
+                          {isFull ? (
+                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-black font-mono tracking-wider bg-amber-500 text-slate-950 uppercase shadow-xs flex items-center space-x-1 shrink-0">
+                              <Lock className="h-3 w-3" />
+                              <span>FULL {selectedShiftFilter !== 'ALL' ? `(${selectedShiftFilter})` : ''}</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono tracking-wider bg-slate-100 text-slate-700 border border-slate-200 uppercase flex items-center space-x-1 shrink-0">
+                              <Unlock className="h-3 w-3 text-emerald-600" />
+                              <span>OPEN {selectedShiftFilter !== 'ALL' ? `(${selectedShiftFilter})` : ''}</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Driver & Route */}

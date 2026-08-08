@@ -442,7 +442,7 @@ function MapInner({
     if (!viewingTrackEventsTruckId) return [];
 
     const isTruck1903 = (trackEventsTruck?.id || "").includes("1903") || (trackEventsTruck?.name || "").includes("1903");
-    const isWindmill = isTruck1903 || trackEventsTruck?.branchId === 'DC-WINAMILL';
+    const isWindmill = !isTruck1903 && (trackEventsTruck?.branchId === 'DC-WINAMILL' || (trackEventsTruck?.id || "").includes("2101"));
 
     const startLat = isWindmill ? 44.6855 : 44.9752;
     const startLng = isWindmill ? -63.5825 : -63.5042;

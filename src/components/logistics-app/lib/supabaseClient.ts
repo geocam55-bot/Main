@@ -277,12 +277,20 @@ export function deserializeType(truck: any): any {
   const gIdle = getLastMatch(/\|\|gpsIdlingMins:([^|]+)/g);
   if (gIdle && !isNaN(parseFloat(gIdle))) gpsIdlingMins = parseFloat(gIdle);
 
-  const is1903 = (truck.id || "").includes("1903") || (truck.name || "").includes("1903") || (gpsDeviceName || "").includes("1903");
-  if (is1903 && lat === undefined) {
+  const idOrNameClean = ((truck.id || "") + " " + (truck.name || "") + " " + (gpsDeviceName || "")).toLowerCase();
+  const is1903 = idOrNameClean.includes("1903");
+  const isAlmon = idOrNameClean.includes("2401") || idOrNameClean.includes("almon");
+
+  if (isAlmon && (lat === undefined || lat !== 44.6855 || lat === 44.6536 || lat === 44.9792 || lat === 44.9652)) {
     lat = 44.6855;
     lng = -63.5825;
     gpsLat = 44.6855;
     gpsLng = -63.5825;
+  } else if (is1903 && (lat === undefined || lat === 44.6855 || lat === 44.6536)) {
+    lat = 44.9792;
+    lng = -63.5042;
+    gpsLat = 44.9792;
+    gpsLng = -63.5042;
   }
 
   if (lat !== undefined && lng !== undefined) {

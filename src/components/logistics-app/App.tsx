@@ -18,7 +18,8 @@ import {
   saveUserHeartbeatDirect,
   deleteRecordDirect, 
   clearAllDirect,
-  deserializeType
+  deserializeType,
+  serializeToType
 } from './lib/supabaseClient';
 import Dashboard, { isTruckAssignedToBranch } from './components/Dashboard';
 import LiveDashboard from './components/LiveDashboard';
@@ -34,6 +35,8 @@ import SuperAdminTenantsView from './components/SuperAdminTenantsView';
 import UserProfileModal, { renderUserAvatarHelper } from './components/UserProfileModal';
 import GpsSetup from './components/GpsSetup';
 import EnterpriseHub from './components/EnterpriseHub';
+import DriverTruckSelectModal from './components/DriverTruckSelectModal';
+import { FLEET_COMPLETE_TRUCKS } from './truckSpecs';
 import { rolloverUncompletedDeliveries } from './lib/schedulingUtils';
 import { 
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
@@ -617,6 +620,35 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [currentUser]);
 
+  // Driver Truck Selection Modal state
+  const [showDriverTruckModal, setShowDriverTruckModal] = useState(false);
+
+  // Derive driver's currently assigned truck from state
+  const driverAssignedTruck = React.useMemo(() => {
+    if (!currentUser) return null;
+    const driverNameNorm = (currentUser.name || '').trim().toLowerCase();
+    const driverIdNorm = currentUser.id;
+
+    return trucks.find(t => {
+      const tDrvNorm = (t.driver || '').trim().toLowerCase();
+      const isDriverMatch = tDrvNorm !== 'no driver' && tDrvNorm !== 'unassigned' && tDrvNorm === driverNameNorm;
+      const isIdMatch = t.assignedDriverId && t.assignedDriverId === driverIdNorm;
+      return isDriverMatch || isIdMatch;
+    });
+  }, [trucks, currentUser]);
+
+  // Auto-prompt Driver for Truck Selection on session login if user role is Driver
+  useEffect(() => {
+    if (currentUser && (currentUser.role || '').trim().toLowerCase() === 'driver') {
+      const todayKey = new Date().toISOString().split('T')[0];
+      const promptedKey = `driver_truck_modal_prompted_${currentUser.id}_${todayKey}`;
+      if (!sessionStorage.getItem(promptedKey)) {
+        setShowDriverTruckModal(true);
+        sessionStorage.setItem(promptedKey, 'true');
+      }
+    }
+  }, [currentUser?.id, currentUser?.role]);
+
   // Trigger login session handlers
   const handleLoginSuccess = (tenant: Tenant, user: User) => {
     // Clear operational state immediately to prevent stale cross-tenant contamination
@@ -628,6 +660,119 @@ export default function App() {
     setCurrentUser(user);
     localStorage.setItem('prospaces_active_tenant', JSON.stringify(tenant));
     localStorage.setItem('prospaces_active_user', JSON.stringify(user));
+
+    const roleNorm = (user.role || '').trim().toLowerCase();
+    if (roleNorm === 'driver') {
+      setShowDriverTruckModal(true);
+    }
+  };
+
+  const handleConfirmTruckAssignment = async (selectedTruckId: string) => {
+    if (!currentUser || !currentTenant) return;
+
+    const driverName = currentUser.name;
+    const driverId = currentUser.id;
+
+    let updatedTrucks: Truck[] = [];
+
+    if (selectedTruckId === 'UNASSIGNED') {
+      // Unassign driver from all trucks
+      updatedTrucks = trucks.map(t => {
+        const isThisDriver = 
+          (t.driver && t.driver.trim().toLowerCase() === driverName.trim().toLowerCase()) ||
+          (t.assignedDriverId && t.assignedDriverId === driverId);
+        if (isThisDriver) {
+          return { ...t, driver: 'No Driver', assignedDriverId: undefined };
+        }
+        return t;
+      });
+    } else {
+      let existingList = [...trucks];
+      const existsInList = existingList.some(t => t.id === selectedTruckId);
+
+      if (!existsInList) {
+        const spec = FLEET_COMPLETE_TRUCKS.find(s => s.id === selectedTruckId);
+        if (spec) {
+          existingList.push({
+            id: spec.id,
+            tenantId: currentTenant.id,
+            name: spec.name,
+            type: spec.model.includes('Boom') ? '6X Boom Truck' : (spec.model.includes('Box') ? 'Box Truck' : 'Pickup / Flatbed'),
+            status: 'Available',
+            driver: 'No Driver',
+            branchId: spec.branchId,
+            homeDepot: spec.homeDepot,
+            licensePlate: spec.licensePlate,
+            lat: 44.68550,
+            lng: -63.58250,
+            gpsLat: 44.68550,
+            gpsLng: -63.58250,
+            gpsSpeed: 0,
+            gpsIdlingMins: 0,
+            gpsLastHandshake: new Date().toISOString()
+          });
+        }
+      }
+
+      updatedTrucks = existingList.map(t => {
+        if (t.id === selectedTruckId) {
+          return {
+            ...t,
+            driver: driverName,
+            assignedDriverId: driverId
+          };
+        }
+        const isThisDriver = 
+          (t.driver && t.driver.trim().toLowerCase() === driverName.trim().toLowerCase()) ||
+          (t.assignedDriverId && t.assignedDriverId === driverId);
+        if (isThisDriver) {
+          return { ...t, driver: 'No Driver', assignedDriverId: undefined };
+        }
+        return t;
+      });
+    }
+
+    setTrucks(updatedTrucks);
+    setShowDriverTruckModal(false);
+
+    // Explicitly write updated truck assignment directly to Supabase trucks table
+    const supabase = getFrontendSupabase();
+    if (supabase) {
+      try {
+        const serializedTrucks = updatedTrucks.map(t => ({
+          id: t.id,
+          tenantId: currentTenant.id,
+          name: t.name,
+          type: serializeToType(
+            t.type,
+            t.registrationDueDate,
+            t.lat,
+            t.lng,
+            t.gpsSource,
+            t.gpsDeviceId,
+            t.gpsSerialNumber,
+            t.gpsDeviceName,
+            t.gpsSimIccid,
+            t.gpsStatus,
+            t.gpsLastHandshake,
+            t.gpsLat,
+            t.gpsLng,
+            t.gpsSpeed,
+            t.gpsIdlingMins,
+            t.imageUrl
+          ),
+          driver: t.driver,
+          branchId: t.branchId,
+          image_url: t.imageUrl || null
+        }));
+        await supabase.from("trucks").upsert(serializedTrucks);
+        console.log("Written driver truck update directly to Supabase trucks table.");
+      } catch (err) {
+        console.error("Direct Supabase truck update write error:", err);
+      }
+    }
+
+    await syncStateToSupabase(currentTenant.id, deliveries, updatedTrucks, branches, users);
   };
 
   const handleLogout = async () => {
@@ -1448,6 +1593,30 @@ export default function App() {
     // Migrate branch ID "DC-ELMSDALE" to "01070"
     if (newTrucks.some(t => t.branchId === "DC-ELMSDALE" || t.branchId === "ELMSDALE")) {
       newTrucks = newTrucks.map(t => (t.branchId === "DC-ELMSDALE" || t.branchId === "ELMSDALE") ? { ...t, branchId: "01070" } : t);
+      stateUpdated = true;
+    }
+
+    // Ensure unit 2401 (Almon F-15) is assigned to 500 Windmill Road Terminal Depot (DC-WINAMILL)
+    const needsAlmonFix = newTrucks.some(t => {
+      const lower = ((t.id || '') + ' ' + (t.name || '') + ' ' + (t.homeDepot || '')).toLowerCase();
+      return (lower.includes('2401') || lower.includes('almon')) && (t.branchId !== 'DC-WINAMILL' || t.lat !== 44.68550 || t.lng !== -63.58250 || t.gpsLat !== 44.68550 || t.gpsLng !== -63.58250);
+    });
+    if (needsAlmonFix) {
+      newTrucks = newTrucks.map(t => {
+        const lower = ((t.id || '') + ' ' + (t.name || '') + ' ' + (t.homeDepot || '')).toLowerCase();
+        if (lower.includes('2401') || lower.includes('almon')) {
+          return {
+            ...t,
+            branchId: 'DC-WINAMILL',
+            homeDepot: '500 Windmill Road Terminal Depot',
+            lat: 44.68550,
+            lng: -63.58250,
+            gpsLat: 44.68550,
+            gpsLng: -63.58250
+          };
+        }
+        return t;
+      });
       stateUpdated = true;
     }
 
@@ -2545,6 +2714,23 @@ export default function App() {
                       {showDriverSpace && (
                         <>
                           <div className="text-[9px] font-black tracking-wider uppercase text-slate-400 font-sans mt-3 mb-1 px-2 border-b border-slate-100 pb-1">Driver Space</div>
+                          
+                          <button
+                            onClick={() => {
+                              setShowDriverTruckModal(true);
+                              setIsMobileNavOpen(false);
+                            }}
+                            className="w-full py-2 px-3 text-xs font-extrabold rounded-xl flex items-center justify-between transition-all cursor-pointer bg-blue-50 text-blue-800 hover:bg-blue-100 mb-1 border border-blue-200/60"
+                          >
+                            <div className="flex items-center space-x-2.5">
+                              <TruckIcon className="h-4 w-4 text-blue-600" />
+                              <span>Change Assigned Truck</span>
+                            </div>
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 text-blue-900 truncate max-w-[85px]">
+                              {driverAssignedTruck ? driverAssignedTruck.name.split(' ')[0] : 'None'}
+                            </span>
+                          </button>
+
                           <button
                             onClick={() => {
                               setActiveTab('epod');
@@ -2760,8 +2946,24 @@ export default function App() {
                     <span>Driver Space</span>
                     <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'driver' ? 'rotate-180' : ''}`} />
                   </button>
-                  <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'driver' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white border border-slate-200 shadow-xl shadow-slate-200/50 rounded-xl p-1.5">
+                  <div className={`absolute left-0 top-full pt-1 min-w-[220px] z-[100] transition-all duration-200 ${activeNavDropdown === 'driver' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
+                    <div className="flex flex-col bg-white border border-slate-200 shadow-xl shadow-slate-200/50 rounded-xl p-1.5 space-y-0.5">
+                      <button
+                        onClick={() => {
+                          setShowDriverTruckModal(true);
+                          setActiveNavDropdown(null);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-extrabold rounded-lg flex items-center justify-between transition-all cursor-pointer bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200/60"
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <TruckIcon className="h-4 w-4 text-blue-600" />
+                          <span>Change Assigned Truck</span>
+                        </div>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 text-blue-900 truncate max-w-[75px]">
+                          {driverAssignedTruck ? driverAssignedTruck.name.split(' ')[0] : 'None'}
+                        </span>
+                      </button>
+
                       <button
                         onClick={() => { setActiveTab('epod'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
@@ -3177,6 +3379,19 @@ export default function App() {
       )}
 
 
+
+      {/* Driver Truck Select Modal */}
+      {showDriverTruckModal && currentUser && (
+        <DriverTruckSelectModal
+          isOpen={showDriverTruckModal}
+          onClose={() => setShowDriverTruckModal(false)}
+          currentUser={currentUser}
+          trucks={trucks}
+          branches={branches}
+          currentTenant={currentTenant}
+          onConfirmTruckAssignment={handleConfirmTruckAssignment}
+        />
+      )}
 
       {diagnosticsModal && diagnosticsModal.show && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="diagnostics-modal">

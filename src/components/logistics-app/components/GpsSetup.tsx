@@ -1009,13 +1009,18 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                     let displayLat = isUsingTruckGps ? (truck.gpsLat ?? truck.lat ?? 44.6855) : (truck.lat ?? truck.gpsLat ?? 44.6855);
                     let displayLng = isUsingTruckGps ? (truck.gpsLng ?? truck.lng ?? -63.5825) : (truck.lng ?? truck.gpsLng ?? -63.5825);
 
-                    if (is2401Almon || is1903) {
+                    if (is1903) {
+                      displayLat = 44.9792;
+                      displayLng = -63.5042;
+                    } else if (is2401Almon) {
                       displayLat = 44.6855;
                       displayLng = -63.5825;
                     }
 
                     let locationLabel = "In Transit / Field Location";
-                    if (is2401Almon || is1903) {
+                    if (is1903) {
+                      locationLabel = "XFGW+38 Elmsdale, NS (RONA Elmsdale #03485)";
+                    } else if (is2401Almon) {
                       locationLabel = "500 Windmill Road Terminal Depot (Parked)";
                     } else if (is2101) {
                       locationLabel = "HWY-102, Goffs, NS B2T, Canada (120 km/h In Transit)";
