@@ -601,6 +601,7 @@ export async function fetchTenantStateDirect(tenantId: string) {
     const destinationNotes = d.destinationNotes || meta.destinationNotes;
     const customerSignature = d.customerSignature || meta.customerSignature;
     const deliveryPhoto = d.deliveryPhoto || meta.deliveryPhoto;
+    const deliveryPhotos = d.deliveryPhotos || meta.deliveryPhotos || (deliveryPhoto ? [deliveryPhoto] : undefined);
     const pdfUrl = d.pdfUrl || meta.pdfUrl;
     const documentType = d.documentType || meta.documentType;
     const weight = d.weight || meta.weight;
@@ -634,6 +635,7 @@ export async function fetchTenantStateDirect(tenantId: string) {
       assignedPicker,
       customerSignature,
       deliveryPhoto,
+      deliveryPhotos,
       pdfUrl,
       documentType,
       scheduledDate,
@@ -794,6 +796,7 @@ export async function saveTenantStateDirect(
       assignedPicker: d.assignedPicker,
       customerSignature: d.customerSignature,
       deliveryPhoto: d.deliveryPhoto,
+      deliveryPhotos: d.deliveryPhotos,
       pdfUrl: d.pdfUrl,
       documentType: d.documentType,
       scheduledDate: d.scheduledDate,

@@ -119,6 +119,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
   const [deliveryOutcome, setDeliveryOutcome] = useState<'SUCCESS' | 'RETURN'>('SUCCESS');
   const [customerSignature, setCustomerSignature] = useState('');
   const [deliveryPhoto, setDeliveryPhoto] = useState('');
+  const [deliveryPhotos, setDeliveryPhotos] = useState<string[]>([]);
   const [returnReason, setReturnReason] = useState('');
   const [returnDestination, setReturnDestination] = useState('WINDMILL_DC');
 
@@ -962,12 +963,16 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
     const now = new Date().toISOString();
 
     if (deliveryOutcome === 'SUCCESS') {
+      const photosToSave = deliveryPhotos.length > 0 ? deliveryPhotos : (deliveryPhoto ? [deliveryPhoto] : undefined);
+      const primaryPhoto = photosToSave ? photosToSave[0] : undefined;
+
       updated = {
         ...scannedRecord,
         status: DeliveryStatus.DELIVERED,
         deliveredAt: now,
         customerSignature: customerSignature || 'Verified at Site',
-        deliveryPhoto: deliveryPhoto || undefined,
+        deliveryPhoto: primaryPhoto,
+        deliveryPhotos: photosToSave,
         history: [
           ...scannedRecord.history,
           {
@@ -975,7 +980,10 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
             timestamp: now,
             location: scannedRecord.deliveryAddress,
             operator: scannedRecord.assignedDriver || 'Courier Driver',
-            notes: `Delivery securely received on-site. Representative signature: "${customerSignature || 'Received'}"`
+            notes: `Delivery securely received on-site with ${photosToSave?.length || 0} POD photo(s). Signature: "${customerSignature || 'Received'}"`,
+            customerSignature: customerSignature || 'Verified at Site',
+            deliveryPhoto: primaryPhoto,
+            deliveryPhotos: photosToSave
           }
         ]
       };
@@ -1003,6 +1011,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
     setActiveFormType('IDLE');
     setBarcodeInput('');
     setDeliveryPhoto('');
+    setDeliveryPhotos([]);
     setCustomerSignature('');
     setReturnReason('');
   };
@@ -1012,6 +1021,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
     setScannedRecord(null);
     setManualSalesOrder(null);
     setDeliveryPhoto('');
+    setDeliveryPhotos([]);
     setCustomerSignature('');
     setReturnReason('');
   };
@@ -2246,37 +2256,64 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase">Attach Delivery Photo</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-600 block uppercase">Attach Proof of Delivery Photos ({deliveryPhotos.length})</label>
+                        <span className="text-[9px] text-emerald-700 font-mono font-bold">Multiple photos supported</span>
+                      </div>
                       <input 
                         type="file" 
                         accept="image/*" 
                         capture="environment"
+                        multiple
                         onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = async () => {
-                              const base64 = reader.result as string;
-                              try {
-                                const compressed = await compressImage(base64, 800, 800);
-                                const photoToUse = compressed || base64;
-                                setDeliveryPhoto(photoToUse);
-                                saveScanImageToServer(photoToUse, undefined, 'delivery_pod_photo', scannedRecord?.id);
-                              } catch (err) {
-                                console.warn("Failed to compress driver photo, using original:", err);
-                                setDeliveryPhoto(base64);
-                                saveScanImageToServer(base64, undefined, 'delivery_pod_photo', scannedRecord?.id);
-                              }
-                            };
-                            reader.readAsDataURL(file);
+                          const files = e.target.files;
+                          if (files && files.length > 0) {
+                            Array.from(files).forEach((file) => {
+                              const reader = new FileReader();
+                              reader.onloadend = async () => {
+                                const base64 = reader.result as string;
+                                try {
+                                  const compressed = await compressImage(base64, 800, 800);
+                                  const photoToUse = compressed || base64;
+                                  setDeliveryPhotos(prev => [...prev, photoToUse]);
+                                  setDeliveryPhoto(photoToUse);
+                                  saveScanImageToServer(photoToUse, undefined, 'delivery_pod_photo', scannedRecord?.id);
+                                } catch (err) {
+                                  console.warn("Failed to compress driver photo, using original:", err);
+                                  setDeliveryPhotos(prev => [...prev, base64]);
+                                  setDeliveryPhoto(base64);
+                                  saveScanImageToServer(base64, undefined, 'delivery_pod_photo', scannedRecord?.id);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            });
                           }
                         }} 
-                        className="w-full border border-slate-200 px-3 py-2.5 rounded-xl text-xs bg-slate-50 focus:ring-1 focus:ring-emerald-500" 
+                        className="w-full border border-slate-200 px-3 py-2.5 rounded-xl text-xs bg-slate-50 focus:ring-1 focus:ring-emerald-500 cursor-pointer" 
                       />
-                      {deliveryPhoto && (
-                        <div className="mt-2 text-[10px] text-green-700 font-bold flex items-center space-x-1">
-                          <CheckSquare className="h-3 w-3" />
-                          <span>Photo captured & attached.</span>
+
+                      {deliveryPhotos.length > 0 && (
+                        <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                          {deliveryPhotos.map((photoUrl, idx) => (
+                            <div key={idx} className="relative group bg-slate-950 rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center min-h-[90px]">
+                              <img 
+                                src={photoUrl} 
+                                alt={`POD Photo #${idx + 1}`} 
+                                className="max-h-28 w-auto max-w-full object-contain rounded" 
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setDeliveryPhotos(prev => prev.filter((_, i) => i !== idx))}
+                                className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full text-xs shadow-md cursor-pointer"
+                                title="Remove photo"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                              <span className="absolute bottom-1 left-1 bg-slate-950/90 text-emerald-400 font-mono text-[9px] px-1.5 py-0.5 rounded border border-slate-800 font-bold">
+                                #{idx + 1}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

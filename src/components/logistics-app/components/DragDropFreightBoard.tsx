@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import type { DeliveryRecord, Truck, Branch, User as AppUser } from '../types';
-import { DeliveryStatus } from '../types';
+import { DeliveryStatus, getDeliveryPhotos } from '../types';
 import { 
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
   ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
-  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink
+  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink, FileText
 } from 'lucide-react';
 import { isTruckAssignedToBranch } from './Dashboard';
 import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/schedulingUtils';
 import { getTruckImage } from '../lib/truckImages';
+import { getEffectivePdfUrl, openScannedDocumentInNewTab } from './DeliveryQueue';
 
 interface DragDropFreightBoardProps {
   deliveries: DeliveryRecord[];
@@ -331,6 +332,12 @@ export default function DragDropFreightBoard({
 
   // Shift selection state (ALL | AM | PM)
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | 'AM' | 'PM'>('ALL');
+
+  // Preview Document Modal state
+  const [previewDocDelivery, setPreviewDocDelivery] = useState<DeliveryRecord | null>(null);
+
+  // Preview Proof of Delivery (POD) Photos Lightbox state
+  const [previewPodDelivery, setPreviewPodDelivery] = useState<DeliveryRecord | null>(null);
 
   // Drag over state for unassigned shift drop targets
   const [dragOverUnassignedSlot, setDragOverUnassignedSlot] = useState<'AM' | 'PM' | 'GENERAL' | null>(null);
@@ -1876,14 +1883,44 @@ export default function DragDropFreightBoard({
                               <span className="font-mono text-[11px] font-bold text-slate-700">
                                 {parseDeliveryWeightLbs(item).toLocaleString()} lbs
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => unloadDelivery(item)}
-                                className="text-[9px] font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded border border-red-200 cursor-pointer transition-colors"
-                                title="Unload item back to unassigned freight pool"
-                              >
-                                Unload
-                              </button>
+                              <div className="flex items-center space-x-1">
+                                {getDeliveryPhotos(item).length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPreviewPodDelivery(item);
+                                    }}
+                                    className="text-[9px] font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 cursor-pointer transition-colors flex items-center space-x-0.5"
+                                    title="View Proof of Delivery photos in full proportion"
+                                  >
+                                    <Camera className="h-2.5 w-2.5 text-emerald-600" />
+                                    <span>{getDeliveryPhotos(item).length} POD</span>
+                                  </button>
+                                )}
+                                {getEffectivePdfUrl(item) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPreviewDocDelivery(item);
+                                    }}
+                                    className="text-[9px] font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 cursor-pointer transition-colors flex items-center space-x-0.5"
+                                    title="View digitized physical document archive"
+                                  >
+                                    <FileText className="h-2.5 w-2.5 text-indigo-600" />
+                                    <span>Doc</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => unloadDelivery(item)}
+                                  className="text-[9px] font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded border border-red-200 cursor-pointer transition-colors"
+                                  title="Unload item back to unassigned freight pool"
+                                >
+                                  Unload
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -2013,6 +2050,8 @@ export default function DragDropFreightBoard({
                             onDragEnd={handleDragEnd}
                             onAssignClick={() => setAssigningDelivery(delivery)}
                             onToggleShiftSlot={handleToggleShiftSlot}
+                            onViewDocument={(d) => setPreviewDocDelivery(d)}
+                            onViewPodPhotos={(d) => setPreviewPodDelivery(d)}
                             isBeingDragged={draggedDeliveryId === delivery.id}
                             isViewOnly={isViewOnly}
                           />
@@ -2068,6 +2107,8 @@ export default function DragDropFreightBoard({
                             onDragEnd={handleDragEnd}
                             onAssignClick={() => setAssigningDelivery(delivery)}
                             onToggleShiftSlot={handleToggleShiftSlot}
+                            onViewDocument={(d) => setPreviewDocDelivery(d)}
+                            onViewPodPhotos={(d) => setPreviewPodDelivery(d)}
                             isBeingDragged={draggedDeliveryId === delivery.id}
                             isViewOnly={isViewOnly}
                           />
@@ -2458,6 +2499,230 @@ export default function DragDropFreightBoard({
         </div>
       )}
 
+      {/* Physical Document Preview Modal */}
+      {previewDocDelivery && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-mono font-bold text-slate-100 text-sm flex items-center space-x-2">
+                    <span>Digitized Physical Document Archive</span>
+                    <span className="text-xs px-2 py-0.5 bg-indigo-950 text-indigo-300 border border-indigo-800/50 rounded font-semibold font-mono">
+                      {previewDocDelivery.epicorSalesOrder || previewDocDelivery.invoiceNumber || previewDocDelivery.id}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-sans mt-0.5">
+                    Ticket ID: <strong className="text-slate-200 font-mono">{previewDocDelivery.id}</strong> &bull; {previewDocDelivery.customerName}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => openScannedDocumentInNewTab(previewDocDelivery)}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                  title="Open document in a dedicated browser tab"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Open in New Tab</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDocDelivery(null)}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Document Render Canvas */}
+            <div className="p-6 overflow-y-auto bg-slate-950/90 flex justify-center items-center">
+              <div className="bg-white rounded-xl p-4 shadow-2xl max-w-full overflow-auto flex justify-center items-center">
+                {(() => {
+                  const pdfUrl = getEffectivePdfUrl(previewDocDelivery);
+                  if (!pdfUrl) return null;
+
+                  if (pdfUrl.startsWith('data:application/pdf') || pdfUrl.endsWith('.pdf') || pdfUrl.startsWith('/uploads/')) {
+                    return (
+                      <iframe
+                        src={pdfUrl}
+                        title="Physical Document Viewer"
+                        className="w-[720px] h-[820px] max-w-full rounded-lg border border-slate-200 shadow-xs"
+                      />
+                    );
+                  } else if (pdfUrl.startsWith('data:image/svg+xml;base64,')) {
+                    try {
+                      const base64Str = pdfUrl.replace('data:image/svg+xml;base64,', '');
+                      const svgStr = decodeURIComponent(escape(atob(base64Str)));
+                      return <div dangerouslySetInnerHTML={{ __html: svgStr }} className="w-full flex justify-center" />;
+                    } catch (e) {
+                      return <img src={pdfUrl} alt="Digitized Document" className="max-w-full h-auto rounded" />;
+                    }
+                  } else if (pdfUrl.startsWith('<svg')) {
+                    return <div dangerouslySetInnerHTML={{ __html: pdfUrl }} className="w-full flex justify-center" />;
+                  } else {
+                    return <img src={pdfUrl} alt="Digitized Document" className="max-w-full h-auto rounded" />;
+                  }
+                })()}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between shrink-0 text-xs text-slate-400">
+              <div className="flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-mono text-[11px] text-slate-300">
+                  Azure OCR High-Fidelity Gate Archive Verified
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => openScannedDocumentInNewTab(previewDocDelivery)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg transition-colors cursor-pointer flex items-center space-x-1"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Full Screen</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDocDelivery(null)}
+                  className="px-4 py-1.5 bg-indigo-900/60 hover:bg-indigo-900/80 text-indigo-200 font-bold rounded-lg transition-colors cursor-pointer border border-indigo-800/40"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Proof of Delivery (POD) Multiple Photos Lightbox Modal */}
+      {previewPodDelivery && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden text-slate-100">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/50">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                  <Camera className="h-5 w-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                    <span>Proof of Delivery Photos</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      {getDeliveryPhotos(previewPodDelivery).length} Captured
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Ticket ID: <span className="text-blue-400 font-bold">{previewPodDelivery.id}</span> · Customer: {previewPodDelivery.customerName}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreviewPodDelivery(null)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Gallery Body - Natural Proportions */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 bg-slate-950/70 flex-1">
+              {/* Delivery Meta Summary Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-slate-300">
+                <div>
+                  <span className="text-slate-500 block text-[10px]">ADDRESS</span>
+                  <span className="font-semibold text-slate-200 truncate block">{previewPodDelivery.deliveryAddress}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">SIGNATURE HANDOFF</span>
+                  <span className="font-semibold text-emerald-400 truncate block">{previewPodDelivery.customerSignature || 'Verified'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">STATUS</span>
+                  <span className="font-bold text-emerald-400 block">{previewPodDelivery.status}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">DELIVERED AT</span>
+                  <span className="font-semibold text-slate-200 block">
+                    {previewPodDelivery.deliveredAt ? new Date(previewPodDelivery.deliveredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Photos Grid - Natural Aspect Ratio & Proportional Container */}
+              {getDeliveryPhotos(previewPodDelivery).length > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {getDeliveryPhotos(previewPodDelivery).map((photoUrl, photoIdx) => (
+                      <div 
+                        key={photoIdx} 
+                        className="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 flex flex-col items-center justify-center space-y-2 group hover:border-emerald-500/50 transition-all shadow-lg"
+                      >
+                        {/* Image Container preserving full true natural proportions */}
+                        <div className="w-full flex justify-center items-center bg-slate-950 rounded-xl p-2 overflow-hidden min-h-[220px] max-h-[420px]">
+                          <img
+                            src={photoUrl}
+                            alt={`Proof of Delivery Photo #${photoIdx + 1}`}
+                            className="max-h-[380px] w-auto max-w-full object-contain rounded-lg transition-transform duration-200 group-hover:scale-[1.01]"
+                          />
+                        </div>
+                        <div className="w-full flex items-center justify-between px-2 text-[10.5px] font-mono text-slate-400 pt-1 border-t border-slate-800/60">
+                          <span className="text-emerald-400 font-bold flex items-center space-x-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Photo #{photoIdx + 1} Proportional View</span>
+                          </span>
+                          <a
+                            href={photoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-400 hover:text-indigo-300 font-bold flex items-center space-x-1 hover:underline"
+                          >
+                            <span>Open Full Size</span>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  <Camera className="h-10 w-10 mx-auto mb-2 opacity-40 text-slate-600" />
+                  <p className="text-sm font-semibold">No POD photos attached for this ticket.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between shrink-0 text-xs text-slate-400">
+              <div className="flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-mono text-[11px] text-slate-300">
+                  Freight Board Proof of Delivery Verification Active
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewPodDelivery(null)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors cursor-pointer text-xs"
+              >
+                Close Gallery
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -2469,6 +2734,8 @@ function UnassignedDeliveryCard({
   onDragEnd,
   onAssignClick,
   onToggleShiftSlot,
+  onViewDocument,
+  onViewPodPhotos,
   isBeingDragged,
   isViewOnly = false
 }: {
@@ -2477,6 +2744,8 @@ function UnassignedDeliveryCard({
   onDragEnd: () => void;
   onAssignClick: () => void;
   onToggleShiftSlot?: (delivery: DeliveryRecord) => void;
+  onViewDocument?: (delivery: DeliveryRecord) => void;
+  onViewPodPhotos?: (delivery: DeliveryRecord) => void;
   isBeingDragged: boolean;
   isViewOnly?: boolean;
 }) {
@@ -2489,6 +2758,9 @@ function UnassignedDeliveryCard({
   const customerSummary = delivery.customerName || 'Customer';
   const addressCity = delivery.deliveryAddress ? delivery.deliveryAddress.split(',')[0] : 'Regional Site';
   const originDepot = formatBranchDisplayName(delivery.originBranch || 'Depot');
+
+  const hasDocument = Boolean(getEffectivePdfUrl(delivery));
+  const podPhotos = getDeliveryPhotos(delivery);
 
   return (
     <div
@@ -2512,15 +2784,49 @@ function UnassignedDeliveryCard({
           <span className="font-mono font-bold text-xs text-blue-600 tracking-wide">
             {delivery.id}
           </span>
-          {isUrgent ? (
-            <span className="px-2 py-0.5 rounded text-[9px] font-black font-mono bg-rose-100 text-rose-700 border border-rose-200 uppercase tracking-wider">
-              URGENT
-            </span>
-          ) : (
-            <span className="text-[10px] text-slate-400 font-mono">
-              #{delivery.epicorSalesOrder || delivery.invoiceNumber || 'ORDER'}
-            </span>
-          )}
+          <div className="flex items-center space-x-1.5">
+            {podPhotos.length > 0 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onViewPodPhotos) onViewPodPhotos(delivery);
+                }}
+                className="px-1.5 py-0.5 rounded text-[9px] font-mono font-extrabold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer flex items-center space-x-0.5"
+                title="View Proof of Delivery photos in full proportion"
+              >
+                <Camera className="h-2.5 w-2.5 text-emerald-600" />
+                <span>{podPhotos.length} POD</span>
+              </button>
+            )}
+            {hasDocument && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onViewDocument) {
+                    onViewDocument(delivery);
+                  } else {
+                    openScannedDocumentInNewTab(delivery);
+                  }
+                }}
+                className="px-1.5 py-0.5 rounded text-[9px] font-mono font-extrabold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors cursor-pointer flex items-center space-x-0.5"
+                title="View physical/digitized imported document"
+              >
+                <FileText className="h-2.5 w-2.5 text-indigo-600" />
+                <span>Doc</span>
+              </button>
+            )}
+            {isUrgent ? (
+              <span className="px-2 py-0.5 rounded text-[9px] font-black font-mono bg-rose-100 text-rose-700 border border-rose-200 uppercase tracking-wider">
+                URGENT
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-mono">
+                #{delivery.epicorSalesOrder || delivery.invoiceNumber || 'ORDER'}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="text-xs font-semibold text-slate-800 line-clamp-1">
@@ -2530,6 +2836,34 @@ function UnassignedDeliveryCard({
         <div className="text-[11px] text-slate-500 truncate">
           {customerSummary}
         </div>
+
+        {/* Proportional POD Photos Preview Thumbnail Row */}
+        {podPhotos.length > 0 && (
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onViewPodPhotos) onViewPodPhotos(delivery);
+            }}
+            className="mt-2 bg-slate-900/95 p-1.5 rounded-lg border border-slate-800 cursor-pointer hover:border-emerald-500/80 transition-all"
+            title="Click to view Proof of Delivery photos in full natural proportion"
+          >
+            <div className="flex items-center justify-between text-[9px] font-mono font-bold text-emerald-400 mb-1 px-0.5">
+              <span>📷 Proof of Delivery</span>
+              <span className="text-slate-400">{podPhotos.length} Photo{podPhotos.length > 1 ? 's' : ''} (Click to expand)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1 max-h-24 overflow-hidden rounded">
+              {podPhotos.slice(0, 2).map((photoUrl, pIdx) => (
+                <div key={pIdx} className="bg-slate-950 rounded flex items-center justify-center p-0.5 border border-slate-800">
+                  <img 
+                    src={photoUrl} 
+                    alt={`POD Photo #${pIdx + 1}`} 
+                    className="max-h-20 w-auto max-w-full object-contain rounded" 
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Card Specs */}

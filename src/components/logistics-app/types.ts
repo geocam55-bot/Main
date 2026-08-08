@@ -26,7 +26,8 @@ export interface DeliveryRecord {
   assignedDriver?: string;
   assignedPicker?: string;
   customerSignature?: string; // Base64 or live SVG string
-  deliveryPhoto?: string; // Live image description or actual asset URL
+  deliveryPhoto?: string; // Live image description or actual asset URL (legacy or primary)
+  deliveryPhotos?: string[]; // Array of multiple Proof of Delivery photos
   pdfUrl?: string; // Link to the uploaded physical invoice/receipt PDF
   documentType?: string; // E.g., 'Supplier Pickup', 'Order', 'Credit', 'RMA'
   scheduledDate?: string; // YYYY-MM-DD
@@ -66,6 +67,23 @@ export interface HistoryEvent {
   location: string;
   operator: string;
   notes?: string;
+  customerSignature?: string;
+  deliveryPhoto?: string;
+  deliveryPhotos?: string[];
+}
+
+/**
+  * Safely extracts all Proof of Delivery photos from a delivery record or event object
+  */
+export function getDeliveryPhotos(record?: { deliveryPhoto?: string; deliveryPhotos?: string[] } | null): string[] {
+  if (!record) return [];
+  if (Array.isArray(record.deliveryPhotos) && record.deliveryPhotos.length > 0) {
+    return record.deliveryPhotos.filter(Boolean);
+  }
+  if (record.deliveryPhoto) {
+    return [record.deliveryPhoto];
+  }
+  return [];
 }
 
 export interface Branch {

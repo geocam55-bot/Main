@@ -240,6 +240,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [uploadedPhotoType, setUploadedPhotoType] = useState('Delivered Package');
   const [uploadedPhotoPath, setUploadedPhotoPath] = useState<string | null>(null);
+  const [uploadedPhotoPaths, setUploadedPhotoPaths] = useState<string[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -842,55 +843,70 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const originalBase64 = reader.result as string;
-        // Compress and downscale the image client-side to ensure the base64 payload is compact and syncs reliably to Supabase
-        const img = new Image();
-        img.src = originalBase64;
-        img.onload = () => {
-          const max_size = 1024; // max dimension (width or height)
-          let width = img.width;
-          let height = img.height;
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      Array.from(files).forEach((file) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const originalBase64 = reader.result as string;
+          const img = new Image();
+          img.src = originalBase64;
+          img.onload = () => {
+            const max_size = 1024;
+            let width = img.width;
+            let height = img.height;
 
-          if (width > height) {
-            if (width > max_size) {
-              height = Math.round((height * max_size) / width);
-              width = max_size;
+            if (width > height) {
+              if (width > max_size) {
+                height = Math.round((height * max_size) / width);
+                width = max_size;
+              }
+            } else {
+              if (height > max_size) {
+                width = Math.round((width * max_size) / height);
+                height = max_size;
+              }
             }
-          } else {
-            if (height > max_size) {
-              width = Math.round((width * max_size) / height);
-              height = max_size;
-            }
-          }
 
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-            setUploadedPhotoPath(compressedBase64);
-          } else {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+              setUploadedPhotoPaths(prev => [...prev, compressedBase64]);
+              setUploadedPhotoPath(compressedBase64);
+            } else {
+              setUploadedPhotoPaths(prev => [...prev, originalBase64]);
+              setUploadedPhotoPath(originalBase64);
+            }
+          };
+          img.onerror = () => {
+            setUploadedPhotoPaths(prev => [...prev, originalBase64]);
             setUploadedPhotoPath(originalBase64);
-          }
+          };
         };
-        img.onerror = () => {
-          setUploadedPhotoPath(originalBase64);
-        };
-      };
-      reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+      });
     }
+  };
+
+  const handleRemovePhoto = (indexToRemove: number) => {
+    setUploadedPhotoPaths(prev => {
+      const next = prev.filter((_, idx) => idx !== indexToRemove);
+      setUploadedPhotoPath(next[0] || null);
+      return next;
+    });
   };
 
   // Log Proof of Delivery (POD)
   const handleLogPOD = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPODOrder) return;
+
+    const primaryPhoto = uploadedPhotoPaths[0] || uploadedPhotoPath || undefined;
+    const photosList = uploadedPhotoPaths.length > 0 ? uploadedPhotoPaths : (uploadedPhotoPath ? [uploadedPhotoPath] : undefined);
 
     try {
       if (onAddOrUpdateDelivery) {
@@ -905,7 +921,8 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
               operator: currentUser?.name || 'Driver',
               notes: podNotes || 'Delivered to recipient',
               customerSignature: signatureData || undefined,
-              deliveryPhoto: uploadedPhotoPath || undefined
+              deliveryPhoto: primaryPhoto,
+              deliveryPhotos: photosList
             }
           ];
 
@@ -914,13 +931,14 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
             status: 'DELIVERED',
             deliveredAt: new Date().toISOString(),
             customerSignature: signatureData || undefined,
-            deliveryPhoto: uploadedPhotoPath || undefined,
+            deliveryPhoto: primaryPhoto,
+            deliveryPhotos: photosList,
             history: newHistory
           });
         }
       }
 
-      setPodSuccessMsg(`Electronic POD successfully logged for ${selectedPODOrder}!`);
+      setPodSuccessMsg(`Electronic POD successfully logged with ${photosList?.length || 0} photo(s) for ${selectedPODOrder}!`);
 
       setTimeout(() => {
         setPodSuccessMsg('');
@@ -928,12 +946,13 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
         setPodNotes('');
         setSignatureData(null);
         setUploadedPhotoPath(null);
+        setUploadedPhotoPaths([]);
         setSelectedPODOrder('');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
         clearSignature();
-      }, 4000);
+      }, 1500);
     } catch (err: any) {
       console.error(err);
       alert(`Error logging POD: ${err.message}`);
@@ -1854,12 +1873,17 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
                 )}
               </div>
 
-              {/* PHOTO UPLOAD */}
+              {/* MULTIPLE PHOTO UPLOAD */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">Proof of Delivery Photo Category</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-bold text-slate-500">
+                    Proof of Delivery Photos ({uploadedPhotoPaths.length})
+                  </label>
+                  <span className="text-[9px] text-indigo-600 font-mono font-semibold">Multiple photos supported</span>
+                </div>
                 <div className="flex gap-2">
                   <select value={uploadedPhotoType} onChange={e => setUploadedPhotoType(e.target.value)} className="p-2 text-base md:text-xs rounded border border-slate-200 focus:outline-blue-500 flex-1">
-                    <option value="Delivered Package">Delivered Package in Front Lobby</option>
+                    <option value="Delivered Package">Delivered Package / Drop-off Site</option>
                     <option value="Damage">Damage Pre-existing Check</option>
                     <option value="Pickup Condition">Warehouse Loading state</option>
                     <option value="Return">Returned Freight Verification</option>
@@ -1868,6 +1892,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
                     type="file" 
                     accept="image/*" 
                     capture="environment" 
+                    multiple
                     ref={fileInputRef} 
                     onChange={handlePhotoCapture} 
                     className="hidden" 
@@ -1875,15 +1900,35 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
                   <button 
                     type="button" 
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-3 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-bold flex items-center space-x-1"
+                    className="px-3 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-bold flex items-center space-x-1 shrink-0 cursor-pointer"
                   >
                     <Camera className="h-3.5 w-3.5" />
-                    <span>Take Photo</span>
+                    <span>{uploadedPhotoPaths.length > 0 ? '+ Add Photo' : 'Take Photo'}</span>
                   </button>
                 </div>
-                {uploadedPhotoPath && (
-                  <div className="mt-2 text-[10px] flex items-center justify-center bg-slate-50 p-2 rounded border border-slate-200">
-                    <img src={uploadedPhotoPath} alt="Captured delivery proof" className="max-h-32 object-contain rounded" />
+
+                {uploadedPhotoPaths.length > 0 && (
+                  <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                    {uploadedPhotoPaths.map((photo, pIdx) => (
+                      <div key={pIdx} className="relative group bg-slate-900 rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center min-h-[100px]">
+                        <img 
+                          src={photo} 
+                          alt={`Captured proof #${pIdx + 1}`} 
+                          className="max-h-32 w-auto max-w-full object-contain rounded" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(pIdx)}
+                          className="absolute top-1 right-1 bg-red-600/90 hover:bg-red-700 text-white p-1 rounded-full text-xs shadow-md transition-all cursor-pointer"
+                          title="Remove photo"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <span className="absolute bottom-1 left-1 bg-slate-950/80 text-white font-mono text-[9px] px-1.5 py-0.5 rounded border border-slate-800">
+                          #{pIdx + 1}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

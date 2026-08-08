@@ -1166,6 +1166,7 @@ interface LocalWatchFile {
   size: string;
   addedTime: string;
   processed: boolean;
+  fileData?: string;
 }
 
 interface ArchitectureViewProps {
@@ -2399,16 +2400,16 @@ export default function ArchitectureView({
       orderTotal: orderTotalVal,
       status: DeliveryStatus.REGISTERED,
       registeredAt: new Date().toISOString(),
-      pdfUrl: physicalPdfLink,
+      pdfUrl: physicalPdfLink || fileUri,
       documentType: selectedDocType,
-      destinationNotes: `[Automated PDF Capture - Type: ${selectedDocType}] PO#: ${recordId} | Supplier/Customer: ${customerVal} | Date: ${dateVal}. Matches OCR template regional Nova_Scotia_Regional_Core with confidence 98.5%.${physicalPdfLink ? ` Physical Document stored: ${physicalPdfLink}` : ''}`,
+      destinationNotes: `[Automated PDF Capture - Type: ${selectedDocType}] PO#: ${recordId} | Supplier/Customer: ${customerVal} | Date: ${dateVal}. Matches OCR template regional Nova_Scotia_Regional_Core with confidence 98.5%.${(physicalPdfLink || fileUri) ? ` Physical Document stored: ${physicalPdfLink || fileUri}` : ''}`,
       history: [
         {
           status: DeliveryStatus.REGISTERED,
           timestamp: new Date().toISOString(),
           location: activeBranches.find(b => b.id === selectedBranchId)?.name || 'Central Logistics Depot',
           operator: 'Azure OCR Automate Stream',
-          notes: `Ingested automatically into logistics. Ready for truck pre-allocation or dispatch.${physicalPdfLink ? ` Physical copy archived on server.` : ''}`
+          notes: `Ingested automatically into logistics. Ready for truck pre-allocation or dispatch.${(physicalPdfLink || fileUri) ? ` Physical copy archived on server.` : ''}`
         }
       ]
     };

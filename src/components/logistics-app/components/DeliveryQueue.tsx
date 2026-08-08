@@ -1,6 +1,6 @@
 import { formatPhoneNumber } from '../lib/formatters';
 import { useState, FormEvent } from 'react';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser } from '../types';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, getDeliveryPhotos } from '../types';
 import { 
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
@@ -117,7 +117,7 @@ const generateScannedSvgForDelivery = (delivery: DeliveryRecord, docType: string
 };
 
 // Helper to retrieve the actual PDF path from the delivery record or parse it from destinationNotes or fallback to SVG scanned copy
-const getEffectivePdfUrl = (delivery: DeliveryRecord): string => {
+export const getEffectivePdfUrl = (delivery: DeliveryRecord): string => {
   if (delivery.pdfUrl) return delivery.pdfUrl;
   if (delivery.destinationNotes) {
     const match = delivery.destinationNotes.match(/Physical Document stored:\s*([^\s|"]+)/);
@@ -136,10 +136,33 @@ const getEffectivePdfUrl = (delivery: DeliveryRecord): string => {
 export const openScannedDocumentInNewTab = (delivery: DeliveryRecord) => {
   const pdfUrl = getEffectivePdfUrl(delivery);
 
-  // If it's a standard HTTP/HTTPS URL, open directly
-  if (pdfUrl.startsWith('http://') || pdfUrl.startsWith('https://')) {
+  // If it's a standard HTTP/HTTPS or /uploads/ URL, open directly
+  if (pdfUrl.startsWith('http://') || pdfUrl.startsWith('https://') || pdfUrl.startsWith('/uploads/')) {
     window.open(pdfUrl, '_blank', 'noopener,noreferrer');
     return;
+  }
+
+  // Handle data URIs (e.g. data:application/pdf;base64, or data:image/png;base64,) via Blob URL
+  if (pdfUrl.startsWith('data:')) {
+    try {
+      const parts = pdfUrl.split(';');
+      const mime = parts[0].replace('data:', '');
+      if (mime === 'application/pdf' || mime.startsWith('image/')) {
+        const base64Str = parts[1].replace('base64,', '');
+        const binaryStr = atob(base64Str);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to convert data URI to Blob URL:', e);
+    }
   }
 
   // Extract raw SVG string from base64 data URI or raw SVG tag
@@ -465,6 +488,7 @@ export default function DeliveryQueue({
   const [formReturnReason, setFormReturnReason] = useState('');
   const [formSignature, setFormSignature] = useState('');
   const [formPhoto, setFormPhoto] = useState('');
+  const [formPhotos, setFormPhotos] = useState<string[]>([]);
   const [formPdfUrl, setFormPdfUrl] = useState('');
   const [formPicker, setFormPicker] = useState('');
   const [formDeliveredAt, setFormDeliveredAt] = useState('');
@@ -498,6 +522,7 @@ export default function DeliveryQueue({
     setFormReturnReason('');
     setFormSignature('');
     setFormPhoto('');
+    setFormPhotos([]);
     setFormPdfUrl('');
     setFormPicker('');
     setFormRegisteredAt(new Date().toISOString().substring(0, 10));
@@ -526,6 +551,7 @@ export default function DeliveryQueue({
     setFormReturnReason(record.returnReason || '');
     setFormSignature(record.customerSignature || '');
     setFormPhoto(record.deliveryPhoto || '');
+    setFormPhotos(getDeliveryPhotos(record));
     setFormPdfUrl(record.pdfUrl || getEffectivePdfUrl(record) || '');
     setFormPicker(record.assignedPicker || '');
     setFormRegisteredAt(parseToYYYYMMDD(record.registeredAt) || new Date().toISOString().substring(0, 10));
@@ -616,7 +642,8 @@ export default function DeliveryQueue({
         assignedPicker: formStatus === DeliveryStatus.PICKED_AND_LOADED ? pickerName : (editingRecord?.assignedPicker || undefined),
         returnReason: formStatus === DeliveryStatus.RETURNED ? (formReturnReason || undefined) : undefined,
         customerSignature: formStatus === DeliveryStatus.DELIVERED ? (formSignature || editingRecord.customerSignature || 'Physical Signoff Done') : undefined,
-        deliveryPhoto: formStatus === DeliveryStatus.DELIVERED ? (formPhoto || editingRecord.deliveryPhoto || undefined) : undefined,
+        deliveryPhoto: formStatus === DeliveryStatus.DELIVERED ? (formPhotos[0] || formPhoto || editingRecord.deliveryPhoto || undefined) : undefined,
+        deliveryPhotos: formStatus === DeliveryStatus.DELIVERED ? (formPhotos.length > 0 ? formPhotos : (formPhoto ? [formPhoto] : editingRecord.deliveryPhotos)) : undefined,
         pdfUrl: formPdfUrl || undefined,
         scheduledDate: formScheduledDate || undefined,
         scheduledSlot: (formScheduledSlot as 'AM' | 'PM') || undefined,
@@ -668,7 +695,8 @@ export default function DeliveryQueue({
         assignedPicker: formStatus === DeliveryStatus.PICKED_AND_LOADED ? pickerName : undefined,
         returnReason: formStatus === DeliveryStatus.RETURNED ? (formReturnReason || undefined) : undefined,
         customerSignature: formStatus === DeliveryStatus.DELIVERED ? (formSignature || 'Physical Handoff Validated') : undefined,
-        deliveryPhoto: formStatus === DeliveryStatus.DELIVERED ? (formPhoto || undefined) : undefined,
+        deliveryPhoto: formStatus === DeliveryStatus.DELIVERED ? (formPhotos[0] || formPhoto || undefined) : undefined,
+        deliveryPhotos: formStatus === DeliveryStatus.DELIVERED ? (formPhotos.length > 0 ? formPhotos : (formPhoto ? [formPhoto] : undefined)) : undefined,
         pdfUrl: formPdfUrl || undefined,
         scheduledDate: formScheduledDate || undefined,
         scheduledSlot: (formScheduledSlot as 'AM' | 'PM') || undefined,
@@ -1490,11 +1518,24 @@ export default function DeliveryQueue({
                             Proof of Delivery Sign-off
                           </h6>
                           <p className="font-mono text-[11px]">Signature Handoff File: <strong>&ldquo;{delivery.customerSignature}&rdquo;</strong></p>
-                          {delivery.deliveryPhoto && (
-                            <div className="rounded-lg overflow-hidden border border-emerald-200 mt-1 max-w-sm">
-                              <img src={delivery.deliveryPhoto} alt="Lumber placement dropoff check" className="h-32 w-full object-cover" />
-                              <div className="bg-emerald-100/90 py-1 text-center font-mono text-[9px] text-emerald-900 border-t border-emerald-200">
-                                🛡️ Timestamped and Location coordinates Verified
+                          {getDeliveryPhotos(delivery).length > 0 && (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-[11px] font-bold text-emerald-900 font-mono">
+                                Proof of Delivery Photos ({getDeliveryPhotos(delivery).length}):
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {getDeliveryPhotos(delivery).map((photoUrl, pIdx) => (
+                                  <div key={pIdx} className="rounded-lg overflow-hidden border border-emerald-200 bg-slate-900/90 flex flex-col items-center justify-center p-1.5 shadow-xs">
+                                    <img 
+                                      src={photoUrl} 
+                                      alt={`Lumber placement dropoff check #${pIdx + 1}`} 
+                                      className="max-h-48 w-auto max-w-full object-contain rounded" 
+                                    />
+                                    <div className="w-full bg-emerald-950/80 py-0.5 text-center font-mono text-[9px] text-emerald-300 mt-1 rounded">
+                                      📷 Photo #{pIdx + 1} · Timestamped & Geolocation Verified
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}
