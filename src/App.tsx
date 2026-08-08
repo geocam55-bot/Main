@@ -937,11 +937,13 @@ export function AppContent() {
                 };
                 localStorage.setItem('prospaces_active_tenant', JSON.stringify(activeTenant));
                 localStorage.setItem('prospaces_active_user', JSON.stringify(activeUser));
+                sessionStorage.setItem('accessed_from_crm', 'true');
+                sessionStorage.setItem('prospaces_session_active', 'true');
               } catch (e) {
                 console.error('Failed setting logistics user in localStorage:', e);
               }
             }
-            window.location.href = '/logistics.html';
+            window.location.href = '/logistics.html?from=crm';
           }}
           onBack={async () => {
             await handleLogout();

@@ -301,7 +301,8 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       <LogisticsSpaceInfo
         onBack={() => setSelectedSpaceInfo(null)}
         onEnterSpace={() => {
-          window.location.href = '/logistics.html';
+          sessionStorage.setItem('accessed_from_crm', 'true');
+          window.location.href = '/logistics.html?from=crm';
         }}
       />
     );
@@ -404,7 +405,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-60 p-2 bg-white rounded-xl shadow-lg border border-slate-150 z-50">
                   <DropdownMenuItem
-                    onClick={() => { window.location.href = '/logistics.html'; }}
+                    onClick={() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics.html?from=crm'; }}
                     className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-blue-50 cursor-pointer text-slate-800 font-medium transition-colors"
                   >
                     <div className="h-8.5 w-8.5 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
@@ -484,7 +485,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 <div className="pt-2 border-t border-slate-100 mt-1">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 mb-1 block">Other Projects</span>
                   <button
-                    onClick={() => { window.location.href = '/logistics.html'; setMobileMenuOpen(false); }}
+                    onClick={() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics.html?from=crm'; setMobileMenuOpen(false); }}
                     className="w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all font-semibold text-slate-700"
                   >
                     <div className="flex items-center gap-2.5">

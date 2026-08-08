@@ -56,9 +56,18 @@ function LogisticsEntryApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const isSessionActive = sessionStorage.getItem('prospaces_session_active');
-      const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
-      if (!isSessionActive && keepLoggedIn === 'false') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isFromCrm = urlParams.get('from') === 'crm' || urlParams.get('source') === 'crm';
+      const isReferrerCrm = document.referrer && (document.referrer.includes('crm') || document.referrer.includes('3000') || document.referrer.includes('index.html'));
+      if (isFromCrm || isReferrerCrm) {
+        sessionStorage.setItem('accessed_from_crm', 'true');
+        sessionStorage.setItem('prospaces_session_active', 'true');
+      }
+
+      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
+      const isSessionActive = sessionStorage.getItem('prospaces_session_active') === 'true';
+
+      if (!accessedFromCrm && !isSessionActive) {
         localStorage.removeItem('prospaces_cached_user');
         localStorage.removeItem('prospaces_active_user');
         localStorage.removeItem('prospaces_active_tenant');
@@ -74,6 +83,27 @@ function LogisticsEntryApp() {
       return null;
     }
   });
+
+  // Handle auto log off when exiting app accessed via direct URL
+  useEffect(() => {
+    const handleExit = () => {
+      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
+      if (!accessedFromCrm) {
+        localStorage.removeItem('prospaces_cached_user');
+        localStorage.removeItem('prospaces_active_user');
+        localStorage.removeItem('prospaces_active_tenant');
+        localStorage.removeItem('prospaces_keep_logged_in');
+        sessionStorage.removeItem('prospaces_session_active');
+      }
+    };
+
+    window.addEventListener('pagehide', handleExit);
+    window.addEventListener('beforeunload', handleExit);
+    return () => {
+      window.removeEventListener('pagehide', handleExit);
+      window.removeEventListener('beforeunload', handleExit);
+    };
+  }, []);
   const [, setAccessToken] = useState<string | undefined>();
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => {

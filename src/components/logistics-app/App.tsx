@@ -218,6 +218,24 @@ export default function App() {
 
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
     try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isFromCrm = urlParams.get('from') === 'crm' || urlParams.get('source') === 'crm';
+      const isReferrerCrm = document.referrer && (document.referrer.includes('crm') || document.referrer.includes('3000') || document.referrer.includes('index.html'));
+      if (isFromCrm || isReferrerCrm) {
+        sessionStorage.setItem('accessed_from_crm', 'true');
+        sessionStorage.setItem('prospaces_session_active', 'true');
+      }
+
+      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
+      const isSessionActive = sessionStorage.getItem('prospaces_session_active') === 'true';
+
+      if (!accessedFromCrm && !isSessionActive) {
+        localStorage.removeItem('prospaces_active_tenant');
+        localStorage.removeItem('prospaces_active_user');
+        localStorage.removeItem('prospaces_cached_user');
+        return null;
+      }
+
       const cached = localStorage.getItem('prospaces_active_tenant');
       if (cached) return JSON.parse(cached);
       const crmUserStr = localStorage.getItem('prospaces_cached_user');
@@ -240,9 +258,19 @@ export default function App() {
   });
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      const isSessionActive = sessionStorage.getItem('prospaces_session_active');
+      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
+      const isSessionActive = sessionStorage.getItem('prospaces_session_active') === 'true';
+
+      if (!accessedFromCrm && !isSessionActive) {
+        localStorage.removeItem('prospaces_active_user');
+        localStorage.removeItem('prospaces_active_tenant');
+        localStorage.removeItem('prospaces_cached_user');
+        return null;
+      }
+
+      const isSessionActiveLegacy = sessionStorage.getItem('prospaces_session_active');
       const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
-      if (!isSessionActive && keepLoggedIn === 'false') {
+      if (!isSessionActiveLegacy && keepLoggedIn === 'false' && !accessedFromCrm) {
         return null;
       }
       const cached = localStorage.getItem('prospaces_active_user');
@@ -256,7 +284,7 @@ export default function App() {
         }
       }
       const crmUserStr = localStorage.getItem('prospaces_cached_user');
-      if (crmUserStr) {
+      if (crmUserStr && accessedFromCrm) {
         const crmUser = JSON.parse(crmUserStr);
         if (crmUser && (crmUser.email || crmUser.id)) {
           const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
@@ -278,6 +306,27 @@ export default function App() {
     } catch (e) {}
     return null;
   });
+
+  // Automatically log off when user exits app accessed via direct URL
+  useEffect(() => {
+    const handleExit = () => {
+      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
+      if (!accessedFromCrm) {
+        localStorage.removeItem('prospaces_active_user');
+        localStorage.removeItem('prospaces_active_tenant');
+        localStorage.removeItem('prospaces_cached_user');
+        localStorage.removeItem('prospaces_keep_logged_in');
+        sessionStorage.removeItem('prospaces_session_active');
+      }
+    };
+
+    window.addEventListener('pagehide', handleExit);
+    window.addEventListener('beforeunload', handleExit);
+    return () => {
+      window.removeEventListener('pagehide', handleExit);
+      window.removeEventListener('beforeunload', handleExit);
+    };
+  }, []);
 
   // State to switch between Super Admin Tenant Maintenance and Tenant Application Workspace
   const [superAdminViewMode, setSuperAdminViewMode] = useState<'tenant_maintenance' | 'app_workspace'>('tenant_maintenance');
@@ -658,6 +707,7 @@ export default function App() {
     setUsers([]);
     setCurrentTenant(tenant);
     setCurrentUser(user);
+    sessionStorage.setItem('prospaces_session_active', 'true');
     localStorage.setItem('prospaces_active_tenant', JSON.stringify(tenant));
     localStorage.setItem('prospaces_active_user', JSON.stringify(user));
 

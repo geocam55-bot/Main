@@ -493,7 +493,7 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.6 }}
-            onClick={() => handleDesktopOnlyClick('Logistics & Fleet Space', onSelectLogisticsSpace || (() => { window.location.href = '/logistics.html'; }))}
+            onClick={() => handleDesktopOnlyClick('Logistics & Fleet Space', onSelectLogisticsSpace || (() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics.html?from=crm'; }))}
             onMouseEnter={() => setHoveredCard('logistics')}
             onMouseLeave={() => setHoveredCard(null)}
             className="group text-left"
