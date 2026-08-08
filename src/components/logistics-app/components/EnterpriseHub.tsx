@@ -3,7 +3,7 @@ import { formatPhoneNumber } from '../lib/formatters';
 import { 
   Users, ShoppingBag, MapPin, Route as RouteIcon, ShieldAlert, 
   Wrench, Fuel, Signature, AlertCircle, Sparkles, CheckCircle2,
-  XCircle, FileText, Bell, Search, Plus, Calendar, ShieldCheck, 
+  XCircle, X, FileText, Bell, Search, Plus, Calendar, ShieldCheck, 
   Gauge, DollarSign, ArrowRight, ClipboardList, PenTool, CheckSquare,
   Activity, Award, RefreshCw, Trash2, HelpCircle, Navigation, Info, Clock, PlayCircle,
   Camera, Truck as TruckIcon
