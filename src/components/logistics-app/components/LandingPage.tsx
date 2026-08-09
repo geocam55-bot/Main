@@ -158,19 +158,19 @@ export default function LandingPage({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
-            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <div className="flex items-center space-x-3.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
               <img 
-                src="/logistics-logo.jpg" 
+                src={getSafeLogoSrc(prospacesLogo)} 
                 alt="ProSpaces Logo" 
-                className="h-16 w-auto object-contain"
+                className="h-20 sm:h-24 md:h-28 w-auto object-contain mix-blend-multiply transition-all"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = getSafeLogoSrc(prospacesLogo);
+                  (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
                 }}
               />
               <div className="flex flex-col">
-                <span className="font-sans font-black text-slate-900 text-2xl tracking-tight leading-none">ProSpaces</span>
-                <span className="text-orange-600 text-xs font-mono uppercase tracking-wider font-extrabold mt-1">Logistics Module</span>
+                <span className="font-sans font-black text-slate-900 text-2xl sm:text-3xl tracking-tight leading-none">ProSpaces</span>
+                <span className="text-orange-600 text-xs sm:text-sm font-mono uppercase tracking-wider font-extrabold mt-1">Logistics Module</span>
               </div>
             </div>
 
@@ -815,19 +815,19 @@ export default function LandingPage({
             
             {/* Column 1: Brand Info */}
             <div className="space-y-4">
-              <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <div className="flex items-center space-x-3.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <img 
-                  src="/logistics-logo.jpg" 
+                  src={getSafeLogoSrc(prospacesLogo)} 
                   alt="ProSpaces Logo" 
-                  className="h-14 w-auto object-contain brightness-110"
+                  className="h-20 sm:h-24 w-auto object-contain brightness-110 rounded-lg bg-white/5 p-1"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = getSafeLogoSrc(prospacesLogo);
+                    (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
                   }}
                 />
                 <div className="flex flex-col">
-                  <span className="font-sans font-black text-white text-xl tracking-tight leading-none">ProSpaces</span>
-                  <span className="text-orange-500 text-[10px] font-mono uppercase tracking-wider font-extrabold mt-1">Logistics Module</span>
+                  <span className="font-sans font-black text-white text-xl sm:text-2xl tracking-tight leading-none">ProSpaces</span>
+                  <span className="text-orange-500 text-[10px] sm:text-xs font-mono uppercase tracking-wider font-extrabold mt-1">Logistics Module</span>
                 </div>
               </div>
               <p className="text-slate-500 text-xs leading-relaxed">

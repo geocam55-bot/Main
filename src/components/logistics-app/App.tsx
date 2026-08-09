@@ -870,7 +870,13 @@ export default function App() {
     );
 
     if (isLogisticsPage) {
-      window.close();
+      try {
+        window.close();
+        window.open('', '_self', '');
+        window.close();
+      } catch (e) {
+        console.warn("Direct window.close prevented by browser security:", e);
+      }
       setIsAppClosed(true);
       return;
     }
@@ -2165,6 +2171,26 @@ export default function App() {
 
 
   if (isAppClosed) {
+    const handleCloseWindowAction = () => {
+      try {
+        window.close();
+      } catch (e) {
+        console.warn("window.close blocked:", e);
+      }
+      try {
+        window.open('', '_self', '');
+        window.close();
+      } catch (e) {
+        console.warn("self-open close blocked:", e);
+      }
+      // Fallback: If browser security blocks closing tabs that weren't opened by script, redirect to blank page
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = 'about:blank';
+        }
+      }, 150);
+    };
+
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center font-sans antialiased text-slate-100">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 animate-in fade-in duration-200">
@@ -2174,7 +2200,7 @@ export default function App() {
           <div className="space-y-2">
             <h2 className="text-xl font-extrabold text-white">ProSpaces Logistics Closed</h2>
             <p className="text-xs text-slate-400 leading-relaxed">
-              You have logged off and exited the ProSpaces Logistics application.
+              You have logged off and exited the ProSpaces Logistics application. Your session has been safely destroyed.
             </p>
           </div>
           <div className="pt-2 space-y-3">
@@ -2193,11 +2219,14 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => window.close()}
-              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+              onClick={handleCloseWindowAction}
+              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-all cursor-pointer"
             >
-              Close Window
+              Close Window / Clear Page
             </button>
+            <p className="text-[10px] text-slate-500 font-mono italic">
+              Note: If your browser security policy prevents automatic tab closure, you may close this tab manually or click above to clear to a blank screen.
+            </p>
           </div>
         </div>
       </div>
@@ -2247,15 +2276,15 @@ export default function App() {
           <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
             
             {/* Branded Logo representation */}
-            <div className="flex items-center space-x-3 text-center sm:text-left">
-              <div className="shrink-0 flex items-center justify-center bg-white p-1 rounded-lg border border-amber-500/10 shadow-sm">
+            <div className="flex items-center space-x-3.5 text-center sm:text-left">
+              <div className="shrink-0 flex items-center justify-center">
                 <img 
-                  src="/logistics-logo.jpg" 
+                  src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
                   alt="ProSpaces Logo" 
-                  className="h-10 w-auto object-contain"
+                  className="h-16 sm:h-20 w-auto object-contain rounded-lg p-1 bg-white"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logo.jpg';
+                    (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
                   }}
                 />
               </div>
@@ -2557,15 +2586,15 @@ export default function App() {
         <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-3">
           
           {/* Logo & title context */}
-          <div className="flex items-center space-x-2.5 sm:space-x-4 text-left">
+          <div className="flex items-center space-x-3 sm:space-x-5 text-left py-1">
             <div className="shrink-0 flex items-center justify-center">
               <img 
-                src="/logistics-logo.jpg" 
+                src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
                 alt="ProSpaces Logo" 
-                className="h-10 sm:h-16 w-auto object-contain animate-fade-in"
+                className="h-14 sm:h-20 md:h-24 w-auto object-contain animate-fade-in mix-blend-multiply border-none ring-0 outline-none shadow-none transition-all"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logo.jpg';
+                  (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
                 }}
               />
             </div>

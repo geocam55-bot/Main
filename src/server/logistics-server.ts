@@ -2234,8 +2234,9 @@ app.use((req, res, next) => {
       });
 
       // Auto-correct common misconfigured hostnames for IONOS
-      if (smtpHost && smtpHost.toLowerCase() === "smtp.ionos.ca") {
-        console.log("[SMTP] Mapping smtp.ionos.ca to smtp.ionos.com to resolve DNS getaddrinfo error.");
+      if (smtpHost && (smtpHost.toLowerCase() === "smtp.ionos.ca" || smtpHost.toLowerCase() === "ionos.ca" || smtpHost.toLowerCase() === "mail.ionos.ca" || smtpHost.toLowerCase() === "ionos.com")) {
+        smtpHost = "smtp.ionos.com";
+      } else if (!smtpHost && (smtpUser.toLowerCase().includes("ionos") || smtpFrom.toLowerCase().includes("ionos"))) {
         smtpHost = "smtp.ionos.com";
       }
 

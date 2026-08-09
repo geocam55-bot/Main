@@ -655,12 +655,12 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
           {/* Main ProSpaces Logo Representation */}
           <div className="flex flex-col items-center mb-6">
             <img 
-              src="/logistics-logo.jpg" 
+              src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
               alt="ProSpaces Logo" 
-              className="h-28 w-auto object-contain mx-auto"
+              className="h-36 sm:h-44 w-auto object-contain mx-auto mix-blend-multiply transition-all"
               referrerPolicy="no-referrer"
               onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logo.jpg';
+                (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
               }}
             />
           </div>
@@ -882,31 +882,6 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
                 />
               </div>
 
-              {/* Secure Role Selection */}
-              <div className="space-y-1 text-left">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Operational Portal Role
-                </label>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {['Admin', 'Dispatcher', 'Driver', 'Picker', 'SUPER_ADMIN'].map((role) => {
-                    const isActive = customRole === role;
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => setCustomRole(role as any)}
-                        className={`py-2 text-center text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
-                          isActive
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                        }`}
-                      >
-                        {role}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
 
               {/* Phone & Hub Station Code */}
               <div className="grid grid-cols-2 gap-3 text-left">
