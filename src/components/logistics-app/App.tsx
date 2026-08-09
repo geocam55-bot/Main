@@ -204,6 +204,7 @@ export default function App() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
   const [activeNavDropdown, setActiveNavDropdown] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState<boolean>(false);
+  const [isAppClosed, setIsAppClosed] = useState<boolean>(false);
   const [allTenants, setAllTenants] = useState<Tenant[]>(() => {
     const cached = localStorage.getItem('prospaces_all_tenants');
     if (cached) {
@@ -863,7 +864,18 @@ export default function App() {
       console.warn("Supabase sign out error:", e);
     }
 
-    // Redirect user to the ProSpaces CRM Hero page
+    const isLogisticsPage = typeof window !== 'undefined' && (
+      window.location.pathname.includes('logistics.html') ||
+      sessionStorage.getItem('accessed_from_crm') !== 'true'
+    );
+
+    if (isLogisticsPage) {
+      window.close();
+      setIsAppClosed(true);
+      return;
+    }
+
+    // Redirect user to the ProSpaces CRM Hero page if accessed from main CRM
     window.location.href = '/';
   };
 
@@ -2152,6 +2164,46 @@ export default function App() {
   };
 
 
+  if (isAppClosed) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center font-sans antialiased text-slate-100">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 animate-in fade-in duration-200">
+          <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-center mx-auto text-blue-400">
+            <LogOut className="h-8 w-8 text-blue-400" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-extrabold text-white">ProSpaces Logistics Closed</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              You have logged off and exited the ProSpaces Logistics application.
+            </p>
+          </div>
+          <div className="pt-2 space-y-3">
+            <button
+              type="button"
+              onClick={() => {
+                setIsAppClosed(false);
+                setShowLogin(true);
+                if (typeof window !== 'undefined' && window.location.pathname.includes('logistics.html')) {
+                  window.location.reload();
+                }
+              }}
+              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            >
+              Log Back In to ProSpaces Logistics
+            </button>
+            <button
+              type="button"
+              onClick={() => window.close()}
+              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Close Window
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentTenant || !currentUser) {
     if (showLogin) {
       return (
@@ -2161,7 +2213,18 @@ export default function App() {
             setShowLogin(false);
           }} 
           tenantsList={allTenants} 
-          onBackToLanding={() => { window.location.href = '/'; }}
+          onBackToLanding={() => { 
+            const isLogisticsPage = typeof window !== 'undefined' && (
+              window.location.pathname.includes('logistics.html') ||
+              sessionStorage.getItem('accessed_from_crm') !== 'true'
+            );
+            if (isLogisticsPage) {
+              window.close();
+              setIsAppClosed(true);
+            } else {
+              window.location.href = '/';
+            }
+          }}
         />
       );
     }
