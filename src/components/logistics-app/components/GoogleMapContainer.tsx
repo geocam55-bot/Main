@@ -519,7 +519,7 @@ function MapInner({
       map.setZoom(13.5);
       
       const isOnline = isTruckOnline(truck);
-      const isMoving = isOnline && coords.hasRealGps && (truck.gpsSpeed || 0) > 0;
+      const isMoving = isOnline && (truck.isDriving || (truck.gpsSpeed && truck.gpsSpeed > 0) || Boolean(assignedDelivery) || truck.status === 'Driving' || truck.status === 'In Transit');
       const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
       
       const activeGpsSourceLabel = isOnline && coords.hasRealGps 
@@ -775,16 +775,19 @@ function MapInner({
         {displayTrucks.map((truck: any) => {
           const isOnline = isTruckOnline(truck);
           const isNoDriver = !truck.driver || truck.driver.toLowerCase() === 'no driver' || truck.driver.toLowerCase() === 'unassigned';
-
-          const nowDate = new Date();
-          const currentUtcHour = nowDate.getUTCHours();
-          const localAstHour = (currentUtcHour - 3 + 24) % 24;
-          const localAstDay = nowDate.getUTCDay();
-          const isStoreClosedNow = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
+          const isExplicitParked = truck.status === 'Parked' || truck.status === 'Stationary' || truck.status === 'Off';
 
           const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
-          const isMoving = !isStoreClosedNow && !isNoDriver && isOnline && ((typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || (assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED));
-          const isIdling = !isStoreClosedNow && !isNoDriver && !isMoving && isOnline && (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0);
+          const isMoving = !isNoDriver && !isExplicitParked && isOnline && (
+            (typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || 
+            Boolean(assignedDelivery) || 
+            truck.isDriving === true ||
+            truck.status === 'Driving' ||
+            truck.status === 'In Transit' ||
+            truck.status === 'En Route' ||
+            truck.status === 'Active'
+          );
+          const isIdling = !isNoDriver && !isExplicitParked && !isMoving && isOnline && ((typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0) || truck.isIdling === true);
 
           const coords = getTruckCoords(truck, simProgress, activeBranches);
           const isSelected = selectedTrackTruckId === truck.id;
@@ -794,10 +797,11 @@ function MapInner({
             ? `<span class="bg-amber-100 text-amber-800 text-[9px] font-mono font-bold px-1.5 py-0.25 rounded-md border border-amber-200">🛰️ ${isMoving ? 'In Transit' : isIdling ? 'Idling' : 'Parked'}: ${truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED' ? truck.gpsDeviceId : 'Core Telematics'}</span>`
             : `<span class="bg-blue-100 text-blue-800 text-[9px] font-mono font-bold px-1.5 py-0.25 rounded-md border border-blue-200">📱 Mobile Device Geolocation</span>`;
 
+          const speedKmh = Math.round(truck.activeSpeed || truck.gpsSpeed || 54);
           const popupMessage = !isOnline
             ? `Driver Offline`
             : isMoving
-              ? `Driving (${Math.round(truck.gpsSpeed || 45)} km/h)`
+              ? `Driving (${speedKmh} km/h)`
               : isIdling
                 ? `Engine Idling (${truck.gpsIdlingMins || 12} mins)`
                 : `Parked at Terminal Depot`;

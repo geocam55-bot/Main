@@ -277,27 +277,32 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
   baseLat = sanitizedBase.lat;
   baseLng = sanitizedBase.lng;
 
+  const trAny = truck as any;
   const isNoDriver = !truck?.driver || truck?.driver.toLowerCase() === 'no driver' || truck?.driver.toLowerCase() === 'unassigned';
-  const nowDate = new Date();
-  const currentUtcHour = nowDate.getUTCHours();
-  const localAstHour = (currentUtcHour - 3 + 24) % 24;
-  const localAstDay = nowDate.getUTCDay();
-  const isStoreClosedNow = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
+  const isExplicitParked = trAny?.status === 'Parked' || trAny?.status === 'Stationary' || trAny?.status === 'Off';
 
   const rawSpeed = typeof truck?.gpsSpeed === 'number' ? truck.gpsSpeed : (typeof truck?.speed === 'number' ? truck.speed : 0);
-  const speed = (isStoreClosedNow || isNoDriver) ? 0 : rawSpeed;
-  const isMoving = speed > 0 && !isStoreClosedNow && !isNoDriver && (truck?.status === 'Driving' || truck?.status === 'In Transit');
+  const isExplicitDriving = trAny?.status === 'Driving' || trAny?.status === 'In Transit' || trAny?.status === 'En Route' || trAny?.isDriving === true;
+  const hasAssignedDelivery = Boolean(trAny?.assignedDeliveryId || trAny?.assignedDelivery || trAny?.trips?.length > 0);
+
+  const isMoving = !isNoDriver && !isExplicitParked && (
+    rawSpeed > 0 ||
+    isExplicitDriving ||
+    hasAssignedDelivery ||
+    (trAny?.status !== 'Parked' && trAny?.status !== 'Off' && trAny?.status !== 'Stationary')
+  );
 
   if (isMoving) {
-    const progress = simProgress[truck?.id] ?? 0.15;
+    const progress = simProgress[truck?.id] ?? 0.18;
     const idHash = (truck?.id || "").split("").reduce((sum: number, ch: string) => sum + ch.charCodeAt(0), 0);
     
-    // Smooth parametric path sweep along land road corridor
+    // Smooth parametric path sweep along land road corridor away from the terminal depot
     const travelDir = (idHash % 2 === 0) ? 1 : -1;
     const isDartmouth = baseLng >= -63.5850;
-    const sweepRange = 0.012; // ~1.2 km movement sweep along route
+    // Sweep range of ~1.8 to ~4.5 km along regional highway arterial corridors
+    const sweepRange = 0.020 + ((idHash % 5) * 0.006);
     const latOffset = Math.sin(progress * 2 * Math.PI) * sweepRange * travelDir;
-    const lngOffset = Math.cos(progress * 2 * Math.PI) * 0.003 * (isDartmouth ? 1 : -1);
+    const lngOffset = Math.cos(progress * 2 * Math.PI) * 0.010 * (isDartmouth ? 1 : -1);
 
     const rawLat = Number((baseLat + latOffset).toFixed(6));
     const rawLng = Number((baseLng + lngOffset).toFixed(6));
@@ -1732,51 +1737,36 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 const isExplicitParked = trAny?.status === 'Parked' || trAny?.status === 'Stationary' || trAny?.status === 'Off';
                 const isExplicitIdling = trAny?.status === 'Idling';
 
-                // Check store closure operating hours (06:00 - 17:00 AST Mon-Sat)
-                const nowDate = new Date();
-                const currentUtcHour = nowDate.getUTCHours();
-                const localAstHour = (currentUtcHour - 3 + 24) % 24;
-                const localAstDay = nowDate.getUTCDay();
-                const isStoreClosedNow = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
-
                 let isDriving = false;
                 let isIdling = false;
                 let isParked = true;
 
-                if (isStoreClosedNow || isNoDriver) {
-                  // When stores are closed or truck has no driver, truck MUST be Parked
+                if (isNoDriver || isExplicitParked) {
+                  // No driver assigned or explicitly marked parked -> Parked at Depot Yard
                   isDriving = false;
                   isIdling = false;
                   isParked = true;
-                } else if (hasGpsSpeed) {
-                  if (realGpsSpeed > 0 && !isExplicitParked) {
-                    isDriving = true;
-                    isParked = false;
-                  } else if ((trAny?.gpsIdlingMins || 0) > 0 || isExplicitIdling) {
-                    isIdling = true;
-                    isParked = false;
-                  } else {
-                    isParked = true;
-                  }
-                } else if (!isNoDriver && (isExplicitDriving || isLoadedInTransit) && !isExplicitParked) {
-                  isDriving = true;
-                  isParked = false;
-                } else if (!isExplicitParked && (isExplicitIdling || ((trAny?.gpsIdlingMins || 0) > 0))) {
+                } else if (isExplicitIdling || (!isExplicitDriving && !isLoadedInTransit && (trAny?.gpsIdlingMins || 0) > 0 && (!hasGpsSpeed || realGpsSpeed === 0))) {
+                  // Engine idling
+                  isDriving = false;
                   isIdling = true;
                   isParked = false;
                 } else {
-                  isParked = true;
+                  // Assigned driver & active route/load -> Driving (En route, left the yard)
+                  isDriving = true;
+                  isIdling = false;
+                  isParked = false;
                 }
 
                 let speedValue = 0;
-                if (isDriving && !isStoreClosedNow && !isNoDriver) {
+                if (isDriving && !isNoDriver) {
                   if (hasGpsSpeed && realGpsSpeed > 0) {
                     speedValue = Math.round(realGpsSpeed);
                   } else {
-                    // Smooth live speed fluctuations unique per vehicle
-                    const baseSpeed = 52 + (idHash % 22);
-                    const variance = Math.round(Math.sin((telemetryTick * 0.7) + (idHash % 7)) * 5);
-                    speedValue = Math.max(35, Math.min(85, baseSpeed + variance));
+                    // Smooth live speed fluctuations unique per vehicle (e.g. 48 - 74 km/h)
+                    const baseSpeed = 52 + (idHash % 20);
+                    const variance = Math.round(Math.sin((telemetryTick * 0.7) + (idHash % 7)) * 6);
+                    speedValue = Math.max(38, Math.min(88, baseSpeed + variance));
                   }
                 } else {
                   speedValue = 0;
