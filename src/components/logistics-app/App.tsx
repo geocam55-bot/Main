@@ -739,10 +739,15 @@ export default function App() {
       });
     } else {
       let existingList = [...trucks];
-      const existsInList = existingList.some(t => t.id === selectedTruckId);
+      const targetTruck = existingList.find(t => 
+        t.id === selectedTruckId || 
+        (t.name && t.name.toLowerCase().trim() === selectedTruckId.toLowerCase().trim())
+      );
 
-      if (!existsInList) {
-        const spec = FLEET_COMPLETE_TRUCKS.find(s => s.id === selectedTruckId);
+      const targetId = targetTruck ? targetTruck.id : selectedTruckId;
+
+      if (!targetTruck) {
+        const spec = FLEET_COMPLETE_TRUCKS.find(s => s.id === selectedTruckId || s.name.toLowerCase().trim() === selectedTruckId.toLowerCase().trim());
         if (spec) {
           existingList.push({
             id: spec.id,
@@ -766,7 +771,7 @@ export default function App() {
       }
 
       updatedTrucks = existingList.map(t => {
-        if (t.id === selectedTruckId) {
+        if (t.id === targetId || (t.name && t.name.toLowerCase().trim() === targetId.toLowerCase().trim())) {
           return {
             ...t,
             driver: driverName,

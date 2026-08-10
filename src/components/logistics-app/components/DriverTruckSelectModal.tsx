@@ -92,9 +92,12 @@ export default function DriverTruckSelectModal({
 
   const [selectedTruckId, setSelectedTruckId] = useState<string>('UNASSIGNED');
 
-  // Populate initial selection when modal opens or driver assignment changes
+  // Track previous isOpen state to only initialize when modal transitions from closed to open
+  const prevIsOpenRef = React.useRef(false);
+
+  // Populate initial selection ONLY when modal transitions from closed to open
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       if (currentAssignedTruck) {
         setSelectedTruckId(currentAssignedTruck.id);
       } else if (fleetList.length > 0) {
@@ -103,11 +106,15 @@ export default function DriverTruckSelectModal({
         setSelectedTruckId('UNASSIGNED');
       }
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, currentAssignedTruck, fleetList]);
 
   if (!isOpen) return null;
 
-  const activeSelectedTruck = fleetList.find(t => t.id === selectedTruckId);
+  const activeSelectedTruck = fleetList.find(t => 
+    t.id === selectedTruckId || 
+    (t.name && t.name.toLowerCase().trim() === selectedTruckId.toLowerCase().trim())
+  );
 
   // Check if selected truck is assigned to someone else
   const currentDriverOfSelected = activeSelectedTruck?.driver && 
