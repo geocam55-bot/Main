@@ -563,9 +563,20 @@ function deduplicateServerTrucks(trucksList: any[]): any[] {
       const isTruckDriverValid = truck.driver && !['no driver', 'unassigned', 'driver', ''].includes(String(truck.driver).trim().toLowerCase());
       const isExistingDriverValid = existing.driver && !['no driver', 'unassigned', 'driver', ''].includes(String(existing.driver).trim().toLowerCase());
 
-      const driver = isTruckDriverValid 
-        ? truck.driver 
-        : (isExistingDriverValid ? existing.driver : (truck.driver || existing.driver || 'No Driver'));
+      let driver = 'No Driver';
+      if (isTruckDriverValid && isExistingDriverValid) {
+        if (truck.assignedDriverId && !existing.assignedDriverId) {
+          driver = truck.driver;
+        } else if (existing.assignedDriverId && !truck.assignedDriverId) {
+          driver = existing.driver;
+        } else {
+          driver = truck.driver || existing.driver;
+        }
+      } else if (isTruckDriverValid) {
+        driver = truck.driver;
+      } else if (isExistingDriverValid) {
+        driver = existing.driver;
+      }
 
       const assignedDriverId = truck.assignedDriverId || existing.assignedDriverId;
       const branchId = truck.branchId || existing.branchId;
@@ -2645,6 +2656,13 @@ app.use((req, res, next) => {
           return resObj;
         });
 
+      inMemoryTenantStates[String(tenantId)] = {
+        branches: deserializedBranches,
+        trucks: deserializedTrucks,
+        users: deserializedUsers,
+        deliveries: enrichedDeliveries
+      };
+
       res.json({
         supabaseActive: true,
         branches: deserializedBranches,
@@ -2791,11 +2809,7 @@ app.use((req, res, next) => {
       });
       let uniqueBranches = Array.from(uniqueBranchesMap.values());
 
-      const uniqueTrucksMap = new Map<string, any>();
-      (trucks || []).forEach((t: any) => {
-        if (t && t.id) uniqueTrucksMap.set(t.id, t);
-      });
-      let uniqueTrucks = Array.from(uniqueTrucksMap.values());
+      let uniqueTrucks = deduplicateServerTrucks(trucks || []);
 
       const uniqueUsersMap = new Map<string, any>();
       (users || []).forEach((u: any) => {
@@ -3195,6 +3209,13 @@ app.use((req, res, next) => {
           }
         }
       }
+
+      inMemoryTenantStates[String(tenantId)] = {
+        branches: uniqueBranches,
+        trucks: uniqueTrucks,
+        users: uniqueUsers,
+        deliveries: uniqueDeliveries
+      };
 
       res.json({ success: true });
     } catch (err: any) {

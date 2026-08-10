@@ -154,9 +154,20 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       const isTruckDriverValid = truck.driver && !['no driver', 'unassigned', 'driver', ''].includes(truck.driver.trim().toLowerCase());
       const isExistingDriverValid = existing.driver && !['no driver', 'unassigned', 'driver', ''].includes(existing.driver.trim().toLowerCase());
 
-      const driverName = isTruckDriverValid 
-        ? truck.driver 
-        : (isExistingDriverValid ? existing.driver : (truck.driver || existing.driver || 'No Driver'));
+      let driverName = 'No Driver';
+      if (isTruckDriverValid && isExistingDriverValid) {
+        if (truck.assignedDriverId && !existing.assignedDriverId) {
+          driverName = truck.driver;
+        } else if (existing.assignedDriverId && !truck.assignedDriverId) {
+          driverName = existing.driver;
+        } else {
+          driverName = truck.driver || existing.driver;
+        }
+      } else if (isTruckDriverValid) {
+        driverName = truck.driver;
+      } else if (isExistingDriverValid) {
+        driverName = existing.driver;
+      }
 
       const assignedDriverId = truck.assignedDriverId || existing.assignedDriverId;
       const branchId = truck.branchId || existing.branchId;
@@ -865,17 +876,22 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (currentUser && currentTenant && users.length > 0) {
-      // Safely prevent logout save if the loaded data in state is contaminated or mismatched
-      const hasDifferentTenantData = 
-        branches.some(b => b.tenantId && b.tenantId !== currentTenant.id) ||
-        users.some(u => u.tenantId && u.tenantId !== currentTenant.id) ||
-        trucks.some(t => t.tenantId && t.tenantId !== currentTenant.id);
+    if (currentUser && currentTenant) {
+      const normalizedTrucks = trucks.map(t => ({ ...t, tenantId: currentTenant.id }));
+      const normalizedUsers = users.map(u => 
+        u.id === currentUser.id 
+          ? { ...u, tenantId: currentTenant.id, lastActive: "1970-01-01T00:00:00.000Z" } 
+          : { ...u, tenantId: currentTenant.id }
+      );
+      const normalizedBranches = branches.map(b => ({ ...b, tenantId: currentTenant.id }));
+      const normalizedDeliveries = deliveries.map(d => ({ ...d, tenantId: currentTenant.id }));
 
-      if (!hasDifferentTenantData) {
-        const updatedUsers = users.map(u => u.id === currentUser.id ? { ...u, lastActive: "1970-01-01T00:00:00.000Z" } : u);
-        setUsers(updatedUsers);
-        syncStateToSupabase(currentTenant.id, deliveries, trucks, branches, updatedUsers);
+      setUsers(normalizedUsers);
+
+      try {
+        await syncStateToSupabase(currentTenant.id, normalizedDeliveries, normalizedTrucks, normalizedBranches, normalizedUsers);
+      } catch (err) {
+        console.warn("Logout syncStateToSupabase error:", err);
       }
     }
     setCurrentTenant(null);

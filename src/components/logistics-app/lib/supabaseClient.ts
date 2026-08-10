@@ -702,15 +702,44 @@ export async function saveTenantStateDirect(
   const uniqueTrucksMap = new Map<string, any>();
   (trucks || []).forEach(t => { 
     if (t && t.id) {
-      if (!uniqueTrucksMap.has(t.id)) {
-        uniqueTrucksMap.set(t.id, t);
+      const idKey = String(t.id).toLowerCase().trim();
+      const unitNum = extractVehicleNumber(t.id) || extractVehicleNumber(t.name);
+
+      let existingKey: string | undefined;
+      for (const [k, v] of uniqueTrucksMap.entries()) {
+        const vUnitNum = extractVehicleNumber(v.id) || extractVehicleNumber(v.name);
+        if (k === idKey || (unitNum && vUnitNum && unitNum === vUnitNum)) {
+          existingKey = k;
+          break;
+        }
+      }
+
+      if (!existingKey) {
+        uniqueTrucksMap.set(idKey, t);
       } else {
-        const existing = uniqueTrucksMap.get(t.id);
-        const isTDriverValid = t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase());
-        uniqueTrucksMap.set(t.id, {
+        const existing = uniqueTrucksMap.get(existingKey)!;
+        const isTDriverValid = t.driver && !['no driver', 'unassigned', 'driver', ''].includes(String(t.driver).trim().toLowerCase());
+        const isExDriverValid = existing.driver && !['no driver', 'unassigned', 'driver', ''].includes(String(existing.driver).trim().toLowerCase());
+
+        let driver = 'No Driver';
+        if (isTDriverValid && isExDriverValid) {
+          if (t.assignedDriverId && !existing.assignedDriverId) {
+            driver = t.driver;
+          } else if (existing.assignedDriverId && !t.assignedDriverId) {
+            driver = existing.driver;
+          } else {
+            driver = t.driver || existing.driver;
+          }
+        } else if (isTDriverValid) {
+          driver = t.driver;
+        } else if (isExDriverValid) {
+          driver = existing.driver;
+        }
+
+        uniqueTrucksMap.set(existingKey, {
           ...existing,
           ...t,
-          driver: isTDriverValid ? t.driver : (existing.driver || 'No Driver')
+          driver
         });
       }
     } 
