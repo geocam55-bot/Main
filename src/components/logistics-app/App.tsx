@@ -143,9 +143,9 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       map.set(idKey, truck);
     } else {
       const existing = map.get(existingKey)!;
-      const driverName = (truck.driver && truck.driver.toLowerCase() !== 'no driver' && truck.driver.toLowerCase() !== 'unassigned') 
+      const driverName = (truck.driver !== undefined && truck.driver.trim() !== '') 
         ? truck.driver 
-        : ((existing.driver && existing.driver.toLowerCase() !== 'no driver' && existing.driver.toLowerCase() !== 'unassigned') ? existing.driver : 'No Driver');
+        : (existing.driver || 'No Driver');
       
       const branchId = truck.branchId || existing.branchId;
 

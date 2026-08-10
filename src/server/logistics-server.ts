@@ -542,7 +542,7 @@ function deduplicateServerTrucks(trucksList: any[]): any[] {
         map.set(key, {
           ...existing,
           ...truck,
-          driver: (existing.driver && String(existing.driver).toLowerCase() !== 'no driver') ? existing.driver : truck.driver,
+          driver: (truck.driver !== undefined && String(truck.driver).trim() !== '') ? truck.driver : (existing.driver || 'No Driver'),
           branchId: existing.branchId || truck.branchId,
           lat: truck.lat ?? existing.lat,
           lng: truck.lng ?? existing.lng,
@@ -1387,7 +1387,7 @@ async function runSelfHealingOnce() {
 
         // 4b. Ensure default trucks in prospaces tenant have GPS Hardware Serial / Device ID configured and correct positions
         const DEFAULT_FLEET_TRUCKS = [
-          { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "Joshua Campbell", branchId: "DC-WINAMILL", lat: 44.6536, lng: -63.6011, speed: 0, idling: 0 },
+          { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6536, lng: -63.6011, speed: 0, idling: 0 },
           { id: "2409 - Elmsdale F150", name: "2409 - Elmsdale F150", model: "2024 Ford F-150 XLT 4x4", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 58, idling: 0 },
           { id: "2412 - MTN RANGER", name: "2412 - MTN RANGER", model: "2024 Ford Ranger XLT 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 52, idling: 0 },
           { id: "2408 - MTN F150 OSR", name: "2408 - MTN F150 OSR", model: "2024 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6310, lng: -63.6620, speed: 64, idling: 0 },
@@ -1487,7 +1487,7 @@ async function runSelfHealingOnce() {
             // Set realistic initial speed / status for telematics preview
             const initialSpeed = typeof deserialized.gpsSpeed === 'number' ? deserialized.gpsSpeed : (matchedFt ? matchedFt.speed : (is2101 ? 120 : 45));
             const initialIdling = typeof deserialized.gpsIdlingMins === 'number' ? deserialized.gpsIdlingMins : (matchedFt ? matchedFt.idling : 0);
-            const updatedDriver = (t.driver && t.driver.toLowerCase() !== 'no driver' && t.driver.toLowerCase() !== 'driver') ? t.driver : (matchedFt?.driver || "No Driver");
+            const updatedDriver = (t.driver && t.driver.toLowerCase() !== 'driver') ? t.driver : "No Driver";
             const updatedBranchId = matchedFt?.branchId || t.branchId || "DC-WINAMILL";
 
             const updatedType = serializeToType(
