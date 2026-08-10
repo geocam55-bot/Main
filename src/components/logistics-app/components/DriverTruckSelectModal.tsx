@@ -25,6 +25,12 @@ interface DriverTruckSelectModalProps {
   onConfirmTruckAssignment: (selectedTruckId: string) => void;
 }
 
+function extractUnitNumber(str: string | undefined | null): string | null {
+  if (!str) return null;
+  const match = str.match(/\b\d{3,5}\b/) || str.match(/\d+/);
+  return match ? match[0] : null;
+}
+
 export default function DriverTruckSelectModal({
   isOpen,
   onClose,
@@ -41,36 +47,64 @@ export default function DriverTruckSelectModal({
     // Add trucks from props
     trucks.forEach(t => {
       if (t && t.id) {
-        map.set(t.id, t);
+        const uNum = extractUnitNumber(t.id) || extractUnitNumber(t.name);
+        let existingKey: string | undefined;
+        for (const [k, v] of map.entries()) {
+          const vUNum = extractUnitNumber(v.id) || extractUnitNumber(v.name);
+          if (
+            k === t.id || 
+            (v.name && t.name && v.name.toLowerCase().trim() === t.name.toLowerCase().trim()) ||
+            (uNum && vUNum && uNum === vUNum)
+          ) {
+            existingKey = k;
+            break;
+          }
+        }
+        if (!existingKey) {
+          map.set(t.id, t);
+        } else {
+          const existing = map.get(existingKey)!;
+          const isTDriverValid = t.driver && !['no driver', 'unassigned', 'driver', ''].includes(t.driver.trim().toLowerCase());
+          map.set(existingKey, {
+            ...existing,
+            ...t,
+            driver: isTDriverValid ? t.driver : (existing.driver || 'No Driver')
+          });
+        }
       }
     });
 
     // Supplement with defaults from FLEET_COMPLETE_TRUCKS if missing
     FLEET_COMPLETE_TRUCKS.forEach(spec => {
-      if (!map.has(spec.id)) {
-        const matchingByName = Array.from(map.values()).find(existing => 
-          existing.name && existing.name.toLowerCase().trim() === spec.name.toLowerCase().trim()
+      const specUNum = extractUnitNumber(spec.id) || extractUnitNumber(spec.name);
+      const existingMatch = Array.from(map.values()).find(existing => {
+        const exUNum = extractUnitNumber(existing.id) || extractUnitNumber(existing.name);
+        return (
+          existing.id === spec.id ||
+          (existing.name && existing.name.toLowerCase().trim() === spec.name.toLowerCase().trim()) ||
+          (specUNum && exUNum && specUNum === exUNum)
         );
-        if (!matchingByName) {
-          map.set(spec.id, {
-            id: spec.id,
-            tenantId: currentTenant?.id || 'prospaces',
-            name: spec.name,
-            type: spec.model.includes('Boom') ? '6X Boom Truck' : (spec.model.includes('Box') ? 'Box Truck' : 'Pickup / Flatbed'),
-            status: 'Available',
-            driver: 'No Driver',
-            branchId: spec.branchId,
-            homeDepot: spec.homeDepot,
-            licensePlate: spec.licensePlate,
-            lat: 44.68550,
-            lng: -63.58250,
-            gpsLat: 44.68550,
-            gpsLng: -63.58250,
-            gpsSpeed: 0,
-            gpsIdlingMins: 0,
-            gpsLastHandshake: new Date().toISOString()
-          });
-        }
+      });
+
+      if (!existingMatch) {
+        map.set(spec.id, {
+          id: spec.id,
+          tenantId: currentTenant?.id || 'prospaces',
+          name: spec.name,
+          type: spec.model.includes('Boom') ? '6X Boom Truck' : (spec.model.includes('Box') ? 'Box Truck' : 'Pickup / Flatbed'),
+          status: 'Available',
+          driver: 'No Driver',
+          branchId: spec.branchId,
+          homeDepot: spec.homeDepot,
+          licensePlate: spec.licensePlate,
+          lat: 44.68550,
+          lng: -63.58250,
+          gpsLat: 44.68550,
+          gpsLng: -63.58250,
+          gpsSpeed: 0,
+          gpsIdlingMins: 0,
+          gpsLastHandshake: new Date().toISOString()
+        });
       }
     });
 

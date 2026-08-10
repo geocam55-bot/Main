@@ -700,7 +700,21 @@ export async function saveTenantStateDirect(
   const uniqueBranches = Array.from(uniqueBranchesMap.values());
 
   const uniqueTrucksMap = new Map<string, any>();
-  (trucks || []).forEach(t => { if (t && t.id) uniqueTrucksMap.set(t.id, t); });
+  (trucks || []).forEach(t => { 
+    if (t && t.id) {
+      if (!uniqueTrucksMap.has(t.id)) {
+        uniqueTrucksMap.set(t.id, t);
+      } else {
+        const existing = uniqueTrucksMap.get(t.id);
+        const isTDriverValid = t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase());
+        uniqueTrucksMap.set(t.id, {
+          ...existing,
+          ...t,
+          driver: isTDriverValid ? t.driver : (existing.driver || 'No Driver')
+        });
+      }
+    } 
+  });
   const uniqueTrucks = Array.from(uniqueTrucksMap.values());
 
   const uniqueUsersMap = new Map<string, any>();

@@ -517,39 +517,87 @@ function deserializeType(truck: any): any {
   };
 }
 
+function extractTruckUnitNumber(idOrName?: string | null): string | null {
+  if (!idOrName) return null;
+  const match = String(idOrName).match(/\b\d{3,5}\b/) || String(idOrName).match(/\d+/);
+  return match ? match[0] : null;
+}
+
 function deduplicateServerTrucks(trucksList: any[]): any[] {
   const map = new Map<string, any>();
 
   for (const truck of trucksList) {
     if (!truck || !truck.id) continue;
     
-    const key = String(truck.id).toLowerCase().trim();
+    const idKey = String(truck.id).toLowerCase().trim();
+    const nameKey = String(truck.name || truck.id).toLowerCase().trim();
+    const unitNum = extractTruckUnitNumber(truck.id) || extractTruckUnitNumber(truck.name);
 
-    if (!map.has(key)) {
-      map.set(key, truck);
+    let existingKey: string | undefined;
+    if (map.has(idKey)) {
+      existingKey = idKey;
     } else {
-      const existing = map.get(key)!;
-      const existingHasGps = !!(existing.gpsDeviceId && existing.gpsDeviceId !== 'DISABLED');
-      const newHasGps = !!(truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED');
+      for (const [k, v] of map.entries()) {
+        const vIdKey = String(v.id).toLowerCase().trim();
+        const vNameKey = String(v.name || v.id).toLowerCase().trim();
+        const vUnitNum = extractTruckUnitNumber(v.id) || extractTruckUnitNumber(v.name);
 
-      if (!existingHasGps && newHasGps) {
-        map.set(key, { ...existing, ...truck });
-      } else if (existingHasGps && newHasGps) {
-        map.set(key, { ...existing, ...truck });
-      } else if (existingHasGps && !newHasGps) {
-        map.set(key, { ...truck, ...existing });
-      } else {
-        map.set(key, {
-          ...existing,
-          ...truck,
-          driver: (truck.driver !== undefined && String(truck.driver).trim() !== '') ? truck.driver : (existing.driver || 'No Driver'),
-          branchId: existing.branchId || truck.branchId,
-          lat: truck.lat ?? existing.lat,
-          lng: truck.lng ?? existing.lng,
-          gpsLat: truck.gpsLat ?? existing.gpsLat,
-          gpsLng: truck.gpsLng ?? existing.gpsLng
-        });
+        if (
+          vIdKey === idKey || 
+          vNameKey === nameKey || 
+          vIdKey === nameKey || 
+          vNameKey === idKey || 
+          (unitNum && vUnitNum && unitNum === vUnitNum)
+        ) {
+          existingKey = k;
+          break;
+        }
       }
+    }
+
+    if (!existingKey) {
+      map.set(idKey, truck);
+    } else {
+      const existing = map.get(existingKey)!;
+      
+      const isTruckDriverValid = truck.driver && !['no driver', 'unassigned', 'driver', ''].includes(String(truck.driver).trim().toLowerCase());
+      const isExistingDriverValid = existing.driver && !['no driver', 'unassigned', 'driver', ''].includes(String(existing.driver).trim().toLowerCase());
+
+      const driver = isTruckDriverValid 
+        ? truck.driver 
+        : (isExistingDriverValid ? existing.driver : (truck.driver || existing.driver || 'No Driver'));
+
+      const assignedDriverId = truck.assignedDriverId || existing.assignedDriverId;
+      const branchId = truck.branchId || existing.branchId;
+
+      const lat = (typeof truck.lat === 'number' && !isNaN(truck.lat)) ? truck.lat : existing.lat;
+      const lng = (typeof truck.lng === 'number' && !isNaN(truck.lng)) ? truck.lng : existing.lng;
+      const gpsLat = (typeof truck.gpsLat === 'number' && !isNaN(truck.gpsLat)) ? truck.gpsLat : (existing.gpsLat ?? lat);
+      const gpsLng = (typeof truck.gpsLng === 'number' && !isNaN(truck.gpsLng)) ? truck.gpsLng : (existing.gpsLng ?? lng);
+      const gpsSpeed = typeof truck.gpsSpeed === 'number' ? truck.gpsSpeed : existing.gpsSpeed;
+      const gpsIdlingMins = typeof truck.gpsIdlingMins === 'number' ? truck.gpsIdlingMins : existing.gpsIdlingMins;
+      const gpsStatus = truck.gpsStatus || existing.gpsStatus;
+      const gpsDeviceId = truck.gpsDeviceId || existing.gpsDeviceId;
+      const gpsLastHandshake = (truck.gpsLastHandshake && existing.gpsLastHandshake && truck.gpsLastHandshake < existing.gpsLastHandshake) ? existing.gpsLastHandshake : (truck.gpsLastHandshake || existing.gpsLastHandshake);
+
+      map.set(existingKey, {
+        ...existing,
+        ...truck,
+        id: existing.id || truck.id,
+        name: existing.name || truck.name,
+        driver,
+        assignedDriverId,
+        branchId,
+        lat,
+        lng,
+        gpsLat,
+        gpsLng,
+        gpsSpeed,
+        gpsIdlingMins,
+        gpsStatus,
+        gpsDeviceId,
+        gpsLastHandshake
+      });
     }
   }
 
@@ -1412,13 +1460,23 @@ async function runSelfHealingOnce() {
 
         const { data: existingProspacesTrucks } = await supabase
           .from("trucks")
-          .select("id, name")
+          .select("id, name, driver")
           .eq("tenantId", "prospaces");
 
-        const existingSet = new Set((existingProspacesTrucks || []).map(t => t.id));
+        const existingDbList = existingProspacesTrucks || [];
 
         for (const ft of DEFAULT_FLEET_TRUCKS) {
-          if (!existingSet.has(ft.id)) {
+          const ftUNum = extractTruckUnitNumber(ft.id) || extractTruckUnitNumber(ft.name);
+          const existsInDb = existingDbList.some(t => {
+            const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
+            return (
+              t.id === ft.id || 
+              (t.name && t.name.toLowerCase().trim() === ft.name.toLowerCase().trim()) ||
+              (ftUNum && tUNum && ftUNum === tUNum)
+            );
+          });
+
+          if (!existsInDb) {
             const timestamp = new Date().toISOString();
             const typeStr = serializeToType(
               ft.model,
@@ -4703,12 +4761,20 @@ async function syncFleetCompleteTelemetry
         const timestamp = v.latestData?.timestamp ? new Date(v.latestData.timestamp).toISOString() : new Date().toISOString();
 
         if (typeof lat === 'number' && typeof lng === 'number') {
+          const vUNum = extractTruckUnitNumber(vehicleName);
           // 3.1 Supabase Upsert / Update
           if (supabase) {
-            // Find all potential matches strictly by exact ID, name, or GPS Device ID
+            // Find all potential matches strictly by exact ID, name, GPS Device ID, or unit number
             const matches = allRawDbTrucks.filter((t: any) => {
               const deserialized = deserializeType(t);
-              if (t.id === vehicleName || t.name === vehicleName || deserialized.gpsDeviceId === gpsDeviceId || (deserialized.gpsDeviceName && deserialized.gpsDeviceName === vehicleName)) {
+              const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
+              if (
+                t.id === vehicleName || 
+                t.name === vehicleName || 
+                deserialized.gpsDeviceId === gpsDeviceId || 
+                (deserialized.gpsDeviceName && deserialized.gpsDeviceName === vehicleName) ||
+                (vUNum && tUNum && vUNum === tUNum)
+              ) {
                 return true;
               }
               return false;
@@ -4745,6 +4811,11 @@ async function syncFleetCompleteTelemetry
                 type: updatedType
               }).eq('id', matchedDbTruck.id);
             } else {
+              const existingDriverInMem = Object.values(inMemoryTenantStates).flatMap(s => s.trucks || []).find((t: any) => {
+                const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
+                return vUNum && tUNum && vUNum === tUNum && t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).toLowerCase());
+              })?.driver || 'No Driver';
+
               const newType = serializeToType(
                 "Commercial Carrier", 
                 "2026-11-29", 
@@ -4767,7 +4838,7 @@ async function syncFleetCompleteTelemetry
                 tenantId: 'prospaces',
                 name: vehicleName,
                 type: newType,
-                driver: 'No Driver',
+                driver: existingDriverInMem,
                 branchId: 'DC-WINAMILL'
               });
             }
@@ -4781,7 +4852,14 @@ async function syncFleetCompleteTelemetry
 
               const matchesInMemory = state.trucks.filter((t: any) => {
                 const deserialized = t.type && t.type.includes("||") ? deserializeType(t) : t;
-                if (t.id === vehicleName || t.name === vehicleName || deserialized.gpsDeviceId === gpsDeviceId || (deserialized.gpsDeviceName && deserialized.gpsDeviceName === vehicleName)) {
+                const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
+                if (
+                  t.id === vehicleName || 
+                  t.name === vehicleName || 
+                  deserialized.gpsDeviceId === gpsDeviceId || 
+                  (deserialized.gpsDeviceName && deserialized.gpsDeviceName === vehicleName) ||
+                  (vUNum && tUNum && vUNum === tUNum)
+                ) {
                   return true;
                 }
                 return false;
@@ -4795,8 +4873,11 @@ async function syncFleetCompleteTelemetry
                   continue; // Respect manual decoupling by user
                 }
 
+                const trkUNum = extractTruckUnitNumber(matchedInMemoryTruck.id) || extractTruckUnitNumber(matchedInMemoryTruck.name);
+
                 state.trucks = state.trucks.map((t: any) => {
-                  if (t.id === matchedInMemoryTruck.id) {
+                  const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
+                  if (t.id === matchedInMemoryTruck.id || (trkUNum && tUNum && trkUNum === tUNum)) {
                     return {
                       ...t,
                       gpsSource: 'truck',

@@ -112,7 +112,7 @@ function deduplicateUsers(usersList: User[]): User[] {
 
 function extractVehicleNumber(str: string | undefined | null): string | null {
   if (!str) return null;
-  const match = str.match(/\d+/);
+  const match = str.match(/\b\d{3,5}\b/) || str.match(/\d+/);
   return match ? match[0] : null;
 }
 
@@ -124,6 +124,7 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
     
     const idKey = String(truck.id).toLowerCase().trim();
     const nameKey = String(truck.name || truck.id).toLowerCase().trim();
+    const unitNum = extractVehicleNumber(truck.id) || extractVehicleNumber(truck.name);
 
     let existingKey: string | undefined;
     if (map.has(idKey)) {
@@ -132,7 +133,14 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       for (const [k, v] of map.entries()) {
         const vNameKey = String(v.name || v.id).toLowerCase().trim();
         const vIdKey = String(v.id).toLowerCase().trim();
-        if (vNameKey === nameKey || vIdKey === nameKey || vNameKey === idKey) {
+        const vUnitNum = extractVehicleNumber(v.id) || extractVehicleNumber(v.name);
+        if (
+          vNameKey === nameKey || 
+          vIdKey === nameKey || 
+          vNameKey === idKey || 
+          vIdKey === idKey || 
+          (unitNum && vUnitNum && unitNum === vUnitNum)
+        ) {
           existingKey = k;
           break;
         }
@@ -143,16 +151,20 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       map.set(idKey, truck);
     } else {
       const existing = map.get(existingKey)!;
-      const driverName = (truck.driver !== undefined && truck.driver.trim() !== '') 
+      const isTruckDriverValid = truck.driver && !['no driver', 'unassigned', 'driver', ''].includes(truck.driver.trim().toLowerCase());
+      const isExistingDriverValid = existing.driver && !['no driver', 'unassigned', 'driver', ''].includes(existing.driver.trim().toLowerCase());
+
+      const driverName = isTruckDriverValid 
         ? truck.driver 
-        : (existing.driver || 'No Driver');
-      
+        : (isExistingDriverValid ? existing.driver : (truck.driver || existing.driver || 'No Driver'));
+
+      const assignedDriverId = truck.assignedDriverId || existing.assignedDriverId;
       const branchId = truck.branchId || existing.branchId;
 
-      const gpsLat = truck.gpsLat !== undefined && !isNaN(truck.gpsLat) ? truck.gpsLat : existing.gpsLat;
-      const gpsLng = truck.gpsLng !== undefined && !isNaN(truck.gpsLng) ? truck.gpsLng : existing.gpsLng;
-      const lat = truck.lat !== undefined && !isNaN(truck.lat) ? truck.lat : existing.lat;
-      const lng = truck.lng !== undefined && !isNaN(truck.lng) ? truck.lng : existing.lng;
+      const gpsLat = truck.gpsLat !== undefined && !isNaN(truck.gpsLat) ? truck.gpsLat : (existing.gpsLat ?? truck.lat);
+      const gpsLng = truck.gpsLng !== undefined && !isNaN(truck.gpsLng) ? truck.gpsLng : (existing.gpsLng ?? truck.lng);
+      const lat = truck.lat !== undefined && !isNaN(truck.lat) ? truck.lat : (existing.lat ?? gpsLat);
+      const lng = truck.lng !== undefined && !isNaN(truck.lng) ? truck.lng : (existing.lng ?? gpsLng);
       const gpsSpeed = typeof truck.gpsSpeed === 'number' ? truck.gpsSpeed : existing.gpsSpeed;
       const gpsIdlingMins = typeof truck.gpsIdlingMins === 'number' ? truck.gpsIdlingMins : existing.gpsIdlingMins;
       const gpsLastHandshake = (truck.gpsLastHandshake && existing.gpsLastHandshake && truck.gpsLastHandshake < existing.gpsLastHandshake) ? existing.gpsLastHandshake : (truck.gpsLastHandshake || existing.gpsLastHandshake);
@@ -161,7 +173,9 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
         ...existing,
         ...truck,
         id: existing.id.startsWith('TRUCK-') ? truck.id : existing.id,
+        name: existing.name || truck.name,
         driver: driverName,
+        assignedDriverId,
         branchId,
         gpsLat,
         gpsLng,
@@ -739,15 +753,28 @@ export default function App() {
       });
     } else {
       let existingList = [...trucks];
-      const targetTruck = existingList.find(t => 
-        t.id === selectedTruckId || 
-        (t.name && t.name.toLowerCase().trim() === selectedTruckId.toLowerCase().trim())
-      );
+      const targetUnitNum = extractVehicleNumber(selectedTruckId);
+
+      const targetTruck = existingList.find(t => {
+        const tUNum = extractVehicleNumber(t.id) || extractVehicleNumber(t.name);
+        return (
+          t.id === selectedTruckId || 
+          (t.name && t.name.toLowerCase().trim() === selectedTruckId.toLowerCase().trim()) ||
+          (targetUnitNum && tUNum && targetUnitNum === tUNum)
+        );
+      });
 
       const targetId = targetTruck ? targetTruck.id : selectedTruckId;
 
       if (!targetTruck) {
-        const spec = FLEET_COMPLETE_TRUCKS.find(s => s.id === selectedTruckId || s.name.toLowerCase().trim() === selectedTruckId.toLowerCase().trim());
+        const spec = FLEET_COMPLETE_TRUCKS.find(s => {
+          const sUNum = extractVehicleNumber(s.id) || extractVehicleNumber(s.name);
+          return (
+            s.id === selectedTruckId || 
+            s.name.toLowerCase().trim() === selectedTruckId.toLowerCase().trim() ||
+            (targetUnitNum && sUNum && targetUnitNum === sUNum)
+          );
+        });
         if (spec) {
           existingList.push({
             id: spec.id,
@@ -771,7 +798,13 @@ export default function App() {
       }
 
       updatedTrucks = existingList.map(t => {
-        if (t.id === targetId || (t.name && t.name.toLowerCase().trim() === targetId.toLowerCase().trim())) {
+        const tUNum = extractVehicleNumber(t.id) || extractVehicleNumber(t.name);
+        const isMatch = 
+          t.id === targetId || 
+          (t.name && t.name.toLowerCase().trim() === targetId.toLowerCase().trim()) ||
+          (targetUnitNum && tUNum && targetUnitNum === tUNum);
+
+        if (isMatch) {
           return {
             ...t,
             driver: driverName,
