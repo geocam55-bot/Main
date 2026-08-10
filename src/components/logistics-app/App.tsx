@@ -21,7 +21,8 @@ import {
   deserializeType,
   serializeToType
 } from './lib/supabaseClient';
-import Dashboard, { isTruckAssignedToBranch } from './components/Dashboard';
+import Dashboard from './components/Dashboard';
+import { isTruckAssignedToBranch } from './lib/mapHelpers';
 import LiveDashboard from './components/LiveDashboard';
 import ScanStation from './components/ScanStation';
 import DeliveryQueue from './components/DeliveryQueue';

@@ -39,7 +39,7 @@ import {
   SlotClosureRule, 
   ClosureType 
 } from '../types';
-import { isTruckAssignedToBranch } from './Dashboard';
+import { isTruckAssignedToBranch } from '../lib/mapHelpers';
 import { getTruckImage } from '../lib/truckImages';
 import { getTruckGpsInfo } from './DragDropFreightBoard';
 

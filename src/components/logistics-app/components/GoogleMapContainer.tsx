@@ -8,7 +8,7 @@ import {
   getTruckCoords, 
   cleanAddressText,
   isTruckAssignedToBranch
-} from './Dashboard';
+} from '../lib/mapHelpers';
 
 // Custom Polyline component for Google Maps
 function MapPolyline({ 

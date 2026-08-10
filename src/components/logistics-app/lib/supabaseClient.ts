@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { extractVehicleNumber } from "./mapHelpers";
 
 // Serialization and Deserialization helpers matching the backend implementation
 export function serializeToPhone(phone: string | undefined, password: string | undefined, status: string | undefined, driverLicenseExpire?: string | undefined, lastActive?: string | undefined, resetRequest?: string | undefined, avatarUrl?: string | undefined): string {

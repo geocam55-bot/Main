@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Truck, Branch, User } from '../types';
 import { Truck as TruckIcon, Plus, Trash2, Edit2, Shield, Info, ChevronRight, FileCheck, AlertTriangle, Calendar, Upload, Image as ImageIcon, Camera, Check, X, Database } from 'lucide-react';
-import { isTruckAssignedToBranch } from './Dashboard';
+import { isTruckAssignedToBranch } from '../lib/mapHelpers';
 import { TRUCK_IMAGE_PRESETS, getTruckImage } from '../lib/truckImages';
 
 interface FleetSetupProps {

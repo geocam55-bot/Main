@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
   Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink, FileText
 } from 'lucide-react';
-import { isTruckAssignedToBranch } from './Dashboard';
+import { isTruckAssignedToBranch } from '../lib/mapHelpers';
 import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/schedulingUtils';
 import { getTruckImage } from '../lib/truckImages';
 import { getEffectivePdfUrl, openScannedDocumentInNewTab } from './DeliveryQueue';
