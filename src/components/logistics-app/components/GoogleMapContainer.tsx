@@ -519,8 +519,8 @@ function MapInner({
       map.setZoom(13.5);
       
       const isOnline = isTruckOnline(truck);
-      const isMoving = isOnline && (truck.isDriving || (truck.gpsSpeed && truck.gpsSpeed > 0) || Boolean(assignedDelivery) || truck.status === 'Driving' || truck.status === 'In Transit');
       const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
+      const isMoving = isOnline && (truck.isDriving || (truck.gpsSpeed && truck.gpsSpeed > 0) || Boolean(assignedDelivery) || truck.status === 'Driving' || truck.status === 'In Transit');
       
       const activeGpsSourceLabel = isOnline && coords.hasRealGps 
         ? `<span class="bg-blue-100 text-blue-800 text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-200">LIVE GPS STREAM</span>`
