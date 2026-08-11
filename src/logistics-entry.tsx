@@ -16,19 +16,19 @@ function syncLogisticsUserSession(userObj: any) {
   try {
     if (!localStorage.getItem('prospaces_active_tenant')) {
       localStorage.setItem('prospaces_active_tenant', JSON.stringify({
-        id: userObj.organization_id || userObj.organizationId || 'prospaces',
-        name: 'ProSpaces Logistics',
-        code: 'PS',
-        description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+        id: userObj.organization_id || userObj.organizationId || 'rona_atlantic',
+        name: 'RONA Atlantic Logistics',
+        code: 'RONA',
+        description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
         logoBadge: '🏢',
-        regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+        regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
         primaryColor: 'blue'
       }));
     }
     const currentActiveStr = localStorage.getItem('prospaces_active_user');
     const currentActive = currentActiveStr ? JSON.parse(currentActiveStr) : null;
 
-    const email = userObj.email || "george.campbell@prospaces.com";
+    const email = userObj.email || "george.campbell@ronaatlantic.ca";
     const name = userObj.full_name || userObj.name || (email ? email.split('@')[0] : "George Campbell");
     const role = (userObj.role === 'SUPER_ADMIN' || userObj.role === 'Super_Admin' || userObj.role === 'super_admin' || email === 'superadmin@prospaces.com')
       ? "SUPER_ADMIN"
@@ -56,24 +56,10 @@ function LogisticsEntryApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const isFromCrm = urlParams.get('from') === 'crm' || urlParams.get('source') === 'crm';
-      const isReferrerCrm = document.referrer && (document.referrer.includes('crm') || document.referrer.includes('3000') || document.referrer.includes('index.html'));
-      if (isFromCrm || isReferrerCrm) {
-        sessionStorage.setItem('accessed_from_crm', 'true');
-        sessionStorage.setItem('prospaces_session_active', 'true');
-      }
+      sessionStorage.setItem('accessed_from_crm', 'true');
+      sessionStorage.setItem('prospaces_session_active', 'true');
 
-      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
-      const isSessionActive = sessionStorage.getItem('prospaces_session_active') === 'true';
-
-      if (!accessedFromCrm && !isSessionActive) {
-        localStorage.removeItem('prospaces_cached_user');
-        localStorage.removeItem('prospaces_active_user');
-        localStorage.removeItem('prospaces_active_tenant');
-        return null;
-      }
-      const cached = localStorage.getItem('prospaces_cached_user');
+      const cached = localStorage.getItem('prospaces_cached_user') || localStorage.getItem('prospaces_active_user');
       const parsed = cached ? JSON.parse(cached) : null;
       if (parsed) {
         syncLogisticsUserSession(parsed);
@@ -84,26 +70,6 @@ function LogisticsEntryApp() {
     }
   });
 
-  // Handle auto log off when exiting app accessed via direct URL
-  useEffect(() => {
-    const handleExit = () => {
-      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
-      if (!accessedFromCrm) {
-        localStorage.removeItem('prospaces_cached_user');
-        localStorage.removeItem('prospaces_active_user');
-        localStorage.removeItem('prospaces_active_tenant');
-        localStorage.removeItem('prospaces_keep_logged_in');
-        sessionStorage.removeItem('prospaces_session_active');
-      }
-    };
-
-    window.addEventListener('pagehide', handleExit);
-    window.addEventListener('beforeunload', handleExit);
-    return () => {
-      window.removeEventListener('pagehide', handleExit);
-      window.removeEventListener('beforeunload', handleExit);
-    };
-  }, []);
   const [, setAccessToken] = useState<string | undefined>();
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => {

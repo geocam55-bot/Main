@@ -282,16 +282,18 @@ export function deserializeType(truck: any): any {
   const is1903 = idOrNameClean.includes("1903");
   const isAlmon = idOrNameClean.includes("2401") || idOrNameClean.includes("almon");
 
-  if (isAlmon && (lat === undefined || lat !== 44.6855 || lat === 44.6536 || lat === 44.9792 || lat === 44.9652)) {
-    lat = 44.6855;
-    lng = -63.5825;
-    gpsLat = 44.6855;
-    gpsLng = -63.5825;
-  } else if (is1903 && (lat === undefined || lat === 44.6855 || lat === 44.6536)) {
-    lat = 44.9792;
-    lng = -63.5042;
-    gpsLat = 44.9792;
-    gpsLng = -63.5042;
+  if (lat === undefined || lng === undefined) {
+    if (isAlmon) {
+      lat = 44.6855;
+      lng = -63.5825;
+      gpsLat = 44.6855;
+      gpsLng = -63.5825;
+    } else if (is1903) {
+      lat = 44.9792;
+      lng = -63.5042;
+      gpsLat = 44.9792;
+      gpsLng = -63.5042;
+    }
   }
 
   if (lat !== undefined && lng !== undefined) {
@@ -819,7 +821,7 @@ export async function saveTenantStateDirect(
   const mappedDeliveries = uniqueDeliveries.map(d => {
     const fullMeta = {
       id: d.id,
-      tenantId: d.tenantId || tenantId,
+      tenantId: String(tenantId),
       invoiceNumber: d.invoiceNumber || d.orderNumber || d.id || "",
       epicorSalesOrder: d.epicorSalesOrder || d.orderNumber || d.id || "",
       customerName: d.customerName || d.customer || "N/A",
@@ -867,12 +869,93 @@ export async function saveTenantStateDirect(
     return obj;
   });
 
-  // Perform parallel upserts
-  await Promise.all([
+  // Prepare GPS units setup records (only active configured stationary devices)
+  const activeStationaryTrucks = uniqueTrucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED');
+  const disabledTruckIds = uniqueTrucks.filter(t => t.gpsDeviceId === 'DISABLED' || !t.gpsDeviceId).map(t => String(t.id));
+
+  const gpsUnitsToUpsert = activeStationaryTrucks.map(t => {
+    const devId = t.gpsDeviceId;
+    const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
+    const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
+    return {
+      id: `GPS-IMEI-${t.id}`,
+      tenantId: String(tenantId),
+      deviceId: devId,
+      deviceName: t.gpsDeviceName || t.name || `GPS Unit (${t.id})`,
+      simIccid: t.gpsSimIccid || 'Bell Mobility Business IoT',
+      status: t.gpsStatus || 'Connected',
+      assignedTruckId: String(t.id),
+      lastHandshake: t.gpsLastHandshake || new Date().toISOString(),
+      lastLatitude: lat,
+      lastLongitude: lng
+    };
+  });
+
+  if (disabledTruckIds.length > 0) {
+    try {
+      await supabase.from("gps_units_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds);
+      await supabase.from("gps_unit_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds);
+    } catch (_) {}
+  }
+
+  // Prepare GPS tracking history points
+  const historyPointsToInsert = uniqueTrucks.map(t => {
+    const devId = t.gpsDeviceId || `GPS-${t.id}`;
+    const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
+    const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
+    const speed = typeof t.gpsSpeed === 'number' ? t.gpsSpeed : 0;
+    const idlingMins = typeof t.gpsIdlingMins === 'number' ? t.gpsIdlingMins : 0;
+    return {
+      tenantId: String(tenantId),
+      deviceId: devId,
+      latitude: lat,
+      longitude: lng,
+      speed: speed,
+      heading: 180.0,
+      recordedAt: t.gpsLastHandshake || new Date().toISOString(),
+      ignitionStatus: speed > 0 || idlingMins > 0,
+      gps_device_id: devId,
+      truck_id: String(t.id),
+      speed_kph: speed,
+      engine_status: speed > 0 ? 'Driving' : (idlingMins > 0 ? 'Idling' : 'Stopped'),
+      created_date: new Date().toISOString()
+    };
+  });
+
+  // Prepare geofences / gpsfences records
+  const geofencesToUpsert = uniqueBranches.map(b => {
+    let cLat = 44.6855;
+    let cLng = -63.5825;
+    if (b.address && b.address.includes('44.')) {
+      const match = b.address.match(/(44\.\d+)[^\d-]+(-63\.\d+)/);
+      if (match) {
+        cLat = parseFloat(match[1]);
+        cLng = parseFloat(match[2]);
+      }
+    }
+    return {
+      id: `GF-${b.id}`,
+      tenantId: String(tenantId),
+      name: `${b.name} Yard Geofence`,
+      center_latitude: cLat,
+      center_longitude: cLng,
+      radius_meters: 250,
+      branch_id: String(b.id)
+    };
+  });
+
+  // Perform parallel upserts including GPS telemetry tables
+  await Promise.allSettled([
     supabase.from("branches").upsert(mappedBranches),
     supabase.from("trucks").upsert(serializedTrucks),
     supabase.from("users").upsert(serializedUsers),
     supabase.from("deliveries").upsert(mappedDeliveries),
+    supabase.from("gps_units_setup").upsert(gpsUnitsToUpsert),
+    supabase.from("gps_unit_setup").upsert(gpsUnitsToUpsert),
+    supabase.from("gps_tracking_history").insert(historyPointsToInsert),
+    supabase.from("geofences").upsert(geofencesToUpsert),
+    supabase.from("gpsfences").upsert(geofencesToUpsert),
+    supabase.from("gps_fences").upsert(geofencesToUpsert)
   ]);
 
   return { supabaseActive: true };
@@ -882,18 +965,36 @@ export async function saveTenantStateDirect(
 export async function deleteRecordDirect(table: string, id: string, tenantId: string) {
   const supabase = getFrontendSupabase();
   if (!supabase) return;
-  const { error } = await supabase.from(table).delete().eq("id", id).eq("tenantId", tenantId);
+  const tid = String(tenantId);
+  const { error } = await supabase.from(table).delete().eq("id", id).eq("tenantId", tid);
   if (error) throw error;
+  
+  if (table === 'trucks') {
+    await supabase.from("gps_units_setup").delete().eq("assignedTruckId", id).eq("tenantId", tid).catch(() => {});
+    await supabase.from("gps_unit_setup").delete().eq("assignedTruckId", id).eq("tenantId", tid).catch(() => {});
+    await supabase.from("gps_tracking_history").delete().eq("truck_id", id).eq("tenantId", tid).catch(() => {});
+  } else if (table === 'branches') {
+    await supabase.from("geofences").delete().eq("branch_id", id).eq("tenantId", tid).catch(() => {});
+    await supabase.from("gpsfences").delete().eq("branch_id", id).eq("tenantId", tid).catch(() => {});
+    await supabase.from("gps_fences").delete().eq("branch_id", id).eq("tenantId", tid).catch(() => {});
+  }
 }
 
 // Clear all records for a tenant
 export async function clearAllDirect(tenantId: string) {
   const supabase = getFrontendSupabase();
   if (!supabase) return;
-  await Promise.all([
-    supabase.from("deliveries").delete().eq("tenantId", tenantId),
-    supabase.from("users").delete().eq("tenantId", tenantId),
-    supabase.from("trucks").delete().eq("tenantId", tenantId),
-    supabase.from("branches").delete().eq("tenantId", tenantId),
+  const tid = String(tenantId);
+  await Promise.allSettled([
+    supabase.from("deliveries").delete().eq("tenantId", tid),
+    supabase.from("users").delete().eq("tenantId", tid),
+    supabase.from("trucks").delete().eq("tenantId", tid),
+    supabase.from("branches").delete().eq("tenantId", tid),
+    supabase.from("gps_units_setup").delete().eq("tenantId", tid),
+    supabase.from("gps_unit_setup").delete().eq("tenantId", tid),
+    supabase.from("gps_tracking_history").delete().eq("tenantId", tid),
+    supabase.from("geofences").delete().eq("tenantId", tid),
+    supabase.from("gpsfences").delete().eq("tenantId", tid),
+    supabase.from("gps_fences").delete().eq("tenantId", tid)
   ]);
 }

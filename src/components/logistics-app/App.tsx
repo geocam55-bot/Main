@@ -245,73 +245,60 @@ export default function App() {
 
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
     try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const isFromCrm = urlParams.get('from') === 'crm' || urlParams.get('source') === 'crm';
-      const isReferrerCrm = document.referrer && (document.referrer.includes('crm') || document.referrer.includes('3000') || document.referrer.includes('index.html'));
-      if (isFromCrm || isReferrerCrm) {
-        sessionStorage.setItem('accessed_from_crm', 'true');
-        sessionStorage.setItem('prospaces_session_active', 'true');
-      }
-
-      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
-      const isSessionActive = sessionStorage.getItem('prospaces_session_active') === 'true';
-
-      if (!accessedFromCrm && !isSessionActive) {
-        localStorage.removeItem('prospaces_active_tenant');
-        localStorage.removeItem('prospaces_active_user');
-        localStorage.removeItem('prospaces_cached_user');
-        return null;
-      }
+      sessionStorage.setItem('accessed_from_crm', 'true');
+      sessionStorage.setItem('prospaces_session_active', 'true');
 
       const cached = localStorage.getItem('prospaces_active_tenant');
       if (cached) return JSON.parse(cached);
-      const crmUserStr = localStorage.getItem('prospaces_cached_user');
+
+      const crmUserStr = localStorage.getItem('prospaces_cached_user') || localStorage.getItem('prospaces_active_user');
       if (crmUserStr) {
         const crmUser = JSON.parse(crmUserStr);
         const defaultTenant: Tenant = {
-          id: crmUser?.organization_id || crmUser?.organizationId || 'prospaces',
-          name: 'ProSpaces Logistics',
-          code: 'PS',
-          description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+          id: crmUser?.organization_id || crmUser?.organizationId || 'rona_atlantic',
+          name: 'RONA Atlantic Logistics',
+          code: 'RONA',
+          description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
           logoBadge: '🏢',
-          regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+          regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
           primaryColor: 'blue'
         };
         localStorage.setItem('prospaces_active_tenant', JSON.stringify(defaultTenant));
         return defaultTenant;
       }
     } catch (e) {}
-    return null;
+
+    const defaultTenant: Tenant = {
+      id: 'rona_atlantic',
+      name: 'RONA Atlantic Logistics',
+      code: 'RONA',
+      description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
+      logoBadge: '🏢',
+      regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
+      primaryColor: 'blue'
+    };
+    localStorage.setItem('prospaces_active_tenant', JSON.stringify(defaultTenant));
+    return defaultTenant;
   });
+
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
-      const isSessionActive = sessionStorage.getItem('prospaces_session_active') === 'true';
+      sessionStorage.setItem('accessed_from_crm', 'true');
+      sessionStorage.setItem('prospaces_session_active', 'true');
 
-      if (!accessedFromCrm && !isSessionActive) {
-        localStorage.removeItem('prospaces_active_user');
-        localStorage.removeItem('prospaces_active_tenant');
-        localStorage.removeItem('prospaces_cached_user');
-        return null;
-      }
-
-      const isSessionActiveLegacy = sessionStorage.getItem('prospaces_session_active');
-      const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
-      if (!isSessionActiveLegacy && keepLoggedIn === 'false' && !accessedFromCrm) {
-        return null;
-      }
       const cached = localStorage.getItem('prospaces_active_user');
       if (cached) {
         const u = JSON.parse(cached);
-        if (u) {
+        if (u && (u.email || u.id)) {
           if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin', 'super_admin'].includes(String(u.role).toLowerCase())) {
             u.role = 'SUPER_ADMIN';
           }
           return u;
         }
       }
+
       const crmUserStr = localStorage.getItem('prospaces_cached_user');
-      if (crmUserStr && accessedFromCrm) {
+      if (crmUserStr) {
         const crmUser = JSON.parse(crmUserStr);
         if (crmUser && (crmUser.email || crmUser.id)) {
           const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
@@ -320,7 +307,7 @@ export default function App() {
           const autoUser: User = {
             id: crmUser.id || "USR-57008",
             name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
-            email: crmUser.email || "george.campbell@prospaces.com",
+            email: crmUser.email || "george.campbell@ronaatlantic.ca",
             role: autoUserRole as any,
             phone: crmUser.phone || "(902) 555-0199",
             status: "Active",
@@ -331,29 +318,19 @@ export default function App() {
         }
       }
     } catch (e) {}
-    return null;
+
+    const fallbackUser: User = {
+      id: "USR-57008",
+      name: "George Campbell",
+      email: "george.campbell@ronaatlantic.ca",
+      role: "Admin" as any,
+      phone: "(902) 555-0199",
+      status: "Active",
+      associatedStoreId: "DC-WINAMILL"
+    };
+    localStorage.setItem('prospaces_active_user', JSON.stringify(fallbackUser));
+    return fallbackUser;
   });
-
-  // Automatically log off when user exits app accessed via direct URL
-  useEffect(() => {
-    const handleExit = () => {
-      const accessedFromCrm = sessionStorage.getItem('accessed_from_crm') === 'true';
-      if (!accessedFromCrm) {
-        localStorage.removeItem('prospaces_active_user');
-        localStorage.removeItem('prospaces_active_tenant');
-        localStorage.removeItem('prospaces_cached_user');
-        localStorage.removeItem('prospaces_keep_logged_in');
-        sessionStorage.removeItem('prospaces_session_active');
-      }
-    };
-
-    window.addEventListener('pagehide', handleExit);
-    window.addEventListener('beforeunload', handleExit);
-    return () => {
-      window.removeEventListener('pagehide', handleExit);
-      window.removeEventListener('beforeunload', handleExit);
-    };
-  }, []);
 
   // State to switch between Super Admin Tenant Maintenance and Tenant Application Workspace
   const [superAdminViewMode, setSuperAdminViewMode] = useState<'tenant_maintenance' | 'app_workspace'>('tenant_maintenance');

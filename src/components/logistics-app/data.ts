@@ -2,12 +2,12 @@ import { Tenant } from './types';
 
 export const TENANTS: Tenant[] = [
   {
-    id: 'prospaces',
-    name: 'ProSpaces Logistics',
-    code: 'PS',
-    description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+    id: 'rona_atlantic',
+    name: 'RONA Atlantic Logistics',
+    code: 'RONA',
+    description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
     logoBadge: '🏢',
-    regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+    regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
     primaryColor: 'blue'
   }
 ];

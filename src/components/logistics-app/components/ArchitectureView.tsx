@@ -234,11 +234,25 @@ create table if not exists gps_units_setup (
   "installedAt" text default now()::text
 );
 
+create table if not exists gps_unit_setup (
+  id text primary key,
+  "tenantId" text not null default 'prospaces',
+  "deviceId" text not null,
+  "deviceName" text not null,
+  "simIccid" text,
+  status text not null default 'Disconnected',
+  "assignedTruckId" text,
+  "lastHandshake" text,
+  "lastLatitude" double precision,
+  "lastLongitude" double precision,
+  "installedAt" text default now()::text
+);
+
 -- 7. Create gps_tracking_history table for telemetric tracking updates
 create table if not exists gps_tracking_history (
   id uuid primary key default gen_random_uuid(),
   "tenantId" text not null default 'prospaces',
-  "deviceId" text not null references gps_units_setup("deviceId") on delete cascade,
+  "deviceId" text not null,
   latitude double precision not null,
   longitude double precision not null,
   speed double precision, -- speed in km/h or mph
@@ -292,8 +306,28 @@ create table if not exists route_stops (
   status text default 'Pending' -- 'Pending', 'Arrived', 'Departed', 'Skipped'
 );
 
--- 10. Create geofences table
+-- 10. Create geofences table and aliases
 create table if not exists geofences (
+  id text primary key,
+  "tenantId" text not null default 'prospaces',
+  name text not null,
+  center_latitude double precision not null,
+  center_longitude double precision not null,
+  radius_meters integer not null default 100,
+  branch_id text references branches(id) on delete set null
+);
+
+create table if not exists gpsfences (
+  id text primary key,
+  "tenantId" text not null default 'prospaces',
+  name text not null,
+  center_latitude double precision not null,
+  center_longitude double precision not null,
+  radius_meters integer not null default 100,
+  branch_id text references branches(id) on delete set null
+);
+
+create table if not exists gps_fences (
   id text primary key,
   "tenantId" text not null default 'prospaces',
   name text not null,
@@ -690,10 +724,13 @@ ALTER TABLE trucks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deliveries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gps_units_setup ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gps_unit_setup ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gps_tracking_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE routes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE route_stops ENABLE ROW LEVEL SECURITY;
 ALTER TABLE geofences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gpsfences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gps_fences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE driver_behaviour ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vehicle_maintenance ENABLE ROW LEVEL SECURITY;
 
@@ -758,6 +795,16 @@ CREATE POLICY "Allow public write on gps_units_setup" ON gps_units_setup FOR INS
 CREATE POLICY "Allow public update on gps_units_setup" ON gps_units_setup FOR UPDATE USING ("tenantId" IS NOT NULL) WITH CHECK ("tenantId" IS NOT NULL);
 CREATE POLICY "Allow public delete on gps_units_setup" ON gps_units_setup FOR DELETE USING ("tenantId" IS NOT NULL);
 
+-- gps_unit_setup policies
+DROP POLICY IF EXISTS "Allow public read on gps_unit_setup" ON gps_unit_setup;
+DROP POLICY IF EXISTS "Allow public write on gps_unit_setup" ON gps_unit_setup;
+DROP POLICY IF EXISTS "Allow public update on gps_unit_setup" ON gps_unit_setup;
+DROP POLICY IF EXISTS "Allow public delete on gps_unit_setup" ON gps_unit_setup;
+CREATE POLICY "Allow public read on gps_unit_setup" ON gps_unit_setup FOR SELECT USING (true);
+CREATE POLICY "Allow public write on gps_unit_setup" ON gps_unit_setup FOR INSERT WITH CHECK ("tenantId" IS NOT NULL);
+CREATE POLICY "Allow public update on gps_unit_setup" ON gps_unit_setup FOR UPDATE USING ("tenantId" IS NOT NULL) WITH CHECK ("tenantId" IS NOT NULL);
+CREATE POLICY "Allow public delete on gps_unit_setup" ON gps_unit_setup FOR DELETE USING ("tenantId" IS NOT NULL);
+
 -- gps_tracking_history policies
 DROP POLICY IF EXISTS "Allow public read on gps_tracking_history" ON gps_tracking_history;
 DROP POLICY IF EXISTS "Allow public write on gps_tracking_history" ON gps_tracking_history;
@@ -791,6 +838,20 @@ DROP POLICY IF EXISTS "Allow public update on geofences" ON geofences;
 DROP POLICY IF EXISTS "Allow public delete on geofences" ON geofences;
 CREATE POLICY "Allow public read on geofences" ON geofences FOR SELECT USING (true);
 CREATE POLICY "Allow public write on geofences" ON geofences FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read on gpsfences" ON gpsfences;
+DROP POLICY IF EXISTS "Allow public write on gpsfences" ON gpsfences;
+DROP POLICY IF EXISTS "Allow public update on gpsfences" ON gpsfences;
+DROP POLICY IF EXISTS "Allow public delete on gpsfences" ON gpsfences;
+CREATE POLICY "Allow public read on gpsfences" ON gpsfences FOR SELECT USING (true);
+CREATE POLICY "Allow public write on gpsfences" ON gpsfences FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read on gps_fences" ON gps_fences;
+DROP POLICY IF EXISTS "Allow public write on gps_fences" ON gps_fences;
+DROP POLICY IF EXISTS "Allow public update on gps_fences" ON gps_fences;
+DROP POLICY IF EXISTS "Allow public delete on gps_fences" ON gps_fences;
+CREATE POLICY "Allow public read on gps_fences" ON gps_fences FOR SELECT USING (true);
+CREATE POLICY "Allow public write on gps_fences" ON gps_fences FOR ALL USING (true) WITH CHECK (true);
 
 -- Driver behaviour policies
 DROP POLICY IF EXISTS "Allow public read on driver_behaviour" ON driver_behaviour;

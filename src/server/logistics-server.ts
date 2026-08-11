@@ -806,7 +806,7 @@ create table if not exists deliveries (
 -- 6. Create gps_units_setup table for built-in GPS hardware configurations in Trucks
 create table if not exists gps_units_setup (
   id text primary key, -- hardware ID / IMEI
-  "tenantId" text not null default 'prospaces',
+  "tenantId" text not null default 'rona_atlantic',
   "deviceId" text not null unique, -- custom unique identifier
   "deviceName" text not null, -- label, e.g. "CalAmp LMU-3030" or "Built-in GPS Premium"
   "simIccid" text, -- SIM ICCID card number
@@ -818,11 +818,25 @@ create table if not exists gps_units_setup (
   "installedAt" text default now()::text
 );
 
+create table if not exists gps_unit_setup (
+  id text primary key,
+  "tenantId" text not null default 'rona_atlantic',
+  "deviceId" text not null,
+  "deviceName" text not null,
+  "simIccid" text,
+  status text not null default 'Disconnected',
+  "assignedTruckId" text,
+  "lastHandshake" text,
+  "lastLatitude" double precision,
+  "lastLongitude" double precision,
+  "installedAt" text default now()::text
+);
+
 -- 7. Create gps_tracking_history table for telemetric tracking updates
 create table if not exists gps_tracking_history (
   id uuid primary key default gen_random_uuid(),
-  "tenantId" text not null default 'prospaces',
-  "deviceId" text not null references gps_units_setup("deviceId") on delete cascade,
+  "tenantId" text not null default 'rona_atlantic',
+  "deviceId" text not null,
   latitude double precision not null,
   longitude double precision not null,
   speed double precision, -- speed in km/h or mph
@@ -853,7 +867,7 @@ create table if not exists gps_tracking_history (
 -- 8. Create routes table
 create table if not exists routes (
   id text primary key,
-  "tenantId" text not null default 'prospaces',
+  "tenantId" text not null default 'rona_atlantic',
   truck_id text references trucks(id) on delete cascade,
   driver_id text references users(id) on delete set null,
   route_date date not null default now()::date,
@@ -867,7 +881,7 @@ create table if not exists routes (
 -- 9. Create route_stops table
 create table if not exists route_stops (
   id text primary key,
-  "tenantId" text not null default 'prospaces',
+  "tenantId" text not null default 'rona_atlantic',
   route_id text references routes(id) on delete cascade,
   sequence_number integer not null,
   branch_id text references branches(id) on delete cascade,
@@ -876,10 +890,30 @@ create table if not exists route_stops (
   status text default 'Pending' -- 'Pending', 'Arrived', 'Departed', 'Skipped'
 );
 
--- 10. Create geofences table
+-- 10. Create geofences table and aliases
 create table if not exists geofences (
   id text primary key,
-  "tenantId" text not null default 'prospaces',
+  "tenantId" text not null default 'rona_atlantic',
+  name text not null,
+  center_latitude double precision not null,
+  center_longitude double precision not null,
+  radius_meters integer not null default 100,
+  branch_id text references branches(id) on delete set null
+);
+
+create table if not exists gpsfences (
+  id text primary key,
+  "tenantId" text not null default 'rona_atlantic',
+  name text not null,
+  center_latitude double precision not null,
+  center_longitude double precision not null,
+  radius_meters integer not null default 100,
+  branch_id text references branches(id) on delete set null
+);
+
+create table if not exists gps_fences (
+  id text primary key,
+  "tenantId" text not null default 'rona_atlantic',
   name text not null,
   center_latitude double precision not null,
   center_longitude double precision not null,
@@ -890,7 +924,7 @@ create table if not exists geofences (
 -- 11. Create driver_behaviour table
 create table if not exists driver_behaviour (
   id text primary key,
-  "tenantId" text not null default 'prospaces',
+  "tenantId" text not null default 'rona_atlantic',
   driver_id text references users(id) on delete cascade,
   event_time timestamp not null default now(),
   event_type varchar not null, -- 'Speeding', 'Harsh Braking', 'Rapid Acceleration', 'Cornering', 'Phone Use', 'Seatbelt Use'
@@ -901,7 +935,7 @@ create table if not exists driver_behaviour (
 -- 12. Create vehicle_maintenance table
 create table if not exists vehicle_maintenance (
   id text primary key,
-  "tenantId" text not null default 'prospaces',
+  "tenantId" text not null default 'rona_atlantic',
   truck_id text references trucks(id) on delete cascade,
   service_date date not null default now()::date,
   service_type varchar not null, -- 'Oil Change', 'Brake Pad Replacement', 'Tire Rotation', 'Annual Inspection', etc.
@@ -912,27 +946,27 @@ create table if not exists vehicle_maintenance (
 
 -- Seed Initial Logistical Partners
 insert into tenants (id, name, code, description, "logoBadge", "regionalFocus", "primaryColor") values
-('prospaces', 'ProSpaces Logistics', 'PS', 'Corporate logistics tracking for ProSpaces distributor and dealer stores.', '🏢', 'Atlantic Canada (Dartmouth, Tantallon, Halifax)', 'blue')
+('rona_atlantic', 'RONA Atlantic Logistics', 'RONA', 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.', '🏢', 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)', 'blue')
 on conflict (id) do nothing;
 
 -- Seed GPS Setup data for the trucks (TRUCK-87 and TRUCK-28)
 insert into gps_units_setup (id, "tenantId", "deviceId", "deviceName", "simIccid", status, "assignedTruckId", "lastHandshake", "lastLatitude", "lastLongitude") values
-('GPS-IMEI-874812', 'prospaces', 'GPS-DEV-87', 'CalAmp LMU-3030 Premium', '8901410327981234567', 'Connected', 'TRUCK-87', '2026-07-01 06:00:00', 44.6855, -63.5825),
-('GPS-IMEI-281932', 'prospaces', 'GPS-DEV-28', 'Sierra Wireless RV50X', '8901410327981234568', 'Connected', 'TRUCK-28', '2026-07-01 06:02:15', 44.6295, -63.6651)
+('GPS-IMEI-874812', 'rona_atlantic', 'GPS-DEV-87', 'CalAmp LMU-3030 Premium', '8901410327981234567', 'Connected', 'TRUCK-87', '2026-07-01 06:00:00', 44.6855, -63.5825),
+('GPS-IMEI-281932', 'rona_atlantic', 'GPS-DEV-28', 'Sierra Wireless RV50X', '8901410327981234568', 'Connected', 'TRUCK-28', '2026-07-01 06:02:15', 44.6295, -63.6651)
 on conflict (id) do nothing;
 
 -- Seed GPS tracking history points for GPS-DEV-87
 insert into gps_tracking_history (id, "tenantId", "deviceId", latitude, longitude, speed, heading, "recordedAt", "ignitionStatus") values
-(gen_random_uuid(), 'prospaces', 'GPS-DEV-87', 44.7050, -63.5950, 45.2, 180.0, '2026-07-01 05:50:00', true),
-(gen_random_uuid(), 'prospaces', 'GPS-DEV-87', 44.7065, -63.5942, 32.5, 175.5, '2026-07-01 05:55:00', true),
-(gen_random_uuid(), 'prospaces', 'GPS-DEV-87', 44.6855, -63.5825, 0.0, 175.5, '2026-07-01 06:00:00', false)
+(gen_random_uuid(), 'rona_atlantic', 'GPS-DEV-87', 44.7050, -63.5950, 45.2, 180.0, '2026-07-01 05:50:00', true),
+(gen_random_uuid(), 'rona_atlantic', 'GPS-DEV-87', 44.7065, -63.5942, 32.5, 175.5, '2026-07-01 05:55:00', true),
+(gen_random_uuid(), 'rona_atlantic', 'GPS-DEV-87', 44.6855, -63.5825, 0.0, 175.5, '2026-07-01 06:00:00', false)
 on conflict (id) do nothing;
 
 -- Seed GPS tracking history points for GPS-DEV-28
 insert into gps_tracking_history (id, "tenantId", "deviceId", latitude, longitude, speed, heading, "recordedAt", "ignitionStatus") values
-(gen_random_uuid(), 'prospaces', 'GPS-DEV-28', 44.6210, -63.6695, 65.0, 90.0, '2026-07-01 05:52:15', true),
-(gen_random_uuid(), 'prospaces', 'GPS-DEV-28', 44.6255, -63.6672, 48.3, 85.0, '2026-07-01 05:57:15', true),
-(gen_random_uuid(), 'prospaces', 'GPS-DEV-28', 44.6295, -63.6651, 0.0, 85.0, '2026-07-01 06:02:15', false)
+(gen_random_uuid(), 'rona_atlantic', 'GPS-DEV-28', 44.6210, -63.6695, 65.0, 90.0, '2026-07-01 05:52:15', true),
+(gen_random_uuid(), 'rona_atlantic', 'GPS-DEV-28', 44.6255, -63.6672, 48.3, 85.0, '2026-07-01 05:57:15', true),
+(gen_random_uuid(), 'rona_atlantic', 'GPS-DEV-28', 44.6295, -63.6651, 0.0, 85.0, '2026-07-01 06:02:15', false)
 on conflict (id) do nothing;
 
 -- 6. Row-Level Security (RLS) Master Configuration & Policies
@@ -1303,148 +1337,111 @@ async function runSelfHealingOnce() {
     try {
       const supabase = getSupabase();
       if (supabase) {
-        console.log("Starting lazy database self-healing and alignment process...");
+        console.log("Starting lazy database self-healing and alignment process for 'rona_atlantic'...");
         
-        // 1. Ensure prospaces tenant is seeded
-        const prospacesTenant = {
-          id: "prospaces",
-          name: "ProSpaces Logistics",
-          code: "PS",
-          description: "Corporate logistics tracking for ProSpaces distributor and dealer stores.",
+        // 1. Ensure rona_atlantic tenant is seeded
+        const ronaTenant = {
+          id: "rona_atlantic",
+          name: "RONA Atlantic Logistics",
+          code: "RONA",
+          description: "Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.",
           logoBadge: "🏢",
-          regionalFocus: "Atlantic Canada (Dartmouth, Tantallon, Halifax)",
+          regionalFocus: "Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)",
           primaryColor: "blue"
         };
-        await supabase.from("tenants").upsert([prospacesTenant]);
-        console.log("Seeded/validated 'prospaces' tenant.");
+        await supabase.from("tenants").upsert([ronaTenant]);
+        console.log("Seeded/validated 'rona_atlantic' tenant.");
 
-        // 2. Migrate users from agfydicwfv8u0rqr5apc to prospaces
+        // 2. Migrate users from prospaces or agfydicwfv8u0rqr5apc to rona_atlantic
         const { data: usersToMigrate } = await supabase
           .from("users")
           .select("*")
-          .in("tenantId", ["agfydicwfv8u0rqr5apc"]);
+          .in("tenantId", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]);
           
         if (usersToMigrate && usersToMigrate.length > 0) {
           for (const user of usersToMigrate) {
             let updatedEmail = user.email;
-            if (updatedEmail.endsWith("@ronaatlantic.ca")) {
-              updatedEmail = updatedEmail.replace("@ronaatlantic.ca", "@prospaces.com");
+            if (updatedEmail.endsWith("@prospaces.com")) {
+              updatedEmail = updatedEmail.replace("@prospaces.com", "@ronaatlantic.ca");
             }
             await supabase
               .from("users")
               .update({ 
-                tenantId: "prospaces",
+                tenantId: "rona_atlantic",
                 email: updatedEmail
               })
               .eq("id", user.id);
-            console.log(`Migrated user ${user.name} (${user.email} -> ${updatedEmail}) to 'prospaces' tenant.`);
+            console.log(`Migrated user ${user.name} (${user.email} -> ${updatedEmail}) to 'rona_atlantic' tenant.`);
           }
         }
 
-        // Also check if any user with joshua.campbell email has wrong tenantId
+        // Reconcile all users ending with @prospaces.com or containing joshua.campbell
         const { data: joshuaUsers } = await supabase
           .from("users")
           .select("*")
-          .ilike("email", "%joshua.campbell%");
+          .or("email.ilike.%prospaces.com%,email.ilike.%joshua.campbell%");
           
         if (joshuaUsers && joshuaUsers.length > 0) {
           for (const user of joshuaUsers) {
             let updatedEmail = user.email;
-            if (updatedEmail.endsWith("@ronaatlantic.ca")) {
-              updatedEmail = updatedEmail.replace("@ronaatlantic.ca", "@prospaces.com");
+            if (updatedEmail.endsWith("@prospaces.com")) {
+              updatedEmail = updatedEmail.replace("@prospaces.com", "@ronaatlantic.ca");
             }
-            if (user.tenantId !== "prospaces" || user.email !== updatedEmail) {
+            if (user.tenantId !== "rona_atlantic" || user.email !== updatedEmail) {
               await supabase
                 .from("users")
                 .update({ 
-                  tenantId: "prospaces",
+                  tenantId: "rona_atlantic",
                   email: updatedEmail
                 })
                 .eq("id", user.id);
-              console.log(`Reconciled Joshua Campbell's tenantId to 'prospaces' and email to ${updatedEmail}.`);
+              console.log(`Reconciled user ${user.name} tenantId to 'rona_atlantic' and email to ${updatedEmail}.`);
             }
           }
         }
 
-        // 3. Migrate branches from agfydicwfv8u0rqr5apc to prospaces
+        // 3. Migrate branches from prospaces / agfydicwfv8u0rqr5apc to rona_atlantic
         const { data: branchesToMigrate } = await supabase
           .from("branches")
           .select("*")
-          .in("tenantId", ["agfydicwfv8u0rqr5apc"]);
+          .in("tenantId", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]);
           
         if (branchesToMigrate && branchesToMigrate.length > 0) {
           for (const branch of branchesToMigrate) {
             let cleanBranchName = branch.name;
-            if (cleanBranchName.startsWith("RONA - ")) {
-              cleanBranchName = cleanBranchName.replace("RONA - ", "ProSpaces - ");
+            if (cleanBranchName.startsWith("ProSpaces - ")) {
+              cleanBranchName = cleanBranchName.replace("ProSpaces - ", "RONA - ");
             }
             await supabase
               .from("branches")
               .update({ 
-                tenantId: "prospaces",
+                tenantId: "rona_atlantic",
                 name: cleanBranchName
               })
               .eq("id", branch.id);
-            console.log(`Migrated branch ${branch.name} -> ${cleanBranchName} to 'prospaces' tenant.`);
+            console.log(`Migrated branch ${branch.name} -> ${cleanBranchName} to 'rona_atlantic' tenant.`);
           }
         }
 
-        // 4. Migrate trucks from agfydicwfv8u0rqr5apc to prospaces
+        // 4. Migrate trucks from prospaces / agfydicwfv8u0rqr5apc to rona_atlantic
         const { data: trucksToMigrate } = await supabase
           .from("trucks")
           .select("*")
-          .in("tenantId", ["agfydicwfv8u0rqr5apc"]);
+          .in("tenantId", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]);
           
         if (trucksToMigrate && trucksToMigrate.length > 0) {
           for (const truck of trucksToMigrate) {
-            const baseType = (truck.type || "").split("||")[0].trim();
-            const updatedType = `${baseType} ||regdue:2026-11-29 ||lat:44.6295 ||lng:-63.6651`;
-            
             await supabase
               .from("trucks")
               .update({ 
-                tenantId: "prospaces",
-                type: updatedType
+                tenantId: "rona_atlantic"
               })
               .eq("id", truck.id);
-            console.log(`Migrated truck ${truck.name} to 'prospaces' and set coordinates.`);
+            console.log(`Migrated truck ${truck.name} to 'rona_atlantic'.`);
           }
         }
 
-        // Also check any trucks with driver Joshua Campbell specifically
-        const { data: joshuaTrucks } = await supabase
-          .from("trucks")
-          .select("*")
-          .eq("driver", "Joshua Campbell");
-          
-        if (joshuaTrucks && joshuaTrucks.length > 0) {
-          for (const truck of joshuaTrucks) {
-            // ONLY set default coordinates if the truck currently has NO latitude/longitude in its type column
-            if (!truck.type || (!truck.type.includes("||lat:") && !truck.type.includes("||gpsLat:"))) {
-              const baseType = (truck.type || "").split("||")[0].trim();
-              const updatedType = `${baseType} ||regdue:2026-11-29 ||lat:44.6295 ||lng:-63.6651`;
-              await supabase
-                .from("trucks")
-                .update({ 
-                  tenantId: "prospaces",
-                  type: updatedType
-                })
-                .eq("id", truck.id);
-              console.log(`Set Joshua Campbell's truck (${truck.name}) coordinates specifically to 137 Chain Lake Drive.`);
-            } else if (truck.tenantId !== "prospaces") {
-              // Ensure it is in the correct tenant
-              await supabase
-                .from("trucks")
-                .update({ 
-                  tenantId: "prospaces"
-                })
-                .eq("id", truck.id);
-              console.log(`Ensured Joshua Campbell's truck (${truck.name}) tenant is 'prospaces'.`);
-            }
-          }
-        }
-
-        // 4b. Ensure default trucks in prospaces tenant have GPS Hardware Serial / Device ID configured and correct positions
+        // 4b. Ensure default trucks in rona_atlantic tenant have GPS Hardware Serial / Device ID configured and correct positions
         const DEFAULT_FLEET_TRUCKS = [
           { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6536, lng: -63.6011, speed: 0, idling: 0 },
           { id: "2409 - Elmsdale F150", name: "2409 - Elmsdale F150", model: "2024 Ford F-150 XLT 4x4", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 58, idling: 0 },
@@ -1469,12 +1466,12 @@ async function runSelfHealingOnce() {
           { id: "PEI WS BOOM", name: "PEI WS BOOM", model: "2023 Western Star 4700 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "01075", lat: 46.2382, lng: -63.1311, speed: 0, idling: 25 }
         ];
 
-        const { data: existingProspacesTrucks } = await supabase
+        const { data: existingRonaTrucks } = await supabase
           .from("trucks")
           .select("id, name, driver")
-          .eq("tenantId", "prospaces");
+          .eq("tenantId", "rona_atlantic");
 
-        const existingDbList = existingProspacesTrucks || [];
+        const existingDbList = existingRonaTrucks || [];
 
         for (const ft of DEFAULT_FLEET_TRUCKS) {
           const ftUNum = extractTruckUnitNumber(ft.id) || extractTruckUnitNumber(ft.name);
@@ -1508,13 +1505,13 @@ async function runSelfHealingOnce() {
             );
             await supabase.from("trucks").upsert({
               id: ft.id,
-              tenantId: "prospaces",
+              tenantId: "rona_atlantic",
               name: ft.name,
               type: typeStr,
               driver: ft.driver,
               branchId: ft.branchId
             });
-            console.log(`[Fleet Seed] Upserted default fleet truck ${ft.id}`);
+            console.log(`[Fleet Seed] Upserted default fleet truck ${ft.id} into rona_atlantic`);
           }
         }
 
@@ -1529,13 +1526,13 @@ async function runSelfHealingOnce() {
           console.warn("[Fleet Complete Self-Healing] Notice validating token on startup:", fcErr);
         }
 
-        const { data: prospacesTrucks } = await supabase
+        const { data: ronaTrucks } = await supabase
           .from("trucks")
           .select("*")
-          .eq("tenantId", "prospaces");
+          .eq("tenantId", "rona_atlantic");
 
-        if (prospacesTrucks && prospacesTrucks.length > 0) {
-          for (const t of prospacesTrucks) {
+        if (ronaTrucks && ronaTrucks.length > 0) {
+          for (const t of ronaTrucks) {
             const deserialized = deserializeType(t);
             const is1903 = t.id.includes("1903") || t.name.includes("1903");
             const isAlmon2401 = t.id.includes("2401") || t.name.includes("2401") || t.name.toLowerCase().includes("almon");
@@ -1588,22 +1585,21 @@ async function runSelfHealingOnce() {
           }
         }
 
-        // 5. Migrate deliveries from agfydicwfv8u0rqr5apc to prospaces
+        // 6. Migrate deliveries from prospaces / agfydicwfv8u0rqr5apc to rona_atlantic
         const { data: deliveriesToMigrate } = await supabase
           .from("deliveries")
           .select("*")
-          .in("tenantId", ["agfydicwfv8u0rqr5apc"]);
+          .in("tenantId", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]);
           
         if (deliveriesToMigrate && deliveriesToMigrate.length > 0) {
           for (const del of deliveriesToMigrate) {
-            // Update history notes or location if they contain RONA
             let updatedHistory = del.history;
             if (Array.isArray(updatedHistory)) {
               updatedHistory = updatedHistory.map((h: any) => {
                 if (h && typeof h === "object") {
                   let updatedLoc = h.location || "";
-                  if (updatedLoc.startsWith("RONA - ")) {
-                    updatedLoc = updatedLoc.replace("RONA - ", "ProSpaces - ");
+                  if (updatedLoc.startsWith("ProSpaces - ")) {
+                    updatedLoc = updatedLoc.replace("ProSpaces - ", "RONA - ");
                   }
                   return { ...h, location: updatedLoc };
                 }
@@ -1613,20 +1609,25 @@ async function runSelfHealingOnce() {
             await supabase
               .from("deliveries")
               .update({ 
-                tenantId: "prospaces",
+                tenantId: "rona_atlantic",
                 history: updatedHistory
               })
               .eq("id", del.id);
-            console.log(`Migrated delivery ${del.invoiceNumber} to 'prospaces' tenant.`);
+            console.log(`Migrated delivery ${del.invoiceNumber} to 'rona_atlantic' tenant.`);
           }
         }
 
-        // 6. Delete temporary and old tenants to keep DB clean
+        // 7. Migrate GPS tables to rona_atlantic
+        try { await supabase.from("gps_units_setup").update({ tenantId: "rona_atlantic" }).in("tenantId", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]); } catch (_) {}
+        try { await supabase.from("gps_unit_setup").update({ tenantId: "rona_atlantic" }).in("tenantId", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]); } catch (_) {}
+        try { await supabase.from("gps_tracking_history").update({ tenantId: "rona_atlantic" }).in("tenantId", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]); } catch (_) {}
+
+        // 8. Delete old prospaces and temporary tenants to keep DB clean
         await supabase
           .from("tenants")
           .delete()
-          .in("id", ["agfydicwfv8u0rqr5apc"]);
-        console.log("Cleaned up temporary tenant 'agfydicwfv8u0rqr5apc'.");
+          .in("id", ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc"]);
+        console.log("Cleaned up old tenant 'prospaces'. Database self-healing complete.");
 
         // 7. Auto-seeding disabled as requested by the user to ensure we only work with live database data.
         console.log("Database self-healing and alignment complete.");
@@ -2583,7 +2584,7 @@ app.use((req, res, next) => {
           const customerName = d.customerName || meta.customerName || d.customer || "N/A";
           const deliveryAddress = d.deliveryAddress || meta.deliveryAddress || d.destination || "N/A";
           const phone = d.phone !== undefined ? d.phone : (meta.phone !== undefined ? meta.phone : "");
-          const originBranch = d.originBranch || meta.originBranch || d.pickup_location || "prospaces-dc";
+          const originBranch = d.originBranch || meta.originBranch || d.pickup_location || "DC-WINAMILL";
           const registeredAt = d.registeredAt || meta.registeredAt || d.date || d.scheduled_date || new Date().toISOString();
           const status = d.status || meta.status || "REGISTERED";
           const assignedTruck = d.assignedTruck || meta.assignedTruck || (d.assignedTruckId && d.assignedTruckId !== "unassigned" ? d.assignedTruckId : undefined);
@@ -2858,24 +2859,24 @@ app.use((req, res, next) => {
         }
         return {
           id: b.id,
-          tenantId,
+          tenantId: String(tenantId),
           name: b.name,
           type: b.type,
           address: addressVal
         };
       });
-      const sanitizedTrucks = uniqueTrucks.map((t: any) => ({ ...t, tenantId }));
-      const sanitizedUsers = uniqueUsers.map((u: any) => ({ ...u, tenantId }));
+      const sanitizedTrucks = uniqueTrucks.map((t: any) => ({ ...t, tenantId: String(tenantId) }));
+      const sanitizedUsers = uniqueUsers.map((u: any) => ({ ...u, tenantId: String(tenantId) }));
       const sanitizedDeliveries = uniqueDeliveries.map((d: any) => {
         const fullMeta = {
           id: String(d.id),
-          tenantId: String(d.tenantId || tenantId),
+          tenantId: String(tenantId),
           invoiceNumber: String(d.invoiceNumber || d.orderNumber || d.id || ""),
           epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
           customerName: String(d.customerName || d.customer || "N/A"),
           deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
           phone: String(d.phone || ""),
-          originBranch: String(d.originBranch || "prospaces-dc"),
+          originBranch: String(d.originBranch || "DC-WINAMILL"),
           weight: d.weight,
           orderTotal: d.orderTotal,
           destinationNotes: d.destinationNotes,
@@ -2902,7 +2903,7 @@ app.use((req, res, next) => {
         // Guarantee non-null string fallbacks for all NOT NULL table constraints.
         return {
           id: String(d.id),
-          tenantId: String(d.tenantId || tenantId),
+          tenantId: String(tenantId),
           orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
           customer: String(d.customerName || d.customer || "N/A"),
           destination: String(d.deliveryAddress || d.destination || "N/A"),
@@ -2911,7 +2912,7 @@ app.use((req, res, next) => {
           assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
           status: String(d.status || "REGISTERED"),
           eta: String(d.eta || "N/A"),
-          pickup_location: String(d.originBranch || "prospaces-dc"),
+          pickup_location: String(d.originBranch || "DC-WINAMILL"),
           items: [JSON.stringify({ _meta: fullMeta })]
         };
       });
@@ -2946,6 +2947,13 @@ app.use((req, res, next) => {
             const gpsIdlingMins = (typeof t.gpsIdlingMins === 'number' && !isNaN(t.gpsIdlingMins)) ? t.gpsIdlingMins : (ex?.gpsIdlingMins ?? t.gpsIdlingMins);
             const gpsLastHandshake = (ex?.gpsLastHandshake && t.gpsLastHandshake && ex.gpsLastHandshake > t.gpsLastHandshake) ? ex.gpsLastHandshake : (t.gpsLastHandshake || ex?.gpsLastHandshake);
 
+            const targetGpsDeviceId = t.gpsDeviceId !== undefined ? t.gpsDeviceId : (ex?.gpsDeviceId || '');
+            const targetGpsSerialNumber = t.gpsSerialNumber !== undefined ? t.gpsSerialNumber : (ex?.gpsSerialNumber || '');
+            const targetGpsDeviceName = t.gpsDeviceName !== undefined ? t.gpsDeviceName : (ex?.gpsDeviceName || '');
+            const targetGpsSimIccid = t.gpsSimIccid !== undefined ? t.gpsSimIccid : (ex?.gpsSimIccid || '');
+            const targetGpsStatus = t.gpsStatus !== undefined ? t.gpsStatus : (ex?.gpsStatus || 'Connected');
+            const targetGpsSource = t.gpsSource !== undefined ? t.gpsSource : (ex?.gpsSource || 'truck');
+
             return {
               id: t.id,
               tenantId: t.tenantId,
@@ -2955,12 +2963,12 @@ app.use((req, res, next) => {
                 t.registrationDueDate,
                 lat,
                 lng,
-                t.gpsSource || 'truck',
-                t.gpsDeviceId || ex?.gpsDeviceId,
-                t.gpsSerialNumber || ex?.gpsSerialNumber,
-                t.gpsDeviceName || ex?.gpsDeviceName,
-                t.gpsSimIccid || ex?.gpsSimIccid,
-                t.gpsStatus || ex?.gpsStatus || 'Connected',
+                targetGpsSource,
+                targetGpsDeviceId,
+                targetGpsSerialNumber,
+                targetGpsDeviceName,
+                targetGpsSimIccid,
+                targetGpsStatus,
                 gpsLastHandshake,
                 gpsLat,
                 gpsLng,
@@ -3185,6 +3193,102 @@ app.use((req, res, next) => {
         }
       }
 
+      // 5. GPS Telemetry persistence: gps_units_setup, gps_unit_setup, gps_tracking_history
+      if (sanitizedTrucks.length > 0) {
+        try {
+          const activeStationary = sanitizedTrucks.filter((t: any) => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED');
+          const disabledTruckIds = sanitizedTrucks.filter((t: any) => t.gpsDeviceId === 'DISABLED' || !t.gpsDeviceId).map((t: any) => String(t.id));
+
+          const gpsUnitsToUpsert = activeStationary.map((t: any) => {
+            const devId = t.gpsDeviceId;
+            const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
+            const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
+            return {
+              id: `GPS-IMEI-${t.id}`,
+              tenantId: String(tenantId),
+              deviceId: devId,
+              deviceName: t.gpsDeviceName || t.name || `GPS Unit (${t.id})`,
+              simIccid: t.gpsSimIccid || 'Bell Mobility Business IoT',
+              status: t.gpsStatus || 'Connected',
+              assignedTruckId: String(t.id),
+              lastHandshake: t.gpsLastHandshake || new Date().toISOString(),
+              lastLatitude: lat,
+              lastLongitude: lng
+            };
+          });
+
+          const historyPointsToInsert = sanitizedTrucks.map((t: any) => {
+            const devId = t.gpsDeviceId || `GPS-${t.id}`;
+            const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
+            const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
+            const speed = typeof t.gpsSpeed === 'number' ? t.gpsSpeed : 0;
+            const idlingMins = typeof t.gpsIdlingMins === 'number' ? t.gpsIdlingMins : 0;
+            return {
+              tenantId: String(tenantId),
+              deviceId: devId,
+              latitude: lat,
+              longitude: lng,
+              speed: speed,
+              heading: 180.0,
+              recordedAt: t.gpsLastHandshake || new Date().toISOString(),
+              ignitionStatus: speed > 0 || idlingMins > 0,
+              gps_device_id: devId,
+              truck_id: String(t.id),
+              speed_kph: speed,
+              engine_status: speed > 0 ? 'Driving' : (idlingMins > 0 ? 'Idling' : 'Stopped'),
+              created_date: new Date().toISOString()
+            };
+          });
+
+          if (disabledTruckIds.length > 0) {
+            try { await supabase.from("gps_units_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds); } catch (_) {}
+            try { await supabase.from("gps_unit_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds); } catch (_) {}
+          }
+
+          if (gpsUnitsToUpsert.length > 0) {
+            try { await supabase.from("gps_units_setup").upsert(gpsUnitsToUpsert); } catch (_) {}
+            try { await supabase.from("gps_unit_setup").upsert(gpsUnitsToUpsert); } catch (_) {}
+          }
+          if (historyPointsToInsert.length > 0) {
+            try { await supabase.from("gps_tracking_history").insert(historyPointsToInsert); } catch (_) {}
+          }
+        } catch (gpsErr) {
+          console.warn("[GPS Sync] Warning during telemetry table sync:", gpsErr);
+        }
+      }
+
+      // 6. Geofences / gpsfences persistence
+      if (sanitizedBranches.length > 0) {
+        try {
+          const geofencesToUpsert = sanitizedBranches.map((b: any) => {
+            let cLat = 44.6855;
+            let cLng = -63.5825;
+            if (b.address && b.address.includes('44.')) {
+              const match = b.address.match(/(44\.\d+)[^\d-]+(-63\.\d+)/);
+              if (match) {
+                cLat = parseFloat(match[1]);
+                cLng = parseFloat(match[2]);
+              }
+            }
+            return {
+              id: `GF-${b.id}`,
+              tenantId: String(tenantId),
+              name: `${b.name} Yard Geofence`,
+              center_latitude: cLat,
+              center_longitude: cLng,
+              radius_meters: 250,
+              branch_id: String(b.id)
+            };
+          });
+
+          try { await supabase.from("geofences").upsert(geofencesToUpsert); } catch (_) {}
+          try { await supabase.from("gpsfences").upsert(geofencesToUpsert); } catch (_) {}
+          try { await supabase.from("gps_fences").upsert(geofencesToUpsert); } catch (_) {}
+        } catch (gfErr) {
+          console.warn("[Geofences Sync] Warning during geofence table sync:", gfErr);
+        }
+      }
+
       // Enforce defensive deletes from memory before finishing the save-state flow
       const tidStr = String(tenantId);
       const deletesObj = deletedTenantRecords[tidStr];
@@ -3351,7 +3455,15 @@ app.use((req, res, next) => {
       // 3. Delete all branches
       await supabase.from("branches").delete().eq("tenantId", tenantId);
 
-      // 4. Delete all users except the active logged-in profile to preserve their session
+      // 4. Delete GPS hardware and tracking telemetry records
+      try { await supabase.from("gps_units_setup").delete().eq("tenantId", tenantId); } catch (_) {}
+      try { await supabase.from("gps_unit_setup").delete().eq("tenantId", tenantId); } catch (_) {}
+      try { await supabase.from("gps_tracking_history").delete().eq("tenantId", tenantId); } catch (_) {}
+      try { await supabase.from("geofences").delete().eq("tenantId", tenantId); } catch (_) {}
+      try { await supabase.from("gpsfences").delete().eq("tenantId", tenantId); } catch (_) {}
+      try { await supabase.from("gps_fences").delete().eq("tenantId", tenantId); } catch (_) {}
+
+      // 5. Delete all users except the active logged-in profile to preserve their session
       if (keepUserEmail) {
         const { error } = await supabase
           .from("users")
@@ -3586,7 +3698,7 @@ Output schema keys:
         timestamp: timestampIso,
         barcodeText: metadata.barcodeText || null,
         source: metadata.source || 'camera_or_upload',
-        tenantId: metadata.tenantId || 'prospaces',
+        tenantId: metadata.tenantId || 'rona_atlantic',
         orderId: metadata.orderId || null,
         driverName: metadata.driverName || null,
         notes: metadata.notes || null
@@ -4510,10 +4622,10 @@ async function syncFleetCompleteTelemetry
           allRawDbTrucks = rawTrucks;
           rawTrucks.forEach((t: any) => {
             const deserialized = deserializeType(t);
-            if (deserialized && (deserialized.gpsSource === 'truck' || (deserialized.gpsDeviceId && deserialized.gpsDeviceId !== 'DISABLED') || deserialized.gpsSource !== 'disabled')) {
+            if (deserialized && deserialized.gpsSource === 'truck' && deserialized.gpsDeviceId && deserialized.gpsDeviceId !== 'DISABLED') {
               trucksToProcessList.push({
                 id: t.id,
-                tenantId: t.tenantId || 'prospaces',
+                tenantId: t.tenantId || 'rona_atlantic',
                 truck: deserialized,
                 isSupabase: true
               });
@@ -4532,7 +4644,7 @@ async function syncFleetCompleteTelemetry
         state.trucks.forEach((t: any) => {
           // If in-memory, truck is already client-side style.
           const deserialized = t.type && t.type.includes("||") ? deserializeType(t) : t;
-          if (deserialized && (deserialized.gpsSource === 'truck' || (deserialized.gpsDeviceId && deserialized.gpsDeviceId !== 'DISABLED') || deserialized.gpsSource !== 'disabled')) {
+          if (deserialized && deserialized.gpsSource === 'truck' && deserialized.gpsDeviceId && deserialized.gpsDeviceId !== 'DISABLED') {
             trucksToProcessList.push({
               id: t.id,
               tenantId: tid,
@@ -4730,8 +4842,16 @@ async function syncFleetCompleteTelemetry
             engineStatus = false;
           }
 
-          const rawLat = Number((baseLat + latOffset).toFixed(6));
-          const rawLng = Number((baseLng + lngOffset).toFixed(6));
+          let targetLat = baseLat + latOffset;
+          let targetLng = baseLng + lngOffset;
+
+          if (speed === 0) {
+            targetLat = typeof truck.gpsLat === 'number' ? truck.gpsLat : (typeof truck.lat === 'number' ? truck.lat : baseLat);
+            targetLng = typeof truck.gpsLng === 'number' ? truck.gpsLng : (typeof truck.lng === 'number' ? truck.lng : baseLng);
+          }
+
+          const rawLat = Number(targetLat.toFixed(6));
+          const rawLng = Number(targetLng.toFixed(6));
 
           // Strict Nova Scotia water body & bounds sanitization
           const sanitized = sanitizeGpsCoordinates(rawLat, rawLng);
@@ -4808,16 +4928,16 @@ async function syncFleetCompleteTelemetry
 
             if (matchedDbTruck) {
               const deserialized = deserializeType(matchedDbTruck);
-              if (deserialized.gpsDeviceId === 'DISABLED') {
-                continue; // Respect manual decoupling by user
+              if (deserialized.gpsDeviceId === 'DISABLED' || deserialized.gpsSource === 'mobile') {
+                continue; // Respect manual decoupling or mobile tracking mode by user
               }
               const updatedType = serializeToType(
                 deserialized.type || "Commercial Carrier", 
                 deserialized.registrationDueDate || "2026-11-29", 
                 lat, 
                 lng, 
-                'truck', 
-                gpsDeviceId,
+                deserialized.gpsSource || 'truck', 
+                deserialized.gpsDeviceId || gpsDeviceId,
                 deserialized.gpsSerialNumber || gpsDeviceId,
                 deserialized.gpsDeviceName || vehicleName,
                 deserialized.gpsSimIccid, 
@@ -4828,9 +4948,42 @@ async function syncFleetCompleteTelemetry
                 speed,
                 idlingMins
               );
+              const trkTenantId = matchedDbTruck?.tenantId || 'rona_atlantic';
               await supabase.from('trucks').update({
                 type: updatedType
               }).eq('id', matchedDbTruck.id);
+
+              const gpsPayload = {
+                id: `GPS-IMEI-${vehicleName}`,
+                tenantId: trkTenantId,
+                deviceId: gpsDeviceId,
+                deviceName: vehicleName,
+                simIccid: 'Bell Mobility Business IoT',
+                status: 'Connected',
+                assignedTruckId: matchedDbTruck.id,
+                lastHandshake: timestamp,
+                lastLatitude: lat,
+                lastLongitude: lng
+              };
+              try { await supabase.from('gps_units_setup').upsert([gpsPayload]); } catch (_) {}
+              try { await supabase.from('gps_unit_setup').upsert([gpsPayload]); } catch (_) {}
+
+              const historyPayload = {
+                tenantId: trkTenantId,
+                deviceId: gpsDeviceId,
+                latitude: lat,
+                longitude: lng,
+                speed: speed,
+                heading: 180.0,
+                recordedAt: timestamp,
+                ignitionStatus: speed > 0 || idlingMins > 0,
+                gps_device_id: gpsDeviceId,
+                truck_id: String(matchedDbTruck.id),
+                speed_kph: speed,
+                engine_status: speed > 0 ? 'Driving' : (idlingMins > 0 ? 'Idling' : 'Stopped'),
+                created_date: new Date().toISOString()
+              };
+              try { await supabase.from('gps_tracking_history').insert([historyPayload]); } catch (_) {}
             } else {
               const existingDriverInMem = Object.values(inMemoryTenantStates).flatMap(s => s.trucks || []).find((t: any) => {
                 const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
@@ -4856,12 +5009,44 @@ async function syncFleetCompleteTelemetry
               );
               await supabase.from('trucks').insert({
                 id: vehicleName,
-                tenantId: 'prospaces',
+                tenantId: 'rona_atlantic',
                 name: vehicleName,
                 type: newType,
                 driver: existingDriverInMem,
                 branchId: 'DC-WINAMILL'
               });
+
+              const gpsPayload = {
+                id: `GPS-IMEI-${vehicleName}`,
+                tenantId: 'rona_atlantic',
+                deviceId: gpsDeviceId,
+                deviceName: vehicleName,
+                simIccid: 'Bell Mobility Business IoT',
+                status: 'Connected',
+                assignedTruckId: vehicleName,
+                lastHandshake: timestamp,
+                lastLatitude: lat,
+                lastLongitude: lng
+              };
+              try { await supabase.from('gps_units_setup').upsert([gpsPayload]); } catch (_) {}
+              try { await supabase.from('gps_unit_setup').upsert([gpsPayload]); } catch (_) {}
+
+              const historyPayload = {
+                tenantId: 'rona_atlantic',
+                deviceId: gpsDeviceId,
+                latitude: lat,
+                longitude: lng,
+                speed: speed,
+                heading: 180.0,
+                recordedAt: timestamp,
+                ignitionStatus: speed > 0 || idlingMins > 0,
+                gps_device_id: gpsDeviceId,
+                truck_id: vehicleName,
+                speed_kph: speed,
+                engine_status: speed > 0 ? 'Driving' : (idlingMins > 0 ? 'Idling' : 'Stopped'),
+                created_date: new Date().toISOString()
+              };
+              try { await supabase.from('gps_tracking_history').insert([historyPayload]); } catch (_) {}
             }
           }
 
@@ -4890,8 +5075,8 @@ async function syncFleetCompleteTelemetry
                 const matchedInMemoryTruck = matchesInMemory.find((m: any) => m.id === vehicleName || m.name === vehicleName) || matchesInMemory[0];
                 const deserializedInMem = matchedInMemoryTruck.type && matchedInMemoryTruck.type.includes("||") ? deserializeType(matchedInMemoryTruck) : matchedInMemoryTruck;
                 
-                if (deserializedInMem.gpsDeviceId === 'DISABLED') {
-                  continue; // Respect manual decoupling by user
+                if (deserializedInMem.gpsDeviceId === 'DISABLED' || deserializedInMem.gpsSource === 'mobile') {
+                  continue; // Respect manual decoupling or mobile tracking mode by user
                 }
 
                 const trkUNum = extractTruckUnitNumber(matchedInMemoryTruck.id) || extractTruckUnitNumber(matchedInMemoryTruck.name);
@@ -4901,8 +5086,8 @@ async function syncFleetCompleteTelemetry
                   if (t.id === matchedInMemoryTruck.id || (trkUNum && tUNum && trkUNum === tUNum)) {
                     return {
                       ...t,
-                      gpsSource: 'truck',
-                      gpsDeviceId,
+                      gpsSource: t.gpsSource || 'truck',
+                      gpsDeviceId: t.gpsDeviceId || gpsDeviceId,
                       gpsDeviceName: t.gpsDeviceName || vehicleName,
                       gpsStatus: 'Connected',
                       gpsLastHandshake: timestamp,
@@ -4916,7 +5101,7 @@ async function syncFleetCompleteTelemetry
                   }
                   return t;
                 });
-              } else {
+              } else if (hasFcConfig) {
                 state.trucks.push({
                   id: vehicleName,
                   tenantId: tid,
@@ -4947,7 +5132,7 @@ async function syncFleetCompleteTelemetry
       // Step 3 (Fallback): Loop through collected trucks and apply matching fallback/mock telemetry
       for (const item of trucksToProcessList) {
         const truck = item.truck;
-        if (truck.gpsDeviceId === 'DISABLED') continue;
+        if (truck.gpsDeviceId === 'DISABLED' || truck.gpsSource === 'mobile') continue;
         
         const deviceMatch = liveData?.vehicles?.find((v: any) => 
           v.id === truck.gpsDeviceId || 

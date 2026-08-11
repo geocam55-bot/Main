@@ -916,18 +916,18 @@ export function AppContent() {
               try {
                 localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
                 const activeTenant = {
-                  id: user.organization_id || 'prospaces',
-                  name: 'ProSpaces Logistics',
-                  code: 'PS',
-                  description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
+                  id: user.organization_id || 'rona_atlantic',
+                  name: 'RONA Atlantic Logistics',
+                  code: 'RONA',
+                  description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
                   logoBadge: '🏢',
-                  regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
+                  regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
                   primaryColor: 'blue'
                 };
                 const activeUser = {
                   id: user.id || "USR-57008",
                   name: user.full_name || user.name || (user.email ? user.email.split('@')[0] : "George Campbell"),
-                  email: user.email || "george.campbell@prospaces.com",
+                  email: user.email || "george.campbell@ronaatlantic.ca",
                   role: (user.role === 'SUPER_ADMIN' || user.role === 'Super_Admin' || user.role === 'super_admin' || user.email === 'superadmin@prospaces.com')
                     ? "SUPER_ADMIN"
                     : ((user.role === 'admin' || user.role === 'Admin') ? "Admin" : (user.role || "Admin")),
