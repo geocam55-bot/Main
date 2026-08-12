@@ -313,69 +313,27 @@ function sanitizeGpsCoordinates(lat: number, lng: number): { lat: number; lng: n
   return { lat, lng };
 }
 
+function normalizeTenantId(rawTenantId: any): string {
+  if (!rawTenantId) return "rona_atlantic";
+  const tid = String(rawTenantId).trim();
+  if (["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc", "default", "undefined", "null"].includes(tid.toLowerCase())) {
+    return "rona_atlantic";
+  }
+  return tid;
+}
+
 function serializeToType(
   type: string | undefined,
-  registrationDueDate: string | undefined,
-  lat?: number,
-  lng?: number,
-  gpsSource?: 'mobile' | 'truck',
-  gpsDeviceId?: string,
-  gpsSerialNumber?: string,
-  gpsDeviceName?: string,
-  gpsSimIccid?: string,
-  gpsStatus?: string,
-  gpsLastHandshake?: string,
-  gpsLat?: number,
-  gpsLng?: number,
-  gpsSpeed?: number,
-  gpsIdlingMins?: number
+  registrationDueDate?: string | undefined,
+  imageUrl?: string
 ): string {
-  // Strip out any existing ||tag:value metadata from type to prevent duplicate tag accumulation
-  const baseType = (type || "").split("||")[0].trim() || "Commercial Truck";
-  let res = baseType;
-  if (registrationDueDate) {
-    res += ` ||regdue:${registrationDueDate}`;
-  }
-  if (lat !== undefined && lat !== null) {
-    res += ` ||lat:${lat}`;
-  }
-  if (lng !== undefined && lng !== null) {
-    res += ` ||lng:${lng}`;
-  }
-  if (gpsSource) {
-    res += ` ||gpsSource:${gpsSource}`;
-  }
-  if (gpsDeviceId) {
-    res += ` ||gpsDeviceId:${encodeURIComponent(gpsDeviceId)}`;
-  }
-  if (gpsSerialNumber) {
-    res += ` ||gpsSerialNumber:${encodeURIComponent(gpsSerialNumber)}`;
-  }
-  if (gpsDeviceName) {
-    res += ` ||gpsDeviceName:${encodeURIComponent(gpsDeviceName)}`;
-  }
-  if (gpsSimIccid) {
-    res += ` ||gpsSimIccid:${encodeURIComponent(gpsSimIccid)}`;
-  }
-  if (gpsStatus) {
-    res += ` ||gpsStatus:${gpsStatus}`;
-  }
-  if (gpsLastHandshake) {
-    res += ` ||gpsLastHandshake:${gpsLastHandshake}`;
-  }
-  if (gpsLat !== undefined && gpsLat !== null) {
-    res += ` ||gpsLat:${gpsLat}`;
-  }
-  if (gpsLng !== undefined && gpsLng !== null) {
-    res += ` ||gpsLng:${gpsLng}`;
-  }
-  if (gpsSpeed !== undefined && gpsSpeed !== null) {
-    res += ` ||gpsSpeed:${gpsSpeed}`;
-  }
-  if (gpsIdlingMins !== undefined && gpsIdlingMins !== null) {
-    res += ` ||gpsIdlingMins:${gpsIdlingMins}`;
-  }
-  return res;
+  const clean = (type || "").split("||")[0].trim() || "Commercial Truck";
+  const tags: string[] = [];
+
+  if (registrationDueDate) tags.push(`||regdue:${registrationDueDate}`);
+  if (imageUrl) tags.push(`||imageUrl:${encodeURIComponent(imageUrl)}`);
+
+  return `${clean}${tags.join("")}`;
 }
 
 function deserializeType(truck: any): any {
@@ -807,11 +765,13 @@ create table if not exists deliveries (
 create table if not exists gps_units_setup (
   id text primary key, -- hardware ID / IMEI
   "tenantId" text not null default 'rona_atlantic',
-  "deviceId" text not null unique, -- custom unique identifier
+  "deviceId" text not null, -- custom unique identifier
   "deviceName" text not null, -- label, e.g. "CalAmp LMU-3030" or "Built-in GPS Premium"
   "simIccid" text, -- SIM ICCID card number
+  "serialNumber" text,
+  "serial_number" text,
   status text not null default 'Disconnected', -- 'Connected', 'Disconnected', 'Syncing', 'Error'
-  "assignedTruckId" text references trucks(id) on delete set null, -- bound to specific truck
+  "assignedTruckId" text, -- bound to specific truck
   "lastHandshake" text, -- formatted string representation
   "lastLatitude" double precision,
   "lastLongitude" double precision,
@@ -824,6 +784,8 @@ create table if not exists gps_unit_setup (
   "deviceId" text not null,
   "deviceName" text not null,
   "simIccid" text,
+  "serialNumber" text,
+  "serial_number" text,
   status text not null default 'Disconnected',
   "assignedTruckId" text,
   "lastHandshake" text,
@@ -1215,7 +1177,14 @@ ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS pickup_location text;
 ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS dropoff_location text;
 ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS "documentType" text;
 
--- Upgrade GPS Tracking History
+-- Upgrade GPS Tracking History & Setup
+ALTER TABLE gps_units_setup ADD COLUMN IF NOT EXISTS "serialNumber" varchar;
+ALTER TABLE gps_units_setup ADD COLUMN IF NOT EXISTS "serial_number" varchar;
+ALTER TABLE gps_unit_setup ADD COLUMN IF NOT EXISTS "serialNumber" varchar;
+ALTER TABLE gps_unit_setup ADD COLUMN IF NOT EXISTS "serial_number" varchar;
+ALTER TABLE gps_units_setup DROP CONSTRAINT IF EXISTS "gps_units_setup_assignedTruckId_fkey";
+ALTER TABLE gps_units_setup DROP CONSTRAINT IF EXISTS "gps_units_setup_deviceId_key";
+
 ALTER TABLE gps_tracking_history ADD COLUMN IF NOT EXISTS gps_device_id varchar;
 ALTER TABLE gps_tracking_history ADD COLUMN IF NOT EXISTS truck_id varchar;
 ALTER TABLE gps_tracking_history ADD COLUMN IF NOT EXISTS user_id varchar;
@@ -1443,7 +1412,8 @@ async function runSelfHealingOnce() {
 
         // 4b. Ensure default trucks in rona_atlantic tenant have GPS Hardware Serial / Device ID configured and correct positions
         const DEFAULT_FLEET_TRUCKS = [
-          { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6536, lng: -63.6011, speed: 0, idling: 0 },
+          { id: "2410 - Tantallon F150", name: "2410 - Tantallon F150", model: "2024 Ford F-150 XL 4x4", driver: "No Driver", branchId: "01075", lat: 44.70885, lng: -63.58521, speed: 0, idling: 0 },
+          { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6468, lng: -63.6712, speed: 0, idling: 0 },
           { id: "2409 - Elmsdale F150", name: "2409 - Elmsdale F150", model: "2024 Ford F-150 XLT 4x4", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 58, idling: 0 },
           { id: "2412 - MTN RANGER", name: "2412 - MTN RANGER", model: "2024 Ford Ranger XLT 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 52, idling: 0 },
           { id: "2408 - MTN F150 OSR", name: "2408 - MTN F150 OSR", model: "2024 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6310, lng: -63.6620, speed: 64, idling: 0 },
@@ -1486,30 +1456,20 @@ async function runSelfHealingOnce() {
 
           if (!existsInDb) {
             const timestamp = new Date().toISOString();
-            const typeStr = serializeToType(
-              ft.model,
-              "2026-11-29",
-              ft.lat,
-              ft.lng,
-              "truck",
-              `FC-${ft.id.replace(/[^a-zA-Z0-9]/g, '')}`,
-              `SN-${ft.id.replace(/[^a-zA-Z0-9]/g, '')}`,
-              ft.id,
-              "Bell Mobility Business IoT",
-              "Connected",
-              timestamp,
-              ft.lat,
-              ft.lng,
-              ft.speed,
-              ft.idling
-            );
+            const typeStr = serializeToType(ft.model);
+            const devId = `FC-${ft.id.replace(/[^a-zA-Z0-9]/g, '')}`;
             await supabase.from("trucks").upsert({
               id: ft.id,
               tenantId: "rona_atlantic",
               name: ft.name,
               type: typeStr,
               driver: ft.driver,
-              branchId: ft.branchId
+              branchId: ft.branchId,
+              gps_device_id: devId,
+              current_latitude: ft.lat,
+              current_longitude: ft.lng,
+              current_status: 'Connected',
+              registration_due_date: '2026-11-29'
             });
             console.log(`[Fleet Seed] Upserted default fleet truck ${ft.id} into rona_atlantic`);
           }
@@ -1545,41 +1505,21 @@ async function runSelfHealingOnce() {
             let initialLng = (typeof deserialized.gpsLng === 'number' && !isNaN(deserialized.gpsLng)) ? deserialized.gpsLng : ((matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5825));
 
             const defaultDeviceId = deserialized.gpsDeviceId || `FC-${t.id}`;
-            const defaultSerialNumber = deserialized.gpsSerialNumber || `SN-FC${Math.floor(100000 + Math.random() * 900000)}`;
-            const defaultDeviceName = deserialized.gpsDeviceName || (is1903 ? "1903 - Elmsdale Windows" : (isAlmon2401 ? "2401 ALMON F-15 OBD-II" : "Fleet Complete MGS800 OBD-II"));
-            const defaultSimIccid = deserialized.gpsSimIccid || "Bell Mobility Business IoT";
-            const timestamp = new Date().toISOString();
-
-            // Set realistic initial speed / status for telematics preview
-            const initialSpeed = typeof deserialized.gpsSpeed === 'number' ? deserialized.gpsSpeed : (matchedFt ? matchedFt.speed : (is2101 ? 120 : 45));
-            const initialIdling = typeof deserialized.gpsIdlingMins === 'number' ? deserialized.gpsIdlingMins : (matchedFt ? matchedFt.idling : 0);
             const updatedDriver = (t.driver && t.driver.toLowerCase() !== 'driver') ? t.driver : "No Driver";
             const updatedBranchId = matchedFt?.branchId || t.branchId || "DC-WINAMILL";
 
-            const updatedType = serializeToType(
-              deserialized.type || "Commercial Truck",
-              deserialized.registrationDueDate || "2026-11-29",
-              initialLat,
-              initialLng,
-              "truck", // Default tracking source to GPS hardware
-              defaultDeviceId,
-              defaultSerialNumber,
-              defaultDeviceName,
-              defaultSimIccid,
-              "Connected",
-              timestamp,
-              initialLat,
-              initialLng,
-              initialSpeed,
-              initialIdling
-            );
+            const updatedType = serializeToType(deserialized.type || "Commercial Truck");
 
             await supabase
               .from("trucks")
               .update({
                 driver: updatedDriver,
                 branchId: updatedBranchId,
-                type: updatedType
+                type: updatedType,
+                gps_device_id: defaultDeviceId,
+                current_latitude: initialLat,
+                current_longitude: initialLng,
+                current_status: "Connected"
               })
               .eq("id", t.id);
           }
@@ -2464,10 +2404,7 @@ app.use((req, res, next) => {
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
     try {
-      const { tenantId } = req.query;
-      if (!tenantId) {
-        return res.status(400).json({ error: "tenantId parameter is required." });
-      }
+      const tenantId = normalizeTenantId(req.query.tenantId);
 
       // Proactive Fleet Complete Token Refresh & Sync on App Open/State Load
       const hasConfig = !!(process.env.FLEET_COMPLETE_API_KEY || (process.env.FLEET_COMPLETE_USERNAME && process.env.FLEET_COMPLETE_PASSWORD) || inMemoryFcApiKey || (inMemoryFcUsername && inMemoryFcPassword));
@@ -2510,12 +2447,13 @@ app.use((req, res, next) => {
       }
 
       // Fetch all tables in parallel with a timeout to prevent hanging (safe 4000ms timeout)
-      let [rBranches, rTrucks, rUsers, rDeliveries] = await withTimeout<any>(
+      let [rBranches, rTrucks, rUsers, rDeliveries, rGpsUnits] = await withTimeout<any>(
         Promise.all([
           supabase.from("branches").select("*").eq("tenantId", tenantId),
           supabase.from("trucks").select("*").eq("tenantId", tenantId),
           supabase.from("users").select("*").eq("tenantId", tenantId),
-          supabase.from("deliveries").select("*").eq("tenantId", tenantId)
+          supabase.from("deliveries").select("*").eq("tenantId", tenantId),
+          Promise.resolve(supabase.from("gps_units_setup").select("*").eq("tenantId", tenantId)).catch(() => ({ data: [] }))
         ]),
         4000
       );
@@ -2526,10 +2464,38 @@ app.use((req, res, next) => {
         throw new Error(primaryError?.message || "Error pulling multi-tenant tables from Supabase.");
       }
 
-      // No automatic mock seeding - working exclusively with live database records
+      const gpsUnitsList = (rGpsUnits && rGpsUnits.data) || [];
+      const gpsUnitMap = new Map<string, any>();
+      gpsUnitsList.forEach((g: any) => {
+        if (g.assignedTruckId) gpsUnitMap.set(String(g.assignedTruckId).toLowerCase(), g);
+        if (g.deviceId) gpsUnitMap.set(String(g.deviceId).toLowerCase(), g);
+      });
 
       const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
-      const deserializedTrucks = deduplicateServerTrucks((rTrucks.data || []).map((t: any) => deserializeType(t)));
+      const deserializedTrucks = deduplicateServerTrucks((rTrucks.data || []).map((t: any) => {
+        const dt = deserializeType(t);
+        const matchedGps = gpsUnitMap.get(String(t.id).toLowerCase()) || (t.gps_device_id ? gpsUnitMap.get(String(t.gps_device_id).toLowerCase()) : null);
+        if (matchedGps) {
+          dt.gpsDeviceId = matchedGps.deviceId || dt.gpsDeviceId;
+          dt.gpsSerialNumber = matchedGps.serialNumber || matchedGps.serial_number || dt.gpsSerialNumber;
+          dt.gpsDeviceName = matchedGps.deviceName || dt.gpsDeviceName;
+          dt.gpsSimIccid = matchedGps.simIccid || dt.gpsSimIccid;
+          dt.gpsStatus = matchedGps.status || dt.gpsStatus || 'Connected';
+          dt.gpsLastHandshake = matchedGps.lastHandshake || dt.gpsLastHandshake;
+          if (typeof matchedGps.lastLatitude === 'number' && !isNaN(matchedGps.lastLatitude)) {
+            dt.gpsLat = matchedGps.lastLatitude;
+            dt.lat = matchedGps.lastLatitude;
+          }
+          if (typeof matchedGps.lastLongitude === 'number' && !isNaN(matchedGps.lastLongitude)) {
+            dt.gpsLng = matchedGps.lastLongitude;
+            dt.lng = matchedGps.lastLongitude;
+          }
+          if (matchedGps.deviceId && matchedGps.deviceId !== 'DISABLED') {
+            dt.gpsSource = 'truck';
+          }
+        }
+        return dt;
+      }));
 
       const deserializedBranches = (rBranches.data || []).map((b: any) => {
         let address = b.address || "";
@@ -2961,23 +2927,15 @@ app.use((req, res, next) => {
               type: serializeToType(
                 t.type,
                 t.registrationDueDate,
-                lat,
-                lng,
-                targetGpsSource,
-                targetGpsDeviceId,
-                targetGpsSerialNumber,
-                targetGpsDeviceName,
-                targetGpsSimIccid,
-                targetGpsStatus,
-                gpsLastHandshake,
-                gpsLat,
-                gpsLng,
-                gpsSpeed,
-                gpsIdlingMins
+                t.imageUrl
               ),
               driver: t.driver,
               branchId: t.branchId,
               registrationDueDate: t.registrationDueDate || null,
+              gps_device_id: targetGpsDeviceId || null,
+              current_latitude: (typeof gpsLat === 'number' && !isNaN(gpsLat)) ? gpsLat : (typeof lat === 'number' && !isNaN(lat) ? lat : null),
+              current_longitude: (typeof gpsLng === 'number' && !isNaN(gpsLng)) ? gpsLng : (typeof lng === 'number' && !isNaN(lng) ? lng : null),
+              current_status: targetGpsStatus || 'Connected',
               
               // Map camelCase frontend fields to snake_case backend columns
               truck_number: t.truckNumber || null,
@@ -3196,19 +3154,18 @@ app.use((req, res, next) => {
       // 5. GPS Telemetry persistence: gps_units_setup, gps_unit_setup, gps_tracking_history
       if (sanitizedTrucks.length > 0) {
         try {
-          const activeStationary = sanitizedTrucks.filter((t: any) => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED');
-          const disabledTruckIds = sanitizedTrucks.filter((t: any) => t.gpsDeviceId === 'DISABLED' || !t.gpsDeviceId).map((t: any) => String(t.id));
-
-          const gpsUnitsToUpsert = activeStationary.map((t: any) => {
-            const devId = t.gpsDeviceId;
+          const gpsUnitsToUpsert = sanitizedTrucks.map((t: any) => {
+            const devId = t.gpsDeviceId || `FC-${String(t.id).replace(/[^a-zA-Z0-9]/g, '')}`;
             const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
             const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
             return {
               id: `GPS-IMEI-${t.id}`,
               tenantId: String(tenantId),
               deviceId: devId,
-              deviceName: t.gpsDeviceName || t.name || `GPS Unit (${t.id})`,
+              deviceName: t.gpsDeviceName || t.name || 'Samsara VG54 Core Gateway',
               simIccid: t.gpsSimIccid || 'Bell Mobility Business IoT',
+              serialNumber: t.gpsSerialNumber || '0160293848',
+              serial_number: t.gpsSerialNumber || '0160293848',
               status: t.gpsStatus || 'Connected',
               assignedTruckId: String(t.id),
               lastHandshake: t.gpsLastHandshake || new Date().toISOString(),
@@ -3218,10 +3175,10 @@ app.use((req, res, next) => {
           });
 
           const historyPointsToInsert = sanitizedTrucks.map((t: any) => {
-            const devId = t.gpsDeviceId || `GPS-${t.id}`;
+            const devId = t.gpsDeviceId || `FC-${String(t.id).replace(/[^a-zA-Z0-9]/g, '')}`;
             const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
             const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
-            const speed = typeof t.gpsSpeed === 'number' ? t.gpsSpeed : 0;
+            const speed = typeof t.gpsSpeed === 'number' ? t.gpsSpeed : (typeof t.speed === 'number' ? t.speed : 0);
             const idlingMins = typeof t.gpsIdlingMins === 'number' ? t.gpsIdlingMins : 0;
             return {
               tenantId: String(tenantId),
@@ -3240,17 +3197,15 @@ app.use((req, res, next) => {
             };
           });
 
-          if (disabledTruckIds.length > 0) {
-            try { await supabase.from("gps_units_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds); } catch (_) {}
-            try { await supabase.from("gps_unit_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds); } catch (_) {}
-          }
-
           if (gpsUnitsToUpsert.length > 0) {
-            try { await supabase.from("gps_units_setup").upsert(gpsUnitsToUpsert); } catch (_) {}
-            try { await supabase.from("gps_unit_setup").upsert(gpsUnitsToUpsert); } catch (_) {}
+            const { error: err1 } = await supabase.from("gps_units_setup").upsert(gpsUnitsToUpsert);
+            if (err1) console.error("[GPS Sync] gps_units_setup error:", err1);
+            const { error: err2 } = await supabase.from("gps_unit_setup").upsert(gpsUnitsToUpsert);
+            if (err2) console.error("[GPS Sync] gps_unit_setup error:", err2);
           }
           if (historyPointsToInsert.length > 0) {
-            try { await supabase.from("gps_tracking_history").insert(historyPointsToInsert); } catch (_) {}
+            const { error: err3 } = await supabase.from("gps_tracking_history").insert(historyPointsToInsert);
+            if (err3) console.error("[GPS Sync] gps_tracking_history error:", err3);
           }
         } catch (gpsErr) {
           console.warn("[GPS Sync] Warning during telemetry table sync:", gpsErr);
@@ -4548,6 +4503,32 @@ async function getFleetId(token: string): Promise<string | null> {
     }
   });
 
+  app.post("/api/telematics/sync", async (req, res) => {
+    try {
+      await syncFleetCompleteTelemetry();
+      return res.json({
+        success: true,
+        message: "Fleet telemetry resynced successfully across all vehicles and database tables.",
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/telematics/sync", async (req, res) => {
+    try {
+      await syncFleetCompleteTelemetry();
+      return res.json({
+        success: true,
+        message: "Fleet telemetry resynced successfully across all vehicles and database tables.",
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.get("/api/tenants", async (req, res) => {
     const fallbackTenants: any[] = [];
     try {
@@ -4767,8 +4748,11 @@ async function syncFleetCompleteTelemetry
           let baseLat = 44.6855; // Windmill HQ default
           let baseLng = -63.5825;
 
-          if (isAlmon2401) {
-            baseLat = 44.6536; baseLng = -63.6011;
+          const is2410 = idOrName.includes("2410") || idOrName.includes("tantallon");
+          if (is2410) {
+            baseLat = 44.70885; baseLng = -63.58521;
+          } else if (isAlmon2401) {
+            baseLat = 44.6468; baseLng = -63.6712;
           } else if (is2101) {
             baseLat = 44.8770; baseLng = -63.5410;
           } else if (isElmsdale) {
@@ -4931,26 +4915,14 @@ async function syncFleetCompleteTelemetry
               if (deserialized.gpsDeviceId === 'DISABLED' || deserialized.gpsSource === 'mobile') {
                 continue; // Respect manual decoupling or mobile tracking mode by user
               }
-              const updatedType = serializeToType(
-                deserialized.type || "Commercial Carrier", 
-                deserialized.registrationDueDate || "2026-11-29", 
-                lat, 
-                lng, 
-                deserialized.gpsSource || 'truck', 
-                deserialized.gpsDeviceId || gpsDeviceId,
-                deserialized.gpsSerialNumber || gpsDeviceId,
-                deserialized.gpsDeviceName || vehicleName,
-                deserialized.gpsSimIccid, 
-                "Connected", 
-                timestamp, 
-                lat, 
-                lng,
-                speed,
-                idlingMins
-              );
+              const updatedType = serializeToType(deserialized.type || "Commercial Carrier");
               const trkTenantId = matchedDbTruck?.tenantId || 'rona_atlantic';
               await supabase.from('trucks').update({
-                type: updatedType
+                type: updatedType,
+                gps_device_id: gpsDeviceId,
+                current_latitude: lat,
+                current_longitude: lng,
+                current_status: 'Connected'
               }).eq('id', matchedDbTruck.id);
 
               const gpsPayload = {
@@ -4990,30 +4962,19 @@ async function syncFleetCompleteTelemetry
                 return vUNum && tUNum && vUNum === tUNum && t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).toLowerCase());
               })?.driver || 'No Driver';
 
-              const newType = serializeToType(
-                "Commercial Carrier", 
-                "2026-11-29", 
-                lat, 
-                lng, 
-                'truck', 
-                gpsDeviceId,
-                gpsDeviceId,
-                vehicleName,
-                "", 
-                "Connected", 
-                timestamp, 
-                lat, 
-                lng,
-                speed,
-                idlingMins
-              );
+              const newType = serializeToType("Commercial Carrier");
               await supabase.from('trucks').insert({
                 id: vehicleName,
                 tenantId: 'rona_atlantic',
                 name: vehicleName,
                 type: newType,
                 driver: existingDriverInMem,
-                branchId: 'DC-WINAMILL'
+                branchId: 'DC-WINAMILL',
+                gps_device_id: gpsDeviceId,
+                current_latitude: lat,
+                current_longitude: lng,
+                current_status: 'Connected',
+                registration_due_date: '2026-11-29'
               });
 
               const gpsPayload = {
@@ -5155,25 +5116,12 @@ async function syncFleetCompleteTelemetry
           const timestamp = deviceMatch?.latestData?.timestamp ? new Date(deviceMatch.latestData.timestamp).toISOString() : new Date().toISOString();
 
           if (item.isSupabase && supabase) {
-            const updatedType = serializeToType(
-              truck.type, 
-              truck.registrationDueDate, 
-              lat, 
-              lng, 
-              truck.gpsSource || 'truck', 
-              truck.gpsDeviceId,
-              truck.gpsSerialNumber,
-              truck.gpsDeviceName,
-              truck.gpsSimIccid, 
-              "Connected", 
-              timestamp, 
-              lat, 
-              lng,
-              speed,
-              idlingMins
-            );
+            const updatedType = serializeToType(truck.type);
             await supabase.from('trucks').update({
-              type: updatedType
+              type: updatedType,
+              current_latitude: lat,
+              current_longitude: lng,
+              current_status: 'Connected'
             }).eq('id', truck.id);
           }
 

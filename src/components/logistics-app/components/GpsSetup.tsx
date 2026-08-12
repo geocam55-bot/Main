@@ -281,6 +281,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
   const fetchTelematicsStatus = async () => {
     setLoadingStatus(true);
     try {
+      await fetch('/api/telematics/sync', { method: 'POST' }).catch(() => {});
       const res = await fetch('/api/telematics/status');
       if (res.ok) {
         const text = await res.text();
@@ -313,6 +314,9 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
         if (data.apiKey) {
           setFcApiKey(data.apiKey);
         }
+      }
+      if (onRefreshData) {
+        onRefreshData();
       }
     } catch (err) {
       console.error('Failed to fetch telematics status', err);
@@ -788,7 +792,15 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupPr
                 required
                 value={selectedTruckId}
                 onChange={(e) => {
-                  setSelectedTruckId(e.target.value);
+                  const tid = e.target.value;
+                  setSelectedTruckId(tid);
+                  const trk = trucks.find(t => t.id === tid);
+                  if (trk) {
+                    if (trk.gpsDeviceId && trk.gpsDeviceId !== 'DISABLED') setDeviceId(trk.gpsDeviceId);
+                    if (trk.gpsSerialNumber) setSerialNumber(trk.gpsSerialNumber);
+                    if (trk.gpsDeviceName) setDeviceName(trk.gpsDeviceName);
+                    if (trk.gpsSimIccid) setSimIccid(trk.gpsSimIccid);
+                  }
                 }}
                 className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
               >

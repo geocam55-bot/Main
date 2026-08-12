@@ -249,7 +249,17 @@ export default function App() {
       sessionStorage.setItem('prospaces_session_active', 'true');
 
       const cached = localStorage.getItem('prospaces_active_tenant');
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed) {
+          if (['prospaces', 'prospaces-dev', 'prospaces-prod', 'agfydicwfv8u0rqr5apc', 'default', 'null', 'undefined'].includes(String(parsed.id).toLowerCase()) || !parsed.id) {
+            parsed.id = 'rona_atlantic';
+            parsed.name = 'RONA Atlantic Logistics';
+            localStorage.setItem('prospaces_active_tenant', JSON.stringify(parsed));
+          }
+          return parsed;
+        }
+      }
 
       const crmUserStr = localStorage.getItem('prospaces_cached_user') || localStorage.getItem('prospaces_active_user');
       if (crmUserStr) {
@@ -821,27 +831,15 @@ export default function App() {
           id: t.id,
           tenantId: currentTenant.id,
           name: t.name,
-          type: serializeToType(
-            t.type,
-            t.registrationDueDate,
-            t.lat,
-            t.lng,
-            t.gpsSource,
-            t.gpsDeviceId,
-            t.gpsSerialNumber,
-            t.gpsDeviceName,
-            t.gpsSimIccid,
-            t.gpsStatus,
-            t.gpsLastHandshake,
-            t.gpsLat,
-            t.gpsLng,
-            t.gpsSpeed,
-            t.gpsIdlingMins,
-            t.imageUrl
-          ),
+          type: serializeToType(t.type),
           driver: t.driver,
           branchId: t.branchId,
-          image_url: t.imageUrl || null
+          image_url: t.imageUrl || null,
+          registration_due_date: t.registrationDueDate || null,
+          gps_device_id: t.gpsDeviceId || null,
+          current_latitude: typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : null),
+          current_longitude: typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : null),
+          current_status: t.gpsStatus || 'Connected'
         }));
         await supabase.from("trucks").upsert(serializedTrucks);
         console.log("Written driver truck update directly to Supabase trucks table.");
@@ -1696,10 +1694,10 @@ export default function App() {
       stateUpdated = true;
     }
 
-    // Ensure unit 2401 (Almon F-15) is assigned to 500 Windmill Road Terminal Depot (DC-WINAMILL)
+    // Ensure unit 2401 (Almon F-15) is placed on Chain Lake Drive, Halifax
     const needsAlmonFix = newTrucks.some(t => {
       const lower = ((t.id || '') + ' ' + (t.name || '') + ' ' + (t.homeDepot || '')).toLowerCase();
-      return (lower.includes('2401') || lower.includes('almon')) && (t.branchId !== 'DC-WINAMILL' || t.lat !== 44.68550 || t.lng !== -63.58250 || t.gpsLat !== 44.68550 || t.gpsLng !== -63.58250);
+      return (lower.includes('2401') || lower.includes('almon')) && (t.lat !== 44.6468 || t.lng !== -63.6712 || t.gpsLat !== 44.6468 || t.gpsLng !== -63.6712);
     });
     if (needsAlmonFix) {
       newTrucks = newTrucks.map(t => {
@@ -1707,12 +1705,11 @@ export default function App() {
         if (lower.includes('2401') || lower.includes('almon')) {
           return {
             ...t,
-            branchId: 'DC-WINAMILL',
-            homeDepot: '500 Windmill Road Terminal Depot',
-            lat: 44.68550,
-            lng: -63.58250,
-            gpsLat: 44.68550,
-            gpsLng: -63.58250
+            lat: 44.6468,
+            lng: -63.6712,
+            gpsLat: 44.6468,
+            gpsLng: -63.6712,
+            locationName: '200 Chain Lake Dr, Halifax, NS B3S 1A2, Canada'
           };
         }
         return t;

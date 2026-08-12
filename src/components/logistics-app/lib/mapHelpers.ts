@@ -208,6 +208,142 @@ export const isTruckAssignedToBranch = (truck: any, branch: any): boolean => {
   return false;
 };
 
+export interface StoreColorInfo {
+  storeKey: 'halifax' | 'elmsdale' | 'tantallon' | 'windmill';
+  storeName: string;
+  bgColor: string;         // Tailwind bg class for marker pin
+  textColor: string;       // Tailwind text color for icon
+  borderColor: string;     // Tailwind border color for marker
+  ringColor: string;       // Tailwind ring color for selected state
+  badgeBg: string;         // Tailwind bg class for store badge
+  badgeText: string;       // Tailwind text class for store badge
+  hexColor: string;        // Hex color for canvas / map markers
+  tailColor: string;       // Tail class or hex
+}
+
+export const STORE_COLOR_MAP: Record<'halifax' | 'elmsdale' | 'tantallon' | 'windmill', StoreColorInfo> = {
+  halifax: {
+    storeKey: 'halifax',
+    storeName: 'Halifax',
+    bgColor: 'bg-yellow-400',
+    textColor: 'text-slate-950 font-bold',
+    borderColor: 'border-yellow-200',
+    ringColor: 'ring-yellow-400',
+    badgeBg: 'bg-yellow-400 text-slate-950 font-bold',
+    badgeText: 'text-slate-950',
+    hexColor: '#facc15', // Yellow
+    tailColor: 'bg-yellow-400'
+  },
+  elmsdale: {
+    storeKey: 'elmsdale',
+    storeName: 'Elmsdale',
+    bgColor: 'bg-slate-950',
+    textColor: 'text-white font-bold',
+    borderColor: 'border-slate-700',
+    ringColor: 'ring-slate-900',
+    badgeBg: 'bg-slate-950 text-white font-bold',
+    badgeText: 'text-white',
+    hexColor: '#090d16', // Black
+    tailColor: 'bg-slate-950'
+  },
+  tantallon: {
+    storeKey: 'tantallon',
+    storeName: 'Tantallon',
+    bgColor: 'bg-red-600',
+    textColor: 'text-white font-bold',
+    borderColor: 'border-red-300',
+    ringColor: 'ring-red-500',
+    badgeBg: 'bg-red-600 text-white font-bold',
+    badgeText: 'text-white',
+    hexColor: '#dc2626', // Red
+    tailColor: 'bg-red-600'
+  },
+  windmill: {
+    storeKey: 'windmill',
+    storeName: 'Windmill',
+    bgColor: 'bg-blue-600',
+    textColor: 'text-white font-bold',
+    borderColor: 'border-blue-300',
+    ringColor: 'ring-blue-500',
+    badgeBg: 'bg-blue-600 text-white font-bold',
+    badgeText: 'text-white',
+    hexColor: '#2563eb', // Blue
+    tailColor: 'bg-blue-600'
+  }
+};
+
+export const getTruckStoreInfo = (truck: any, branches: any[] = []): StoreColorInfo => {
+  if (!truck) return STORE_COLOR_MAP.windmill;
+
+  // 1. Try finding matched branch in active branches array
+  const matchedBranch = Array.isArray(branches) ? branches.find(b => isTruckAssignedToBranch(truck, b)) : null;
+
+  const strToTest = (
+    (truck.id || '') + ' ' +
+    (truck.name || '') + ' ' +
+    (truck.type || '') + ' ' +
+    (truck.branchId || '') + ' ' +
+    (truck.homeDepot || '') + ' ' +
+    (truck.assignedStore || '') + ' ' +
+    (matchedBranch ? `${matchedBranch.id} ${matchedBranch.name} ${matchedBranch.branchCode || ''} ${matchedBranch.address || ''}` : '')
+  ).toLowerCase();
+
+  // 2. Halifax Store matching
+  if (
+    strToTest.includes('halifax') ||
+    strToTest.includes('almon') ||
+    strToTest.includes('3300') ||
+    strToTest.includes('chain') ||
+    strToTest.includes('03480') ||
+    strToTest.includes('peninsula')
+  ) {
+    return STORE_COLOR_MAP.halifax;
+  }
+
+  // 3. Elmsdale Store matching
+  if (
+    strToTest.includes('elmsdale') ||
+    strToTest.includes('01070') ||
+    strToTest.includes('03485') ||
+    strToTest.includes('1903') ||
+    strToTest.includes('2409')
+  ) {
+    return STORE_COLOR_MAP.elmsdale;
+  }
+
+  // 4. Tantallon Store matching
+  if (
+    strToTest.includes('tantallon') ||
+    strToTest.includes('01075')
+  ) {
+    return STORE_COLOR_MAP.tantallon;
+  }
+
+  // 5. Windmill / Dartmouth Store matching
+  if (
+    strToTest.includes('windmill') ||
+    strToTest.includes('dartmouth') ||
+    strToTest.includes('dc-winamill') ||
+    strToTest.includes('500') ||
+    strToTest.includes('2101') ||
+    strToTest.includes('2412') ||
+    strToTest.includes('2408')
+  ) {
+    return STORE_COLOR_MAP.windmill;
+  }
+
+  // Fallback: check if matched branch has an id/name or default to Windmill
+  if (matchedBranch?.name) {
+    const bName = matchedBranch.name.toLowerCase();
+    if (bName.includes('halifax')) return STORE_COLOR_MAP.halifax;
+    if (bName.includes('elmsdale')) return STORE_COLOR_MAP.elmsdale;
+    if (bName.includes('tantallon')) return STORE_COLOR_MAP.tantallon;
+    if (bName.includes('windmill') || bName.includes('dartmouth')) return STORE_COLOR_MAP.windmill;
+  }
+
+  return STORE_COLOR_MAP.windmill;
+};
+
 export const getBranchCoordinates = (id: string, name: string, address?: string): { x: number; y: number; lat: number; lng: number } => {
   const combinedStr = `${name || ''} ${address || ''}`.trim();
   const gps = getGpsForLocation(id, combinedStr);
@@ -228,6 +364,7 @@ export const getDeliveryCoordinates = (id: string, address: string, originX?: nu
 export const getTruckCoords = (truck: any, simProgress: Record<string, number>, branches: any[]) => {
   const isTruckGps = truck?.gpsSource === 'truck';
   const idOrName = ((truck?.id || '') + ' ' + (truck?.name || '') + ' ' + (truck?.homeDepot || '')).toLowerCase();
+  const is2410 = idOrName.includes('2410') || idOrName.includes('tantallon f150');
   const is2401Almon = idOrName.includes('2401') || idOrName.includes('almon');
   const is1903 = idOrName.includes('1903');
   const is2101Windmill = idOrName.includes('2101') || idOrName.includes('windmill');
@@ -235,20 +372,23 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
   const isChainMtn = idOrName.includes('chain') || idOrName.includes('mountain') || idOrName.includes('2412') || idOrName.includes('2408') || idOrName.includes('2404');
   const isPei = idOrName.includes('pei') || idOrName.includes('charlottetown') || idOrName.includes('01075');
 
-  const hasRealGps = isTruckGps 
-    ? (truck?.gpsLat !== undefined && truck?.gpsLng !== undefined && !isNaN(truck.gpsLat) && !isNaN(truck.gpsLng))
-    : (truck?.lat !== undefined && truck?.lng !== undefined && !isNaN(truck.lat) && !isNaN(truck.lng));
+  const rawLat = truck?.gpsLat ?? truck?.lat ?? truck?.latitude;
+  const rawLng = truck?.gpsLng ?? truck?.lng ?? truck?.longitude;
+  const numLat = typeof rawLat === 'number' ? rawLat : (typeof rawLat === 'string' ? parseFloat(rawLat) : NaN);
+  const numLng = typeof rawLng === 'number' ? rawLng : (typeof rawLng === 'string' ? parseFloat(rawLng) : NaN);
+  const hasRealGps = !isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0;
 
-  let baseLat = hasRealGps 
-    ? (isTruckGps ? truck.gpsLat : truck.lat) 
-    : 44.68550;
-  let baseLng = hasRealGps 
-    ? (isTruckGps ? truck.gpsLng : truck.lng) 
-    : -63.58250;
+  let baseLat = hasRealGps ? numLat : 44.68550;
+  let baseLng = hasRealGps ? numLng : -63.58250;
 
-  if (is2401Almon && (!hasRealGps || baseLat === 44.9792 || baseLat === 44.6536)) {
-    baseLat = 44.68550;
-    baseLng = -63.58250;
+  if (is2410 && (!hasRealGps || baseLat === 44.6855 || baseLat === 44.6536)) {
+    // 134 Akerley Blvd, Dartmouth, NS B3B 2E4 (Matches Fleet Complete screenshot)
+    baseLat = 44.70885;
+    baseLng = -63.58521;
+  } else if (is2401Almon && (!hasRealGps || baseLat === 44.9792 || baseLat === 44.6536 || baseLat === 44.6855)) {
+    // Chain Lake Drive, Halifax, NS B3S 1A2
+    baseLat = 44.6468;
+    baseLng = -63.6712;
   } else if ((is1903 || isElmsdale) && (!hasRealGps || baseLat === 44.6855 || baseLat === 44.6536)) {
     baseLat = 44.979223;
     baseLng = -63.504250;
@@ -282,11 +422,11 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
   const isExplicitDriving = trAny?.status === 'Driving' || trAny?.status === 'In Transit' || trAny?.status === 'En Route' || trAny?.isDriving === true;
   const hasAssignedDelivery = Boolean(trAny?.assignedDeliveryId || trAny?.assignedDelivery || trAny?.trips?.length > 0);
 
-  const isMoving = !isNoDriver && !isExplicitParked && (
-    rawSpeed > 0 ||
-    isExplicitDriving ||
-    hasAssignedDelivery ||
-    (trAny?.status !== 'Parked' && trAny?.status !== 'Off' && trAny?.status !== 'Stationary')
+  const isMoving = rawSpeed > 0 || isExplicitDriving || (
+    !is2410 && !isNoDriver && !isExplicitParked && (
+      hasAssignedDelivery ||
+      (trAny?.status !== 'Parked' && trAny?.status !== 'Off' && trAny?.status !== 'Stationary')
+    )
   );
 
   if (isMoving) {

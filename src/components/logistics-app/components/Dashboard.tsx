@@ -66,7 +66,9 @@ import {
   getDeliveryCoordinates,
   getTruckCoords,
   getPercentCoordsFromGps,
-  calculateDistanceKm
+  calculateDistanceKm,
+  getTruckStoreInfo,
+  STORE_COLOR_MAP
 } from '../lib/mapHelpers';
 
 export {
@@ -1295,6 +1297,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   isMoving = false;
                 }
 
+                const storeInfo = getTruckStoreInfo(truck, activeBranches);
                 const { lat: truckLat, lng: truckLng, hasRealGps } = getTruckCoords(truck, simProgress, activeBranches);
                 const percentCoords = getPercentCoordsFromGps(truckLat, truckLng);
                 const xPosition = percentCoords.x;
@@ -1306,37 +1309,39 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   <button
                     key={`gps-truck-${truck.id}`}
                     type="button"
-                    style={{ left: `${xPosition}%`, top: `${yPosition}%` }}
+                    style={{ left: `${xPosition}%`, top: `${yPosition}%`, ...(storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16', color: '#ffffff' } : {}) }}
                     onClick={(e) => {
                       e.stopPropagation(); // Stop click from propagating and moving the HQ anchor!
                       setSelectedTrackTruckId(isSelected ? null : truck.id);
                     }}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 p-1.5 rounded-full shadow-lg border-2 z-30 cursor-pointer group transition-all duration-1000 hover:scale-120 ${
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-lg border-2 z-30 cursor-pointer group transition-all duration-300 hover:scale-125 ${storeInfo.bgColor} ${storeInfo.textColor} ${
                       isSelected 
-                        ? 'bg-amber-500 border-white text-slate-950 scale-110 ring-4 ring-amber-500/35' 
-                        : isMoving 
-                          ? 'bg-blue-600 border-blue-400 text-white animate-pulse' 
-                          : 'bg-slate-800 border-slate-600 text-slate-300'
+                        ? 'scale-125 ring-4 ring-amber-400 border-white shadow-2xl' 
+                        : 'border-white'
                     }`}
                   >
-                    <div className="relative">
+                    <div className="relative flex items-center justify-center">
                       {isMoving && (
-                        <span className="absolute -inset-1 rounded-full animate-ping bg-blue-500/20" />
+                        <span className="absolute -inset-1 rounded-full animate-ping bg-emerald-400/40" />
                       )}
-                      <TruckIcon className="h-3.5 w-3.5 transform-gpu" />
+                      <TruckIcon className="h-4 w-4 transform-gpu shrink-0" />
                     </div>
 
                     {/* Popover display info */}
-                    <div className="absolute bottom-9 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-850 text-[10px] text-white px-2.5 py-1.5 rounded-xl shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-40 font-sans space-y-0.5">
+                    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-slate-700 text-[10px] text-white px-3 py-2 rounded-xl shadow-2xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-40 font-sans space-y-1">
                       <p className="font-extrabold text-white flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-full ${isMoving ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
                         🚚 {truck.name} ({truck.type || 'Flatbed'})
                       </p>
-                      <p className="text-[8.5px] text-amber-400 font-medium font-sans">Driver: {truck.driver || 'No assigned driver'}</p>
+                      <p className="text-[9px] text-amber-400 font-bold uppercase tracking-wide flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${storeInfo.bgColor}`} style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16' } : {}} />
+                        <span>{storeInfo.storeName} Fleet</span>
+                      </p>
+                      <p className="text-[8.5px] text-slate-300 font-medium">Driver: {truck.driver || 'No assigned driver'}</p>
                       {assignedDelivery ? (
                         <>
                           <p className="text-[8px] text-emerald-400 font-mono font-semibold">Active Run: {assignedDelivery.id}</p>
-                          <p className="text-[8px] text-slate-400 font-mono">Manifest Status: {assignedDelivery.status}</p>
+                          <p className="text-[8px] text-slate-300 font-mono">Manifest Status: {assignedDelivery.status}</p>
                           <p className="text-[8px] text-slate-400">Destination: {cleanAddressText(assignedDelivery.deliveryAddress)}</p>
                         </>
                       ) : (
@@ -1350,27 +1355,26 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
             </div>
 
             {/* Bottom Legend Map Panel */}
-            <div className={`mt-4 pt-3 border-t flex flex-wrap items-center justify-between text-[11px] gap-2 pr-2 transition-colors duration-300 z-10 ${
+            <div className={`mt-4 pt-3 border-t flex flex-wrap items-center justify-between text-[11px] gap-3 pr-2 transition-colors duration-300 z-10 ${
               mapTheme !== 'satellite' ? 'border-slate-300 text-slate-600' : 'border-slate-850 text-slate-400'
             }`}>
-              <div className="flex flex-wrap items-center gap-4 font-medium">
-                <span className="flex items-center space-x-1.5">
-                  <span className="w-3 h-3 bg-red-950 border border-red-500 rounded text-[8px] font-bold flex items-center justify-center text-red-400 font-mono">DC</span>
-                  <span>DC Depots</span>
+              <div className="flex flex-wrap items-center gap-3.5 font-bold">
+                <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 mr-1">Store Fleets:</span>
+                <span className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-yellow-100 text-slate-900 border border-yellow-300">
+                  <span className="w-2.5 h-2.5 bg-yellow-400 rounded-full border border-slate-900 inline-block"></span>
+                  <span>Halifax (Yellow)</span>
                 </span>
-                <span className="flex items-center space-x-1.5">
-                  <span className="w-2.5 h-2.5 bg-blue-600 rounded-full border border-blue-400"></span>
-                  <span>Active Drivers</span>
+                <span className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-slate-900 text-white border border-slate-700">
+                  <span className="w-2.5 h-2.5 bg-slate-950 rounded-full border border-white inline-block"></span>
+                  <span>Elmsdale (Black)</span>
                 </span>
-                <span className="flex items-center space-x-1.5 font-sans">
-                  <span className="w-2.5 h-2.5 bg-blue-600 rounded-full border border-white relative inline-flex">
-                    <span className="animate-ping absolute inset-0 rounded-full bg-blue-400 opacity-75"></span>
-                  </span>
-                  <span>Dispatcher (You)</span>
+                <span className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-red-100 text-red-900 border border-red-300">
+                  <span className="w-2.5 h-2.5 bg-red-600 rounded-full border border-slate-900 inline-block"></span>
+                  <span>Tantallon (Red)</span>
                 </span>
-                <span className="flex items-center space-x-1.5">
-                  <MapPin className="h-3 w-3 text-amber-500" />
-                  <span>Pending Dropoffs</span>
+                <span className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-300">
+                  <span className="w-2.5 h-2.5 bg-blue-600 rounded-full border border-slate-900 inline-block"></span>
+                  <span>Windmill (Blue)</span>
                 </span>
               </div>
               <span className="font-mono text-[9.5px] uppercase opacity-75">
@@ -2585,14 +2589,15 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
               });
 
               return (
-                <div className="space-y-4 flex-1 flex flex-col overflow-hidden">
+                <div className="space-y-3 flex-1 flex flex-col overflow-hidden">
+                  {/* Search Input */}
                   <div className="relative">
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search"
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-705 placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-inner focus:ring-1 focus:ring-blue-500/20"
+                      placeholder="Search for assets and geofences"
+                      className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-emerald-500 shadow-2xs focus:ring-1 focus:ring-emerald-500/20"
                     />
                     <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400">
                       <Search className="h-4 w-4" />
@@ -2606,6 +2611,18 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                         ✕
                       </button>
                     )}
+                  </div>
+
+                  {/* Filter Subheader Bar */}
+                  <div className="flex items-center justify-between px-1 text-xs text-slate-600 font-semibold">
+                    <div className="flex items-center gap-1.5">
+                      <span>All assets</span>
+                      <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                      <span className="text-slate-400 font-normal">{filteredFleet.length} total</span>
+                    </div>
+                    <button type="button" className="p-1 hover:bg-slate-100 rounded text-slate-500 transition-colors" title="Filter Assets">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    </button>
                   </div>
 
                   <div className={`flex-1 overflow-y-auto space-y-3.5 pr-1 ${
@@ -2661,18 +2678,22 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                       return "Last sync < 1 min ago";
                     };
 
-                    // Helper to get custom colors for vehicle icons based on screenshot
-                    const getTruckIconDetails = (name: string) => {
-                      const lower = name.toLowerCase();
-                      if (lower.includes('almon') || lower.includes('2401')) {
-                        return { color: 'text-amber-500 bg-amber-50 border-amber-100', textClass: 'text-amber-600' };
-                      } else if (lower.includes('mtn') || lower.includes('2404') || lower.includes('2408')) {
-                        return { color: 'text-blue-500 bg-blue-50 border-blue-100', textClass: 'text-blue-600' };
+                    // Helper to get custom colors for vehicle icons based on store assignment matching Fleet Complete
+                    const getTruckIconDetails = (truck: any) => {
+                      const storeInfo = getTruckStoreInfo(truck, activeBranches);
+                      if (storeInfo.storeKey === 'tantallon') {
+                        return { color: 'text-red-600 bg-red-50 border-red-200', textClass: 'text-red-600' };
+                      } else if (storeInfo.storeKey === 'windmill') {
+                        return { color: 'text-blue-600 bg-blue-50 border-blue-200', textClass: 'text-blue-600' };
+                      } else if (storeInfo.storeKey === 'elmsdale') {
+                        return { color: 'text-slate-900 bg-slate-100 border-slate-300', textClass: 'text-slate-900' };
+                      } else if (storeInfo.storeKey === 'halifax') {
+                        return { color: 'text-amber-600 bg-amber-50 border-amber-200', textClass: 'text-amber-600' };
                       }
-                      return { color: 'text-slate-500 bg-slate-50 border-slate-200/60', textClass: 'text-slate-600' };
+                      return { color: 'text-slate-600 bg-slate-50 border-slate-200', textClass: 'text-slate-600' };
                     };
 
-                    const iconDetails = getTruckIconDetails(truckRow.name);
+                    const iconDetails = getTruckIconDetails(truckRow);
 
                     return (
                       <div 
@@ -2703,43 +2724,43 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                         )}
 
                         {/* Main row layout */}
-                        <div className="p-4 flex items-start justify-between gap-3 select-none">
+                        <div className="p-3.5 flex items-start justify-between gap-3 select-none">
                           <div className="flex items-start gap-3 flex-1 min-w-0">
                             {/* Vehicle Icon on Left */}
-                            <div className={`p-2.5 rounded-lg border shrink-0 flex items-center justify-center ${iconDetails.color}`}>
+                            <div className={`p-2.5 rounded-xl border shrink-0 flex items-center justify-center ${iconDetails.color}`}>
                               <TruckIcon className="w-5 h-5" />
                             </div>
 
                             {/* Center details block */}
-                            <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="flex-1 min-w-0 space-y-1">
                               {/* Row 1: Name and Status Badge */}
-                              <div className="flex items-start justify-between gap-2">
-                                <h4 className="font-sans font-bold text-slate-850 leading-none text-xs md:text-[13px] truncate mt-0.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="font-sans font-bold text-slate-850 leading-tight text-xs md:text-[13px] truncate">
                                   {truckRow.name}
                                 </h4>
-                                <div className="flex flex-col items-end shrink-0">
-                                  <div className={`flex flex-col items-center justify-center px-2 py-1 rounded border text-[9px] font-bold leading-none ${statusBg}`}>
-                                    <div className="flex items-center gap-1">
-                                      <span className={`w-1.5 h-1.5 ${statusDotColor} rounded-full inline-block`}></span>
+                                <div className="flex items-center shrink-0">
+                                  {isMoving ? (
+                                    <div className="px-2 py-0.5 rounded-full bg-emerald-100/90 text-emerald-800 border border-emerald-200 font-bold text-[10.5px] flex items-center gap-1 shadow-2xs">
+                                      <span>↗</span>
+                                      <span>{truckRow.activeSpeed || 53} km/h</span>
+                                    </div>
+                                  ) : (
+                                    <div className="px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 border border-slate-300/80 font-bold text-[10.5px] flex items-center gap-1 shadow-2xs">
+                                      <span className="text-[8px] text-slate-600">■</span>
                                       <span>{statusText}</span>
                                     </div>
-                                    {isMoving && (
-                                      <span className="text-[9.5px] font-extrabold text-emerald-700 font-mono mt-1 text-center tracking-tight">
-                                        {truckRow.activeSpeed} km/h
-                                      </span>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                               </div>
 
                               {/* Row 2: Driver icon and driver name */}
-                              <div className="flex items-center gap-1.5 text-xs text-slate-500 leading-none">
+                              <div className="flex items-center gap-1.5 text-xs text-slate-500 leading-none pt-0.5">
                                 <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span className="truncate">{truckRow.driver}</span>
+                                <span className="truncate">{truckRow.driver || 'No driver'}</span>
                               </div>
 
                               {/* Row 3: Clock icon and last sync */}
-                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 leading-none">
+                              <div className="flex items-center gap-1.5 text-[10.5px] text-slate-400 leading-none pt-0.5">
                                 <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 <span>{getLastSyncText(truckRow)}</span>
                               </div>

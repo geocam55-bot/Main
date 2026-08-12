@@ -125,73 +125,27 @@ function sanitizeGpsCoordinates(lat: number, lng: number): { lat: number; lng: n
   return { lat, lng };
 }
 
+export function normalizeTenantId(rawTenantId: any): string {
+  if (!rawTenantId) return "rona_atlantic";
+  const tid = String(rawTenantId).trim();
+  if (["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc", "default", "undefined", "null"].includes(tid.toLowerCase())) {
+    return "rona_atlantic";
+  }
+  return tid;
+}
+
 export function serializeToType(
   type: string | undefined,
-  registrationDueDate: string | undefined,
-  lat?: number,
-  lng?: number,
-  gpsSource?: 'mobile' | 'truck',
-  gpsDeviceId?: string,
-  gpsSerialNumber?: string,
-  gpsDeviceName?: string,
-  gpsSimIccid?: string,
-  gpsStatus?: string,
-  gpsLastHandshake?: string,
-  gpsLat?: number,
-  gpsLng?: number,
-  gpsSpeed?: number,
-  gpsIdlingMins?: number,
+  registrationDueDate?: string | undefined,
   imageUrl?: string
 ): string {
-  // Strip out any existing ||tag:value metadata from type to prevent duplicate tag accumulation
-  const baseType = (type || "").split("||")[0].trim() || "Commercial Truck";
-  let res = baseType;
-  if (imageUrl) {
-    res += ` ||imageUrl:${encodeURIComponent(imageUrl)}`;
-  }
-  if (registrationDueDate) {
-    res += ` ||regdue:${registrationDueDate}`;
-  }
-  if (lat !== undefined && lat !== null) {
-    res += ` ||lat:${lat}`;
-  }
-  if (lng !== undefined && lng !== null) {
-    res += ` ||lng:${lng}`;
-  }
-  if (gpsSource) {
-    res += ` ||gpsSource:${gpsSource}`;
-  }
-  if (gpsDeviceId) {
-    res += ` ||gpsDeviceId:${encodeURIComponent(gpsDeviceId)}`;
-  }
-  if (gpsSerialNumber) {
-    res += ` ||gpsSerialNumber:${encodeURIComponent(gpsSerialNumber)}`;
-  }
-  if (gpsDeviceName) {
-    res += ` ||gpsDeviceName:${encodeURIComponent(gpsDeviceName)}`;
-  }
-  if (gpsSimIccid) {
-    res += ` ||gpsSimIccid:${encodeURIComponent(gpsSimIccid)}`;
-  }
-  if (gpsStatus) {
-    res += ` ||gpsStatus:${gpsStatus}`;
-  }
-  if (gpsLastHandshake) {
-    res += ` ||gpsLastHandshake:${gpsLastHandshake}`;
-  }
-  if (gpsLat !== undefined && gpsLat !== null) {
-    res += ` ||gpsLat:${gpsLat}`;
-  }
-  if (gpsLng !== undefined && gpsLng !== null) {
-    res += ` ||gpsLng:${gpsLng}`;
-  }
-  if (gpsSpeed !== undefined && gpsSpeed !== null) {
-    res += ` ||gpsSpeed:${gpsSpeed}`;
-  }
-  if (gpsIdlingMins !== undefined && gpsIdlingMins !== null) {
-    res += ` ||gpsIdlingMins:${gpsIdlingMins}`;
-  }
-  return res;
+  const clean = (type || "").split("||")[0].trim() || "Commercial Truck";
+  const tags: string[] = [];
+
+  if (registrationDueDate) tags.push(`||regdue:${registrationDueDate}`);
+  if (imageUrl) tags.push(`||imageUrl:${encodeURIComponent(imageUrl)}`);
+
+  return `${clean}${tags.join("")}`;
 }
 
 export function deserializeType(truck: any): any {
@@ -284,10 +238,10 @@ export function deserializeType(truck: any): any {
 
   if (lat === undefined || lng === undefined) {
     if (isAlmon) {
-      lat = 44.6855;
-      lng = -63.5825;
-      gpsLat = 44.6855;
-      gpsLng = -63.5825;
+      lat = 44.6468;
+      lng = -63.6712;
+      gpsLat = 44.6468;
+      gpsLng = -63.6712;
     } else if (is1903) {
       lat = 44.9792;
       lng = -63.5042;
@@ -554,17 +508,20 @@ export async function deleteTenantDirect(tenantId: string): Promise<void> {
 }
 
 // Hydrate state for a specific tenant directly
-export async function fetchTenantStateDirect(tenantId: string) {
+export async function fetchTenantStateDirect(rawTenantId: string) {
   const supabase = getFrontendSupabase();
   if (!supabase) {
     return { supabaseActive: false };
   }
 
-  const [rBranches, rTrucks, rUsers, rDeliveries] = await Promise.all([
+  const tenantId = normalizeTenantId(rawTenantId);
+
+  const [rBranches, rTrucks, rUsers, rDeliveries, rGpsUnits] = await Promise.all([
     supabase.from("branches").select("*").eq("tenantId", tenantId),
     supabase.from("trucks").select("*").eq("tenantId", tenantId),
     supabase.from("users").select("*").eq("tenantId", tenantId),
-    supabase.from("deliveries").select("*").eq("tenantId", tenantId)
+    supabase.from("deliveries").select("*").eq("tenantId", tenantId),
+    supabase.from("gps_units_setup").select("*").eq("tenantId", tenantId)
   ]);
 
   if (rBranches.error || rTrucks.error || rUsers.error || rDeliveries.error) {
@@ -572,8 +529,38 @@ export async function fetchTenantStateDirect(tenantId: string) {
     throw new Error(primaryError?.message || "Failed to query tables directly from Supabase.");
   }
 
+  const gpsUnits = rGpsUnits?.data || [];
+  const gpsMap = new Map<string, any>();
+  gpsUnits.forEach((g: any) => {
+    if (g.assignedTruckId) gpsMap.set(String(g.assignedTruckId).toLowerCase(), g);
+    if (g.deviceId) gpsMap.set(String(g.deviceId).toLowerCase(), g);
+  });
+
   const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
-  const deserializedTrucks = (rTrucks.data || []).map((t: any) => deserializeType(t));
+  const deserializedTrucks = (rTrucks.data || []).map((t: any) => {
+    const dt = deserializeType(t);
+    const matchedGps = gpsMap.get(String(t.id).toLowerCase()) || (t.gps_device_id ? gpsMap.get(String(t.gps_device_id).toLowerCase()) : null);
+    if (matchedGps) {
+      dt.gpsDeviceId = matchedGps.deviceId || dt.gpsDeviceId;
+      dt.gpsSerialNumber = matchedGps.serialNumber || matchedGps.serial_number || dt.gpsSerialNumber;
+      dt.gpsDeviceName = matchedGps.deviceName || dt.gpsDeviceName;
+      dt.gpsSimIccid = matchedGps.simIccid || dt.gpsSimIccid;
+      dt.gpsStatus = matchedGps.status || dt.gpsStatus || 'Connected';
+      dt.gpsLastHandshake = matchedGps.lastHandshake || dt.gpsLastHandshake;
+      if (typeof matchedGps.lastLatitude === 'number' && !isNaN(matchedGps.lastLatitude)) {
+        dt.gpsLat = matchedGps.lastLatitude;
+        dt.lat = matchedGps.lastLatitude;
+      }
+      if (typeof matchedGps.lastLongitude === 'number' && !isNaN(matchedGps.lastLongitude)) {
+        dt.gpsLng = matchedGps.lastLongitude;
+        dt.lng = matchedGps.lastLongitude;
+      }
+      if (matchedGps.deviceId && matchedGps.deviceId !== 'DISABLED') {
+        dt.gpsSource = 'truck';
+      }
+    }
+    return dt;
+  });
 
   const rawDeliveries = rDeliveries.data || [];
   const enrichedDeliveries = rawDeliveries.map((d: any) => {
@@ -688,7 +675,7 @@ export async function fetchTenantStateDirect(tenantId: string) {
 
 // Upsert state directly
 export async function saveTenantStateDirect(
-  tenantId: string,
+  rawTenantId: string,
   deliveries: any[],
   trucks: any[],
   branches: any[],
@@ -696,6 +683,8 @@ export async function saveTenantStateDirect(
 ) {
   const supabase = getFrontendSupabase();
   if (!supabase) return { supabaseActive: false };
+
+  const tenantId = normalizeTenantId(rawTenantId);
 
   // Deduplicate input arrays to prevent ON CONFLICT DO UPDATE rows violations
   const uniqueBranchesMap = new Map<string, any>();
@@ -775,24 +764,16 @@ export async function saveTenantStateDirect(
     type: serializeToType(
       t.type,
       t.registrationDueDate,
-      t.lat,
-      t.lng,
-      t.gpsSource,
-      t.gpsDeviceId,
-      t.gpsSerialNumber,
-      t.gpsDeviceName,
-      t.gpsSimIccid,
-      t.gpsStatus,
-      t.gpsLastHandshake,
-      t.gpsLat,
-      t.gpsLng,
-      t.gpsSpeed,
-      t.gpsIdlingMins,
       t.imageUrl
     ),
     driver: t.driver,
     branchId: t.branchId,
-    image_url: t.imageUrl || null
+    image_url: t.imageUrl || null,
+    registration_due_date: t.registrationDueDate || null,
+    gps_device_id: t.gpsDeviceId || null,
+    current_latitude: typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : null),
+    current_longitude: typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : null),
+    current_status: t.gpsStatus || 'Connected'
   }));
 
   const mappedBranches = uniqueBranches.map(b => {
@@ -869,20 +850,19 @@ export async function saveTenantStateDirect(
     return obj;
   });
 
-  // Prepare GPS units setup records (only active configured stationary devices)
-  const activeStationaryTrucks = uniqueTrucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED');
-  const disabledTruckIds = uniqueTrucks.filter(t => t.gpsDeviceId === 'DISABLED' || !t.gpsDeviceId).map(t => String(t.id));
-
-  const gpsUnitsToUpsert = activeStationaryTrucks.map(t => {
-    const devId = t.gpsDeviceId;
+  // Prepare GPS units setup records
+  const gpsUnitsToUpsert = uniqueTrucks.map(t => {
+    const devId = t.gpsDeviceId || `FC-${String(t.id).replace(/[^a-zA-Z0-9]/g, '')}`;
     const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
     const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
     return {
       id: `GPS-IMEI-${t.id}`,
       tenantId: String(tenantId),
       deviceId: devId,
-      deviceName: t.gpsDeviceName || t.name || `GPS Unit (${t.id})`,
+      deviceName: t.gpsDeviceName || t.name || 'Samsara VG54 Core Gateway',
       simIccid: t.gpsSimIccid || 'Bell Mobility Business IoT',
+      serialNumber: t.gpsSerialNumber || '0160293848',
+      serial_number: t.gpsSerialNumber || '0160293848',
       status: t.gpsStatus || 'Connected',
       assignedTruckId: String(t.id),
       lastHandshake: t.gpsLastHandshake || new Date().toISOString(),
@@ -890,13 +870,6 @@ export async function saveTenantStateDirect(
       lastLongitude: lng
     };
   });
-
-  if (disabledTruckIds.length > 0) {
-    try {
-      await supabase.from("gps_units_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds);
-      await supabase.from("gps_unit_setup").delete().eq("tenantId", String(tenantId)).in("assignedTruckId", disabledTruckIds);
-    } catch (_) {}
-  }
 
   // Prepare GPS tracking history points
   const historyPointsToInsert = uniqueTrucks.map(t => {

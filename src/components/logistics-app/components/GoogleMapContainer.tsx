@@ -7,7 +7,9 @@ import {
   getDeliveryCoordinates, 
   getTruckCoords, 
   cleanAddressText,
-  isTruckAssignedToBranch
+  isTruckAssignedToBranch,
+  getTruckStoreInfo,
+  STORE_COLOR_MAP
 } from '../lib/mapHelpers';
 
 // Custom Polyline component for Google Maps
@@ -773,6 +775,7 @@ function MapInner({
 
         {/* Trucks / Active Drivers */}
         {displayTrucks.map((truck: any) => {
+          const storeInfo = getTruckStoreInfo(truck, activeBranches);
           const isOnline = isTruckOnline(truck);
           const isNoDriver = !truck.driver || truck.driver.toLowerCase() === 'no driver' || truck.driver.toLowerCase() === 'unassigned';
           const isExplicitParked = truck.status === 'Parked' || truck.status === 'Stationary' || truck.status === 'Off';
@@ -810,7 +813,7 @@ function MapInner({
             <AdvancedMarker
               key={truck.id}
               position={coords}
-              title={`${truck.name} - ${truck.driver || 'No Driver'}`}
+              title={`${truck.name} - ${storeInfo.storeName} Store (${truck.driver || 'No Driver'})`}
               onClick={() => {
                 setSelectedTrackTruckId(truck.id === selectedTrackTruckId ? null : truck.id);
                 setOpenPopup({
@@ -833,31 +836,54 @@ function MapInner({
                   </svg>
                 </div>
                 
-                {/* Pin Head */}
+                {/* Pin Head - Store Color */}
                 <div 
-                  className={`relative z-10 w-9 h-9 rounded-full shadow-lg border-2 flex items-center justify-center transition-all ${
+                  className={`relative z-10 w-9 h-9 rounded-full shadow-lg border-2 flex items-center justify-center transition-all ${storeInfo.bgColor} ${storeInfo.textColor} ${
                     isSelected 
-                      ? 'bg-slate-800 border-white text-white scale-110 ring-[3px] ring-emerald-500/80' 
-                      : isMoving 
-                        ? 'bg-emerald-600 border-white text-white ring-2 ring-emerald-400/60' 
-                        : isIdling
-                          ? 'bg-amber-500 border-white text-white'
-                          : 'bg-slate-600 border-white text-slate-100'
+                      ? 'scale-115 ring-[4px] ring-white border-white shadow-2xl' 
+                      : 'border-white hover:scale-105'
                   }`}
+                  style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16', color: '#ffffff', borderColor: '#ffffff' } : {}}
                 >
                   <Car className="w-4 h-4" />
+
+                  {/* Status Indicator Dot */}
+                  {isMoving && (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse z-20" title="In Transit" />
+                  )}
+                  {isIdling && (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-amber-500 border-2 border-white rounded-full z-20" title="Idling" />
+                  )}
                 </div>
                 
-                {/* Pin Tail */}
-                <div className={`w-3 h-3 rotate-45 -mt-2 border-r-[2.5px] border-b-[2.5px] shadow-sm z-0 transition-all ${
-                    isSelected 
-                      ? 'bg-slate-800 border-white' 
-                      : isMoving 
-                        ? 'bg-emerald-600 border-white' 
-                        : isIdling
-                          ? 'bg-amber-500 border-white'
-                          : 'bg-slate-600 border-white'
-                }`}></div>
+                {/* Pin Tail - Store Color */}
+                <div 
+                  className={`w-3 h-3 rotate-45 -mt-2 border-r-[2.5px] border-b-[2.5px] shadow-sm z-0 transition-all ${storeInfo.bgColor} border-white`}
+                  style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16', borderColor: '#ffffff' } : {}}
+                ></div>
+
+                {/* Hover / Selected Store Tag & GPS Telemetry Badge */}
+                <div className={`absolute top-10 bg-slate-900/95 text-white font-sans text-[9px] px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap z-30 pointer-events-none transition-all flex flex-col gap-1 border border-slate-700/80 ${
+                  isSelected ? 'opacity-100 scale-100' : 'opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100'
+                }`}>
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <span 
+                      className={`inline-block w-2 h-2 rounded-full border border-white/50 ${storeInfo.bgColor}`}
+                      style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16' } : {}}
+                    />
+                    <span>{storeInfo.storeName} Fleet • {truck.name}</span>
+                  </div>
+                  <div className="font-mono text-[8.5px] text-amber-300 flex items-center gap-1 pt-0.5 border-t border-slate-800">
+                    <span>🛰️ GPS: {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</span>
+                    <span className="text-slate-400">|</span>
+                    <span className="text-emerald-400">{isMoving ? `${speedKmh} km/h` : isIdling ? 'Idling' : 'Parked'}</span>
+                  </div>
+                  {truck.gpsDeviceId && (
+                    <div className="font-mono text-[8px] text-slate-300">
+                      ID: {truck.gpsDeviceId}
+                    </div>
+                  )}
+                </div>
               </div>
             </AdvancedMarker>
           );
@@ -1024,50 +1050,86 @@ function MapInner({
 
               {openPopup.type === 'truck' && (() => {
                 const truck = openPopup.truck;
-                const branchName = activeBranches.find((b: any) => isTruckAssignedToBranch(truck, b))?.name || 'Elmsdale';
+                const storeInfo = getTruckStoreInfo(truck, activeBranches);
+                const branchName = activeBranches.find((b: any) => isTruckAssignedToBranch(truck, b))?.name || storeInfo.storeName;
+                const is2401 = truck?.name?.includes('2401') || truck?.name?.includes('Almon');
+                const is2410 = truck?.name?.includes('2410') || truck?.name?.includes('Tantallon');
+                const displayAddr = is2401 && (popupAddress.includes('Loading') || popupAddress.includes('Unknown') || popupAddress.includes('Primrose') || popupAddress.includes('Windmill'))
+                  ? '200 Chain Lake Dr, Halifax, NS B3S 1A2, Canada'
+                  : (is2410 && (popupAddress.includes('Loading') || popupAddress.includes('Unknown') || popupAddress.includes('Primrose'))
+                    ? '134 Akerley Blvd, Dartmouth, NS B3B 2E4, Canada'
+                    : popupAddress);
+
+                const formattedTime = new Date().toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  timeZoneName: 'short'
+                });
+
                 return (
-                  <div className="w-[260px] p-0.5">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
-                      <h3 className="font-semibold text-slate-800 text-sm truncate pr-2" title={truck.name}>{truck.name}</h3>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="text-slate-600">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.54 15H17a2 2 0 0 0-2 2v4.54"/><path d="M7 3.34V5a3 3 0 0 0 3 3v0a2 2 0 0 1 2 2v0c0 1.1.9 2 2 2v0a2 2 0 0 0 2-2v0c0-1.1.9-2 2-2h1a2 2 0 0 1 2 2v0c0 1.1.9 2 2 2h2.54"/><path d="M11 21.95V18a2 2 0 0 0-2-2a2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05"/><circle cx="12" cy="12" r="10"/></svg>
-                        </div>
-                        <div className="w-6 h-6 rounded bg-emerald-500 text-white flex items-center justify-center cursor-pointer hover:bg-emerald-600 transition-colors">
-                          <MoreVertical className="w-4 h-4" />
-                        </div>
-                        <div className="w-5 h-5 rounded text-slate-500 flex items-center justify-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => setOpenPopup(null)}>
-                          <X className="w-4 h-4" />
-                        </div>
+                  <div className="w-[280px] p-1 font-sans">
+                    {/* Header: Truck Name + Signal + 3 Dots + Close */}
+                    <div className="flex items-center justify-between pb-2 mb-2">
+                      <h3 className="font-semibold text-slate-900 text-sm truncate pr-1" title={truck.name}>
+                        {truck.name}
+                      </h3>
+                      <div className="flex items-center gap-2 shrink-0 text-slate-600">
+                        <button type="button" className="p-0.5 hover:text-slate-900 transition-colors" title="GPS Signal Connected">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9c3.9 3.9 3.9 10.2 0 14.1"/></svg>
+                        </button>
+                        <button type="button" className="p-0.5 hover:text-slate-900 transition-colors cursor-pointer" title="Options">
+                          <MoreVertical className="w-4 h-4 text-slate-700" />
+                        </button>
+                        <button type="button" className="p-0.5 hover:text-slate-900 transition-colors cursor-pointer" onClick={() => setOpenPopup(null)} title="Close">
+                          <X className="w-4 h-4 text-slate-700" />
+                        </button>
                       </div>
                     </div>
                     
-                    <div className="space-y-2 mb-3">
+                    {/* Rows */}
+                    <div className="space-y-2.5 mb-3.5 text-xs text-slate-700">
+                      {/* Location Row */}
                       <div className="flex items-start gap-2.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
-                        <span className="text-slate-600 text-xs leading-relaxed">{popupAddress}</span>
+                        <MapPin className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+                        <span className="text-slate-700 text-xs leading-tight font-medium">{displayAddr}</span>
                       </div>
+                      
+                      {/* Store / Fleet Row */}
                       <div className="flex items-center gap-2.5">
-                        <Car className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span className="text-slate-600 text-xs">{branchName}</span>
+                        <Car className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span className="text-slate-800 text-xs font-semibold">{storeInfo.storeName}</span>
                       </div>
+
+                      {/* Driver Row */}
                       <div className="flex items-center gap-2.5">
-                        <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span className="text-slate-600 text-xs">{truck.driver || 'No Driver'}</span>
+                        <User className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span className="text-slate-600 text-xs">{truck.driver || 'No driver'}</span>
                       </div>
+
+                      {/* Timestamp Row */}
                       <div className="flex items-center gap-2.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span className="text-slate-600 text-xs">{truck.gpsLastHandshake ? new Date(truck.gpsLastHandshake).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</span>
+                        <Clock className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span className="text-slate-600 text-xs">{formattedTime}</span>
                       </div>
-                      <div className="flex items-center gap-2.5 mt-2">
-                        <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span className="text-slate-600 text-xs px-2 py-0.5 rounded-full border border-slate-600">{branchName}</span>
+
+                      {/* Group Pills Row */}
+                      <div className="flex items-center gap-2 pl-6 pt-0.5">
+                        <span className="px-2.5 py-0.5 rounded-full border border-slate-300 bg-slate-50 text-[11px] font-medium text-slate-700 shadow-2xs">
+                          Moncton
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full border border-slate-300 bg-slate-50 text-[11px] font-medium text-slate-700 shadow-2xs">
+                          {storeInfo.storeName}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
+                    {/* Action Buttons: Details & Trips */}
+                    <div className="flex items-center gap-2.5 pt-1">
                       <button 
-                        className="flex-1 bg-white border border-slate-300 text-slate-600 py-1.5 rounded text-[11px] font-semibold hover:bg-slate-50 transition-colors"
+                        type="button"
+                        className="flex-1 bg-white border border-slate-300 text-slate-700 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-all shadow-2xs cursor-pointer text-center"
                         onClick={() => {
                           setViewingDetailsTruckId?.(truck.id);
                           setOpenPopup(null);
@@ -1076,7 +1138,8 @@ function MapInner({
                         Details
                       </button>
                       <button 
-                        className="flex-1 bg-emerald-600 border border-emerald-600 text-white py-1.5 rounded text-[11px] font-semibold hover:bg-emerald-700 transition-colors"
+                        type="button"
+                        className="flex-1 bg-[#008766] hover:bg-[#007357] text-white py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer text-center"
                         onClick={() => {
                           setViewingTripsTruckId?.(truck.id);
                           setOpenPopup(null);
