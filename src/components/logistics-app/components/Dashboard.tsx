@@ -1415,16 +1415,21 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 let isIdling = false;
                 let isParked = true;
 
-                if (isNoDriver || isExplicitParked) {
+                if (hasGpsSpeed && realGpsSpeed > 0) {
+                  // Real telemetry says we are moving
+                  isDriving = true;
+                  isIdling = false;
+                  isParked = false;
+                } else if (isExplicitIdling || (trAny?.gpsIdlingMins || 0) > 0) {
+                  // Real telemetry says engine idling
+                  isDriving = false;
+                  isIdling = true;
+                  isParked = false;
+                } else if (isExplicitParked || (isNoDriver && !isExplicitDriving && !isLoadedInTransit)) {
                   // No driver assigned or explicitly marked parked -> Parked at Depot Yard
                   isDriving = false;
                   isIdling = false;
                   isParked = true;
-                } else if (isExplicitIdling || (!isExplicitDriving && !isLoadedInTransit && (trAny?.gpsIdlingMins || 0) > 0 && (!hasGpsSpeed || realGpsSpeed === 0))) {
-                  // Engine idling
-                  isDriving = false;
-                  isIdling = true;
-                  isParked = false;
                 } else {
                   // Assigned driver & active route/load -> Driving (En route, left the yard)
                   isDriving = true;
@@ -1433,7 +1438,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 }
 
                 let speedValue = 0;
-                if (isDriving && !isNoDriver) {
+                if (isDriving) {
                   if (hasGpsSpeed && realGpsSpeed > 0) {
                     speedValue = Math.round(realGpsSpeed);
                   } else {

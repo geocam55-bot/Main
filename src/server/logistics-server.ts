@@ -343,17 +343,17 @@ function deserializeType(truck: any): any {
 
   // Check direct DB columns / object properties first
   let registrationDueDate = truck.registrationDueDate || truck.registration_due_date || "";
-  let lat: number | undefined = truck.lat !== undefined ? truck.lat : undefined;
-  let lng: number | undefined = truck.lng !== undefined ? truck.lng : undefined;
+  let lat: number | undefined = truck.lat !== undefined ? truck.lat : (truck.current_latitude !== undefined ? truck.current_latitude : undefined);
+  let lng: number | undefined = truck.lng !== undefined ? truck.lng : (truck.current_longitude !== undefined ? truck.current_longitude : undefined);
   let gpsSource: 'mobile' | 'truck' | undefined = truck.gpsSource || truck.gps_source || undefined;
   let gpsDeviceId: string | undefined = truck.gpsDeviceId || truck.gps_device_id || undefined;
   let gpsSerialNumber: string | undefined = truck.gpsSerialNumber || truck.gps_serial_number || undefined;
   let gpsDeviceName: string | undefined = truck.gpsDeviceName || truck.gps_device_name || undefined;
   let gpsSimIccid: string | undefined = truck.gpsSimIccid || truck.gps_sim_iccid || undefined;
-  let gpsStatus: 'Connected' | 'Disconnected' | 'Syncing' | 'Error' | undefined = truck.gpsStatus || truck.gps_status || undefined;
+  let gpsStatus: 'Connected' | 'Disconnected' | 'Syncing' | 'Error' | undefined = truck.gpsStatus || truck.gps_status || truck.current_status || undefined;
   let gpsLastHandshake: string | undefined = truck.gpsLastHandshake || truck.gps_last_handshake || undefined;
-  let gpsLat: number | undefined = truck.gpsLat !== undefined ? truck.gpsLat : (truck.gps_lat !== undefined ? truck.gps_lat : undefined);
-  let gpsLng: number | undefined = truck.gpsLng !== undefined ? truck.gpsLng : (truck.gps_lng !== undefined ? truck.gps_lng : undefined);
+  let gpsLat: number | undefined = truck.gpsLat !== undefined ? truck.gpsLat : (truck.gps_lat !== undefined ? truck.gps_lat : (truck.current_latitude !== undefined ? truck.current_latitude : undefined));
+  let gpsLng: number | undefined = truck.gpsLng !== undefined ? truck.gpsLng : (truck.gps_lng !== undefined ? truck.gps_lng : (truck.current_longitude !== undefined ? truck.current_longitude : undefined));
   let gpsSpeed: number | undefined = truck.gpsSpeed !== undefined ? truck.gpsSpeed : (truck.gps_speed !== undefined ? truck.gps_speed : undefined);
   let gpsIdlingMins: number | undefined = truck.gpsIdlingMins !== undefined ? truck.gpsIdlingMins : (truck.gps_idling_mins !== undefined ? truck.gps_idling_mins : undefined);
 
@@ -773,22 +773,6 @@ create table if not exists gps_units_setup (
   status text not null default 'Disconnected', -- 'Connected', 'Disconnected', 'Syncing', 'Error'
   "assignedTruckId" text, -- bound to specific truck
   "lastHandshake" text, -- formatted string representation
-  "lastLatitude" double precision,
-  "lastLongitude" double precision,
-  "installedAt" text default now()::text
-);
-
-create table if not exists gps_unit_setup (
-  id text primary key,
-  "tenantId" text not null default 'rona_atlantic',
-  "deviceId" text not null,
-  "deviceName" text not null,
-  "simIccid" text,
-  "serialNumber" text,
-  "serial_number" text,
-  status text not null default 'Disconnected',
-  "assignedTruckId" text,
-  "lastHandshake" text,
   "lastLatitude" double precision,
   "lastLongitude" double precision,
   "installedAt" text default now()::text
@@ -3200,8 +3184,6 @@ app.use((req, res, next) => {
           if (gpsUnitsToUpsert.length > 0) {
             const { error: err1 } = await supabase.from("gps_units_setup").upsert(gpsUnitsToUpsert);
             if (err1) console.error("[GPS Sync] gps_units_setup error:", err1);
-            const { error: err2 } = await supabase.from("gps_unit_setup").upsert(gpsUnitsToUpsert);
-            if (err2) console.error("[GPS Sync] gps_unit_setup error:", err2);
           }
           if (historyPointsToInsert.length > 0) {
             const { error: err3 } = await supabase.from("gps_tracking_history").insert(historyPointsToInsert);
@@ -4732,136 +4714,6 @@ async function syncFleetCompleteTelemetry
       break;
     }
 
-    if (!apiSuccess) {
-      // Mock data for preview/demo when no live API keys are provided or API is unreachable
-      liveData = {
-        vehicles: trucksToProcessList.map(item => {
-          const truck = item.truck;
-          const idOrName = ((truck.id || "") + " " + (truck.name || "")).toLowerCase();
-          const isTruck1903 = idOrName.includes("1903");
-          const isAlmon2401 = idOrName.includes("2401") || idOrName.includes("almon");
-          const is2101 = idOrName.includes("2101");
-          const isElmsdale = idOrName.includes("elmsdale") || truck.branchId === 'DC-ELMSDALE';
-          const isPei = idOrName.includes("pei") || truck.branchId === '01075';
-
-          // Fixed base depot anchor coords (non-accumulating origin)
-          let baseLat = 44.6855; // Windmill HQ default
-          let baseLng = -63.5825;
-
-          const is2410 = idOrName.includes("2410") || idOrName.includes("tantallon");
-          if (is2410) {
-            baseLat = 44.70885; baseLng = -63.58521;
-          } else if (isAlmon2401) {
-            baseLat = 44.6468; baseLng = -63.6712;
-          } else if (is2101) {
-            baseLat = 44.8770; baseLng = -63.5410;
-          } else if (isElmsdale) {
-            baseLat = 44.9752; baseLng = -63.5042;
-          } else if (isPei) {
-            baseLat = 46.2382; baseLng = -63.1311;
-          } else if (truck.branchId === 'DC-WINAMILL' || isTruck1903) {
-            baseLat = 44.6855; baseLng = -63.5825;
-          }
-
-          const idStr = item.id || truck.id || truck.name || "";
-          let idHash = 0;
-          for (let i = 0; i < idStr.length; i++) {
-            idHash = (idHash * 37 + idStr.charCodeAt(i)) & 0x7fffffff;
-          }
-
-          const timeStep = Math.floor(Date.now() / 15000);
-          const truckPhase = (idHash % 10 + 10) % 10;
-          const stateCycle = (truckPhase + timeStep * 3) % 10;
-
-          const now = new Date();
-          const currentUtcHour = now.getUTCHours();
-          const localAstHour = (currentUtcHour - 3 + 24) % 24;
-          const localAstDay = now.getUTCDay();
-          const isStoreClosed = localAstDay === 0 || localAstHour < 6 || localAstHour >= 17;
-
-          const isNoDriver = !truck.driver || truck.driver.toLowerCase() === 'no driver' || truck.driver.toLowerCase() === 'unassigned';
-
-          let speed = 0;
-          let idlingMins = 0;
-          let engineStatus = false;
-          let latOffset = 0;
-          let lngOffset = 0;
-
-          if (!isStoreClosed && !isNoDriver) {
-            if (is2101) {
-              speed = 110 + (timeStep % 15);
-              idlingMins = 0;
-              engineStatus = true;
-              const progress = (timeStep % 80) / 80;
-              latOffset = (progress - 0.5) * 0.04;
-              lngOffset = (progress - 0.5) * 0.02;
-            } else if (stateCycle < 6) {
-              // Driving / In Transit on active Maritime route (60% of time)
-              speed = 34 + ((idHash * 17 + timeStep * 13) % 49); // 34 to 82 km/h
-              idlingMins = 0;
-              engineStatus = true;
-
-              const progress = ((idHash + timeStep * 5) % 120) / 120;
-              const travelDir = (idHash % 2 === 0) ? 1 : -1;
-              const isDartmouth = baseLng >= -63.5850;
-
-              // Smooth parametric path sweep along land road corridor
-              latOffset = Math.sin(progress * 2 * Math.PI) * 0.010 * travelDir;
-              lngOffset = Math.cos(progress * 2 * Math.PI) * 0.003 * (isDartmouth ? 1 : -1);
-            } else if (stateCycle < 8) {
-              // Engine Idling at job site / stop (20% of time)
-              speed = 0;
-              idlingMins = 3 + ((idHash * 11 + timeStep * 7) % 38);
-              engineStatus = true;
-            } else {
-              // Parked at depot (20% of time)
-              speed = 0;
-              idlingMins = 0;
-              engineStatus = false;
-            }
-          } else {
-            // Stores closed or no driver -> strictly Parked at depot
-            speed = 0;
-            idlingMins = 0;
-            engineStatus = false;
-          }
-
-          let targetLat = baseLat + latOffset;
-          let targetLng = baseLng + lngOffset;
-
-          if (speed === 0) {
-            targetLat = typeof truck.gpsLat === 'number' ? truck.gpsLat : (typeof truck.lat === 'number' ? truck.lat : baseLat);
-            targetLng = typeof truck.gpsLng === 'number' ? truck.gpsLng : (typeof truck.lng === 'number' ? truck.lng : baseLng);
-          }
-
-          const rawLat = Number(targetLat.toFixed(6));
-          const rawLng = Number(targetLng.toFixed(6));
-
-          // Strict Nova Scotia water body & bounds sanitization
-          const sanitized = sanitizeGpsCoordinates(rawLat, rawLng);
-
-          return {
-            id: truck.gpsDeviceId || `FC-${truck.id}`,
-            name: truck.id,
-            latestData: {
-               timestamp: new Date().toISOString(),
-               gps: {
-                 latitude: sanitized.lat,
-                 longitude: sanitized.lng,
-                 speed
-               },
-               canBus: {
-                 engineIdleTime: idlingMins * 60
-               },
-               ignition: {
-                 engineStatus
-               }
-            }
-          };
-        })
-      };
-    }
-
     // Step 3: Apply matching live telemetry & perform auto-discovery/upsert of vehicles
     if (apiSuccess && liveData?.vehicles && liveData.vehicles.length > 0) {
       for (const v of liveData.vehicles) {
@@ -4938,7 +4790,6 @@ async function syncFleetCompleteTelemetry
                 lastLongitude: lng
               };
               try { await supabase.from('gps_units_setup').upsert([gpsPayload]); } catch (_) {}
-              try { await supabase.from('gps_unit_setup').upsert([gpsPayload]); } catch (_) {}
 
               const historyPayload = {
                 tenantId: trkTenantId,
@@ -4990,7 +4841,6 @@ async function syncFleetCompleteTelemetry
                 lastLongitude: lng
               };
               try { await supabase.from('gps_units_setup').upsert([gpsPayload]); } catch (_) {}
-              try { await supabase.from('gps_unit_setup').upsert([gpsPayload]); } catch (_) {}
 
               const historyPayload = {
                 tenantId: 'rona_atlantic',

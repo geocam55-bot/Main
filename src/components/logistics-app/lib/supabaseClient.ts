@@ -156,17 +156,17 @@ export function deserializeType(truck: any): any {
   // Check direct DB columns / object properties first
   let registrationDueDate = truck.registrationDueDate || truck.registration_due_date || "";
   let imageUrl: string | undefined = truck.imageUrl || truck.image_url || truck.image || undefined;
-  let lat: number | undefined = truck.lat !== undefined ? truck.lat : undefined;
-  let lng: number | undefined = truck.lng !== undefined ? truck.lng : undefined;
+  let lat: number | undefined = truck.lat !== undefined ? truck.lat : (truck.current_latitude !== undefined ? truck.current_latitude : undefined);
+  let lng: number | undefined = truck.lng !== undefined ? truck.lng : (truck.current_longitude !== undefined ? truck.current_longitude : undefined);
   let gpsSource: 'mobile' | 'truck' | undefined = truck.gpsSource || truck.gps_source || undefined;
   let gpsDeviceId: string | undefined = truck.gpsDeviceId || truck.gps_device_id || undefined;
   let gpsSerialNumber: string | undefined = truck.gpsSerialNumber || truck.gps_serial_number || undefined;
   let gpsDeviceName: string | undefined = truck.gpsDeviceName || truck.gps_device_name || undefined;
   let gpsSimIccid: string | undefined = truck.gpsSimIccid || truck.gps_sim_iccid || undefined;
-  let gpsStatus: 'Connected' | 'Disconnected' | 'Syncing' | 'Error' | undefined = truck.gpsStatus || truck.gps_status || undefined;
+  let gpsStatus: 'Connected' | 'Disconnected' | 'Syncing' | 'Error' | undefined = truck.gpsStatus || truck.gps_status || truck.current_status || undefined;
   let gpsLastHandshake: string | undefined = truck.gpsLastHandshake || truck.gps_last_handshake || undefined;
-  let gpsLat: number | undefined = truck.gpsLat !== undefined ? truck.gpsLat : (truck.gps_lat !== undefined ? truck.gps_lat : undefined);
-  let gpsLng: number | undefined = truck.gpsLng !== undefined ? truck.gpsLng : (truck.gps_lng !== undefined ? truck.gps_lng : undefined);
+  let gpsLat: number | undefined = truck.gpsLat !== undefined ? truck.gpsLat : (truck.gps_lat !== undefined ? truck.gps_lat : (truck.current_latitude !== undefined ? truck.current_latitude : undefined));
+  let gpsLng: number | undefined = truck.gpsLng !== undefined ? truck.gpsLng : (truck.gps_lng !== undefined ? truck.gps_lng : (truck.current_longitude !== undefined ? truck.current_longitude : undefined));
   let gpsSpeed: number | undefined = truck.gpsSpeed !== undefined ? truck.gpsSpeed : (truck.gps_speed !== undefined ? truck.gps_speed : undefined);
   let gpsIdlingMins: number | undefined = truck.gpsIdlingMins !== undefined ? truck.gpsIdlingMins : (truck.gps_idling_mins !== undefined ? truck.gps_idling_mins : undefined);
 

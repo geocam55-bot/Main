@@ -363,17 +363,9 @@ export const getDeliveryCoordinates = (id: string, address: string, originX?: nu
 
 export const getTruckCoords = (truck: any, simProgress: Record<string, number>, branches: any[]) => {
   const isTruckGps = truck?.gpsSource === 'truck';
-  const idOrName = ((truck?.id || '') + ' ' + (truck?.name || '') + ' ' + (truck?.homeDepot || '')).toLowerCase();
-  const is2410 = idOrName.includes('2410') || idOrName.includes('tantallon f150');
-  const is2401Almon = idOrName.includes('2401') || idOrName.includes('almon');
-  const is1903 = idOrName.includes('1903');
-  const is2101Windmill = idOrName.includes('2101') || idOrName.includes('windmill');
-  const isElmsdale = !is2401Almon && !is2101Windmill && (is1903 || idOrName.includes('elmsdale') || idOrName.includes('03485'));
-  const isChainMtn = idOrName.includes('chain') || idOrName.includes('mountain') || idOrName.includes('2412') || idOrName.includes('2408') || idOrName.includes('2404');
-  const isPei = idOrName.includes('pei') || idOrName.includes('charlottetown') || idOrName.includes('01075');
 
-  const rawLat = truck?.gpsLat ?? truck?.lat ?? truck?.latitude;
-  const rawLng = truck?.gpsLng ?? truck?.lng ?? truck?.longitude;
+  const rawLat = truck?.gpsLat ?? truck?.lat ?? truck?.latitude ?? truck?.current_latitude;
+  const rawLng = truck?.gpsLng ?? truck?.lng ?? truck?.longitude ?? truck?.current_longitude;
   const numLat = typeof rawLat === 'number' ? rawLat : (typeof rawLat === 'string' ? parseFloat(rawLat) : NaN);
   const numLng = typeof rawLng === 'number' ? rawLng : (typeof rawLng === 'string' ? parseFloat(rawLng) : NaN);
   const hasRealGps = !isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0;
@@ -381,27 +373,7 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
   let baseLat = hasRealGps ? numLat : 44.68550;
   let baseLng = hasRealGps ? numLng : -63.58250;
 
-  if (is2410 && (!hasRealGps || baseLat === 44.6855 || baseLat === 44.6536)) {
-    // 134 Akerley Blvd, Dartmouth, NS B3B 2E4 (Matches Fleet Complete screenshot)
-    baseLat = 44.70885;
-    baseLng = -63.58521;
-  } else if (is2401Almon && (!hasRealGps || baseLat === 44.9792 || baseLat === 44.6536 || baseLat === 44.6855)) {
-    // Chain Lake Drive, Halifax, NS B3S 1A2
-    baseLat = 44.6468;
-    baseLng = -63.6712;
-  } else if ((is1903 || isElmsdale) && (!hasRealGps || baseLat === 44.6855 || baseLat === 44.6536)) {
-    baseLat = 44.979223;
-    baseLng = -63.504250;
-  } else if (is2101Windmill && (!hasRealGps || baseLat === 44.9792)) {
-    baseLat = 44.68550;
-    baseLng = -63.58250;
-  } else if (isChainMtn && (!hasRealGps || baseLat === 44.9792 || baseLat === 44.6855)) {
-    baseLat = 44.6295;
-    baseLng = -63.6651;
-  } else if (isPei && (!hasRealGps || baseLat < 45.5)) {
-    baseLat = 46.2382;
-    baseLng = -63.1311;
-  } else if (!hasRealGps) {
+  if (!hasRealGps) {
     const homeBranch = branches.find(b => isTruckAssignedToBranch(truck, b));
     if (homeBranch) {
       const branchCoords = getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address);
@@ -411,47 +383,8 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
   }
 
   const sanitizedBase = sanitizeGpsCoordinates(baseLat, baseLng);
-  baseLat = sanitizedBase.lat;
-  baseLng = sanitizedBase.lng;
 
-  const trAny = truck as any;
-  const isNoDriver = !truck?.driver || truck?.driver.toLowerCase() === 'no driver' || truck?.driver.toLowerCase() === 'unassigned';
-  const isExplicitParked = trAny?.status === 'Parked' || trAny?.status === 'Stationary' || trAny?.status === 'Off';
-
-  const rawSpeed = typeof truck?.gpsSpeed === 'number' ? truck.gpsSpeed : (typeof truck?.speed === 'number' ? truck.speed : 0);
-  const isExplicitDriving = trAny?.status === 'Driving' || trAny?.status === 'In Transit' || trAny?.status === 'En Route' || trAny?.isDriving === true;
-  const hasAssignedDelivery = Boolean(trAny?.assignedDeliveryId || trAny?.assignedDelivery || trAny?.trips?.length > 0);
-
-  const isMoving = rawSpeed > 0 || isExplicitDriving || (
-    !is2410 && !isNoDriver && !isExplicitParked && (
-      hasAssignedDelivery ||
-      (trAny?.status !== 'Parked' && trAny?.status !== 'Off' && trAny?.status !== 'Stationary')
-    )
-  );
-
-  if (isMoving) {
-    const progress = simProgress[truck?.id] ?? 0.18;
-    const idHash = (truck?.id || "").split("").reduce((sum: number, ch: string) => sum + ch.charCodeAt(0), 0);
-    
-    const travelDir = (idHash % 2 === 0) ? 1 : -1;
-    const isDartmouth = baseLng >= -63.5850;
-    const sweepRange = 0.020 + ((idHash % 5) * 0.006);
-    const latOffset = Math.sin(progress * 2 * Math.PI) * sweepRange * travelDir;
-    const lngOffset = Math.cos(progress * 2 * Math.PI) * 0.010 * (isDartmouth ? 1 : -1);
-
-    const rawLat = Number((baseLat + latOffset).toFixed(6));
-    const rawLng = Number((baseLng + lngOffset).toFixed(6));
-    const sanitized = sanitizeGpsCoordinates(rawLat, rawLng);
-
-    return {
-      lat: sanitized.lat,
-      lng: sanitized.lng,
-      hasRealGps: true,
-      isTruckGps
-    };
-  }
-
-  return { lat: baseLat, lng: baseLng, hasRealGps, isTruckGps };
+  return { lat: sanitizedBase.lat, lng: sanitizedBase.lng, hasRealGps, isTruckGps };
 };
 
 export const getPercentCoordsFromGps = (lat: number, lng: number): { x: number; y: number } => {

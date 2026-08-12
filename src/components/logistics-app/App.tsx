@@ -36,6 +36,7 @@ import SuperAdminTenantsView from './components/SuperAdminTenantsView';
 import UserProfileModal, { renderUserAvatarHelper } from './components/UserProfileModal';
 import GpsSetup from './components/GpsSetup';
 import EnterpriseHub from './components/EnterpriseHub';
+import DriverMobileApp from './components/DriverMobileApp';
 import DriverTruckSelectModal from './components/DriverTruckSelectModal';
 import { FLEET_COMPLETE_TRUCKS } from './truckSpecs';
 import { rolloverUncompletedDeliveries } from './lib/schedulingUtils';
@@ -3306,7 +3307,7 @@ export default function App() {
               users={users}
             />
           )}
-          {['enterprise-hub', 'epod', 'inspections', 'fuel', 'safety', 'compliance', 'maintenance', 'routes'].includes(activeTab) && (
+          {['enterprise-hub', 'inspections', 'fuel', 'safety', 'compliance', 'maintenance', 'routes'].includes(activeTab) && (
             <EnterpriseHub 
               deliveries={deliveries}
               branches={branches}
@@ -3321,6 +3322,16 @@ export default function App() {
                 activeTab === 'enterprise-hub' ? 'customers' :
                 activeTab
               }
+            />
+          )}
+          
+          {activeTab === 'epod' && (
+            <DriverMobileApp 
+              deliveries={deliveries}
+              trucks={trucks}
+              users={users}
+              currentUser={currentUser}
+              onAddOrUpdateDelivery={handleAddOrUpdateDelivery}
             />
           )}
           {activeTab === 'scanner' && (
