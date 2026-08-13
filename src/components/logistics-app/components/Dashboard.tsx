@@ -211,9 +211,10 @@ interface DashboardProps {
   onUpdateTruck?: (truck: TruckType) => void;
   users?: UserType[];
   currentUser?: UserType | null;
+  onRefreshData?: () => void;
 }
 
-export default function Dashboard({ deliveries, onSelectTab, trucks, branches, onUpdateTruck, users, currentUser }: DashboardProps) {
+export default function Dashboard({ deliveries, onSelectTab, trucks, branches, onUpdateTruck, users, currentUser, onRefreshData }: DashboardProps) {
   const activeBranches = branches || [];
   const activeUsers = users || [];
 
@@ -254,23 +255,30 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
   const [simProgress, setSimProgress] = useState<Record<string, number>>({});
   const [telemetryTick, setTelemetryTick] = useState<number>(0);
 
-  // Live telemetry simulation and dynamic fleet position ticker
+  // Periodic live Fleet Complete Telemetry sync polling
   useEffect(() => {
+    const syncTelemetry = async () => {
+      try {
+        const res = await fetch('/api/telematics/sync', { method: 'POST' });
+        if (res.ok && onRefreshData) {
+          onRefreshData();
+        }
+      } catch (e) {
+        // Silently ignore network sync hiccups
+      }
+    };
+    
+    // Initial sync on load
+    syncTelemetry();
+
+    // Auto-poll live telemetry every 60 seconds
     const timer = setInterval(() => {
       setTelemetryTick(prev => prev + 1);
-      setSimProgress(prev => {
-        const next: Record<string, number> = { ...prev };
-        displayTrucks.forEach(t => {
-          const curr = next[t.id] ?? 0.15;
-          const speed = t.gpsSpeed || t.speed || 50;
-          const speedFactor = (speed / 100) * 0.005;
-          next[t.id] = (curr + Math.max(0.002, speedFactor)) % 1;
-        });
-        return next;
-      });
-    }, 1000);
+      syncTelemetry();
+    }, 60000);
+
     return () => clearInterval(timer);
-  }, [displayTrucks]);
+  }, [onRefreshData]);
   const [lastRadarPingTime, setLastRadarPingTime] = useState<string>(() => new Date().toLocaleTimeString());
   const [isPinging, setIsPinging] = useState<boolean>(false);
   const [pingPulseLocation, setPingPulseLocation] = useState<{ x: number, y: number } | null>(null);
@@ -1398,60 +1406,17 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 const isOnline = isTruckOnline(t);
                 
                 const trAny = t as any;
-                const idStr = String(t.id || '2401').toLowerCase();
-                const nameStr = String(t.name || '').toLowerCase();
-                const idHash = idStr.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+                const rawSpeedVal = typeof trAny?.speed === 'number' && !isNaN(trAny.speed) ? trAny.speed : (typeof trAny?.gpsSpeed === 'number' && !isNaN(trAny.gpsSpeed) ? trAny.gpsSpeed : 0);
+                const activeSpeed = Math.max(0, Math.round(rawSpeedVal));
 
-                const realGpsSpeed = trAny?.gpsSpeed;
-                const hasGpsSpeed = typeof realGpsSpeed === 'number' && !isNaN(realGpsSpeed);
+                const isExplicitDriving = trAny?.status === 'Driving' || trAny?.status === 'In Transit' || trAny?.status === 'En Route' || trAny?.isDriving === true;
+                const isExplicitIdling = trAny?.status === 'Idling' || trAny?.ignitionStatus === 'IDLING' || (trAny?.gpsIdlingMins || trAny?.idlingMins || 0) > 0;
 
-                const isNoDriver = !t.driver || t.driver.toLowerCase() === 'no driver' || t.driver.toLowerCase() === 'unassigned';
-                const isLoadedInTransit = assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED;
-                const isExplicitDriving = trAny?.status === 'Driving' || trAny?.status === 'In Transit';
-                const isExplicitParked = trAny?.status === 'Parked' || trAny?.status === 'Stationary' || trAny?.status === 'Off';
-                const isExplicitIdling = trAny?.status === 'Idling';
+                const isDriving = activeSpeed > 0 || isExplicitDriving;
+                const isIdling = !isDriving && isExplicitIdling;
+                const isParked = !isDriving && !isIdling;
 
-                let isDriving = false;
-                let isIdling = false;
-                let isParked = true;
-
-                if (hasGpsSpeed && realGpsSpeed > 0) {
-                  // Real telemetry says we are moving
-                  isDriving = true;
-                  isIdling = false;
-                  isParked = false;
-                } else if (isExplicitIdling || (trAny?.gpsIdlingMins || 0) > 0) {
-                  // Real telemetry says engine idling
-                  isDriving = false;
-                  isIdling = true;
-                  isParked = false;
-                } else if (isExplicitParked || (isNoDriver && !isExplicitDriving && !isLoadedInTransit)) {
-                  // No driver assigned or explicitly marked parked -> Parked at Depot Yard
-                  isDriving = false;
-                  isIdling = false;
-                  isParked = true;
-                } else {
-                  // Assigned driver & active route/load -> Driving (En route, left the yard)
-                  isDriving = true;
-                  isIdling = false;
-                  isParked = false;
-                }
-
-                let speedValue = 0;
-                if (isDriving) {
-                  if (hasGpsSpeed && realGpsSpeed > 0) {
-                    speedValue = Math.round(realGpsSpeed);
-                  } else {
-                    // Smooth live speed fluctuations unique per vehicle (e.g. 48 - 74 km/h)
-                    const baseSpeed = 52 + (idHash % 20);
-                    const variance = Math.round(Math.sin((telemetryTick * 0.7) + (idHash % 7)) * 6);
-                    speedValue = Math.max(38, Math.min(88, baseSpeed + variance));
-                  }
-                } else {
-                  speedValue = 0;
-                }
-
-                const statusText = isDriving ? 'Driving' : (isIdling ? 'Idling' : 'Parked');
+                const statusText = isDriving ? (activeSpeed > 0 ? `${activeSpeed} km/h` : 'Driving') : (isIdling ? 'Idling' : 'Parked');
                 
                 return {
                   ...t,
@@ -1459,7 +1424,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                   name: t.name,
                   driver: t.driver || 'No Driver',
                   type: t.type || 'Carrier',
-                  activeSpeed: speedValue,
+                  activeSpeed: activeSpeed,
                   isDriving,
                   isIdling,
                   isParked,
@@ -2794,6 +2759,34 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <div className="py-1">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      setActiveActionMenuTruckId(null);
+                                      setToastMessage(`Pinging Fleet Complete for ${truckRow.name}...`);
+                                      try {
+                                        const res = await fetch('/api/telematics/ping', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ truckId: truckRow.id, name: truckRow.name })
+                                        });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                          setToastMessage(`Live Fleet Complete ping received for ${truckRow.name}`);
+                                          setSysLogs(prev => [`[${new Date().toLocaleTimeString()}] Live Telematics Ping OK: ${truckRow.name}`, ...prev.slice(0, 3)]);
+                                          if (onRefreshData) onRefreshData();
+                                        } else {
+                                          setToastMessage(`Ping completed: ${data.message || 'Updated'}`);
+                                        }
+                                      } catch (e) {
+                                        setToastMessage(`Ping sent for ${truckRow.name}`);
+                                      }
+                                    }}
+                                    className="w-full text-left px-4 py-1.5 hover:bg-teal-50 hover:text-teal-800 transition-colors flex items-center font-bold text-teal-700"
+                                  >
+                                    <span className="w-2 h-2 rounded-full bg-teal-500 mr-2 animate-pulse"></span>
+                                    Ping Live GPS
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => {

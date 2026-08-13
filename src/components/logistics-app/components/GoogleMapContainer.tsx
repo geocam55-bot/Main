@@ -778,19 +778,19 @@ function MapInner({
           const storeInfo = getTruckStoreInfo(truck, activeBranches);
           const isOnline = isTruckOnline(truck);
           const isNoDriver = !truck.driver || truck.driver.toLowerCase() === 'no driver' || truck.driver.toLowerCase() === 'unassigned';
-          const isExplicitParked = truck.status === 'Parked' || truck.status === 'Stationary' || truck.status === 'Off';
-
           const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
-          const isMoving = !isNoDriver && !isExplicitParked && isOnline && (
-            (typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0) || 
-            Boolean(assignedDelivery) || 
-            truck.isDriving === true ||
-            truck.status === 'Driving' ||
-            truck.status === 'In Transit' ||
-            truck.status === 'En Route' ||
-            truck.status === 'Active'
+
+          const hasGpsSpeed = typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0;
+          const hasActiveDelivery = Boolean(assignedDelivery);
+          const isExplicitDriving = truck.status === 'Driving' || truck.status === 'In Transit' || truck.status === 'En Route' || truck.status === 'Active' || truck.ignitionStatus === 'ON' || truck.isDriving === true;
+          const isExplicitIdling = truck.status === 'Idling' || truck.ignitionStatus === 'IDLING' || (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0) || truck.isIdling === true;
+
+          const isMoving = isOnline && (
+            hasGpsSpeed ||
+            isExplicitDriving ||
+            (!isNoDriver && (hasActiveDelivery || (truck.status !== 'Parked' && truck.status !== 'Stationary' && truck.status !== 'Off')))
           );
-          const isIdling = !isNoDriver && !isExplicitParked && !isMoving && isOnline && ((typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0) || truck.isIdling === true);
+          const isIdling = !isMoving && isOnline && isExplicitIdling;
 
           const coords = getTruckCoords(truck, simProgress, activeBranches);
           const isSelected = selectedTrackTruckId === truck.id;
@@ -862,28 +862,7 @@ function MapInner({
                   style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16', borderColor: '#ffffff' } : {}}
                 ></div>
 
-                {/* Hover / Selected Store Tag & GPS Telemetry Badge */}
-                <div className={`absolute top-10 bg-slate-900/95 text-white font-sans text-[9px] px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap z-30 pointer-events-none transition-all flex flex-col gap-1 border border-slate-700/80 ${
-                  isSelected ? 'opacity-100 scale-100' : 'opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100'
-                }`}>
-                  <div className="flex items-center gap-1.5 font-bold">
-                    <span 
-                      className={`inline-block w-2 h-2 rounded-full border border-white/50 ${storeInfo.bgColor}`}
-                      style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16' } : {}}
-                    />
-                    <span>{storeInfo.storeName} Fleet • {truck.name}</span>
-                  </div>
-                  <div className="font-mono text-[8.5px] text-amber-300 flex items-center gap-1 pt-0.5 border-t border-slate-800">
-                    <span>🛰️ GPS: {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</span>
-                    <span className="text-slate-400">|</span>
-                    <span className="text-emerald-400">{isMoving ? `${speedKmh} km/h` : isIdling ? 'Idling' : 'Parked'}</span>
-                  </div>
-                  {truck.gpsDeviceId && (
-                    <div className="font-mono text-[8px] text-slate-300">
-                      ID: {truck.gpsDeviceId}
-                    </div>
-                  )}
-                </div>
+
               </div>
             </AdvancedMarker>
           );

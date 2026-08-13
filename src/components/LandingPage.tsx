@@ -46,7 +46,7 @@ import {
   Briefcase,
   Layers2,
   FileSpreadsheet,
-  AlertBubble,
+  AlertCircle,
   HelpCircle,
   X,
   Menu,
@@ -1063,3 +1063,5 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
     </div>
   );
 }
+
+export default LandingPage;

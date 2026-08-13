@@ -2914,7 +2914,7 @@ self.addEventListener('activate', (event) => {
   });
 
   const locations = [
-    path.join(process.cwd(), 'build'),
+    path.join(process.cwd(), 'dist'),
     path.join(process.cwd(), 'dist')
   ];
   let distPath = locations[0];
@@ -2938,7 +2938,7 @@ self.addEventListener('activate', (event) => {
 
   if (!isProduction) {
     const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false },
+      server: { middlewareMode: true,  },
       appType: "custom",
     });
     app.use(vite.middlewares);

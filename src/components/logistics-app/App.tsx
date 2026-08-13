@@ -118,6 +118,13 @@ function extractVehicleNumber(str: string | undefined | null): string | null {
   return match ? match[0] : null;
 }
 
+function getFallbackDriverName(idOrName: string, currentDriver?: string): string {
+  if (currentDriver && !['no driver', 'unassigned', 'driver', ''].includes(currentDriver.trim().toLowerCase())) {
+    return currentDriver;
+  }
+  return 'No Driver';
+}
+
 function deduplicateTrucks(trucksList: Truck[]): Truck[] {
   const map = new Map<string, Truck>();
 
@@ -150,13 +157,14 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
     }
 
     if (!existingKey) {
-      map.set(idKey, truck);
+      const fallbackDriver = getFallbackDriverName(truck.id || truck.name, truck.driver);
+      map.set(idKey, { ...truck, driver: fallbackDriver });
     } else {
       const existing = map.get(existingKey)!;
       const isTruckDriverValid = truck.driver && !['no driver', 'unassigned', 'driver', ''].includes(truck.driver.trim().toLowerCase());
       const isExistingDriverValid = existing.driver && !['no driver', 'unassigned', 'driver', ''].includes(existing.driver.trim().toLowerCase());
 
-      let driverName = 'No Driver';
+      let driverName = getFallbackDriverName(truck.id || truck.name, existing.driver || truck.driver);
       if (isTruckDriverValid && isExistingDriverValid) {
         if (truck.assignedDriverId && !existing.assignedDriverId) {
           driverName = truck.driver;
@@ -1692,29 +1700,6 @@ export default function App() {
     // Migrate branch ID "DC-ELMSDALE" to "01070"
     if (newTrucks.some(t => t.branchId === "DC-ELMSDALE" || t.branchId === "ELMSDALE")) {
       newTrucks = newTrucks.map(t => (t.branchId === "DC-ELMSDALE" || t.branchId === "ELMSDALE") ? { ...t, branchId: "01070" } : t);
-      stateUpdated = true;
-    }
-
-    // Ensure unit 2401 (Almon F-15) is placed on Chain Lake Drive, Halifax
-    const needsAlmonFix = newTrucks.some(t => {
-      const lower = ((t.id || '') + ' ' + (t.name || '') + ' ' + (t.homeDepot || '')).toLowerCase();
-      return (lower.includes('2401') || lower.includes('almon')) && (t.lat !== 44.6468 || t.lng !== -63.6712 || t.gpsLat !== 44.6468 || t.gpsLng !== -63.6712);
-    });
-    if (needsAlmonFix) {
-      newTrucks = newTrucks.map(t => {
-        const lower = ((t.id || '') + ' ' + (t.name || '') + ' ' + (t.homeDepot || '')).toLowerCase();
-        if (lower.includes('2401') || lower.includes('almon')) {
-          return {
-            ...t,
-            lat: 44.6468,
-            lng: -63.6712,
-            gpsLat: 44.6468,
-            gpsLng: -63.6712,
-            locationName: '200 Chain Lake Dr, Halifax, NS B3S 1A2, Canada'
-          };
-        }
-        return t;
-      });
       stateUpdated = true;
     }
 
@@ -3297,6 +3282,7 @@ export default function App() {
               onUpdateTruck={handleUpdateTruck}
               users={users}
               currentUser={currentUser}
+              onRefreshData={handleForceRefreshLive}
             />
           )}
           {activeTab === 'live-dashboard' && (
@@ -3386,6 +3372,7 @@ export default function App() {
               trucks={trucks}
               branches={branches}
               onUpdateTruck={handleUpdateTruck}
+              onRefreshData={() => setLoadTrigger(prev => prev + 1)}
             />
           )}
           {activeTab === 'users' && (

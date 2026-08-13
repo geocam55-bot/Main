@@ -1,1 +1,4 @@
-[DIAG] Server starting at 2026-08-12T16:09:27.314Z
+[DIAG] Server starting at 2026-08-13T23:08:52.900Z
+[2026-08-13T23:08:56.631Z] REQ: HEAD / (original: /)
+[2026-08-13T23:09:04.850Z] REQ: GET /api/vehicles (original: /api/vehicles)
+[2026-08-13T23:09:06.487Z] REQ: GET /api/vehicles (original: /api/vehicles)

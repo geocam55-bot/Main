@@ -76,9 +76,10 @@ interface GpsSetupProps {
   trucks: Truck[];
   branches: Branch[];
   onUpdateTruck: (truck: Truck) => void;
+  onRefreshData?: () => void;
 }
 
-export default function GpsSetup({ trucks, branches, onUpdateTruck }: GpsSetupProps) {
+export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshData }: GpsSetupProps) {
   // Input states for building a GPS connection record
   const [selectedTruckId, setSelectedTruckId] = useState('');
   const [deviceId, setDeviceId] = useState('');

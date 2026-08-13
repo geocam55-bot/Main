@@ -232,24 +232,6 @@ export function deserializeType(truck: any): any {
   const gIdle = getLastMatch(/\|\|gpsIdlingMins:([^|]+)/g);
   if (gIdle && !isNaN(parseFloat(gIdle))) gpsIdlingMins = parseFloat(gIdle);
 
-  const idOrNameClean = ((truck.id || "") + " " + (truck.name || "") + " " + (gpsDeviceName || "")).toLowerCase();
-  const is1903 = idOrNameClean.includes("1903");
-  const isAlmon = idOrNameClean.includes("2401") || idOrNameClean.includes("almon");
-
-  if (lat === undefined || lng === undefined) {
-    if (isAlmon) {
-      lat = 44.6468;
-      lng = -63.6712;
-      gpsLat = 44.6468;
-      gpsLng = -63.6712;
-    } else if (is1903) {
-      lat = 44.9792;
-      lng = -63.5042;
-      gpsLat = 44.9792;
-      gpsLng = -63.5042;
-    }
-  }
-
   if (lat !== undefined && lng !== undefined) {
     const san = sanitizeGpsCoordinates(lat, lng);
     lat = san.lat;

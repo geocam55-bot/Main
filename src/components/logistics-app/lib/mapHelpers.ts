@@ -361,19 +361,61 @@ export const getDeliveryCoordinates = (id: string, address: string, originX?: nu
   return { x: coords.x, y: coords.y, lat: gps.lat, lng: gps.lng };
 };
 
-export const getTruckCoords = (truck: any, simProgress: Record<string, number>, branches: any[]) => {
+export const HIGHWAY_102_ROUTE = [
+  { lat: 44.9792, lng: -63.5042 }, // RONA Elmsdale Depot
+  { lat: 44.9450, lng: -63.5350 }, // Hwy 102 Enfield
+  { lat: 44.8780, lng: -63.5620 }, // Hwy 102 Goffs / Aerotech
+  { lat: 44.8350, lng: -63.5980 }, // Hwy 102 Fall River
+  { lat: 44.7720, lng: -63.6380 }, // Hwy 102 Waverley
+  { lat: 44.7311, lng: -63.6620 }, // Hwy 102 Bedford / Sackville
+  { lat: 44.6980, lng: -63.6420 }, // Hwy 102 Rockingham / Bicentennial
+  { lat: 44.6568, lng: -63.6003 }, // RONA Halifax (Almon St)
+  { lat: 44.6980, lng: -63.6420 },
+  { lat: 44.7311, lng: -63.6620 },
+  { lat: 44.7720, lng: -63.6380 },
+  { lat: 44.8350, lng: -63.5980 },
+  { lat: 44.8780, lng: -63.5620 },
+  { lat: 44.9450, lng: -63.5350 },
+  { lat: 44.9792, lng: -63.5042 },
+];
+
+export const HIGHWAY_111_ROUTE = [
+  { lat: 44.6855, lng: -63.5825 }, // RONA Windmill Burnside HQ
+  { lat: 44.7080, lng: -63.5852 }, // Akerley Blvd / Hwy 111
+  { lat: 44.7280, lng: -63.6250 }, // Magazine Hill / Hwy 101
+  { lat: 44.7311, lng: -63.6620 }, // Bedford Hwy 102 Junction
+  { lat: 44.6980, lng: -63.6420 },
+  { lat: 44.6568, lng: -63.6003 }, // RONA Halifax
+  { lat: 44.6710, lng: -63.5850 }, // Dartmouth Crossing
+  { lat: 44.6855, lng: -63.5825 },
+];
+
+export const HIGHWAY_103_ROUTE = [
+  { lat: 44.7030, lng: -63.8571 }, // RONA Tantallon Depot
+  { lat: 44.6880, lng: -63.8115 }, // Hubley Hwy 103
+  { lat: 44.6650, lng: -63.7250 }, // Timberlea / Beechville
+  { lat: 44.6488, lng: -63.6352 }, // Joseph Howe Hwy 103 Exit
+  { lat: 44.6568, lng: -63.6003 }, // RONA Halifax
+  { lat: 44.6488, lng: -63.6352 },
+  { lat: 44.6650, lng: -63.7250 },
+  { lat: 44.6880, lng: -63.8115 },
+  { lat: 44.7030, lng: -63.8571 },
+];
+
+export const getTruckCoords = (truck: any, simProgress?: Record<string, number>, branches: any[] = []) => {
   const isTruckGps = truck?.gpsSource === 'truck';
 
   const rawLat = truck?.gpsLat ?? truck?.lat ?? truck?.latitude ?? truck?.current_latitude;
   const rawLng = truck?.gpsLng ?? truck?.lng ?? truck?.longitude ?? truck?.current_longitude;
   const numLat = typeof rawLat === 'number' ? rawLat : (typeof rawLat === 'string' ? parseFloat(rawLat) : NaN);
   const numLng = typeof rawLng === 'number' ? rawLng : (typeof rawLng === 'string' ? parseFloat(rawLng) : NaN);
-  const hasRealGps = !isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0;
+  const hasValidStaticGps = !isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0;
 
-  let baseLat = hasRealGps ? numLat : 44.68550;
-  let baseLng = hasRealGps ? numLng : -63.58250;
+  // Fallback to recorded lat/lng or home branch depot
+  let baseLat = hasValidStaticGps ? numLat : 44.68550;
+  let baseLng = hasValidStaticGps ? numLng : -63.58250;
 
-  if (!hasRealGps) {
+  if (!hasValidStaticGps && Array.isArray(branches)) {
     const homeBranch = branches.find(b => isTruckAssignedToBranch(truck, b));
     if (homeBranch) {
       const branchCoords = getBranchCoordinates(homeBranch.id, homeBranch.name, homeBranch.address);
@@ -384,7 +426,7 @@ export const getTruckCoords = (truck: any, simProgress: Record<string, number>, 
 
   const sanitizedBase = sanitizeGpsCoordinates(baseLat, baseLng);
 
-  return { lat: sanitizedBase.lat, lng: sanitizedBase.lng, hasRealGps, isTruckGps };
+  return { lat: sanitizedBase.lat, lng: sanitizedBase.lng, hasRealGps: hasValidStaticGps, isTruckGps };
 };
 
 export const getPercentCoordsFromGps = (lat: number, lng: number): { x: number; y: number } => {

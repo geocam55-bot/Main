@@ -18,39 +18,47 @@ import { canAccessSpace, initializePermissions } from './utils/permissions';
 import { getTheme } from './utils/themes';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
-// ── Code-split: lazy-loaded page modules (only fetched when navigated to) ──
+// ── Eagerly loaded entry & authentication views (guaranteed instant render with no chunk fetch errors) ──
+import { LandingPage } from './components/LandingPage';
+import { SpaceChooser } from './components/SpaceChooser';
+import { SpaceAccessNotice } from './components/SpaceAccessNotice';
+import { Login } from './components/Login';
+import { MemberLogin } from './components/MemberLogin';
+import { FreeSignup } from './components/FreeSignup';
+
+// ── Code-split: lazy-loaded secondary page modules with automatic retry ──
 const lazyNamed = <T extends Record<string, any>>(
   factory: () => Promise<T>,
-  name: keyof T
-) => lazy(() => 
-  factory()
-    .then((m) => ({ default: m[name] as React.ComponentType<any> }))
-    .catch((err) => {
-      const isDynamicImportError = 
-        err.message?.includes('Failed to fetch dynamically imported module') ||
-        err.message?.includes('Importing a module script failed') ||
-        err.message?.includes('chunk') ||
-        err.name === 'TypeError';
-
-      if (isDynamicImportError) {
-        const lastReload = sessionStorage.getItem('last-chunk-reload');
-        const now = Date.now();
-        if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
-          sessionStorage.setItem('last-chunk-reload', String(now));
-          window.location.reload();
+  name: keyof T,
+  retries = 2
+) => lazy(() => {
+  const load = (attemptsLeft: number): Promise<{ default: React.ComponentType<any> }> => {
+    return factory()
+      .then((m) => ({ default: (m[name] || m.default) as React.ComponentType<any> }))
+      .catch((err) => {
+        if (attemptsLeft > 0) {
+          return new Promise((resolve) => setTimeout(resolve, 500)).then(() => load(attemptsLeft - 1));
         }
-      }
-      throw err;
-    })
-);
+        const isDynamicImportError = 
+          err.message?.includes('Failed to fetch dynamically imported module') ||
+          err.message?.includes('Importing a module script failed') ||
+          err.message?.includes('chunk') ||
+          err.name === 'TypeError';
 
-// Lazy load non-critical authentication or secondary dashboard entry screens
-const LandingPage = lazyNamed(() => import('./components/LandingPage'), 'LandingPage');
-const SpaceChooser = lazyNamed(() => import('./components/SpaceChooser'), 'SpaceChooser');
-const SpaceAccessNotice = lazyNamed(() => import('./components/SpaceAccessNotice'), 'SpaceAccessNotice');
-const Login = lazyNamed(() => import('./components/Login'), 'Login');
-const MemberLogin = lazyNamed(() => import('./components/MemberLogin'), 'MemberLogin');
-const FreeSignup = lazyNamed(() => import('./components/FreeSignup'), 'FreeSignup');
+        if (isDynamicImportError) {
+          const lastReload = sessionStorage.getItem('last-chunk-reload');
+          const now = Date.now();
+          if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+            sessionStorage.setItem('last-chunk-reload', String(now));
+            window.location.reload();
+          }
+        }
+        throw err;
+      });
+  };
+  return load(retries);
+});
+
 const PlanSelection = lazyNamed(() => import('./components/subscription/PlanSelection'), 'PlanSelection');
 
 // Lazy load heavy public-facing pages and developmental tools
