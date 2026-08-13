@@ -2900,7 +2900,7 @@ export default function App() {
                             }`}
                           >
                             <TruckIcon className="h-4 w-4 text-emerald-600" />
-                            <span>Mobile EPOD</span>
+                            <span>Driver Mobile App</span>
                           </button>
 
                           <button
@@ -3128,7 +3128,7 @@ export default function App() {
                         }`}
                       >
                         <TruckIcon className="h-4 w-4 text-emerald-600" />
-                        <span>Mobile EPOD</span>
+                        <span>Driver Mobile App</span>
                       </button>
                       <button
                         onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
