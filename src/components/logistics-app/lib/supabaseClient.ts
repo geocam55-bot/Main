@@ -221,7 +221,6 @@ export function deserializeType(truck: any): any {
     // Map snake_case DB columns back to camelCase frontend interface
     branchId: truck.branchId || truck.branch_id || truck.branchid || truck.storeId || truck.store_id || '',
     branch_id: truck.branch_id || truck.branchId || truck.branchid || '',
-    imageUrl: imageUrl || truck.image_url || truck.imageUrl || '',
     truckNumber: truck.truck_number || truck.truckNumber,
     vin: truck.vin,
     licensePlate: truck.license_plate || truck.licensePlate,
@@ -886,6 +885,66 @@ export async function saveTenantStateDirect(
   ]);
 
   return { supabaseActive: true };
+}
+
+// Save or update an individual truck directly in Supabase
+export async function saveTruckDirect(truck: any, tenantId: string) {
+  const supabase = getFrontendSupabase();
+  if (!supabase) return;
+  const tid = String(tenantId);
+  const serialized: any = {
+    id: String(truck.id),
+    tenantId: tid,
+    name: truck.name || `Truck ${truck.id}`,
+    type: serializeToType(truck.type, truck.registrationDueDate, truck.imageUrl),
+    driver: truck.driver || 'No Driver',
+    branchId: truck.branchId || truck.branch_id || null,
+    branch_id: truck.branchId || truck.branch_id || null,
+    image_url: truck.imageUrl || truck.image_url || null,
+    registration_due_date: truck.registrationDueDate || null,
+    truck_number: truck.truckNumber || null,
+    vin: truck.vin || null,
+    license_plate: truck.licensePlate || null,
+    make: truck.make || null,
+    model: truck.model || null,
+    year: truck.year || null,
+    color: truck.color || null,
+    capacity_weight_kg: truck.capacityWeightKg || null,
+    capacity_volume_m3: truck.capacityVolumeM3 || null,
+    fuel_type: truck.fuelType || null,
+    current_mileage: truck.currentMileage || null,
+    last_service_date: truck.lastServiceDate || null,
+    next_service_due_date: truck.nextServiceDueDate || null,
+    insurance_policy_number: truck.insurancePolicyNumber || null,
+    insurance_expiry_date: truck.insuranceExpiryDate || null,
+    user_field_1: truck.userField1 || null,
+    user_field_2: truck.userField2 || null
+  };
+
+  let payload = { ...serialized };
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { error } = await supabase.from("trucks").upsert(payload);
+    if (!error) break;
+    const errMsg = error.message || String(error);
+    const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
+    if (colMatch && colMatch[1] && payload[colMatch[1]] !== undefined) {
+      delete payload[colMatch[1]];
+    } else {
+      // Fallback to essential columns
+      const fallbackPayload = {
+        id: serialized.id,
+        tenantId: serialized.tenantId,
+        name: serialized.name,
+        type: serialized.type,
+        driver: serialized.driver,
+        branchId: serialized.branchId,
+        image_url: serialized.image_url,
+        registration_due_date: serialized.registration_due_date
+      };
+      await supabase.from("trucks").upsert(fallbackPayload).catch(console.warn);
+      break;
+    }
+  }
 }
 
 // Delete record directly

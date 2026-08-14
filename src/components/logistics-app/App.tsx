@@ -15,6 +15,7 @@ import {
   deleteTenantDirect, 
   fetchTenantStateDirect, 
   saveTenantStateDirect, 
+  saveTruckDirect,
   saveUserHeartbeatDirect,
   deleteRecordDirect, 
   clearAllDirect,
@@ -234,7 +235,6 @@ export default function App() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
   const [activeNavDropdown, setActiveNavDropdown] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState<boolean>(false);
-  const [isAppClosed, setIsAppClosed] = useState<boolean>(false);
   const [allTenants, setAllTenants] = useState<Tenant[]>(() => {
     const cached = localStorage.getItem('prospaces_all_tenants');
     if (cached) {
@@ -889,25 +889,7 @@ export default function App() {
       console.warn("Supabase sign out error:", e);
     }
 
-    const isLogisticsPage = typeof window !== 'undefined' && (
-      window.location.pathname.includes('logistics.html') ||
-      sessionStorage.getItem('accessed_from_crm') !== 'true'
-    );
-
-    if (isLogisticsPage) {
-      try {
-        window.close();
-        window.open('', '_self', '');
-        window.close();
-      } catch (e) {
-        console.warn("Direct window.close prevented by browser security:", e);
-      }
-      setIsAppClosed(true);
-      return;
-    }
-
-    // Redirect user to the ProSpaces CRM Hero page if accessed from main CRM
-    window.location.href = '/';
+    setShowLogin(true);
   };
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
@@ -1526,7 +1508,7 @@ export default function App() {
       if (document.visibilityState === 'visible') {
         setLoadTrigger(prev => prev + 1);
       }
-    }, 5000);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, [currentTenant, currentUser?.role]);
@@ -1985,29 +1967,22 @@ export default function App() {
   const deleteRecordWithFallback = async (table: string, id: string, tenantId: string) => {
     lastMutationTimeRef.current = Date.now();
     recentlyDeletedIdsRef.current.add(id);
-    if (isExpressBackendAvailableRef.current === false) {
-      try {
-        await deleteRecordDirect(table, id, tenantId);
-      } catch (directErr) {
-        console.error("Direct Supabase record deletion failed as well:", directErr);
-      }
-      return;
+
+    // 1. Trigger direct Supabase client deletion for instantaneous database consistency
+    try {
+      await deleteRecordDirect(table, id, tenantId);
+    } catch (directErr) {
+      console.warn("Direct Supabase deletion notice:", directErr);
     }
+
+    // 2. Also notify express backend to clean in-memory state and perform server-side cascade
     try {
       const res = await customFetch(`/api/tenant/delete-record?table=${table}&id=${id}&tenantId=${tenantId}`, { method: 'DELETE' });
       if (!res.ok) {
-        throw new Error(`Server returned status ${res.status}`);
+        console.warn(`Server delete-record returned status ${res.status}`);
       }
-      const data = await res.json();
-      if (data.supabaseActive === false) throw new Error("Supabase is unconfigured on server.");
-    } catch (err) {
-      isExpressBackendAvailableRef.current = false;
-      console.warn(`API record deletion failed, attempting direct Supabase query fallback:`, err);
-      try {
-        await deleteRecordDirect(table, id, tenantId);
-      } catch (directErr) {
-        console.error("Direct Supabase record deletion failed as well:", directErr);
-      }
+    } catch (apiErr) {
+      console.warn("API delete-record notice:", apiErr);
     }
   };
 
@@ -2034,12 +2009,24 @@ export default function App() {
       ...newTruck,
       tenantId: currentTenant.id
     };
-    const updated = [...trucks, truckWithTenant];
+    const updated = [...trucks.filter(t => t.id !== truckWithTenant.id), truckWithTenant];
     setTrucks(updated);
+    setSyncStatus('SYNCING');
     try {
       localStorage.setItem(`prospaces_trucks_tenant_${currentTenant.id}`, JSON.stringify(updated));
     } catch {}
-    await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
+
+    try {
+      // 1. Direct Supabase write for instant guaranteed persistence in supabase table
+      await saveTruckDirect(truckWithTenant, currentTenant.id);
+      // 2. Sync state to ensure backend and other clients are synchronized
+      await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
+      setSyncStatus('IDLE');
+      setLastSyncTime(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.error("Add truck persistence error:", err);
+      setSyncStatus('ERROR');
+    }
   };
 
   const handleUpdateTruck = async (updatedTruck: Truck) => {
@@ -2051,10 +2038,22 @@ export default function App() {
     };
     const updated = trucks.map(t => t.id === updatedTruck.id ? truckWithTenant : t);
     setTrucks(updated);
+    setSyncStatus('SYNCING');
     try {
       localStorage.setItem(`prospaces_trucks_tenant_${currentTenant.id}`, JSON.stringify(updated));
     } catch {}
-    await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
+
+    try {
+      // 1. Direct Supabase write for instant guaranteed persistence in supabase table
+      await saveTruckDirect(truckWithTenant, currentTenant.id);
+      // 2. Sync state to ensure backend and other clients are synchronized
+      await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
+      setSyncStatus('IDLE');
+      setLastSyncTime(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.error("Update truck persistence error:", err);
+      setSyncStatus('ERROR');
+    }
   };
 
   const handleDeleteTruck = async (id: string) => {
@@ -2063,9 +2062,18 @@ export default function App() {
     setTrucks(updated);
     setSyncStatus('SYNCING');
     lastMutationTimeRef.current = Date.now();
+    recentlyDeletedIdsRef.current.add(id);
     try {
+      localStorage.setItem(`prospaces_trucks_tenant_${currentTenant.id}`, JSON.stringify(updated));
+    } catch {}
+
+    try {
+      // 1. Permanently remove truck from Supabase database table and telemetry history
       await deleteRecordWithFallback('trucks', id, currentTenant.id);
+      // 2. Sync remaining state
       await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
+      setSyncStatus('IDLE');
+      setLastSyncTime(new Date().toLocaleTimeString());
     } catch (err) {
       console.error("Delete truck error:", err);
       setSyncStatus('ERROR');
@@ -2265,69 +2273,6 @@ export default function App() {
   };
 
 
-  if (isAppClosed) {
-    const handleCloseWindowAction = () => {
-      try {
-        window.close();
-      } catch (e) {
-        console.warn("window.close blocked:", e);
-      }
-      try {
-        window.open('', '_self', '');
-        window.close();
-      } catch (e) {
-        console.warn("self-open close blocked:", e);
-      }
-      // Fallback: If browser security blocks closing tabs that weren't opened by script, redirect to blank page
-      setTimeout(() => {
-        if (typeof window !== 'undefined') {
-          window.location.href = 'about:blank';
-        }
-      }, 150);
-    };
-
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center font-sans antialiased text-slate-100">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 animate-in fade-in duration-200">
-          <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-center mx-auto text-blue-400">
-            <LogOut className="h-8 w-8 text-blue-400" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-xl font-extrabold text-white">ProSpaces Logistics Closed</h2>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              You have logged off and exited the ProSpaces Logistics application. Your session has been safely destroyed.
-            </p>
-          </div>
-          <div className="pt-2 space-y-3">
-            <button
-              type="button"
-              onClick={() => {
-                setIsAppClosed(false);
-                setShowLogin(true);
-                if (typeof window !== 'undefined' && window.location.pathname.includes('logistics.html')) {
-                  window.location.reload();
-                }
-              }}
-              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
-            >
-              Log Back In to ProSpaces Logistics
-            </button>
-            <button
-              type="button"
-              onClick={handleCloseWindowAction}
-              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-all cursor-pointer"
-            >
-              Close Window / Clear Page
-            </button>
-            <p className="text-[10px] text-slate-500 font-mono italic">
-              Note: If your browser security policy prevents automatic tab closure, you may close this tab manually or click above to clear to a blank screen.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (!currentTenant || !currentUser) {
     if (showLogin) {
       return (
@@ -2338,16 +2283,7 @@ export default function App() {
           }} 
           tenantsList={allTenants} 
           onBackToLanding={() => { 
-            const isLogisticsPage = typeof window !== 'undefined' && (
-              window.location.pathname.includes('logistics.html') ||
-              sessionStorage.getItem('accessed_from_crm') !== 'true'
-            );
-            if (isLogisticsPage) {
-              window.close();
-              setIsAppClosed(true);
-            } else {
-              window.location.href = '/';
-            }
+            setShowLogin(false);
           }}
         />
       );
@@ -2980,7 +2916,7 @@ export default function App() {
                             }`}
                           >
                             <TruckIcon className="h-4 w-4 text-emerald-600" />
-                            <span>Driver Mobile App</span>
+                            <span>Driver ePOD & Route Dispatch</span>
                           </button>
 
                           <button
@@ -3208,7 +3144,7 @@ export default function App() {
                         }`}
                       >
                         <TruckIcon className="h-4 w-4 text-emerald-600" />
-                        <span>Driver Mobile App</span>
+                        <span>Driver ePOD & Route Dispatch</span>
                       </button>
                       <button
                         onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}

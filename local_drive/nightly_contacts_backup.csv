@@ -1,0 +1,4 @@
+"id","Name","Email","Phone","Company","Trade","Status","PriceLevel","Notes"
+"1","John Doe","john@example.com","555-0199","Acme Corp","Builder","Lead","Standard","Met at builders convention"
+"2","Sarah Jenkins","sarah@design.com","555-0144","Jenkins Design","Architect","Customer","Wholesale","Premium client"
+"3","Bob Builder","bob@constructions.com","555-0200","Bob Constructions","Carpenter","Active","Contractor","Prefers SMS updates"

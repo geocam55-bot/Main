@@ -1,5 +1,18 @@
 [
   {
+    "id": "log-3vekryv",
+    "taskId": "task-demo-1",
+    "taskName": "Unattended Nightly Contacts Backup",
+    "timestamp": "2026-08-14T11:36:47.444Z",
+    "actionType": "export",
+    "module": "contacts",
+    "fileStorage": "local",
+    "fileName": "nightly_contacts_backup.csv",
+    "status": "success",
+    "recordCount": 3,
+    "message": "Successfully exported 3 records from contacts to unattended local storage file: nightly_contacts_backup.csv"
+  },
+  {
     "id": "log-sys-ready",
     "taskId": "task-demo-1",
     "taskName": "Unattended Nightly Contacts Backup",

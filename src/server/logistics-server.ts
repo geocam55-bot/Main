@@ -1419,76 +1419,11 @@ async function runSelfHealingOnce() {
           }
         }
 
-        // 4b. Ensure default trucks in rona_atlantic tenant have GPS Hardware Serial / Device ID configured and correct positions
-        const DEFAULT_FLEET_TRUCKS = [
-          { id: "2410 - Tantallon F150", name: "2410 - Tantallon F150", model: "2024 Ford F-150 XL 4x4", driver: "No Driver", branchId: "01075", lat: 44.70885, lng: -63.58521, speed: 0, idling: 0 },
-          { id: "2401 ALMON F-15", name: "2401 ALMON F-15", model: "2024 Ford F-150 SuperCrew 4x4 (Almon OSR)", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6468, lng: -63.6712, speed: 0, idling: 0 },
-          { id: "2409 - Elmsdale F150", name: "2409 - Elmsdale F150", model: "2024 Ford F-150 XLT 4x4", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 0, idling: 0 },
-          { id: "2412 - MTN RANGER", name: "2412 - MTN RANGER", model: "2024 Ford Ranger XLT 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 0, idling: 0 },
-          { id: "2408 - MTN F150 OSR", name: "2408 - MTN F150 OSR", model: "2024 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6310, lng: -63.6620, speed: 0, idling: 0 },
-          { id: "2101 - Windmill F150", name: "2101 - Windmill F150", model: "2021 Ford F-150 XL 4x4", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.8770, lng: -63.5410, speed: 0, idling: 0 },
-          { id: "2404 - MTN 6X WesternStar Boom", name: "2404 - MTN 6X WesternStar Boom", model: "2024 Western Star 4700 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6320, lng: -63.6680, speed: 0, idling: 0 },
-          { id: "2501 - Elmsdale 6X Boom", name: "2501 - Elmsdale 6X Boom", model: "2025 Western Star 47X 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9740, lng: -63.5030, speed: 0, idling: 0 },
-          { id: "2502 - Elmsdale 4X Boom", name: "2502 - Elmsdale 4X Boom", model: "2025 Freightliner M2 106 4x2 Boom Truck", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9760, lng: -63.5050, speed: 0, idling: 0 },
-          { id: "2503 - Elmsdale 6X Boom", name: "2503 - Elmsdale 6X Boom", model: "2025 Western Star 47X 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9750, lng: -63.5020, speed: 0, idling: 0 },
-          { id: "2504 - Elmsdale 6X Boom", name: "2504 - Elmsdale 6X Boom", model: "2025 Western Star 47X 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9755, lng: -63.5060, speed: 0, idling: 0 },
-          { id: "1802 - Elmsdale 4X Boom", name: "1802 - Elmsdale 4X Boom", model: "2018 Freightliner M2 106 4x2 Boom Crane", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9745, lng: -63.5045, speed: 0, idling: 0 },
-          { id: "1701 - MTN 4X Mac Boom", name: "1701 - MTN 4X Mac Boom", model: "2017 Mack Granite 4x2 Boom Crane", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 0, idling: 0 },
-          { id: "1803 - Elmsdale S/A Curtain", name: "1803 - Elmsdale S/A Curtain", model: "2018 International MV607 Single Axle Curtain-side", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 0, idling: 0 },
-          { id: "1804 - MTN S/A Curtain", name: "1804 - MTN S/A Curtain", model: "2018 International MV607 Single Axle Curtain-side", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 0, idling: 0 },
-          { id: "1901 - Elmsdale HH", name: "1901 - Elmsdale HH", model: "2019 Freightliner M2 106 Highway Hauler", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 0, idling: 0 },
-          { id: "1902 - MTN HH", name: "1902 - MTN HH", model: "2019 Freightliner M2 106 Highway Hauler", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6295, lng: -63.6651, speed: 0, idling: 0 },
-          { id: "1702 - Elmsdale HH", name: "1702 - Elmsdale HH", model: "2017 Freightliner M2 106 Heavy Hauler", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 0, idling: 0 },
-          { id: "701 - Elmsdale T/A Flatdeck", name: "701 - Elmsdale T/A Flatdeck", model: "2020 Peterbilt 337 Tandem-Axle Flatbed", driver: "No Driver", branchId: "DC-ELMSDALE", lat: 44.9752, lng: -63.5042, speed: 0, idling: 0 },
-          { id: "1903 - Elmsdale Windows", name: "1903 - Elmsdale Windows", model: "2019 Ford F-550 Glass & Window Transport Rack", driver: "No Driver", branchId: "DC-WINAMILL", lat: 44.6855, lng: -63.5825, speed: 0, idling: 0 },
-          { id: "PEI F550 Box", name: "PEI F550 Box", model: "2022 Ford F-550 Super Duty 16ft Box Truck", driver: "No Driver", branchId: "01075", lat: 46.2382, lng: -63.1311, speed: 0, idling: 0 },
-          { id: "PEI WS BOOM", name: "PEI WS BOOM", model: "2023 Western Star 4700 6x4 Heavy Boom Crane", driver: "No Driver", branchId: "01075", lat: 46.2382, lng: -63.1311, speed: 0, idling: 0 }
-        ];
-
+        // 4b. Ensure existing trucks in rona_atlantic tenant have GPS hardware configuration if present
         const { data: existingRonaTrucks } = await supabase
           .from("trucks")
-          .select("id, name, driver")
+          .select("id, name, driver, gps_device_id")
           .eq("tenantId", "rona_atlantic");
-
-        const existingDbList = existingRonaTrucks || [];
-
-        for (const ft of DEFAULT_FLEET_TRUCKS) {
-          const ftUNum = extractTruckUnitNumber(ft.id) || extractTruckUnitNumber(ft.name);
-          const existsInDb = existingDbList.some(t => {
-            const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
-            return (
-              t.id === ft.id || 
-              (t.name && t.name.toLowerCase().trim() === ft.name.toLowerCase().trim()) ||
-              (ftUNum && tUNum && ftUNum === tUNum)
-            );
-          });
-
-          if (!existsInDb) {
-            const timestamp = new Date().toISOString();
-            const devId = `FC-${ft.id.replace(/[^a-zA-Z0-9]/g, '')}`;
-            const typeStr = serializeToType(ft.model, '2026-11-29', undefined, {
-              speed: ft.speed || 0,
-              lat: ft.lat,
-              lng: ft.lng,
-              status: 'Connected',
-              handshake: timestamp
-            });
-            await supabase.from("trucks").upsert({
-              id: ft.id,
-              tenantId: "rona_atlantic",
-              name: ft.name,
-              type: typeStr,
-              driver: ft.driver || "No Driver",
-              branchId: ft.branchId || "DC-WINAMILL",
-              gps_device_id: devId,
-              gps_device_name: "Fleet Complete FT1 Telematics",
-              registrationDueDate: '2026-11-29',
-              is_active: true,
-              updated_date: timestamp
-            });
-            console.log(`[Fleet Seed] Upserted default fleet truck ${ft.id} into rona_atlantic`);
-          }
-        }
 
         // 5. Ensure Fleet Complete connection & token is initialized and active in Supabase
         try {
@@ -1503,53 +1438,22 @@ async function runSelfHealingOnce() {
 
         const { data: ronaTrucks } = await supabase
           .from("trucks")
-          .select("*")
+          .select("id, gps_device_id")
           .eq("tenantId", "rona_atlantic");
 
         if (ronaTrucks && ronaTrucks.length > 0) {
           for (const t of ronaTrucks) {
-            const deserialized = deserializeType(t);
-            const is1903 = t.id.includes("1903") || t.name.includes("1903");
-            const isAlmon2401 = t.id.includes("2401") || t.name.includes("2401") || t.name.toLowerCase().includes("almon");
-            const is2101 = t.id.includes("2101") || t.name.includes("2101");
-
-            const matchedFt = DEFAULT_FLEET_TRUCKS.find(ft => ft.id === t.id || ft.name === t.name);
-
-            // Set realistic initial position / telematics
-            let initialLat = (typeof deserialized.gpsLat === 'number' && !isNaN(deserialized.gpsLat)) ? deserialized.gpsLat : ((matchedFt ? matchedFt.lat : deserialized.lat) || (is2101 ? 44.8770 : 44.6855));
-            let initialLng = (typeof deserialized.gpsLng === 'number' && !isNaN(deserialized.gpsLng)) ? deserialized.gpsLng : ((matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5825));
-
-            const defaultDeviceId = deserialized.gpsDeviceId || `FC-${t.id.replace(/[^a-zA-Z0-9]/g, '')}`;
-            // Preserve user-assigned driver and branch! Never overwrite user configuration!
-            const updatedDriver = t.driver || matchedFt?.driver || "No Driver";
-            const updatedBranchId = t.branchId || t.branch_id || matchedFt?.branchId || "DC-WINAMILL";
-
-            const updatedType = serializeToType(
-              deserialized.type || "Commercial Truck",
-              deserialized.registrationDueDate || "2026-11-29",
-              deserialized.imageUrl,
-              {
-                speed: deserialized.gpsSpeed || 0,
-                lat: initialLat,
-                lng: initialLng,
-                status: 'Connected',
-                handshake: new Date().toISOString()
-              }
-            );
-
-            // Only update GPS hardware device identification and live coordinates if missing, preserving existing branch and driver
-            await supabase
-              .from("trucks")
-              .update({
-                driver: updatedDriver,
-                branchId: updatedBranchId,
-                branch_id: updatedBranchId,
-                type: updatedType,
-                gps_device_id: defaultDeviceId,
-                gps_device_name: "Fleet Complete FT1 Telematics",
-                updated_date: new Date().toISOString()
-              })
-              .eq("id", t.id);
+            if (!t.gps_device_id) {
+              const defaultDeviceId = `FC-${t.id.replace(/[^a-zA-Z0-9]/g, '')}`;
+              await supabase
+                .from("trucks")
+                .update({
+                  gps_device_id: defaultDeviceId,
+                  gps_device_name: "Fleet Complete FT1 Telematics",
+                  updated_date: new Date().toISOString()
+                })
+                .eq("id", t.id);
+            }
           }
         }
 
@@ -3346,20 +3250,22 @@ app.use((req, res, next) => {
         } catch (e) {}
       }, 600000);
 
+      // Always update in-memory tenant state immediately
+      const state = inMemoryTenantStates[tidStr];
+      if (state) {
+        if (tblStr === "branches" && state.branches) {
+          state.branches = state.branches.filter((item: any) => item.id !== idStr && item.id !== "500");
+        } else if (tblStr === "trucks" && state.trucks) {
+          state.trucks = state.trucks.filter((item: any) => item.id !== idStr);
+        } else if (tblStr === "users" && state.users) {
+          state.users = state.users.filter((item: any) => item.id !== idStr);
+        } else if (tblStr === "deliveries" && state.deliveries) {
+          state.deliveries = state.deliveries.filter((item: any) => item.id !== idStr);
+        }
+      }
+
       const supabase = getSupabase(req);
       if (!supabase) {
-        const state = inMemoryTenantStates[tidStr];
-        if (state) {
-          if (tblStr === "branches" && state.branches) {
-            state.branches = state.branches.filter((item: any) => item.id !== idStr && item.id !== "500");
-          } else if (tblStr === "trucks" && state.trucks) {
-            state.trucks = state.trucks.filter((item: any) => item.id !== idStr);
-          } else if (tblStr === "users" && state.users) {
-            state.users = state.users.filter((item: any) => item.id !== idStr);
-          } else if (tblStr === "deliveries" && state.deliveries) {
-            state.deliveries = state.deliveries.filter((item: any) => item.id !== idStr);
-          }
-        }
         return res.json({ success: true, supabaseActive: false });
       }
 
@@ -3375,6 +3281,21 @@ app.use((req, res, next) => {
       const { error } = await deleteQuery;
 
       if (error) throw error;
+
+      // Clean up linked telemetry and geofence entries
+      if (tblStr === "trucks") {
+        await Promise.allSettled([
+          supabase.from("gps_units_setup").delete().eq("tenantId", tenantId).eq("assignedTruckId", idStr),
+          supabase.from("gps_unit_setup").delete().eq("tenantId", tenantId).eq("assignedTruckId", idStr),
+          supabase.from("gps_tracking_history").delete().eq("tenantId", tenantId).eq("truck_id", idStr)
+        ]);
+      } else if (tblStr === "branches") {
+        await Promise.allSettled([
+          supabase.from("geofences").delete().eq("tenantId", tenantId).eq("branch_id", idStr),
+          supabase.from("gpsfences").delete().eq("tenantId", tenantId).eq("branch_id", idStr),
+          supabase.from("gps_fences").delete().eq("tenantId", tenantId).eq("branch_id", idStr)
+        ]);
+      }
 
       // If deletion succeeded on Supabase, also register the explicit delete marker
       try {

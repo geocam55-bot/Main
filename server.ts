@@ -2085,7 +2085,7 @@ async function startServer() {
 
   // Root level diagnostics to verify server is actually running and receiving traffic
   try {
-    fs.writeFileSync(path.join(process.cwd(), 'server_diag.txt'), `[DIAG] Server starting at ${new Date().toISOString()}\n`, 'utf8');
+    
   } catch (err) {
     console.error('Diag write failed:', err);
   }
@@ -2131,7 +2131,7 @@ async function startServer() {
   app.use((req, res, next) => {
     try {
       const logLine = `[${new Date().toISOString()}] REQ: ${req.method} ${req.url} (original: ${req.originalUrl || ''})\n`;
-      fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
+      
     } catch (err) {
       console.error('Diag append failed:', err);
     }
@@ -2193,7 +2193,7 @@ async function startServer() {
 
       const logLine = `[${new Date().toISOString()}] [API BASE64 SUCCESS] Saved ${fileName} (${buffer.length} bytes) to ${destPath} and uploaded copy to virtual storage\n`;
       try {
-        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
+        
       } catch {}
       
       return res.json({ success: true, fileName });
@@ -2231,7 +2231,7 @@ async function startServer() {
     const ct = req.headers['content-type'] || 'unknown';
     const logLine = `[${new Date().toISOString()}] [API START] POST /api/import-export/storage/${target}/upload, content-length: ${len}, content-type: ${ct}\n`;
     try {
-      fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), logLine);
+      
     } catch (e) {
       console.error('Diag append failed in upload start:', e);
     }
@@ -2243,7 +2243,7 @@ async function startServer() {
     if (!req.file) {
       const warnLine = `[${new Date().toISOString()}] [API WARN] No req.file found after multer parsing! target: ${target}\n`;
       try {
-        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), warnLine);
+        
       } catch (e) {}
       res.status(400).json({ error: 'No file uploaded' });
       return;
@@ -2261,14 +2261,14 @@ async function startServer() {
       
       const successLine = `[${new Date().toISOString()}] [API SUCCESS] Successfully uploaded & saved ${req.file.originalname} to ${destPath} and uploaded copy to virtual storage\n`;
       try {
-        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), successLine);
+        
       } catch (e) {}
       
       res.json({ success: true, fileName: req.file.originalname });
     } catch (err: any) {
       const errLine = `[${new Date().toISOString()}] [API ERROR] Failed in file save/unlink sequence: ${err.message || err}\n`;
       try {
-        fs.appendFileSync(path.join(process.cwd(), 'server_diag.txt'), errLine);
+        
       } catch (e) {}
       res.status(500).json({ success: false, error: err.message });
     }

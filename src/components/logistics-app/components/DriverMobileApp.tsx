@@ -1,32 +1,37 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { DeliveryRecord, Truck, User, DeliveryStatus, HistoryEvent } from '../types';
+import { DeliveryRecord, Truck, User, DeliveryStatus, HistoryEvent, getDeliveryPhotos } from '../types';
 import { 
-  Navigation2, 
-  Phone, 
-  Camera, 
-  ArrowLeft, 
-  Check, 
-  RotateCcw, 
-  Bell, 
-  Compass, 
+  Truck as TruckIcon,
   MapPin, 
-  ChevronRight, 
-  Upload, 
-  ShieldCheck, 
+  CheckCircle2, 
   Clock, 
+  Search, 
+  Filter, 
+  Phone, 
+  Navigation, 
+  Camera, 
+  Upload, 
+  FileText, 
+  Printer, 
+  RotateCcw, 
+  Check, 
+  AlertCircle, 
+  UserCheck, 
+  ChevronRight, 
   Layers, 
   Smartphone, 
-  CheckCircle2, 
-  Wifi, 
-  Battery, 
-  Signal, 
+  Monitor, 
+  ShieldCheck, 
+  Copy, 
   ExternalLink,
   Sparkles,
-  RefreshCw,
-  Info,
   Calendar,
-  Truck as TruckIcon,
-  X
+  PackageCheck,
+  Eye,
+  X,
+  RefreshCw,
+  Send,
+  Building2
 } from 'lucide-react';
 
 interface DriverMobileAppProps {
@@ -37,83 +42,6 @@ interface DriverMobileAppProps {
   onAddOrUpdateDelivery: (del: DeliveryRecord) => void;
 }
 
-// Default Live Route Stops when DB is being initialized or filtered
-const DEFAULT_ROUTE_STOPS: Partial<DeliveryRecord>[] = [
-  {
-    id: 'SO-10821-A',
-    invoiceNumber: 'INV-88210',
-    epicorSalesOrder: 'SO-10821',
-    customerName: 'Blue Jay Residence',
-    deliveryAddress: '142 Blue Jay Lane, Halifax, NS',
-    phone: '(902) 455-8120',
-    status: DeliveryStatus.DELIVERED,
-    scheduledSlot: 'AM',
-    destinationNotes: 'Leave on front porch. Ring bell upon drop-off.',
-    registeredAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-    deliveredAt: new Date(Date.now() - 3600000 * 1.5).toISOString()
-  },
-  {
-    id: 'SO-10822-B',
-    invoiceNumber: 'INV-88211',
-    epicorSalesOrder: 'SO-10822',
-    customerName: 'Green Leaf Landscape',
-    deliveryAddress: '88 Green Leaf Way, Dartmouth, NS',
-    phone: '(902) 468-2300',
-    status: DeliveryStatus.PICKED_AND_LOADED,
-    scheduledSlot: 'AM',
-    destinationNotes: 'Arriving. Drop pallets near back garden gate.',
-    registeredAt: new Date(Date.now() - 3600000 * 2.5).toISOString()
-  },
-  {
-    id: 'SO-10823-C',
-    invoiceNumber: 'INV-88212',
-    epicorSalesOrder: 'SO-10823',
-    customerName: 'Oak Ridge Construction',
-    deliveryAddress: '56 Oak Drive, Bedford, NS',
-    phone: '(902) 835-9011',
-    status: DeliveryStatus.PICKED_AND_LOADED,
-    scheduledSlot: 'AM',
-    destinationNotes: 'Gate code #5621. Unload lumber package at driveway.',
-    registeredAt: new Date(Date.now() - 3600000 * 2).toISOString()
-  },
-  {
-    id: 'SO-10824-D',
-    invoiceNumber: 'INV-88213',
-    epicorSalesOrder: 'SO-10824',
-    customerName: 'Atlantic Build Co',
-    deliveryAddress: '210 Maple Crescent, Lower Sackville, NS',
-    phone: '(902) 864-7720',
-    status: DeliveryStatus.PICKED_AND_LOADED,
-    scheduledSlot: 'PM',
-    destinationNotes: 'Call 15 mins before arrival.',
-    registeredAt: new Date(Date.now() - 3600000 * 1.5).toISOString()
-  },
-  {
-    id: 'SO-10825-E',
-    invoiceNumber: 'INV-88214',
-    epicorSalesOrder: 'SO-10825',
-    customerName: 'Highland Framing',
-    deliveryAddress: '74 Highland Terrace, Tantallon, NS',
-    phone: '(902) 826-1144',
-    status: DeliveryStatus.REGISTERED,
-    scheduledSlot: 'PM',
-    destinationNotes: 'Verify sheetrock dry before sign-off.',
-    registeredAt: new Date(Date.now() - 3600000).toISOString()
-  },
-  {
-    id: 'SO-10826-F',
-    invoiceNumber: 'DEPOT-RETURN',
-    epicorSalesOrder: 'DEPOT-RTN',
-    customerName: 'Windmill Logistics Hub',
-    deliveryAddress: '100 Windmill Rd, Dartmouth DC, NS',
-    phone: '(902) 468-5500',
-    status: DeliveryStatus.REGISTERED,
-    scheduledSlot: 'PM',
-    destinationNotes: 'Final route stop - Post-trip inspection & refueling.',
-    registeredAt: new Date().toISOString()
-  }
-];
-
 export default function DriverMobileApp({ 
   deliveries, 
   trucks, 
@@ -121,90 +49,119 @@ export default function DriverMobileApp({
   currentUser, 
   onAddOrUpdateDelivery 
 }: DriverMobileAppProps) {
-  // Selected driver / truck filter
-  const [selectedDriverId, setSelectedDriverId] = useState<string>(currentUser?.id || 'all');
+  // Filters & Selection
+  const [selectedDriverId, setSelectedDriverId] = useState<string>(() => {
+    if (currentUser?.role === 'Driver') return currentUser.id;
+    return 'all';
+  });
+  const [selectedTruckId, setSelectedTruckId] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'delivered'>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   
-  // Current active screen tab for interactive single-phone navigation:
-  // 1 = Today's Deliveries (Map View)
-  // 2 = Route Progress (Timeline Stepper)
-  // 3 = Confirm Delivery (POD Photo + Signature + Notes)
-  const [activeScreenTab, setActiveScreenTab] = useState<1 | 2 | 3>(1);
-  
-  // View mode: '3-screens' (Side-by-side workflow as in the attached mockup) or 'single' (Mobile device view)
-  const [viewMode, setViewMode] = useState<'3-screens' | 'single'>('3-screens');
+  // Selected Delivery for ePOD Action
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
 
-  // Currently focused stop index (0-indexed)
-  const [activeStopIndex, setActiveStopIndex] = useState<number>(1); // Default to Stop 2 (Green Leaf)
+  // Workstation View Mode: 'desktop' (Split-pane command center) vs 'handheld' (Mobile/Tablet single column)
+  const [layoutMode, setLayoutMode] = useState<'desktop' | 'handheld'>('desktop');
 
-  // Real-time clock for phone status bars
-  const [currentTime, setCurrentTime] = useState<string>('10:30');
+  // Real-time clock for live tracking
+  const [currentTime, setCurrentTime] = useState<string>('');
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      let hours = now.getHours();
-      const minutes = now.getMinutes();
-      hours = hours % 12 || 12;
-      const minsStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
-      setCurrentTime(`${hours}:${minsStr}`);
+      setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     };
     updateTime();
-    const interval = setInterval(updateTime, 10000);
+    const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Filter deliveries for the selected driver or active route
-  const liveRouteStops: DeliveryRecord[] = useMemo(() => {
-    let filtered = deliveries;
+  // Filter live deliveries strictly from real props.deliveries
+  const filteredDeliveries = useMemo(() => {
+    let list = Array.isArray(deliveries) ? deliveries : [];
 
+    // Filter by Driver
     if (selectedDriverId !== 'all') {
       const selectedUser = users.find(u => u.id === selectedDriverId);
-      const driverName = selectedUser?.name?.toLowerCase() || '';
-      filtered = deliveries.filter(d => {
-        const dDrv = (d.assignedDriver || '').toLowerCase();
-        return dDrv.includes(driverName) || d.assignedDriver === selectedDriverId;
+      const driverName = (selectedUser?.name || '').toLowerCase().trim();
+      list = list.filter(d => {
+        const assigned = (d.assignedDriver || '').toLowerCase().trim();
+        return (
+          d.assignedDriver === selectedDriverId ||
+          (driverName && (assigned.includes(driverName) || driverName.includes(assigned)))
+        );
       });
     }
 
-    // If we have real DB deliveries, prioritize them
-    if (filtered && filtered.length > 0) {
-      // Return up to 6 stops for a clean mobile route
-      return filtered.slice(0, 6);
+    // Filter by Truck
+    if (selectedTruckId !== 'all') {
+      list = list.filter(d => d.assignedTruck === selectedTruckId);
     }
 
-    // Fallback: If no deliveries match yet, merge DB records with realistic live route
-    return DEFAULT_ROUTE_STOPS.map((s, idx) => ({
-      id: s.id || `DEL-${idx + 1}`,
-      invoiceNumber: s.invoiceNumber || `INV-${1000 + idx}`,
-      epicorSalesOrder: s.epicorSalesOrder || `SO-${2000 + idx}`,
-      customerName: s.customerName || `Customer ${idx + 1}`,
-      deliveryAddress: s.deliveryAddress || `Delivery Stop ${idx + 1}`,
-      phone: s.phone || '(902) 555-0100',
-      originBranch: 'WINDMILL_DC',
-      status: s.status || DeliveryStatus.PICKED_AND_LOADED,
-      registeredAt: s.registeredAt || new Date().toISOString(),
-      deliveredAt: s.deliveredAt,
-      destinationNotes: s.destinationNotes || 'Standard curbside drop-off.',
-      history: []
-    })) as DeliveryRecord[];
-  }, [deliveries, selectedDriverId, users]);
+    // Filter by Status
+    if (statusFilter === 'pending') {
+      list = list.filter(d => d.status !== DeliveryStatus.DELIVERED);
+    } else if (statusFilter === 'delivered') {
+      list = list.filter(d => d.status === DeliveryStatus.DELIVERED);
+    }
 
-  // Current active stop record
-  const currentStop = liveRouteStops[activeStopIndex] || liveRouteStops[0] || DEFAULT_ROUTE_STOPS[0];
+    // Search Query (Sales Order, Invoice, Customer, Address)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(d => 
+        (d.customerName || '').toLowerCase().includes(q) ||
+        (d.deliveryAddress || '').toLowerCase().includes(q) ||
+        (d.epicorSalesOrder || '').toLowerCase().includes(q) ||
+        (d.invoiceNumber || '').toLowerCase().includes(q) ||
+        (d.id || '').toLowerCase().includes(q) ||
+        (d.phone || '').toLowerCase().includes(q)
+      );
+    }
 
-  // Screen 3: Proof of Delivery Form States
-  const [signatureText, setSignatureText] = useState<string>('Mark Miller');
+    return list;
+  }, [deliveries, selectedDriverId, selectedTruckId, statusFilter, searchQuery, users]);
+
+  // Keep first stop selected if none currently selected
+  useEffect(() => {
+    if (filteredDeliveries.length > 0) {
+      if (!selectedDeliveryId || !filteredDeliveries.some(d => d.id === selectedDeliveryId)) {
+        setSelectedDeliveryId(filteredDeliveries[0].id);
+      }
+    } else {
+      setSelectedDeliveryId(null);
+    }
+  }, [filteredDeliveries, selectedDeliveryId]);
+
+  const activeDelivery = useMemo(() => {
+    return filteredDeliveries.find(d => d.id === selectedDeliveryId) || null;
+  }, [filteredDeliveries, selectedDeliveryId]);
+
+  // Form State for ePOD Capture
+  const [signatureName, setSignatureName] = useState<string>('');
   const [hasDrawnSignature, setHasDrawnSignature] = useState<boolean>(false);
-  const [deliveryNotes, setDeliveryNotes] = useState<string>('Left cardboard package securely on front welcome mat. Verified undamaged.');
-  const [deliveryPhotoUrl, setDeliveryPhotoUrl] = useState<string>('/doorstep_delivery_photo.jpg');
-  const [isCapturingCamera, setIsCapturingCamera] = useState<boolean>(false);
-  const [completionSuccessToast, setCompletionSuccessToast] = useState<string | null>(null);
+  const [deliveryNote, setDeliveryNote] = useState<string>('');
+  const [quickNoteTag, setQuickNoteTag] = useState<string>('');
+  const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
-  // Canvas drawing ref
+  // Sync active delivery into form
+  useEffect(() => {
+    if (activeDelivery) {
+      setSignatureName(activeDelivery.customerSignature && !activeDelivery.customerSignature.startsWith('data:') ? activeDelivery.customerSignature : activeDelivery.customerName || '');
+      setDeliveryNote('');
+      setQuickNoteTag('');
+      setCapturedPhotos(getDeliveryPhotos(activeDelivery));
+      setHasDrawnSignature(!!(activeDelivery.customerSignature && activeDelivery.customerSignature.startsWith('data:')));
+      clearCanvas();
+    }
+  }, [activeDelivery?.id]);
+
+  // Canvas Signature Handling
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawingRef = useRef<boolean>(false);
 
-  // Initialize or clear signature canvas
-  const clearSignature = () => {
+  const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -215,7 +172,6 @@ export default function DriverMobileApp({
     setHasDrawnSignature(false);
   };
 
-  // Start touch / mouse drawing on signature canvas
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -235,7 +191,7 @@ export default function DriverMobileApp({
     ctx.moveTo(x, y);
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#1E293B';
+    ctx.strokeStyle = '#0F172A';
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -259,726 +215,816 @@ export default function DriverMobileApp({
     isDrawingRef.current = false;
   };
 
-  // Handle Mark Complete
-  const handleMarkComplete = () => {
-    if (!currentStop) return;
+  // Photo Upload Handler
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    let signatureData = signatureText;
-    if (canvasRef.current && hasDrawnSignature) {
-      try {
-        signatureData = canvasRef.current.toDataURL('image/png');
-      } catch (err) {
-        console.warn('Canvas export fallback:', err);
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        if (uploadEvent.target?.result) {
+          const result = uploadEvent.target.result as string;
+          setCapturedPhotos(prev => [...prev, result]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Submit Proof of Delivery (ePOD)
+  const handleSubmitEpod = async () => {
+    if (!activeDelivery) return;
+    setIsSubmitting(true);
+
+    try {
+      let signatureOutput = signatureName.trim() || activeDelivery.customerName || 'Authorized Signee';
+      if (canvasRef.current && hasDrawnSignature) {
+        try {
+          signatureOutput = canvasRef.current.toDataURL('image/png');
+        } catch (e) {
+          console.warn("Canvas export fallback:", e);
+        }
       }
-    }
 
+      const timestamp = new Date().toISOString();
+      const combinedNotes = [quickNoteTag, deliveryNote.trim()].filter(Boolean).join(' - ') || 'Delivered & verified in good order.';
+
+      const updatedRecord: DeliveryRecord = {
+        ...activeDelivery,
+        status: DeliveryStatus.DELIVERED,
+        deliveredAt: timestamp,
+        customerSignature: signatureOutput,
+        deliveryPhoto: capturedPhotos[0] || activeDelivery.deliveryPhoto,
+        deliveryPhotos: capturedPhotos.length > 0 ? capturedPhotos : (activeDelivery.deliveryPhotos || []),
+        destinationNotes: activeDelivery.destinationNotes 
+          ? `${activeDelivery.destinationNotes} | Driver POD Note: ${combinedNotes}` 
+          : combinedNotes,
+        history: [
+          ...(activeDelivery.history || []),
+          {
+            status: DeliveryStatus.DELIVERED,
+            timestamp: timestamp,
+            location: activeDelivery.deliveryAddress || 'Customer Drop-off Location',
+            operator: currentUser?.name || 'Assigned Driver',
+            notes: combinedNotes,
+            customerSignature: signatureOutput,
+            deliveryPhotos: capturedPhotos
+          }
+        ]
+      };
+
+      onAddOrUpdateDelivery(updatedRecord);
+      setSuccessToast(`Proof of Delivery recorded for ${activeDelivery.customerName || activeDelivery.id}!`);
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err) {
+      console.error("Error submitting ePOD:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Quick Status Transition (e.g. Mark Picked/Loaded or En Route)
+  const handleQuickStatusChange = (newStatus: DeliveryStatus) => {
+    if (!activeDelivery) return;
+
+    const timestamp = new Date().toISOString();
     const updatedRecord: DeliveryRecord = {
-      ...currentStop,
-      status: DeliveryStatus.DELIVERED,
-      deliveredAt: new Date().toISOString(),
-      customerSignature: signatureData,
-      deliveryPhoto: deliveryPhotoUrl,
-      destinationNotes: `${currentStop.destinationNotes || ''} - Driver Note: ${deliveryNotes}`,
+      ...activeDelivery,
+      status: newStatus,
+      pickedAt: newStatus === DeliveryStatus.PICKED_AND_LOADED ? timestamp : activeDelivery.pickedAt,
       history: [
-        ...(currentStop.history || []),
+        ...(activeDelivery.history || []),
         {
-          status: DeliveryStatus.DELIVERED,
-          timestamp: new Date().toISOString(),
-          location: currentStop.deliveryAddress || 'Customer Site',
-          operator: currentUser?.name || 'Driver Mark',
-          notes: deliveryNotes,
-          customerSignature: signatureData,
-          deliveryPhoto: deliveryPhotoUrl
+          status: newStatus,
+          timestamp: timestamp,
+          location: activeDelivery.originBranch || 'Depot',
+          operator: currentUser?.name || 'Assigned Driver',
+          notes: `Status updated to ${newStatus}`
         }
       ]
     };
 
-    // Save to real database
     onAddOrUpdateDelivery(updatedRecord);
-
-    // Show confirmation feedback
-    setCompletionSuccessToast(`Stop #${activeStopIndex + 1} (${currentStop.customerName}) marked as Delivered!`);
-    setTimeout(() => setCompletionSuccessToast(null), 4000);
-
-    // Advance to next stop if available
-    if (activeStopIndex < liveRouteStops.length - 1) {
-      setActiveStopIndex(activeStopIndex + 1);
-    }
-    setActiveScreenTab(2); // Go back to Route Progress
+    setSuccessToast(`Status updated to ${newStatus.replace(/_/g, ' ')}!`);
+    setTimeout(() => setSuccessToast(null), 3000);
   };
 
-  // Photo upload handler
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (reader.result) {
-          setDeliveryPhotoUrl(reader.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Calculate live completion metrics
-  const completedStopsCount = liveRouteStops.filter(s => s.status === DeliveryStatus.DELIVERED).length;
-  const totalStopsCount = liveRouteStops.length;
-  const routeProgressPercent = totalStopsCount > 0 ? Math.round((completedStopsCount / totalStopsCount) * 100) : 0;
-
-  // Selected stop details for Screen 1 bottom sheet
-  const firstStop = liveRouteStops[0] || DEFAULT_ROUTE_STOPS[0];
-  const secondStop = liveRouteStops[1] || DEFAULT_ROUTE_STOPS[1];
-  const thirdStop = liveRouteStops[2] || DEFAULT_ROUTE_STOPS[2];
+  // Metrics calculation
+  const totalDeliveries = deliveries.length;
+  const completedCount = deliveries.filter(d => d.status === DeliveryStatus.DELIVERED).length;
+  const pendingCount = deliveries.filter(d => d.status !== DeliveryStatus.DELIVERED).length;
+  const routeCompletionPct = totalDeliveries > 0 ? Math.round((completedCount / totalDeliveries) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-[#EBE7DF] text-slate-800 flex flex-col items-center justify-start py-8 px-4 sm:px-6 select-none font-sans">
+    <div className="w-full min-h-[calc(100vh-140px)] bg-slate-50 text-slate-800 p-4 sm:p-6 lg:p-8 font-sans antialiased">
       
-      {/* ── HEADER BANNER (Matches user reference image styling) ── */}
-      <div className="text-center mb-8 max-w-2xl mx-auto">
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <span className="text-3xl">🚚</span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2C2C2C] tracking-tight">
-            Driver App: Mobile Workflow Screens
-          </h1>
-        </div>
-        <p className="text-base sm:text-lg font-medium text-[#5F6368]">
-          Light Theme UI
-        </p>
-
-        {/* Live Controls & Driver Switcher Bar */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3 bg-white/80 backdrop-blur-md p-2.5 rounded-2xl shadow-sm border border-black/5 text-xs">
+      {/* ── TOP DESKTOP COMMAND BAR ── */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           
-          {/* View Mode Toggle */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-            <button
-              onClick={() => setViewMode('3-screens')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                viewMode === '3-screens' 
-                  ? 'bg-white text-blue-700 shadow-xs' 
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Layers className="h-3.5 w-3.5" />
-              <span>3-Screen Overview</span>
-            </button>
-            <button
-              onClick={() => setViewMode('single')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                viewMode === 'single' 
-                  ? 'bg-white text-blue-700 shadow-xs' 
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Smartphone className="h-3.5 w-3.5" />
-              <span>Interactive Phone</span>
-            </button>
-          </div>
-
-          {/* Active Screen Tab Selector (When in single-phone mode) */}
-          {viewMode === 'single' && (
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setActiveScreenTab(1)}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreenTab === 1 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                1. Today's Deliveries
-              </button>
-              <button
-                onClick={() => setActiveScreenTab(2)}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreenTab === 2 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                2. Route Progress
-              </button>
-              <button
-                onClick={() => setActiveScreenTab(3)}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreenTab === 3 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                3. Confirm Delivery
-              </button>
-            </div>
-          )}
-
-          {/* Driver Filter Selector */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-            <span className="font-semibold text-slate-500">Driver:</span>
-            <select
-              value={selectedDriverId}
-              onChange={(e) => setSelectedDriverId(e.target.value)}
-              className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-            >
-              <option value="all">All Fleet Routes ({liveRouteStops.length} Stops)</option>
-              {users.filter(u => u.role === 'Driver' || u.role === 'Logistics').map(u => (
-                <option key={u.id} value={u.id}>
-                  {u.name} {currentUser?.id === u.id ? '(You)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Live DB Status Pill */}
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/60">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Live DB Sync ({liveRouteStops.length} active stops)</span>
-          </div>
-
-        </div>
-
-        {/* Real-time Toast Feedback */}
-        {completionSuccessToast && (
-          <div className="mt-4 inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg animate-bounce">
-            <CheckCircle2 className="h-4 w-4" />
-            <span>{completionSuccessToast}</span>
-          </div>
-        )}
-      </div>
-
-      {/* ── 3-SCREEN WORKFLOW CONTAINER ── */}
-      <div className={`w-full max-w-7xl mx-auto flex items-center justify-center transition-all ${
-        viewMode === '3-screens' 
-          ? 'flex-col lg:flex-row items-center justify-center gap-8 lg:gap-10 xl:gap-14' 
-          : 'flex-col items-center'
-      }`}>
-
-        {/* ══════════════════════════════════════════════════════════════
-            SCREEN 1: TODAY'S DELIVERIES (Route Map View)
-           ══════════════════════════════════════════════════════════════ */}
-        {(viewMode === '3-screens' || activeScreenTab === 1) && (
-          <div className="w-[340px] sm:w-[360px] h-[720px] bg-white rounded-[44px] shadow-[0_20px_50px_rgba(0,0,0,0.12)] border-[8px] border-white ring-1 ring-black/10 overflow-hidden flex flex-col relative transition-transform hover:scale-[1.01] duration-300">
-            
-            {/* Phone Top Notch / Speaker Bar */}
-            <div className="absolute top-0 inset-x-0 h-7 flex items-center justify-between px-6 z-30 pointer-events-none">
-              <span className="text-[12px] font-bold text-slate-700 tracking-tight">{currentTime}</span>
-              <div className="w-20 h-4 bg-black/5 rounded-full mx-auto"></div>
-              <div className="flex items-center gap-1.5 text-slate-700">
-                <Signal className="h-3 w-3" />
-                <Wifi className="h-3 w-3" />
-                <Battery className="h-3.5 w-3.5 fill-slate-700" />
+          {/* Title & Live Status */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                <TruckIcon className="h-5 w-5" />
               </div>
-            </div>
-
-            {/* Header: Today's Deliveries */}
-            <div className="pt-9 pb-3 px-5 flex items-center justify-between bg-white z-20 border-b border-slate-100/80">
-              <h2 className="text-lg font-black text-[#1E293B] tracking-tight">
-                Today's Deliveries
-              </h2>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => alert(`Active Route: ${liveRouteStops.length} stops loaded for today.`)}
-                  className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
-                  title="Route Notifications"
-                >
-                  <Bell className="h-4 w-4" />
-                </button>
-                <button 
-                  onClick={() => alert('GPS Location Locked on Fleet Vehicle')}
-                  className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-blue-600 transition-colors cursor-pointer"
-                  title="Center on Vehicle"
-                >
-                  <Compass className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Map Canvas with Route Polyline and Markers */}
-            <div className="flex-1 relative bg-[#EBF0F5] overflow-hidden">
-              
-              {/* Light Street Map Background (Vector Drawing matching screenshot) */}
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 360 560" preserveAspectRatio="none">
-                <defs>
-                  {/* Subtle Grid / Land Blocks */}
-                  <pattern id="street-grid" width="60" height="60" patternUnits="userSpaceOnUse">
-                    <rect width="60" height="60" fill="#EDF2F7" />
-                    <rect x="2" y="2" width="56" height="56" fill="#F8FAFC" rx="4" />
-                  </pattern>
-                  {/* Route Polyline Glow */}
-                  <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#3B82F6" floodOpacity="0.25" />
-                  </filter>
-                </defs>
-
-                {/* Base Land Fill */}
-                <rect width="360" height="560" fill="url(#street-grid)" />
-
-                {/* Road System Paths */}
-                <path d="M -20 80 Q 140 120 380 90" stroke="#FFFFFF" strokeWidth="18" fill="none" />
-                <path d="M -20 80 Q 140 120 380 90" stroke="#E2E8F0" strokeWidth="14" fill="none" />
-
-                <path d="M 60 -20 L 100 240 L 40 580" stroke="#FFFFFF" strokeWidth="20" fill="none" />
-                <path d="M 60 -20 L 100 240 L 40 580" stroke="#E2E8F0" strokeWidth="14" fill="none" />
-
-                <path d="M 240 -20 L 220 280 L 320 580" stroke="#FFFFFF" strokeWidth="22" fill="none" />
-                <path d="M 240 -20 L 220 280 L 320 580" stroke="#E2E8F0" strokeWidth="16" fill="none" />
-
-                <path d="M -20 320 Q 180 300 380 340" stroke="#FFFFFF" strokeWidth="24" fill="none" />
-                <path d="M -20 320 Q 180 300 380 340" stroke="#E2E8F0" strokeWidth="18" fill="none" />
-
-                <path d="M 20 480 Q 200 460 380 500" stroke="#FFFFFF" strokeWidth="16" fill="none" />
-                <path d="M 20 480 Q 200 460 380 500" stroke="#E2E8F0" strokeWidth="12" fill="none" />
-
-                {/* Active Connected Polyline Route (Blue Vector matching screenshot) */}
-                <path 
-                  d="M 235 120 L 235 160 L 75 315 L 235 410 L 235 340" 
-                  stroke="#4A8AF4" 
-                  strokeWidth="5" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  fill="none" 
-                  filter="url(#routeGlow)"
-                />
-
-                {/* Route Connecting Inner Dash */}
-                <path 
-                  d="M 235 120 L 235 160 L 75 315 L 235 410 L 235 340" 
-                  stroke="#FFFFFF" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeDasharray="4 6" 
-                  fill="none" 
-                />
-
-                {/* Location Waypoint Pins matching screenshot */}
-                {/* Pin 1: Top Right Stop */}
-                <g transform="translate(235, 120)">
-                  <circle r="14" fill="#4A8AF4" opacity="0.2" />
-                  <path d="M 0 -14 C -7 -14 -12 -9 -12 -2 C -12 6 0 14 0 14 C 0 14 12 6 12 -2 C 12 -9 7 -14 0 -14 Z" fill="#4A8AF4" />
-                  <circle cx="0" cy="-4" r="4" fill="#FFFFFF" />
-                </g>
-
-                {/* Pin 2: Mid-Left Stop */}
-                <g transform="translate(75, 315)">
-                  <circle r="14" fill="#4A8AF4" opacity="0.2" />
-                  <path d="M 0 -14 C -7 -14 -12 -9 -12 -2 C -12 6 0 14 0 14 C 0 14 12 6 12 -2 C 12 -9 7 -14 0 -14 Z" fill="#4A8AF4" />
-                  <circle cx="0" cy="-4" r="4" fill="#FFFFFF" />
-                </g>
-
-                {/* Pin 3: Lower-Right Stop */}
-                <g transform="translate(235, 380)">
-                  <circle r="14" fill="#4A8AF4" opacity="0.2" />
-                  <path d="M 0 -14 C -7 -14 -12 -9 -12 -2 C -12 6 0 14 0 14 C 0 14 12 6 12 -2 C 12 -9 7 -14 0 -14 Z" fill="#4A8AF4" />
-                  <circle cx="0" cy="-4" r="4" fill="#FFFFFF" />
-                </g>
-              </svg>
-
-              {/* Interactive Target Recenter Button */}
-              <button 
-                onClick={() => {
-                  setActiveStopIndex(0);
-                  alert(`Target locked to Stop 1: ${firstStop.deliveryAddress}`);
-                }}
-                className="absolute top-4 right-4 h-9 w-9 rounded-full bg-white shadow-md flex items-center justify-center text-slate-700 hover:bg-slate-50 transition-all cursor-pointer z-10"
-              >
-                <Navigation2 className="h-4 w-4 text-blue-600 rotate-45" />
-              </button>
-
-              {/* ── BOTTOM FLOATING CARD (Matches image layout) ── */}
-              <div className="absolute inset-x-3 bottom-4 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-[0_10px_25px_rgba(0,0,0,0.08)] border border-slate-100 z-20">
-                {/* Drag Handle Indicator */}
-                <div className="w-8 h-1 bg-slate-200 rounded-full mx-auto mb-3"></div>
-
-                <div className="space-y-1">
-                  <h3 className="text-xs font-bold text-blue-600 tracking-tight">
-                    1. Stop 1:
-                  </h3>
-                  <p className="text-sm font-bold text-slate-900 leading-tight">
-                    {firstStop.deliveryAddress || '142 Blue Jay Lane'}
-                  </p>
-                  <p className="text-xs font-medium text-slate-500">
-                    Est. 10:30 AM.
-                  </p>
-                </div>
-
-                {/* START ROUTE Button */}
-                <button
-                  onClick={() => {
-                    setActiveScreenTab(2);
-                    setActiveStopIndex(1); // Advance to active Stop 2
-                  }}
-                  className="w-full mt-3 py-2.5 px-4 bg-[#4A8AF4] hover:bg-[#3B7AE4] active:scale-[0.98] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>START ROUTE</span>
-                </button>
-              </div>
-
-            </div>
-
-            {/* Bottom Home Indicator Bar */}
-            <div className="h-5 bg-white flex items-center justify-center">
-              <div className="w-28 h-1 bg-slate-300 rounded-full"></div>
-            </div>
-
-          </div>
-        )}
-
-
-        {/* ══════════════════════════════════════════════════════════════
-            SCREEN 2: ROUTE PROGRESS (Vertical Stepper & Timeline)
-           ══════════════════════════════════════════════════════════════ */}
-        {(viewMode === '3-screens' || activeScreenTab === 2) && (
-          <div className="w-[340px] sm:w-[360px] h-[720px] bg-[#F1F4F9] rounded-[44px] shadow-[0_20px_50px_rgba(0,0,0,0.12)] border-[8px] border-white ring-1 ring-black/10 overflow-hidden flex flex-col relative transition-transform hover:scale-[1.01] duration-300">
-            
-            {/* Phone Top Notch / Status Bar */}
-            <div className="absolute top-0 inset-x-0 h-7 flex items-center justify-between px-6 z-30 pointer-events-none bg-[#F1F4F9]">
-              <span className="text-[12px] font-bold text-slate-700 tracking-tight">12:10</span>
-              <div className="w-20 h-4 bg-black/5 rounded-full mx-auto"></div>
-              <div className="flex items-center gap-1.5 text-slate-700">
-                <Signal className="h-3 w-3" />
-                <Wifi className="h-3 w-3" />
-                <Battery className="h-3.5 w-3.5 fill-slate-700" />
-              </div>
-            </div>
-
-            {/* Header: Route Progress */}
-            <div className="pt-9 pb-3 px-5 flex items-center justify-between bg-[#F1F4F9] z-20">
-              <h2 className="text-lg font-black text-[#1E293B] tracking-tight">
-                Route Progress
-              </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-mono">
-                {completedStopsCount}/{totalStopsCount} Done
-              </span>
-            </div>
-
-            {/* Main Stepper Timeline Area */}
-            <div className="flex-1 overflow-y-auto px-5 pt-2 pb-28 space-y-0 relative">
-              
-              {/* Vertical Connecting Progress Line */}
-              <div className="absolute left-[31px] top-6 bottom-20 w-[2.5px] bg-slate-300 -z-0">
-                {/* Completed Blue Segment */}
-                <div className="w-full bg-[#4A8AF4] h-12"></div>
-                {/* Active Green Segment */}
-                <div className="w-full bg-emerald-500 h-28"></div>
-              </div>
-
-              {/* Stop 1 (Completed) */}
-              <div 
-                onClick={() => setActiveStopIndex(0)}
-                className="relative flex items-center gap-3.5 py-3 cursor-pointer group"
-              >
-                <div className="h-7 w-7 rounded-full bg-[#4A8AF4] text-white text-xs font-bold flex items-center justify-center shadow-xs z-10 shrink-0">
-                  1
-                </div>
-                <div className="flex-1">
-                  <span className="text-sm font-semibold text-slate-700 group-hover:text-blue-600 transition-colors">
-                    Stop 1
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span>Driver ePOD & Route Dispatch</span>
+                  <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Live Data
                   </span>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {firstStop.deliveryAddress || '142 Blue Jay Lane'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Stop 2 (Active Highlighted Card matching screenshot) */}
-              <div 
-                onClick={() => {
-                  setActiveStopIndex(1);
-                  setActiveScreenTab(3); // Navigate to Confirm Delivery
-                }}
-                className="relative flex items-start gap-3.5 py-2 cursor-pointer group"
-              >
-                <div className="h-7 w-7 rounded-full bg-[#4A8AF4] text-white text-xs font-bold flex items-center justify-center shadow-xs z-10 shrink-0 mt-3.5">
-                  2
-                </div>
-
-                {/* Expanded Highlighted Card */}
-                <div className="flex-1 bg-white rounded-2xl p-4 shadow-[0_4px_16px_rgba(0,0,0,0.06)] border border-slate-100 hover:border-blue-300 transition-all">
-                  <h4 className="text-sm font-black text-slate-900 tracking-tight">
-                    {secondStop.customerName || 'Green Leaf'}
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Arriving. Tap to View Details.
-                  </p>
-                </div>
-              </div>
-
-              {/* Stop 3 */}
-              <div 
-                onClick={() => setActiveStopIndex(2)}
-                className="relative flex items-center gap-3.5 py-3 cursor-pointer group"
-              >
-                <div className="h-7 w-7 rounded-full bg-slate-300 text-slate-600 text-xs font-bold flex items-center justify-center shadow-xs z-10 shrink-0">
-                  3
-                </div>
-                <div className="flex-1">
-                  <span className="text-sm font-semibold text-slate-500 group-hover:text-slate-800 transition-colors">
-                    Stop 3
-                  </span>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {thirdStop.deliveryAddress || '56 Oak Drive'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Stop 4 */}
-              <div 
-                onClick={() => setActiveStopIndex(3)}
-                className="relative flex items-center gap-3.5 py-3 cursor-pointer group"
-              >
-                <div className="h-7 w-7 rounded-full bg-slate-300 text-slate-600 text-xs font-bold flex items-center justify-center shadow-xs z-10 shrink-0">
-                  4
-                </div>
-                <div className="flex-1">
-                  <span className="text-sm font-semibold text-slate-500 group-hover:text-slate-800 transition-colors">
-                    Stop 4
-                  </span>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {liveRouteStops[3]?.deliveryAddress || '210 Maple Crescent'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Stop 5 */}
-              <div 
-                onClick={() => setActiveStopIndex(4)}
-                className="relative flex items-center gap-3.5 py-3 cursor-pointer group"
-              >
-                <div className="h-7 w-7 rounded-full bg-slate-300 text-slate-600 text-xs font-bold flex items-center justify-center shadow-xs z-10 shrink-0">
-                  5
-                </div>
-                <div className="flex-1">
-                  <span className="text-sm font-semibold text-slate-500 group-hover:text-slate-800 transition-colors">
-                    Stop 5
-                  </span>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {liveRouteStops[4]?.deliveryAddress || '74 Highland Terrace'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Stop 6 (Green Final Stop matching screenshot) */}
-              <div 
-                onClick={() => setActiveStopIndex(5)}
-                className="relative flex items-center gap-3.5 py-3 cursor-pointer group"
-              >
-                <div className="h-7 w-7 rounded-full bg-[#34A853] text-white text-xs font-bold flex items-center justify-center shadow-xs z-10 shrink-0">
-                  6
-                </div>
-                <div className="flex-1">
-                  <span className="text-sm font-bold text-[#34A853]">
-                    Stop 6
-                  </span>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {liveRouteStops[5]?.deliveryAddress || 'Windmill Logistics Hub (Depot)'}
-                  </p>
-                </div>
-              </div>
-
-            </div>
-
-            {/* ── BOTTOM FLOATING CARD (Matches image layout) ── */}
-            <div className="absolute inset-x-3 bottom-3 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-[0_10px_25px_rgba(0,0,0,0.08)] border border-slate-100 z-20">
-              {/* Drag Handle */}
-              <div className="w-8 h-1 bg-slate-200 rounded-full mx-auto mb-2"></div>
-
-              <div className="space-y-0.5 mb-3">
-                <h3 className="text-xs font-bold text-slate-900 tracking-tight">
-                  Stop {activeStopIndex + 1}: {currentStop.deliveryAddress || '56 Oak Drive'}
-                </h3>
-                <p className="text-[11px] font-medium text-slate-500">
-                  11:15 AM.
+                </h1>
+                <p className="text-xs text-slate-500">
+                  Electronic Proof of Delivery, Real-time Customer Signatures & Route Stop Progression
                 </p>
               </div>
+            </div>
+          </div>
 
-              {/* Dual Action Buttons: Nav & Contact */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => {
-                    const address = encodeURIComponent(currentStop.deliveryAddress || '56 Oak Drive');
-                    window.open(`https://www.google.com/maps/dir/?api=1&destination=${address}`, '_blank');
-                  }}
-                  className="py-2 px-3 rounded-full border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Navigation2 className="h-3.5 w-3.5 text-blue-600 rotate-45" />
-                  <span>Nav</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    const tel = currentStop.phone || '(902) 468-2300';
-                    window.location.href = `tel:${tel.replace(/\D/g, '')}`;
-                  }}
-                  className="py-2 px-3 rounded-full border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Phone className="h-3.5 w-3.5 text-slate-600" />
-                  <span>Contact</span>
-                </button>
+          {/* Route Metrics Pill Group */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 flex items-center gap-3 text-xs">
+              <div className="text-slate-600">
+                <span className="font-medium">Route Progress:</span>
+                <span className="ml-1.5 font-bold text-slate-900">{completedCount}/{totalDeliveries} Stops</span>
               </div>
+              <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                  style={{ width: `${routeCompletionPct}%` }}
+                ></div>
+              </div>
+              <span className="font-mono font-bold text-emerald-600">{routeCompletionPct}%</span>
+            </div>
 
-              {/* Direct POD Navigation Trigger */}
+            {/* Layout Toggle (Desktop Workstation vs Handheld Companion) */}
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1 text-xs">
               <button
-                onClick={() => setActiveScreenTab(3)}
-                className="w-full mt-2 py-1.5 text-[11px] font-bold text-blue-600 hover:text-blue-700 text-center transition-colors cursor-pointer"
+                type="button"
+                onClick={() => setLayoutMode('desktop')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  layoutMode === 'desktop' 
+                    ? 'bg-white text-blue-700 shadow-xs border border-slate-200/60' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Full-width Desktop Dispatch Station"
               >
-                Proceed to Confirm Delivery →
+                <Monitor className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Desktop Workstation</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutMode('handheld')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  layoutMode === 'handheld' 
+                    ? 'bg-white text-blue-700 shadow-xs border border-slate-200/60' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Single-column Driver Handheld View"
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Handheld View</span>
               </button>
             </div>
 
-            {/* Bottom Home Indicator Bar */}
-            <div className="h-5 bg-[#F1F4F9] flex items-center justify-center">
-              <div className="w-28 h-1 bg-slate-300 rounded-full"></div>
+            <div className="text-xs font-mono bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-700">
+              <Clock className="h-3.5 w-3.5 inline mr-1.5 text-blue-600" />
+              {currentTime || '12:00 PM'}
+            </div>
+          </div>
+        </div>
+
+        {/* ── SECONDARY FILTER & SEARCH BAR ── */}
+        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by customer, invoice #, sales order, or address..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-xs transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Driver Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-semibold">Driver:</span>
+              <select
+                value={selectedDriverId}
+                onChange={(e) => setSelectedDriverId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="all">All Fleet Drivers ({deliveries.length} Total)</option>
+                {users.filter(u => u.role === 'Driver' || u.role === 'Logistics').map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} {currentUser?.id === u.id ? '(You)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Truck Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-semibold">Truck:</span>
+              <select
+                value={selectedTruckId}
+                onChange={(e) => setSelectedTruckId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="all">All Vehicles</option>
+                {trucks.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name || t.id} {t.truckNumber ? `(#${t.truckNumber})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Pills */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('all')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  statusFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All ({deliveries.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('pending')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  statusFilter === 'pending' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Pending ({pendingCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('delivered')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  statusFilter === 'delivered' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Delivered ({completedCount})
+              </button>
             </div>
 
           </div>
-        )}
 
-
-        {/* ══════════════════════════════════════════════════════════════
-            SCREEN 3: CONFIRM DELIVERY (Proof of Delivery / POD)
-           ══════════════════════════════════════════════════════════════ */}
-        {(viewMode === '3-screens' || activeScreenTab === 3) && (
-          <div className="w-[340px] sm:w-[360px] h-[720px] bg-white rounded-[44px] shadow-[0_20px_50px_rgba(0,0,0,0.12)] border-[8px] border-white ring-1 ring-black/10 overflow-hidden flex flex-col relative transition-transform hover:scale-[1.01] duration-300">
-            
-            {/* Phone Top Notch / Status Bar */}
-            <div className="absolute top-0 inset-x-0 h-7 flex items-center justify-between px-6 z-30 pointer-events-none">
-              <span className="text-[12px] font-bold text-white/90 drop-shadow-sm tracking-tight">12:30</span>
-              <div className="w-20 h-4 bg-black/20 rounded-full mx-auto"></div>
-              <div className="flex items-center gap-1.5 text-white/90 drop-shadow-sm">
-                <Signal className="h-3 w-3" />
-                <Wifi className="h-3 w-3" />
-                <Battery className="h-3.5 w-3.5 fill-white/90" />
-              </div>
-            </div>
-
-            {/* Back Button (matching screenshot) */}
+          {/* Quick Clear Filter */}
+          {(searchQuery || selectedDriverId !== 'all' || selectedTruckId !== 'all' || statusFilter !== 'all') && (
             <button
-              onClick={() => setActiveScreenTab(2)}
-              className="absolute top-8 left-4 h-8 w-8 rounded-full bg-white/90 backdrop-blur-md shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-all cursor-pointer z-30"
-              title="Back to Route Progress"
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedDriverId('all');
+                setSelectedTruckId('all');
+                setStatusFilter('all');
+              }}
+              className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <RotateCcw className="h-3 w-3" />
+              Reset Filters
             </button>
+          )}
 
-            {/* Top Photo Header: Delivery at Doorstep */}
-            <div className="h-48 relative bg-slate-100 overflow-hidden shrink-0">
-              <img
-                src={deliveryPhotoUrl}
-                alt="Doorstep Delivery Proof"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  // Fallback to stylized SVG placeholder if image is missing
-                  e.currentTarget.src = '/doorstep_delivery_photo.jpg';
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+        </div>
 
-              {/* Retake / Upload Photo Trigger */}
-              <label 
-                className="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-slate-800 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1 cursor-pointer transition-all"
-                title="Snap or upload photo"
-              >
-                <Camera className="h-3 w-3 text-blue-600" />
-                <span>Change Photo</span>
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  capture="environment" 
-                  onChange={handlePhotoUpload} 
-                  className="hidden" 
-                />
-              </label>
+      </div>
+
+      {/* Success Notification Toast */}
+      {successToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-sm font-bold border border-emerald-500 animate-in fade-in slide-in-from-bottom-4">
+          <CheckCircle2 className="h-5 w-5 text-emerald-100" />
+          <span>{successToast}</span>
+        </div>
+      )}
+
+      {/* ── WORKSTATION CONTENT AREA ── */}
+      {filteredDeliveries.length === 0 ? (
+        /* Empty State */
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center max-w-2xl mx-auto my-12 shadow-sm">
+          <div className="h-16 w-16 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-center mx-auto text-blue-600 mb-4">
+            <PackageCheck className="h-8 w-8 text-blue-600" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900">No Live Deliveries Found</h3>
+          <p className="text-xs text-slate-500 mt-2 max-w-md mx-auto leading-relaxed">
+            {deliveries.length === 0
+              ? 'No live deliveries have been dispatched in the database yet. Dispatched deliveries from your sales orders or loading scanner will appear here.'
+              : 'No deliveries match your current driver or search filters. Try clearing your filters above.'}
+          </p>
+          {(searchQuery || selectedDriverId !== 'all' || selectedTruckId !== 'all' || statusFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedDriverId('all');
+                setSelectedTruckId('all');
+                setStatusFilter('all');
+              }}
+              className="mt-5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+            >
+              Show All Deliveries ({deliveries.length})
+            </button>
+          )}
+        </div>
+      ) : (
+        /* Workstation Split View (Desktop or Handheld Mode) */
+        <div className={`grid gap-6 ${layoutMode === 'desktop' ? 'grid-cols-1 lg:grid-cols-12' : 'grid-cols-1 max-w-xl mx-auto'}`}>
+          
+          {/* ══════════════════════════════════════════════════════════════
+              LEFT PANE: LIVE ROUTE STOP QUEUE (40% Width on Desktop)
+             ══════════════════════════════════════════════════════════════ */}
+          <div className={`${layoutMode === 'desktop' ? 'lg:col-span-5' : 'col-span-1'} flex flex-col gap-3`}>
+            
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Layers className="h-4 w-4 text-blue-600" />
+                <span>Route Stops ({filteredDeliveries.length})</span>
+              </h2>
+              <span className="text-[11px] text-slate-500 font-medium">Click stop to inspect & sign</span>
             </div>
 
-            {/* Form Content Area */}
-            <div className="flex-1 overflow-y-auto px-5 pt-3 pb-4 flex flex-col justify-between">
-              
-              <div>
-                {/* Title & Subtitle */}
-                <div className="text-center mb-3">
-                  <h3 className="text-base font-black text-[#1E293B] tracking-tight">
-                    Confirm Delivery
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Confirm your {currentStop.customerName || 'customer'} delivery.
-                  </p>
-                </div>
+            {/* List of Deliveries */}
+            <div className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+              {filteredDeliveries.map((del, idx) => {
+                const isSelected = del.id === activeDelivery?.id;
+                const isDelivered = del.status === DeliveryStatus.DELIVERED;
+                const isPicked = del.status === DeliveryStatus.PICKED_AND_LOADED;
 
-                {/* Signature Field */}
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-500">
-                      Signature
-                    </label>
-                    <button 
-                      onClick={clearSignature}
-                      className="text-[10px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-                    >
-                      Clear
-                    </button>
+                return (
+                  <div
+                    key={del.id}
+                    onClick={() => setSelectedDeliveryId(del.id)}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer relative ${
+                      isSelected
+                        ? 'bg-blue-50/50 border-blue-500 ring-2 ring-blue-500/20 shadow-md'
+                        : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs'
+                    }`}
+                  >
+                    {/* Top Row: Stop Badge & Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`h-7 w-7 rounded-xl font-mono font-black text-xs flex items-center justify-center ${
+                          isDelivered 
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                            : isPicked
+                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}>
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                            {del.customerName || 'Customer Stop'}
+                          </h3>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5">
+                            <span>{del.epicorSalesOrder || del.id}</span>
+                            {del.invoiceNumber && <span>• {del.invoiceNumber}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status Badge */}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                        isDelivered 
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                          : isPicked
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}>
+                        {isDelivered ? 'Delivered' : isPicked ? 'Loaded / In Transit' : 'Registered'}
+                      </span>
+                    </div>
+
+                    {/* Address Line */}
+                    <div className="mt-2.5 flex items-start gap-1.5 text-xs text-slate-600">
+                      <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+                      <span className="line-clamp-1">{del.deliveryAddress || 'No address provided'}</span>
+                    </div>
+
+                    {/* Footer Details: Slot, Driver, Pod Pill */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                      <div className="flex items-center gap-2">
+                        {del.scheduledSlot && (
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-bold">
+                            {del.scheduledSlot} Slot
+                          </span>
+                        )}
+                        {del.assignedDriver && (
+                          <span className="truncate max-w-[110px]">
+                            Driver: {del.assignedDriver}
+                          </span>
+                        )}
+                      </div>
+
+                      {isDelivered && (
+                        <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
+                          <Check className="h-3 w-3" />
+                          Signed & Completed
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+
+          {/* ══════════════════════════════════════════════════════════════
+              RIGHT PANE: ePOD VERIFICATION & SIGN-OFF TERMINAL (60% Width)
+             ══════════════════════════════════════════════════════════════ */}
+          <div className={`${layoutMode === 'desktop' ? 'lg:col-span-7' : 'col-span-1'} flex flex-col gap-4`}>
+            
+            {activeDelivery ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-6">
+                
+                {/* Active Stop Header & Quick Navigation */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 border-b border-slate-100">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 bg-blue-600 text-white rounded-lg text-xs font-mono font-bold">
+                        Stop #{filteredDeliveries.findIndex(d => d.id === activeDelivery.id) + 1}
+                      </span>
+                      <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                        {activeDelivery.customerName || 'Customer'}
+                      </h2>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
+                      <span>Order: {activeDelivery.epicorSalesOrder || activeDelivery.id}</span>
+                      {activeDelivery.invoiceNumber && <span>• Invoice: {activeDelivery.invoiceNumber}</span>}
+                      {activeDelivery.originBranch && <span>• Hub: {activeDelivery.originBranch}</span>}
+                    </div>
                   </div>
 
-                  {/* Interactive Signature Box */}
-                  <div className="h-24 w-full bg-[#F0F4F8] rounded-xl relative overflow-hidden border border-slate-200/80 flex items-center justify-center">
-                    <canvas
-                      ref={canvasRef}
-                      width={300}
-                      height={96}
-                      onMouseDown={startDrawing}
-                      onMouseMove={draw}
-                      onMouseUp={stopDrawing}
-                      onMouseLeave={stopDrawing}
-                      onTouchStart={startDrawing}
-                      onTouchMove={draw}
-                      onTouchEnd={stopDrawing}
-                      className="w-full h-full cursor-crosshair touch-none"
-                    />
-
-                    {/* Placeholder Script if untouched */}
-                    {!hasDrawnSignature && (
-                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        <span 
-                          className="text-2xl text-slate-400/80 italic font-serif select-none"
-                          style={{ fontFamily: "'Brush Script MT', 'Caveat', cursive, serif" }}
-                        >
-                          {signatureText}
-                        </span>
-                      </div>
+                  {/* Quick Action Trigger Buttons */}
+                  <div className="flex items-center gap-2">
+                    {activeDelivery.phone && (
+                      <a
+                        href={`tel:${activeDelivery.phone}`}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+                        title="Call Customer"
+                      >
+                        <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>{activeDelivery.phone}</span>
+                      </a>
+                    )}
+                    {activeDelivery.deliveryAddress && (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(activeDelivery.deliveryAddress)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                        title="Open in Google Maps"
+                      >
+                        <Navigation className="h-3.5 w-3.5" />
+                        <span>Navigate</span>
+                      </a>
                     )}
                   </div>
                 </div>
 
-                {/* Notes Field */}
-                <div className="mb-2">
-                  <label className="text-xs font-semibold text-slate-500 block mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    value={deliveryNotes}
-                    onChange={(e) => setDeliveryNotes(e.target.value)}
-                    rows={2}
-                    placeholder="Enter site delivery notes..."
-                    className="w-full bg-[#F0F4F8] rounded-xl p-2.5 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-slate-200/80 resize-none font-medium leading-relaxed"
-                  />
+                {/* Delivery Location & Special Notes Banner */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
+                    <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px] block">
+                      Delivery Destination
+                    </span>
+                    <p className="text-slate-800 font-medium leading-relaxed flex items-start gap-1.5">
+                      <MapPin className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                      <span>{activeDelivery.deliveryAddress || 'Address on file'}</span>
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
+                    <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px] block">
+                      Dispatch Instructions / Notes
+                    </span>
+                    <p className="text-slate-700 italic">
+                      {activeDelivery.destinationNotes || 'Standard curbside drop-off. Verify customer sign-off.'}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Status Stepper / Stage Controls */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <span className="text-slate-600 font-semibold">Workflow Stage:</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickStatusChange(DeliveryStatus.REGISTERED)}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        activeDelivery.status === DeliveryStatus.REGISTERED
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      1. Registered
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickStatusChange(DeliveryStatus.PICKED_AND_LOADED)}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        activeDelivery.status === DeliveryStatus.PICKED_AND_LOADED
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      2. Loaded & En Route
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeDelivery.status !== DeliveryStatus.DELIVERED) {
+                          handleSubmitEpod();
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        activeDelivery.status === DeliveryStatus.DELIVERED
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      3. Completed (ePOD)
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── ELECTRONIC PROOF OF DELIVERY CAPTURE SECTION ── */}
+                {activeDelivery.status === DeliveryStatus.DELIVERED ? (
+                  /* Already Delivered - Audit & Inspection View */
+                  <div className="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-emerald-800">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                        <h3 className="text-sm font-bold text-slate-900">Delivery Completed & Verified</h3>
+                      </div>
+                      <span className="text-xs text-emerald-700 font-mono font-medium">
+                        {activeDelivery.deliveredAt ? new Date(activeDelivery.deliveredAt).toLocaleString() : 'Delivered'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      {/* Customer Signature View */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2 shadow-xs">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                          Recorded Signature
+                        </span>
+                        {activeDelivery.customerSignature && activeDelivery.customerSignature.startsWith('data:') ? (
+                          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 flex items-center justify-center h-28">
+                            <img 
+                              src={activeDelivery.customerSignature} 
+                              alt="Customer Signature" 
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 rounded-lg p-4 text-center font-serif text-lg text-slate-700 italic border border-slate-200">
+                            "{activeDelivery.customerSignature || activeDelivery.customerName || 'Signed on File'}"
+                          </div>
+                        )}
+                        <span className="text-[10px] text-slate-500 font-mono block text-center">
+                          Signee: {activeDelivery.customerName}
+                        </span>
+                      </div>
+
+                      {/* Delivery Photo View */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2 shadow-xs">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                          Drop-off Verification Photo
+                        </span>
+                        {capturedPhotos.length > 0 ? (
+                          <div className="flex gap-2 overflow-x-auto py-1">
+                            {capturedPhotos.map((photo, pIdx) => (
+                              <img
+                                key={pIdx}
+                                src={photo}
+                                alt={`Proof of Delivery ${pIdx + 1}`}
+                                className="h-28 w-28 object-cover rounded-lg border border-slate-200 shrink-0"
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="h-28 bg-slate-50 rounded-lg flex items-center justify-center text-xs text-slate-400 italic border border-slate-200">
+                            No photo attached
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleQuickStatusChange(DeliveryStatus.PICKED_AND_LOADED)}
+                        className="text-xs text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Reopen Delivery Sign-off
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-2 transition-all cursor-pointer border border-slate-200 shadow-xs"
+                      >
+                        <Printer className="h-4 w-4 text-blue-600" />
+                        Print ePOD Slip
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Active Capture Form */
+                  <div className="space-y-5">
+                    
+                    {/* 1. Digital Signature Pad */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          <span>Customer Digital Signature</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={clearCanvas}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Clear Signature
+                        </button>
+                      </div>
+
+                      {/* Signature Canvas Box */}
+                      <div className="bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 relative overflow-hidden shadow-inner h-36">
+                        <canvas
+                          ref={canvasRef}
+                          width={600}
+                          height={144}
+                          onMouseDown={startDrawing}
+                          onMouseMove={draw}
+                          onMouseUp={stopDrawing}
+                          onMouseLeave={stopDrawing}
+                          onTouchStart={startDrawing}
+                          onTouchMove={draw}
+                          onTouchEnd={stopDrawing}
+                          className="w-full h-full cursor-crosshair touch-none"
+                        />
+                        {!hasDrawnSignature && (
+                          <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-slate-400 text-xs font-medium">
+                            <span>Draw customer signature here with mouse or stylus...</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Signee Name Input */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-600 font-semibold shrink-0">Signee Name:</span>
+                        <input
+                          type="text"
+                          placeholder="Recipient / Customer Name"
+                          value={signatureName}
+                          onChange={(e) => setSignatureName(e.target.value)}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 2. Photo Proof of Delivery */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <Camera className="h-4 w-4 text-emerald-600" />
+                          <span>Drop-off Photo Verification</span>
+                        </label>
+                        <span className="text-[11px] text-slate-500 font-mono">{capturedPhotos.length} photo(s)</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* Upload Button */}
+                        <label className="h-24 w-28 border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-white rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer text-slate-500 hover:text-blue-600 transition-all shadow-xs">
+                          <Upload className="h-5 w-5 text-blue-600" />
+                          <span className="text-[10px] font-bold">Upload Photo</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handlePhotoUpload}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {/* Photo Previews */}
+                        {capturedPhotos.map((img, idx) => (
+                          <div key={idx} className="relative group h-24 w-24 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-xs">
+                            <img src={img} alt={`Proof ${idx + 1}`} className="h-full w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setCapturedPhotos(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 3. Driver Drop-off Notes & Quick Tags */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                        Driver Drop-off Notes & Location Tags
+                      </label>
+
+                      {/* Quick Tags */}
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          'Left on front porch',
+                          'Handed directly to customer',
+                          'Placed in garage / carport',
+                          'Delivered to warehouse dock',
+                          'Signed by job site superintendent'
+                        ].map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setQuickNoteTag(prev => prev === tag ? '' : tag)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                              quickNoteTag === tag
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200'
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+
+                      <textarea
+                        rows={2}
+                        placeholder="Additional drop-off notes or verification details..."
+                        value={deliveryNote}
+                        onChange={(e) => setDeliveryNote(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                      />
+                    </div>
+
+                    {/* 4. Complete Delivery Action Button */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={handleSubmitEpod}
+                        className="w-full py-3.5 px-6 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white font-black text-sm rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                            <span>Recording Electronic Proof of Delivery...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-5 w-5" />
+                            <span>Confirm & Submit Electronic Proof of Delivery</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                  </div>
+                )}
+
               </div>
-
-              {/* MARK COMPLETE Button (Matching screenshot) */}
-              <div className="pt-2">
-                <button
-                  onClick={handleMarkComplete}
-                  className="w-full py-3 bg-[#4A8AF4] hover:bg-[#3B7AE4] active:scale-[0.98] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <Check className="h-4 w-4" />
-                  <span>MARK COMPLETE</span>
-                </button>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-sm">
+                <PackageCheck className="h-10 w-10 text-slate-400 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-slate-800">Select a Stop to Begin ePOD Sign-Off</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Choose any delivery from the left queue to view customer details, sign electronically, and attach drop-off photos.
+                </p>
               </div>
-
-            </div>
-
-            {/* Bottom Home Indicator Bar */}
-            <div className="h-5 bg-white flex items-center justify-center">
-              <div className="w-28 h-1 bg-slate-300 rounded-full"></div>
-            </div>
+            )}
 
           </div>
-        )}
 
-      </div>
+        </div>
+      )}
 
     </div>
   );

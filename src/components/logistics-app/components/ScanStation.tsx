@@ -512,26 +512,6 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
         setTimeout(() => setScanMessage(''), 4500);
         return;
       }
-
-      try {
-        const res = await fetch("/api/scan-photo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileData })
-        });
-
-        if (res.ok) {
-          const result = await res.json();
-          if (result.success && result.barcodeText) {
-            handleScanAction(result.barcodeText);
-            setScanMessage(`📋 AI Auto-Decrypted: ${result.barcodeText}`);
-            stopCamera();
-            setTimeout(() => setScanMessage(''), 4500);
-          }
-        }
-      } catch (apiErr) {
-        // Safe to ignore bg api failures
-      }
     } catch (err: any) {
       console.warn("Background client stream scan failed:", err);
     } finally {
