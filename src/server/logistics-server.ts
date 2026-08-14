@@ -358,6 +358,7 @@ function deserializeType(truck: any): any {
 
   // Check direct DB columns / object properties first
   let registrationDueDate = truck.registrationDueDate || truck.registration_due_date || "";
+  let imageUrl: string | undefined = truck.imageUrl || truck.image_url || truck.image || undefined;
   let lat: number | undefined = truck.lat !== undefined ? truck.lat : (truck.current_latitude !== undefined ? truck.current_latitude : undefined);
   let lng: number | undefined = truck.lng !== undefined ? truck.lng : (truck.current_longitude !== undefined ? truck.current_longitude : undefined);
   let gpsSource: 'mobile' | 'truck' | undefined = truck.gpsSource || truck.gps_source || undefined;
@@ -391,6 +392,9 @@ function deserializeType(truck: any): any {
 
   const regdue = getLastMatch(/\|\|regdue:([^|]+)/g);
   if (regdue) registrationDueDate = regdue;
+
+  const imgMatch = getLastMatch(/\|\|imageUrl:([^|]+)/g);
+  if (imgMatch) imageUrl = safeDecode(imgMatch);
 
   const latStr = getLastMatch(/\|\|lat:([^|]+)/g);
   if (latStr && !isNaN(parseFloat(latStr))) lat = parseFloat(latStr);
@@ -470,6 +474,9 @@ function deserializeType(truck: any): any {
     ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {}),
 
     // Map snake_case DB columns back to camelCase frontend interface
+    branchId: truck.branchId || truck.branch_id || truck.branchid || truck.storeId || truck.store_id || '',
+    branch_id: truck.branch_id || truck.branchId || truck.branchid || '',
+    imageUrl: imageUrl || truck.image_url || truck.imageUrl || '',
     truckNumber: truck.truck_number || truck.truckNumber,
     vin: truck.vin,
     licensePlate: truck.license_plate || truck.licensePlate,
@@ -552,7 +559,7 @@ function deduplicateServerTrucks(trucksList: any[]): any[] {
       }
 
       const assignedDriverId = truck.assignedDriverId || existing.assignedDriverId;
-      const branchId = truck.branchId || existing.branchId;
+      const branchId = truck.branchId || truck.branch_id || existing.branchId || existing.branch_id || '';
 
       const lat = (typeof truck.lat === 'number' && !isNaN(truck.lat)) ? truck.lat : existing.lat;
       const lng = (typeof truck.lng === 'number' && !isNaN(truck.lng)) ? truck.lng : existing.lng;
@@ -567,11 +574,12 @@ function deduplicateServerTrucks(trucksList: any[]): any[] {
       map.set(existingKey, {
         ...existing,
         ...truck,
-        id: existing.id || truck.id,
-        name: existing.name || truck.name,
+        id: truck.id || existing.id,
+        name: truck.name || existing.name,
         driver,
         assignedDriverId,
         branchId,
+        branch_id: branchId,
         lat,
         lng,
         gpsLat,
@@ -1094,6 +1102,8 @@ ALTER TABLE branches ADD COLUMN IF NOT EXISTS fuel_station_available boolean DEF
 ALTER TABLE branches ADD COLUMN IF NOT EXISTS maintenance_facility_available boolean DEFAULT false;
 
 -- Upgrade Trucks
+ALTER TABLE trucks ADD COLUMN IF NOT EXISTS "branchId" varchar;
+ALTER TABLE trucks ADD COLUMN IF NOT EXISTS branch_id varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS truck_number varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS vin varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS license_plate varchar;
@@ -1510,8 +1520,9 @@ async function runSelfHealingOnce() {
             let initialLng = (typeof deserialized.gpsLng === 'number' && !isNaN(deserialized.gpsLng)) ? deserialized.gpsLng : ((matchedFt ? matchedFt.lng : deserialized.lng) || (is2101 ? -63.5410 : -63.5825));
 
             const defaultDeviceId = deserialized.gpsDeviceId || `FC-${t.id.replace(/[^a-zA-Z0-9]/g, '')}`;
-            const updatedDriver = (t.driver && t.driver.toLowerCase() !== 'driver' && t.driver.toLowerCase() !== 'no driver' && t.driver.trim() !== '') ? t.driver : (matchedFt?.driver || "No Driver");
-            const updatedBranchId = matchedFt?.branchId || t.branchId || "DC-WINAMILL";
+            // Preserve user-assigned driver and branch! Never overwrite user configuration!
+            const updatedDriver = t.driver || matchedFt?.driver || "No Driver";
+            const updatedBranchId = t.branchId || t.branch_id || matchedFt?.branchId || "DC-WINAMILL";
 
             const updatedType = serializeToType(
               deserialized.type || "Commercial Truck",
@@ -1526,11 +1537,13 @@ async function runSelfHealingOnce() {
               }
             );
 
+            // Only update GPS hardware device identification and live coordinates if missing, preserving existing branch and driver
             await supabase
               .from("trucks")
               .update({
                 driver: updatedDriver,
                 branchId: updatedBranchId,
+                branch_id: updatedBranchId,
                 type: updatedType,
                 gps_device_id: defaultDeviceId,
                 gps_device_name: "Fleet Complete FT1 Telematics",
@@ -2937,7 +2950,7 @@ app.use((req, res, next) => {
 
             return {
               id: t.id,
-              tenantId: t.tenantId,
+              tenantId: t.tenantId || tenantId,
               name: t.name,
               type: serializeToType(
                 t.type,
@@ -2945,12 +2958,10 @@ app.use((req, res, next) => {
                 t.imageUrl
               ),
               driver: t.driver,
-              branchId: t.branchId,
+              branchId: t.branchId || t.branch_id || null,
+              branch_id: t.branchId || t.branch_id || null,
+              image_url: t.imageUrl || t.image_url || null,
               registrationDueDate: t.registrationDueDate || null,
-              gps_device_id: targetGpsDeviceId || null,
-              current_latitude: (typeof gpsLat === 'number' && !isNaN(gpsLat)) ? gpsLat : (typeof lat === 'number' && !isNaN(lat) ? lat : null),
-              current_longitude: (typeof gpsLng === 'number' && !isNaN(gpsLng)) ? gpsLng : (typeof lng === 'number' && !isNaN(lng) ? lng : null),
-              current_status: targetGpsStatus || 'Connected',
               
               // Map camelCase frontend fields to snake_case backend columns
               truck_number: t.truckNumber || null,
@@ -2967,7 +2978,9 @@ app.use((req, res, next) => {
               last_service_date: t.lastServiceDate || null,
               next_service_due_date: t.nextServiceDueDate || null,
               insurance_policy_number: t.insurancePolicyNumber || null,
-              insurance_expiry_date: t.insuranceExpiryDate || null
+              insurance_expiry_date: t.insuranceExpiryDate || null,
+              user_field_1: t.userField1 || null,
+              user_field_2: t.userField2 || null
             };
           });
 
@@ -3003,11 +3016,12 @@ app.use((req, res, next) => {
                 console.log(`[Trucks Sync] Fallback: stripping all extended truck columns...`);
                 currentTruckPayload = currentTruckPayload.map((t: any) => ({
                   id: t.id,
-                  tenantId: t.tenantId,
+                  tenantId: t.tenantId || tenantId,
                   name: t.name,
                   type: t.type,
                   driver: t.driver,
-                  branchId: t.branchId
+                  branchId: t.branchId || t.branch_id || null,
+                  branch_id: t.branch_id || t.branchId || null
                 }));
               }
             } else {
@@ -4529,7 +4543,7 @@ async function getFleetId(token: string): Promise<string | null> {
       const fcResult = await getVehiclePositions(credentialsSupplier);
 
       if (fcResult.success && fcResult.vehicles && fcResult.vehicles.length > 0) {
-        // Trigger background sync to persist updated coordinates in DB
+        // Trigger background in-memory telemetry update
         syncFleetCompleteTelemetry().catch((e) => console.warn("[Fleet Sync Notice]", e));
 
         return res.json({
@@ -4542,59 +4556,19 @@ async function getFleetId(token: string): Promise<string | null> {
         });
       }
 
-      // Fallback: Query last-known vehicle positions from database / memory
-      const supabase = getSupabase(req, true);
-      let fallbackVehicles: any[] = [];
-
-      if (supabase) {
-        const { data: dbTrucks } = await supabase.from('trucks').select('*');
-        if (dbTrucks && dbTrucks.length > 0) {
-          fallbackVehicles = dbTrucks.map((t: any) => {
-            const deserialized = deserializeType(t);
-            return {
-              id: t.id,
-              name: t.name || t.id,
-              lat: deserialized?.currentLatitude || t.current_latitude || 44.6488,
-              lng: deserialized?.currentLongitude || t.current_longitude || -63.5752,
-              speed: deserialized?.currentSpeed || 0,
-              heading: deserialized?.heading || 0,
-              timestamp: deserialized?.lastGpsSync || t.updated_at || new Date().toISOString(),
-              ignitionStatus: deserialized?.currentStatus === 'En Route' ? 'ON' : deserialized?.currentStatus === 'Idle' ? 'IDLING' : 'OFF',
-              idlingMins: deserialized?.idlingMins || 0,
-              isStale: true
-            };
-          });
-        }
-      }
-
-      if (fallbackVehicles.length === 0) {
-        const tenantState = inMemoryTenantStates['rona_atlantic'] || Object.values(inMemoryTenantStates)[0];
-        if (tenantState && tenantState.trucks) {
-          fallbackVehicles = tenantState.trucks.map((t: any) => ({
-            id: t.id,
-            name: t.name || t.id,
-            lat: t.currentLatitude || 44.6488,
-            lng: t.currentLongitude || -63.5752,
-            speed: t.currentSpeed || 0,
-            heading: 0,
-            timestamp: t.lastGpsSync || new Date().toISOString(),
-            ignitionStatus: t.currentStatus === 'En Route' ? 'ON' : 'OFF',
-            idlingMins: 0,
-            isStale: true
-          }));
-        }
-      }
-
+      // No demo or mock fallbacks - return authentic live telemetry status
       return res.json({
-        success: true,
-        source: 'database_fallback',
-        isStale: true,
-        warning: fcResult.isAuthError ? 'Fleet Complete authentication requires token refresh' : 'Fleet Complete API unreachable - returning last known vehicle positions from database',
-        vehicles: fallbackVehicles,
+        success: false,
+        source: 'fleet_complete',
+        isStale: false,
+        warning: fcResult.isAuthError
+          ? 'Fleet Complete token expired or missing'
+          : 'No live telemetry reported from Fleet Complete for fleet units at this moment.',
+        vehicles: [],
         timestamp: new Date().toISOString()
       });
     } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      return res.status(500).json({ success: false, error: err.message, vehicles: [] });
     }
   });
 
@@ -4712,8 +4686,6 @@ async function getFleetId(token: string): Promise<string | null> {
 
 async function syncFleetCompleteTelemetry() {
   try {
-    const supabase = getSupabase(true);
-
     const credentialsSupplier = async () => {
       const conn = await getActiveConnection();
       return {
@@ -4725,7 +4697,7 @@ async function syncFleetCompleteTelemetry() {
       };
     };
 
-    // 1. Fetch live telemetry from Fleet Complete
+    // 1. Fetch live telemetry from Fleet Complete using active token
     const fcResult = await getVehiclePositions(credentialsSupplier);
     const vehicles = fcResult.vehicles || [];
 
@@ -4733,20 +4705,7 @@ async function syncFleetCompleteTelemetry() {
       return;
     }
 
-    // 2. Fetch current trucks from Supabase (if active)
-    let allRawDbTrucks: any[] = [];
-    if (supabase) {
-      try {
-        const { data: rawTrucks } = await supabase.from('trucks').select('*');
-        if (rawTrucks) {
-          allRawDbTrucks = rawTrucks;
-        }
-      } catch (dbErr) {
-        console.warn("[Fleet Complete Sync] Notice fetching Supabase trucks:", dbErr);
-      }
-    }
-
-    // 3. Process each telematics vehicle from Fleet Complete
+    // 2. Update In-Memory live telemetry across all active tenants (No longer writes ephemeral telemetry to Supabase tables)
     for (const v of vehicles) {
       const vehicleName = v.name || v.id;
       const gpsDeviceId = v.hardwareId || v.id;
@@ -4764,81 +4723,6 @@ async function syncFleetCompleteTelemetry() {
       const vUNum = extractTruckUnitNumber(vehicleName) || extractTruckUnitNumber(v.id);
 
       if (typeof lat === 'number' && typeof lng === 'number') {
-        // 3.1 Update Supabase
-        if (supabase && allRawDbTrucks.length > 0) {
-          const matches = allRawDbTrucks.filter((t: any) => {
-            const deserialized = deserializeType(t);
-            const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
-            if (
-              t.id === vehicleName ||
-              t.name === vehicleName ||
-              t.id === v.id ||
-              deserialized.gpsDeviceId === gpsDeviceId ||
-              (deserialized.gpsDeviceName && deserialized.gpsDeviceName === vehicleName) ||
-              (vUNum && tUNum && vUNum === tUNum)
-            ) {
-              return true;
-            }
-            return false;
-          });
-
-          if (matches.length > 0) {
-            const matchedDbTruck = matches.find((m: any) => m.id === vehicleName || m.name === vehicleName || m.id === v.id) || matches[0];
-            const deserialized = deserializeType(matchedDbTruck);
-
-            if (deserialized.gpsDeviceId !== 'DISABLED' && deserialized.gpsSource !== 'mobile') {
-              const updatedType = serializeToType(
-                deserialized.type || "Commercial Carrier",
-                deserialized.registrationDueDate || "2026-11-29",
-                deserialized.imageUrl,
-                { speed, lat, lng, status: 'Connected', handshake: timestamp }
-              );
-              const trkTenantId = matchedDbTruck?.tenantId || 'rona_atlantic';
-
-              try {
-                await supabase.from('trucks').update({
-                  type: updatedType,
-                  gps_device_id: gpsDeviceId,
-                  gps_device_name: "Fleet Complete FT1 Telematics",
-                  updated_date: new Date().toISOString()
-                }).eq('id', matchedDbTruck.id);
-              } catch (_) {}
-
-              const gpsPayload = {
-                id: `GPS-IMEI-${vehicleName.replace(/[^a-zA-Z0-9]/g, '')}`,
-                tenantId: trkTenantId,
-                deviceId: gpsDeviceId,
-                deviceName: vehicleName,
-                simIccid: 'Bell Mobility Business IoT',
-                status: 'Connected',
-                assignedTruckId: matchedDbTruck.id,
-                lastHandshake: timestamp,
-                lastLatitude: lat,
-                lastLongitude: lng
-              };
-              try { await supabase.from('gps_units_setup').upsert([gpsPayload]); } catch (_) {}
-
-              const historyPayload = {
-                tenantId: trkTenantId,
-                deviceId: gpsDeviceId,
-                latitude: lat,
-                longitude: lng,
-                speed: speed,
-                heading: v.heading || 180.0,
-                recordedAt: timestamp,
-                ignitionStatus: speed > 0 || idlingMins > 0,
-                gps_device_id: gpsDeviceId,
-                truck_id: String(matchedDbTruck.id),
-                speed_kph: speed,
-                engine_status: speed > 0 ? 'Driving' : (idlingMins > 0 ? 'Idling' : 'Stopped'),
-                created_date: new Date().toISOString()
-              };
-              try { await supabase.from('gps_tracking_history').insert([historyPayload]); } catch (_) {}
-            }
-          }
-        }
-
-        // 3.2 Update In-Memory fallback for all active tenants
         for (const tid of Object.keys(inMemoryTenantStates)) {
           const state = inMemoryTenantStates[tid];
           if (state && state.trucks) {
@@ -4901,9 +4785,8 @@ async function syncFleetCompleteTelemetry() {
 }
 
 setInterval(async () => {
-  console.log("[Fleet Complete Sync] Triggering 60s interval run...");
   await syncFleetCompleteTelemetry();
-}, 60000); // Poll every 60 seconds
+}, 20000); // Continuous live background query every 20 seconds
 
 
 }

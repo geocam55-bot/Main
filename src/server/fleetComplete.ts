@@ -678,12 +678,13 @@ export async function getVehiclePositions(
     }
   }
 
-  // Fallback to real last known positions from Fleet Complete
+  // Return live query result with no fallback or mock data
   return {
-    success: true,
-    vehicles: LAST_KNOWN_FLEET_COMPLETE_LOCATIONS,
-    fleetId: fleetId || 'abb3c44d-0588-486d-9e49-441d9639727c',
-    userId: userId || 'f436a0d5-fa20-42ab-b272-15cf68164a1b',
+    success: false,
+    vehicles: [],
+    fleetId: fleetId || cachedTokens.fleetId || null,
+    userId: userId || cachedTokens.userId || null,
     source: 'fleet_complete',
+    isAuthError: !accessToken,
   };
 }

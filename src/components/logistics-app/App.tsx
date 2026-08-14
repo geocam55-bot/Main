@@ -40,6 +40,7 @@ import DriverMobileApp from './components/DriverMobileApp';
 import DriverTruckSelectModal from './components/DriverTruckSelectModal';
 import { FLEET_COMPLETE_TRUCKS } from './truckSpecs';
 import { rolloverUncompletedDeliveries } from './lib/schedulingUtils';
+import { extractVehicleNumber } from './lib/mapHelpers';
 import { 
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
@@ -112,12 +113,6 @@ function deduplicateUsers(usersList: User[]): User[] {
   return deduped;
 }
 
-function extractVehicleNumber(str: string | undefined | null): string | null {
-  if (!str) return null;
-  const match = str.match(/\b\d{3,5}\b/) || str.match(/\d+/);
-  return match ? match[0] : null;
-}
-
 function getFallbackDriverName(idOrName: string, currentDriver?: string): string {
   if (currentDriver && !['no driver', 'unassigned', 'driver', ''].includes(currentDriver.trim().toLowerCase())) {
     return currentDriver;
@@ -180,7 +175,7 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       }
 
       const assignedDriverId = truck.assignedDriverId || existing.assignedDriverId;
-      const branchId = truck.branchId || existing.branchId;
+      const branchId = truck.branchId || (truck as any).branch_id || existing.branchId || (existing as any).branch_id || '';
 
       const gpsLat = truck.gpsLat !== undefined && !isNaN(truck.gpsLat) ? truck.gpsLat : (existing.gpsLat ?? truck.lat);
       const gpsLng = truck.gpsLng !== undefined && !isNaN(truck.gpsLng) ? truck.gpsLng : (existing.gpsLng ?? truck.lng);
@@ -193,8 +188,8 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
       map.set(existingKey, {
         ...existing,
         ...truck,
-        id: existing.id.startsWith('TRUCK-') ? truck.id : existing.id,
-        name: existing.name || truck.name,
+        id: truck.id || existing.id,
+        name: truck.name || existing.name,
         driver: driverName,
         assignedDriverId,
         branchId,
@@ -670,12 +665,7 @@ export default function App() {
           }).catch(console.error);
         }
 
-        const now = Date.now();
-        // Only write to the physical database table at longer intervals (every 2 minutes) for historical routing logs
-        if (now - lastGpsDbSyncRef.current > 120000) {
-          syncStateToSupabase(latestTenant.id, latestDeliveries, updatedTrucks, latestBranches, latestUsers);
-          lastGpsDbSyncRef.current = now;
-        }
+        // Mobile GPS update broadcasted live to in-memory state and Realtime channel
       }
     };
 
@@ -844,11 +834,7 @@ export default function App() {
           driver: t.driver,
           branchId: t.branchId,
           image_url: t.imageUrl || null,
-          registration_due_date: t.registrationDueDate || null,
-          gps_device_id: t.gpsDeviceId || null,
-          current_latitude: typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : null),
-          current_longitude: typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : null),
-          current_status: t.gpsStatus || 'Connected'
+          registration_due_date: t.registrationDueDate || null
         }));
         await supabase.from("trucks").upsert(serializedTrucks);
         console.log("Written driver truck update directly to Supabase trucks table.");
@@ -1595,6 +1581,84 @@ export default function App() {
     };
   }, [currentTenant]);
 
+  // Continuous live telematics polling from Fleet Complete API using authorized token
+  useEffect(() => {
+    if (!currentTenant) return;
+
+    const extractUnitNum = (str: string | undefined | null): string | null => {
+      if (!str) return null;
+      const match = str.match(/\b(1701|2101|2408|2409|2412|2502|2503|2504|\d{4})\b/);
+      return match ? match[1] : null;
+    };
+
+    const fetchLiveFleetTelemetry = async () => {
+      try {
+        const res = await customFetch('/api/vehicles');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.vehicles) && data.vehicles.length > 0) {
+          const liveVehicles: any[] = data.vehicles;
+          setTrucks(prevTrucks => {
+            let hasChanges = false;
+            const updated = prevTrucks.map(truck => {
+              const trkUNum = extractUnitNum(truck.id) || extractUnitNum(truck.name);
+              const matchedLive = liveVehicles.find(v => {
+                const vUNum = extractUnitNum(v.name || v.id);
+                return (
+                  v.id === truck.id ||
+                  (v.name && truck.name && v.name.trim().toLowerCase() === truck.name.trim().toLowerCase()) ||
+                  (trkUNum && vUNum && trkUNum === vUNum) ||
+                  (v.vin && truck.vin && v.vin === truck.vin) ||
+                  (v.hardwareId && truck.gpsDeviceId && v.hardwareId === truck.gpsDeviceId)
+                );
+              });
+
+              if (matchedLive && typeof matchedLive.lat === 'number' && typeof matchedLive.lng === 'number') {
+                const speed = typeof matchedLive.speed === 'number' ? matchedLive.speed : 0;
+                const idlingMins = typeof matchedLive.idlingMins === 'number' ? matchedLive.idlingMins : 0;
+                const handshake = matchedLive.timestamp || new Date().toISOString();
+
+                if (truck.lat !== matchedLive.lat || truck.lng !== matchedLive.lng || truck.gpsSpeed !== speed || truck.gpsStatus !== 'Connected') {
+                  hasChanges = true;
+                  return {
+                    ...truck,
+                    lat: matchedLive.lat,
+                    lng: matchedLive.lng,
+                    gpsLat: matchedLive.lat,
+                    gpsLng: matchedLive.lng,
+                    gpsSpeed: speed,
+                    speed: speed,
+                    gpsIdlingMins: idlingMins,
+                    gpsStatus: 'Connected',
+                    gpsLastHandshake: handshake,
+                    gpsSource: 'truck',
+                    isDriving: speed > 0,
+                    isIdling: speed === 0 && idlingMins > 0,
+                    isParked: speed === 0 && idlingMins === 0,
+                    statusText: speed > 0 ? `${speed} km/h` : (idlingMins > 0 ? 'Idling' : 'Parked')
+                  };
+                }
+              }
+              return truck;
+            });
+            return hasChanges ? updated : prevTrucks;
+          });
+        }
+      } catch (_) {
+        // Silently continue polling
+      }
+    };
+
+    fetchLiveFleetTelemetry();
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchLiveFleetTelemetry();
+      }
+    }, 15000); // Continuous live query every 15 seconds
+
+    return () => clearInterval(interval);
+  }, [currentTenant]);
+
   const lastGpsDbSyncRef = useRef<number>(Date.now());
   const lastHeartbeatRef = useRef<number>(0);
 
@@ -1697,8 +1761,9 @@ export default function App() {
       stateUpdated = true;
     }
 
-    // Migrate branch ID "DC-ELMSDALE" to "01070"
-    if (newTrucks.some(t => t.branchId === "DC-ELMSDALE" || t.branchId === "ELMSDALE")) {
+    // Migrate branch ID "DC-ELMSDALE" to "01070" only if DC-ELMSDALE is not a valid branch
+    const hasElmsdaleBranch = newBranches.some(b => b.id === "DC-ELMSDALE" || b.id === "ELMSDALE");
+    if (!hasElmsdaleBranch && newTrucks.some(t => t.branchId === "DC-ELMSDALE" || t.branchId === "ELMSDALE")) {
       newTrucks = newTrucks.map(t => (t.branchId === "DC-ELMSDALE" || t.branchId === "ELMSDALE") ? { ...t, branchId: "01070" } : t);
       stateUpdated = true;
     }
@@ -1964,16 +2029,31 @@ export default function App() {
   // Fleet handlers
   const handleAddTruck = async (newTruck: Truck) => {
     if (!currentTenant) return;
-    const updated = [...trucks, newTruck];
+    lastMutationTimeRef.current = Date.now();
+    const truckWithTenant: Truck = {
+      ...newTruck,
+      tenantId: currentTenant.id
+    };
+    const updated = [...trucks, truckWithTenant];
     setTrucks(updated);
+    try {
+      localStorage.setItem(`prospaces_trucks_tenant_${currentTenant.id}`, JSON.stringify(updated));
+    } catch {}
     await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
   };
 
   const handleUpdateTruck = async (updatedTruck: Truck) => {
     if (!currentTenant) return;
     lastMutationTimeRef.current = Date.now();
-    const updated = trucks.map(t => t.id === updatedTruck.id ? updatedTruck : t);
+    const truckWithTenant: Truck = {
+      ...updatedTruck,
+      tenantId: currentTenant.id
+    };
+    const updated = trucks.map(t => t.id === updatedTruck.id ? truckWithTenant : t);
     setTrucks(updated);
+    try {
+      localStorage.setItem(`prospaces_trucks_tenant_${currentTenant.id}`, JSON.stringify(updated));
+    } catch {}
     await syncStateToSupabase(currentTenant.id, deliveries, updated, branches, users);
   };
 

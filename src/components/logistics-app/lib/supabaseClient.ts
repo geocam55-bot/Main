@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { extractVehicleNumber } from "./mapHelpers";
+import { extractVehicleNumber, sanitizeGpsCoordinates } from "./mapHelpers";
 
 // Serialization and Deserialization helpers matching the backend implementation
 export function serializeToPhone(phone: string | undefined, password: string | undefined, status: string | undefined, driverLicenseExpire?: string | undefined, lastActive?: string | undefined, resetRequest?: string | undefined, avatarUrl?: string | undefined): string {
@@ -78,51 +78,6 @@ export function deserializeFromPhone(user: any): any {
     resetRequest,
     avatarUrl
   };
-}
-
-function sanitizeGpsCoordinates(lat: number, lng: number): { lat: number; lng: number } {
-  if (isNaN(lat) || isNaN(lng)) return { lat: 44.68550, lng: -63.58250 };
-
-  // 1. Eastern Passage / Shearwater / Eisner Cove / Halifax Outer Harbour Channel Water
-  if (lat >= 44.5800 && lat <= 44.6550 && lng >= -63.5850 && lng <= -63.5200) {
-    if (lng >= -63.5450) {
-      return { lat: Math.min(lat, 44.6300), lng: -63.5180 };
-    } else if (lng >= -63.5650) {
-      return { lat: Math.max(lat, 44.6550), lng: -63.5480 };
-    } else {
-      return { lat, lng: -63.5880 };
-    }
-  }
-
-  // 2. Halifax Inner Harbour & The Narrows Water Channel
-  if (lat >= 44.6400 && lat <= 44.6850 && lng >= -63.6100 && lng <= -63.5650) {
-    if (lng >= -63.5850) {
-      return { lat: Math.max(lat, 44.68550), lng: -63.58250 };
-    } else {
-      return { lat, lng: -63.60200 };
-    }
-  }
-
-  // 3. Bedford Basin Water
-  if (lat >= 44.6750 && lat <= 44.7300 && lng >= -63.6800 && lng <= -63.6050) {
-    if (lng <= -63.6400) {
-      return { lat, lng: -63.6820 };
-    } else {
-      return { lat, lng: -63.5980 };
-    }
-  }
-
-  // 4. Northwest Arm Water
-  if (lat >= 44.6200 && lat <= 44.6450 && lng >= -63.6100 && lng <= -63.5900) {
-    return { lat, lng: -63.6150 };
-  }
-
-  // 5. Hard bounds fallback for Nova Scotia Region
-  if (lat < 44.4000 || lat > 46.5000 || lng < -64.5000 || lng > -62.0000) {
-    return { lat: 44.68550, lng: -63.58250 };
-  }
-
-  return { lat, lng };
 }
 
 export function normalizeTenantId(rawTenantId: any): string {
@@ -264,6 +219,9 @@ export function deserializeType(truck: any): any {
     ...(gpsIdlingMins !== undefined && !isNaN(gpsIdlingMins) ? { gpsIdlingMins } : {}),
 
     // Map snake_case DB columns back to camelCase frontend interface
+    branchId: truck.branchId || truck.branch_id || truck.branchid || truck.storeId || truck.store_id || '',
+    branch_id: truck.branch_id || truck.branchId || truck.branchid || '',
+    imageUrl: imageUrl || truck.image_url || truck.imageUrl || '',
     truckNumber: truck.truck_number || truck.truckNumber,
     vin: truck.vin,
     licensePlate: truck.license_plate || truck.licensePlate,
@@ -741,7 +699,7 @@ export async function saveTenantStateDirect(
 
   const serializedTrucks = uniqueTrucks.map(t => ({
     id: t.id,
-    tenantId,
+    tenantId: t.tenantId || tenantId,
     name: t.name,
     type: serializeToType(
       t.type,
@@ -749,13 +707,27 @@ export async function saveTenantStateDirect(
       t.imageUrl
     ),
     driver: t.driver,
-    branchId: t.branchId,
+    branchId: t.branchId || t.branch_id || null,
+    branch_id: t.branchId || t.branch_id || null,
     image_url: t.imageUrl || null,
     registration_due_date: t.registrationDueDate || null,
-    gps_device_id: t.gpsDeviceId || null,
-    current_latitude: typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : null),
-    current_longitude: typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : null),
-    current_status: t.gpsStatus || 'Connected'
+    truck_number: t.truckNumber || null,
+    vin: t.vin || null,
+    license_plate: t.licensePlate || null,
+    make: t.make || null,
+    model: t.model || null,
+    year: t.year || null,
+    color: t.color || null,
+    capacity_weight_kg: t.capacityWeightKg || null,
+    capacity_volume_m3: t.capacityVolumeM3 || null,
+    fuel_type: t.fuelType || null,
+    current_mileage: t.currentMileage || null,
+    last_service_date: t.lastServiceDate || null,
+    next_service_due_date: t.nextServiceDueDate || null,
+    insurance_policy_number: t.insurancePolicyNumber || null,
+    insurance_expiry_date: t.insuranceExpiryDate || null,
+    user_field_1: t.userField1 || null,
+    user_field_2: t.userField2 || null
   }));
 
   const mappedBranches = uniqueBranches.map(b => {
