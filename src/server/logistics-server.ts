@@ -142,7 +142,7 @@ function getSupabase(reqOrBypass?: any, bypassCircuitBreaker: boolean = false) {
   return supabaseClient;
 }
 
-function withTimeout<T>(promise: Promise<T> | any, ms: number = 3000): Promise<T> {
+function withTimeout<T>(promise: Promise<T> | any, ms: number = 15000): Promise<T> {
   let timer: NodeJS.Timeout;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -499,13 +499,17 @@ function deserializeType(truck: any): any {
 
 function extractTruckUnitNumber(idOrName?: string | null): string | null {
   if (!idOrName) return null;
-  const match = String(idOrName).match(/\b\d{3,5}\b/) || String(idOrName).match(/\d+/);
+  const str = String(idOrName).trim();
+  // Never extract from UUIDs or long identifiers
+  if (str.length > 20 || /^[0-9a-f]{8}-/i.test(str)) return null;
+  // Match 2 to 5 digits, e.g., "12", "123", "1234"
+  // Do not match single digits to avoid merging "Truck 1" and "Van 1"
+  const match = str.match(/\b\d{2,5}\b/);
   return match ? match[0] : null;
 }
 
 function deduplicateServerTrucks(trucksList: any[]): any[] {
   const map = new Map<string, any>();
-
   for (const truck of trucksList) {
     if (!truck || !truck.id) continue;
     
@@ -517,20 +521,22 @@ function deduplicateServerTrucks(trucksList: any[]): any[] {
     if (map.has(idKey)) {
       existingKey = idKey;
     } else {
-      for (const [k, v] of map.entries()) {
-        const vIdKey = String(v.id).toLowerCase().trim();
-        const vNameKey = String(v.name || v.id).toLowerCase().trim();
-        const vUnitNum = extractTruckUnitNumber(v.id) || extractTruckUnitNumber(v.name);
+      // Only do aggressive name/unit merging for Fleet Complete imported telemetry (which often lack UUIDs)
+      // Standard UI trucks (which have UUIDs) should never be randomly merged together.
+      const isFCVehicle = !/^[0-9a-f]{8}-/i.test(idKey) && idKey.length < 20;
 
-        if (
-          vIdKey === idKey || 
-          vNameKey === nameKey || 
-          vIdKey === nameKey || 
-          vNameKey === idKey || 
-          (unitNum && vUnitNum && unitNum === vUnitNum)
-        ) {
-          existingKey = k;
-          break;
+      if (isFCVehicle) {
+        for (const [k, v] of map.entries()) {
+          const vNameKey = String(v.name || v.id).toLowerCase().trim();
+          const vUnitNum = extractTruckUnitNumber(v.id) || extractTruckUnitNumber(v.name);
+
+          if (
+            vNameKey === nameKey || 
+            (unitNum && vUnitNum && unitNum === vUnitNum)
+          ) {
+            existingKey = k;
+            break;
+          }
         }
       }
     }
@@ -2378,7 +2384,7 @@ app.use((req, res, next) => {
         });
       }
 
-      // Fetch all tables in parallel with a timeout to prevent hanging (safe 4000ms timeout)
+      // Fetch all tables in parallel with a timeout to prevent hanging (safe 15000ms timeout)
       let [rBranches, rTrucks, rUsers, rDeliveries, rGpsUnits] = await withTimeout<any>(
         Promise.all([
           supabase.from("branches").select("*").eq("tenantId", tenantId),
@@ -2387,7 +2393,7 @@ app.use((req, res, next) => {
           supabase.from("deliveries").select("*").eq("tenantId", tenantId),
           Promise.resolve(supabase.from("gps_units_setup").select("*").eq("tenantId", tenantId)).catch(() => ({ data: [] }))
         ]),
-        4000
+        15000
       );
 
       // If schema tables don't exist yet, it'll error.
@@ -2574,25 +2580,31 @@ app.use((req, res, next) => {
       const errMsg = err.message || String(err);
       if (errMsg.includes("timed out") || errMsg.includes("fetch failed") || errMsg.includes("ENOTFOUND") || errMsg.includes("ECONNREFUSED")) {
         supabaseConsecutiveFailures++;
-        if (supabaseConsecutiveFailures >= 2) {
+        if (supabaseConsecutiveFailures >= 3) {
           supabaseTemporarilyDisabled = true;
-          supabaseDisabledUntil = Date.now() + 60000; // Disable queries for 60 seconds
-          console.warn(`[CIRCUIT BREAKER] Supabase disabled for 60 seconds due to consecutive state load errors: ${errMsg}`);
+          supabaseDisabledUntil = Date.now() + 10000; // Disable queries for 10 seconds only
+          console.warn(`[CIRCUIT BREAKER] Supabase paused for 10 seconds due to consecutive state load errors: ${errMsg}`);
         }
       }
 
       const dbError = formatDatabaseError(err);
-      console.warn("Failed to read Supabase state, returning fallback mock data:", dbError);
+      console.warn("Failed to read Supabase state, returning fallback/cached data:", dbError);
       
-      // Fallback data structure for smooth, non-blocking user experience
+      const tid = String(tenantId);
+      if (!inMemoryTenantStates[tid]) {
+        inMemoryTenantStates[tid] = getDefaultTenantState(tid);
+      }
+      const fallbackState = inMemoryTenantStates[tid];
+
+      // Fallback data structure preserving existing in-memory/default data for smooth user experience
       res.json({
         supabaseActive: false,
         error: dbError,
-        schemaMissing: true,
-        branches: [],
-        trucks: [],
-        users: [],
-        deliveries: []
+        schemaMissing: dbError.includes("tables do not exist"),
+        branches: fallbackState.branches || [],
+        trucks: fallbackState.trucks || [],
+        users: fallbackState.users || [],
+        deliveries: fallbackState.deliveries || []
       });
     }
   });
@@ -2836,7 +2848,6 @@ app.use((req, res, next) => {
 
           const trucksToUpsert = sanitizedTrucks.map((t: any) => {
             const ex = existingTruckMap.get(String(t.id).toLowerCase());
-
             const gpsLat = (typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (ex?.gpsLat ?? t.gpsLat ?? ex?.lat ?? t.lat);
             const gpsLng = (typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (ex?.gpsLng ?? t.gpsLng ?? ex?.lng ?? t.lng);
             const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : (ex?.lat ?? t.lat ?? gpsLat);
@@ -2844,7 +2855,6 @@ app.use((req, res, next) => {
             const gpsSpeed = (typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : (ex?.gpsSpeed ?? t.gpsSpeed);
             const gpsIdlingMins = (typeof t.gpsIdlingMins === 'number' && !isNaN(t.gpsIdlingMins)) ? t.gpsIdlingMins : (ex?.gpsIdlingMins ?? t.gpsIdlingMins);
             const gpsLastHandshake = (ex?.gpsLastHandshake && t.gpsLastHandshake && ex.gpsLastHandshake > t.gpsLastHandshake) ? ex.gpsLastHandshake : (t.gpsLastHandshake || ex?.gpsLastHandshake);
-
             const targetGpsDeviceId = t.gpsDeviceId !== undefined ? t.gpsDeviceId : (ex?.gpsDeviceId || '');
             const targetGpsSerialNumber = t.gpsSerialNumber !== undefined ? t.gpsSerialNumber : (ex?.gpsSerialNumber || '');
             const targetGpsDeviceName = t.gpsDeviceName !== undefined ? t.gpsDeviceName : (ex?.gpsDeviceName || '');
@@ -2859,7 +2869,14 @@ app.use((req, res, next) => {
               type: serializeToType(
                 t.type,
                 t.registrationDueDate,
-                t.imageUrl
+                t.imageUrl,
+                {
+                  lat: lat,
+                  lng: lng,
+                  speed: gpsSpeed,
+                  status: targetGpsStatus,
+                  handshake: gpsLastHandshake
+                }
               ),
               driver: t.driver,
               branchId: t.branchId || t.branch_id || null,
