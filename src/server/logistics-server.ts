@@ -2402,6 +2402,7 @@ app.use((req, res, next) => {
       });
 
       const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
+      const inMemState = inMemoryTenantStates[String(tenantId)];
       const deserializedTrucks = deduplicateServerTrucks((rTrucks.data || []).map((t: any) => {
         const dt = deserializeType(t);
         const matchedGps = gpsUnitMap.get(String(t.id).toLowerCase()) || (t.gps_device_id ? gpsUnitMap.get(String(t.gps_device_id).toLowerCase()) : null);
@@ -2424,6 +2425,39 @@ app.use((req, res, next) => {
             dt.gpsSource = 'truck';
           }
         }
+
+        // Overlay latest live in-memory telemetry if available
+        if (inMemState && inMemState.trucks) {
+          const tUNum = extractTruckUnitNumber(dt.id) || extractTruckUnitNumber(dt.name);
+          const inMemMatch = inMemState.trucks.find((imt: any) => {
+            const imUNum = extractTruckUnitNumber(imt.id) || extractTruckUnitNumber(imt.name);
+            return (
+              imt.id === dt.id ||
+              (tUNum && imUNum && tUNum === imUNum) ||
+              (imt.gpsDeviceId && dt.gpsDeviceId && imt.gpsDeviceId === dt.gpsDeviceId)
+            );
+          });
+          if (inMemMatch) {
+            if (typeof inMemMatch.lat === 'number' && typeof inMemMatch.lng === 'number') {
+              dt.lat = inMemMatch.lat;
+              dt.lng = inMemMatch.lng;
+              dt.gpsLat = inMemMatch.lat;
+              dt.gpsLng = inMemMatch.lng;
+            }
+            if (inMemMatch.gpsLastHandshake) dt.gpsLastHandshake = inMemMatch.gpsLastHandshake;
+            if (typeof inMemMatch.gpsSpeed === 'number') {
+              dt.gpsSpeed = inMemMatch.gpsSpeed;
+              dt.speed = inMemMatch.gpsSpeed;
+            }
+            if (typeof inMemMatch.gpsIdlingMins === 'number') dt.gpsIdlingMins = inMemMatch.gpsIdlingMins;
+            if (inMemMatch.gpsStatus) dt.gpsStatus = inMemMatch.gpsStatus;
+            if (inMemMatch.statusText) dt.statusText = inMemMatch.statusText;
+            if (inMemMatch.isDriving !== undefined) dt.isDriving = inMemMatch.isDriving;
+            if (inMemMatch.isIdling !== undefined) dt.isIdling = inMemMatch.isIdling;
+            if (inMemMatch.isParked !== undefined) dt.isParked = inMemMatch.isParked;
+          }
+        }
+
         return dt;
       }));
 
@@ -4601,6 +4635,10 @@ async function getFleetId(token: string): Promise<string | null> {
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
+  });
+
+  app.post(["/api/log-error", "/api/log", "/api/logs", "/api/client-error"], express.text({ type: '*/*' }), (req, res) => {
+    res.status(200).json({ success: true });
   });
 
 async function syncFleetCompleteTelemetry() {

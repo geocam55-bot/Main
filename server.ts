@@ -2904,6 +2904,22 @@ self.addEventListener('activate', (event) => {
     `);
   });
 
+  // --- CLIENT LOGGING & ERROR REPORTING ENDPOINTS ---
+  app.post(['/api/log-error', '/api/log', '/api/logs', '/api/client-error'], express.text({ type: '*/*' }), (req, res) => {
+    try {
+      const payload = req.body;
+      const parsed = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      if (parsed && parsed.length > 0 && parsed !== '{}') {
+        const snippet = parsed.slice(0, 300);
+        // Only log non-benign issues
+        if (!snippet.includes('websocket') && !snippet.includes('ResizeObserver')) {
+          console.log('[Client Error Log]:', snippet);
+        }
+      }
+    } catch (e) {}
+    res.status(200).json({ success: true });
+  });
+
   // --- FALLBACK CATCH-ALL FOR ALL UNHANDLED API ROUTES ---
   app.all('/api/*all', (req, res) => {
     console.warn(`[WARN] Unhandled API request: ${req.method} ${req.originalUrl || req.url}`);

@@ -1595,26 +1595,24 @@ export default function App() {
                 const idlingMins = typeof matchedLive.idlingMins === 'number' ? matchedLive.idlingMins : 0;
                 const handshake = matchedLive.timestamp || new Date().toISOString();
 
-                if (truck.lat !== matchedLive.lat || truck.lng !== matchedLive.lng || truck.gpsSpeed !== speed || truck.gpsStatus !== 'Connected') {
-                  hasChanges = true;
-                  return {
-                    ...truck,
-                    lat: matchedLive.lat,
-                    lng: matchedLive.lng,
-                    gpsLat: matchedLive.lat,
-                    gpsLng: matchedLive.lng,
-                    gpsSpeed: speed,
-                    speed: speed,
-                    gpsIdlingMins: idlingMins,
-                    gpsStatus: 'Connected',
-                    gpsLastHandshake: handshake,
-                    gpsSource: 'truck',
-                    isDriving: speed > 0,
-                    isIdling: speed === 0 && idlingMins > 0,
-                    isParked: speed === 0 && idlingMins === 0,
-                    statusText: speed > 0 ? `${speed} km/h` : (idlingMins > 0 ? 'Idling' : 'Parked')
-                  };
-                }
+                hasChanges = true;
+                return {
+                  ...truck,
+                  lat: matchedLive.lat,
+                  lng: matchedLive.lng,
+                  gpsLat: matchedLive.lat,
+                  gpsLng: matchedLive.lng,
+                  gpsSpeed: speed,
+                  speed: speed,
+                  gpsIdlingMins: idlingMins,
+                  gpsStatus: 'Connected',
+                  gpsLastHandshake: handshake,
+                  gpsSource: 'truck',
+                  isDriving: speed > 0,
+                  isIdling: speed === 0 && idlingMins > 0,
+                  isParked: speed === 0 && idlingMins === 0,
+                  statusText: speed > 0 ? `${speed} km/h` : (idlingMins > 0 ? 'Idling' : 'Parked')
+                };
               }
               return truck;
             });

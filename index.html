@@ -67,7 +67,32 @@
     </script>
   </head>
   <body>
-    <div id="root"></div><script>window.addEventListener("error", function(e) { fetch("/api/log-error", { method: "POST", body: e.message }); }); window.addEventListener("unhandledrejection", function(e) { fetch("/api/log-error", { method: "POST", body: e.reason }); });</script>
+    <div id="root"></div>
+    <script>
+      (function() {
+        function sendError(msg, extra) {
+          try {
+            var text = String(msg || '');
+            if (
+              text.includes('ResizeObserver loop') ||
+              text.includes('Failed to connect to websocket') ||
+              text.includes('failed to connect to websocket') ||
+              text.includes('Loading chunk') ||
+              text.includes('dynamically imported module')
+            ) {
+              return;
+            }
+            fetch("/api/log-error", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message: text, extra: extra || null, url: window.location.href, timestamp: new Date().toISOString() })
+            }).catch(function() {});
+          } catch(err) {}
+        }
+        window.addEventListener("error", function(e) { sendError(e.message, { filename: e.filename, lineno: e.lineno, colno: e.colno }); });
+        window.addEventListener("unhandledrejection", function(e) { sendError(e.reason ? (e.reason.message || e.reason) : 'Unhandled Rejection'); });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
