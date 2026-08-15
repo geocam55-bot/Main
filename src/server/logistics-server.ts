@@ -257,8 +257,13 @@ function deserializeFromPhone(user: any): any {
 
 function extractVehicleNumber(str: string | undefined | null): string | null {
   if (!str) return null;
-  const match = str.match(/\d+/);
-  return match ? match[0] : null;
+  const trimmed = String(str).trim();
+  if (trimmed.length > 30 || /^[0-9a-f]{8}-/i.test(trimmed)) return null;
+  const prefixMatch = trimmed.match(/^(\d{3,5})\b/);
+  if (prefixMatch) return prefixMatch[1];
+  const unitMatch = trimmed.match(/(?:truck|unit|vehicle|#)\s*(\d{3,5})\b/i);
+  if (unitMatch) return unitMatch[1];
+  return null;
 }
 
 function sanitizeGpsCoordinates(lat: number, lng: number): { lat: number; lng: number } {
@@ -325,30 +330,14 @@ function normalizeTenantId(rawTenantId: any): string {
 
 function serializeToType(
   type: string | undefined,
-  registrationDueDate?: string | undefined,
-  imageUrl?: string,
-  telemetry?: {
-    speed?: number;
-    lat?: number;
-    lng?: number;
-    status?: string;
-    handshake?: string;
-  }
+  _registrationDueDate?: string | undefined,
+  _imageUrl?: string,
+  _telemetry?: any
 ): string {
-  const clean = (type || "").split("||")[0].trim() || "Commercial Truck";
-  const tags: string[] = [];
-
-  if (registrationDueDate) tags.push(`||regdue:${registrationDueDate}`);
-  if (imageUrl) tags.push(`||imageUrl:${encodeURIComponent(imageUrl)}`);
-  if (telemetry) {
-    if (typeof telemetry.speed === 'number') tags.push(`||gpsSpeed:${telemetry.speed}`);
-    if (typeof telemetry.lat === 'number') tags.push(`||gpsLat:${telemetry.lat}`);
-    if (typeof telemetry.lng === 'number') tags.push(`||gpsLng:${telemetry.lng}`);
-    if (telemetry.status) tags.push(`||gpsStatus:${telemetry.status}`);
-    if (telemetry.handshake) tags.push(`||gpsLastHandshake:${telemetry.handshake}`);
-  }
-
-  return `${clean}${tags.join("")}`;
+  if (!type) return "Commercial Truck";
+  // Always strip any embedded || tags to keep the database type column pristine and human-readable
+  const clean = String(type).split("||")[0].trim();
+  return clean || "Commercial Truck";
 }
 
 function deserializeType(truck: any): any {
@@ -381,7 +370,7 @@ function deserializeType(truck: any): any {
     }
   };
 
-  // Helper function to extract the LAST occurrence of a metadata tag in type string
+  // Helper function to extract legacy metadata tag if present in old type strings
   const getLastMatch = (pattern: RegExp) => {
     const matches = [...rawType.matchAll(pattern)];
     if (matches.length > 0) {
@@ -391,49 +380,49 @@ function deserializeType(truck: any): any {
   };
 
   const regdue = getLastMatch(/\|\|regdue:([^|]+)/g);
-  if (regdue) registrationDueDate = regdue;
+  if (regdue && !registrationDueDate) registrationDueDate = regdue;
 
   const imgMatch = getLastMatch(/\|\|imageUrl:([^|]+)/g);
-  if (imgMatch) imageUrl = safeDecode(imgMatch);
+  if (imgMatch && !imageUrl) imageUrl = safeDecode(imgMatch);
 
   const latStr = getLastMatch(/\|\|lat:([^|]+)/g);
-  if (latStr && !isNaN(parseFloat(latStr))) lat = parseFloat(latStr);
+  if (latStr && !isNaN(parseFloat(latStr)) && lat === undefined) lat = parseFloat(latStr);
 
   const lngStr = getLastMatch(/\|\|lng:([^|]+)/g);
-  if (lngStr && !isNaN(parseFloat(lngStr))) lng = parseFloat(lngStr);
+  if (lngStr && !isNaN(parseFloat(lngStr)) && lng === undefined) lng = parseFloat(lngStr);
 
   const srcStr = getLastMatch(/\|\|gpsSource:([^|]+)/g);
-  if (srcStr) gpsSource = srcStr.trim() as any;
+  if (srcStr && !gpsSource) gpsSource = srcStr.trim() as any;
 
   const devId = getLastMatch(/\|\|gpsDeviceId:([^|]+)/g);
-  if (devId) gpsDeviceId = safeDecode(devId);
+  if (devId && !gpsDeviceId) gpsDeviceId = safeDecode(devId);
 
   const sn = getLastMatch(/\|\|gpsSerialNumber:([^|]+)/g);
-  if (sn) gpsSerialNumber = safeDecode(sn);
+  if (sn && !gpsSerialNumber) gpsSerialNumber = safeDecode(sn);
 
   const dn = getLastMatch(/\|\|gpsDeviceName:([^|]+)/g);
-  if (dn) gpsDeviceName = safeDecode(dn);
+  if (dn && !gpsDeviceName) gpsDeviceName = safeDecode(dn);
 
   const sim = getLastMatch(/\|\|gpsSimIccid:([^|]+)/g);
-  if (sim) gpsSimIccid = safeDecode(sim);
+  if (sim && !gpsSimIccid) gpsSimIccid = safeDecode(sim);
 
   const st = getLastMatch(/\|\|gpsStatus:([^|]+)/g);
-  if (st) gpsStatus = st.trim() as any;
+  if (st && !gpsStatus) gpsStatus = st.trim() as any;
 
   const hs = getLastMatch(/\|\|gpsLastHandshake:([^|]+)/g);
-  if (hs) gpsLastHandshake = hs.trim();
+  if (hs && !gpsLastHandshake) gpsLastHandshake = hs.trim();
 
   const gLat = getLastMatch(/\|\|gpsLat:([^|]+)/g);
-  if (gLat && !isNaN(parseFloat(gLat))) gpsLat = parseFloat(gLat);
+  if (gLat && !isNaN(parseFloat(gLat)) && gpsLat === undefined) gpsLat = parseFloat(gLat);
 
   const gLng = getLastMatch(/\|\|gpsLng:([^|]+)/g);
-  if (gLng && !isNaN(parseFloat(gLng))) gpsLng = parseFloat(gLng);
+  if (gLng && !isNaN(parseFloat(gLng)) && gpsLng === undefined) gpsLng = parseFloat(gLng);
 
   const gSpd = getLastMatch(/\|\|gpsSpeed:([^|]+)/g);
-  if (gSpd && !isNaN(parseFloat(gSpd))) gpsSpeed = parseFloat(gSpd);
+  if (gSpd && !isNaN(parseFloat(gSpd)) && gpsSpeed === undefined) gpsSpeed = parseFloat(gSpd);
 
   const gIdle = getLastMatch(/\|\|gpsIdlingMins:([^|]+)/g);
-  if (gIdle && !isNaN(parseFloat(gIdle))) gpsIdlingMins = parseFloat(gIdle);
+  if (gIdle && !isNaN(parseFloat(gIdle)) && gpsIdlingMins === undefined) gpsIdlingMins = parseFloat(gIdle);
 
   const is1903 = (truck.id || "").includes("1903") || (truck.name || "").includes("1903") || (gpsDeviceName || "").includes("1903");
   if (is1903 && lat === undefined) {
@@ -501,11 +490,14 @@ function extractTruckUnitNumber(idOrName?: string | null): string | null {
   if (!idOrName) return null;
   const str = String(idOrName).trim();
   // Never extract from UUIDs or long identifiers
-  if (str.length > 20 || /^[0-9a-f]{8}-/i.test(str)) return null;
-  // Match 2 to 5 digits, e.g., "12", "123", "1234"
-  // Do not match single digits to avoid merging "Truck 1" and "Van 1"
-  const match = str.match(/\b\d{2,5}\b/);
-  return match ? match[0] : null;
+  if (str.length > 25 || /^[0-9a-f]{8}-/i.test(str)) return null;
+  // Match prefix unit numbers at the start of string: "1702 - Elmsdale HH" -> "1702"
+  const prefixMatch = str.match(/^(\d{3,5})\b/);
+  if (prefixMatch) return prefixMatch[1];
+  // Match explicit unit or truck prefix: "Unit 1702", "Truck #2409", "Vehicle 2101"
+  const unitMatch = str.match(/(?:truck|unit|vehicle|#)\s*(\d{3,5})\b/i);
+  if (unitMatch) return unitMatch[1];
+  return null;
 }
 
 function deduplicateServerTrucks(trucksList: any[]): any[] {
@@ -2866,18 +2858,7 @@ app.use((req, res, next) => {
               id: t.id,
               tenantId: t.tenantId || tenantId,
               name: t.name,
-              type: serializeToType(
-                t.type,
-                t.registrationDueDate,
-                t.imageUrl,
-                {
-                  lat: lat,
-                  lng: lng,
-                  speed: gpsSpeed,
-                  status: targetGpsStatus,
-                  handshake: gpsLastHandshake
-                }
-              ),
+              type: serializeToType(t.type),
               driver: t.driver,
               branchId: t.branchId || t.branch_id || null,
               branch_id: t.branchId || t.branch_id || null,

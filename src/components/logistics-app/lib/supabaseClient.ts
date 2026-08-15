@@ -91,16 +91,12 @@ export function normalizeTenantId(rawTenantId: any): string {
 
 export function serializeToType(
   type: string | undefined,
-  registrationDueDate?: string | undefined,
-  imageUrl?: string
+  _registrationDueDate?: string | undefined,
+  _imageUrl?: string
 ): string {
-  const clean = (type || "").split("||")[0].trim() || "Commercial Truck";
-  const tags: string[] = [];
-
-  if (registrationDueDate) tags.push(`||regdue:${registrationDueDate}`);
-  if (imageUrl) tags.push(`||imageUrl:${encodeURIComponent(imageUrl)}`);
-
-  return `${clean}${tags.join("")}`;
+  if (!type) return "Commercial Truck";
+  const clean = String(type).split("||")[0].trim();
+  return clean || "Commercial Truck";
 }
 
 export function deserializeType(truck: any): any {

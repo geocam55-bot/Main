@@ -1,7 +1,12 @@
 export function extractVehicleNumber(str: string | undefined | null): string | null {
   if (!str) return null;
-  const match = str.match(/\b\d{3,5}\b/) || str.match(/\d+/);
-  return match ? match[0] : null;
+  const trimmed = String(str).trim();
+  if (trimmed.length > 30 || /^[0-9a-f]{8}-/i.test(trimmed)) return null;
+  const prefixMatch = trimmed.match(/^(\d{3,5})\b/);
+  if (prefixMatch) return prefixMatch[1];
+  const unitMatch = trimmed.match(/(?:truck|unit|vehicle|#)\s*(\d{3,5})\b/i);
+  if (unitMatch) return unitMatch[1];
+  return null;
 }
 
 // Regional Coordinate Dictionary for high-accuracy live geolocating

@@ -135,19 +135,20 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
     if (map.has(idKey)) {
       existingKey = idKey;
     } else {
-      for (const [k, v] of map.entries()) {
-        const vNameKey = String(v.name || v.id).toLowerCase().trim();
-        const vIdKey = String(v.id).toLowerCase().trim();
-        const vUnitNum = extractVehicleNumber(v.id) || extractVehicleNumber(v.name);
-        if (
-          vNameKey === nameKey || 
-          vIdKey === nameKey || 
-          vNameKey === idKey || 
-          vIdKey === idKey || 
-          (unitNum && vUnitNum && unitNum === vUnitNum)
-        ) {
-          existingKey = k;
-          break;
+      // Standard UI trucks (which have UUIDs) should never be randomly merged together.
+      const isFCVehicle = !/^[0-9a-f]{8}-/i.test(idKey) && idKey.length < 20;
+
+      if (isFCVehicle) {
+        for (const [k, v] of map.entries()) {
+          const vNameKey = String(v.name || v.id).toLowerCase().trim();
+          const vUnitNum = extractVehicleNumber(v.id) || extractVehicleNumber(v.name);
+          if (
+            vNameKey === nameKey || 
+            (unitNum && vUnitNum && unitNum === vUnitNum)
+          ) {
+            existingKey = k;
+            break;
+          }
         }
       }
     }
@@ -1567,12 +1568,6 @@ export default function App() {
   useEffect(() => {
     if (!currentTenant) return;
 
-    const extractUnitNum = (str: string | undefined | null): string | null => {
-      if (!str) return null;
-      const match = str.match(/\b(1701|2101|2408|2409|2412|2502|2503|2504|\d{4})\b/);
-      return match ? match[1] : null;
-    };
-
     const fetchLiveFleetTelemetry = async () => {
       try {
         const res = await customFetch('/api/vehicles');
@@ -1583,9 +1578,9 @@ export default function App() {
           setTrucks(prevTrucks => {
             let hasChanges = false;
             const updated = prevTrucks.map(truck => {
-              const trkUNum = extractUnitNum(truck.id) || extractUnitNum(truck.name);
+              const trkUNum = extractVehicleNumber(truck.id) || extractVehicleNumber(truck.name);
               const matchedLive = liveVehicles.find(v => {
-                const vUNum = extractUnitNum(v.name || v.id);
+                const vUNum = extractVehicleNumber(v.name || v.id);
                 return (
                   v.id === truck.id ||
                   (v.name && truck.name && v.name.trim().toLowerCase() === truck.name.trim().toLowerCase()) ||
