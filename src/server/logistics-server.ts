@@ -4637,10 +4637,6 @@ async function getFleetId(token: string): Promise<string | null> {
     }
   });
 
-  app.post(["/api/log-error", "/api/log", "/api/logs", "/api/client-error"], express.text({ type: '*/*' }), (req, res) => {
-    res.status(200).json({ success: true });
-  });
-
 async function syncFleetCompleteTelemetry() {
   try {
     const credentialsSupplier = async () => {

@@ -74,11 +74,19 @@
           try {
             var text = String(msg || '');
             if (
-              text.includes('ResizeObserver loop') ||
-              text.includes('Failed to connect to websocket') ||
-              text.includes('failed to connect to websocket') ||
+              !text ||
+              text === 'Script error.' ||
+              text.includes('ResizeObserver') ||
+              text.includes('websocket') ||
+              text.includes('WebSocket') ||
               text.includes('Loading chunk') ||
-              text.includes('dynamically imported module')
+              text.includes('dynamically imported module') ||
+              text.includes('AbortError') ||
+              text.includes('aborted') ||
+              text.includes('Failed to fetch') ||
+              text.includes('NetworkError') ||
+              text.includes('extension') ||
+              text.includes('chrome-extension')
             ) {
               return;
             }
@@ -89,8 +97,16 @@
             }).catch(function() {});
           } catch(err) {}
         }
-        window.addEventListener("error", function(e) { sendError(e.message, { filename: e.filename, lineno: e.lineno, colno: e.colno }); });
-        window.addEventListener("unhandledrejection", function(e) { sendError(e.reason ? (e.reason.message || e.reason) : 'Unhandled Rejection'); });
+        window.addEventListener("error", function(e) {
+          if (e && e.message) {
+            sendError(e.message, { filename: e.filename, lineno: e.lineno, colno: e.colno });
+          }
+        });
+        window.addEventListener("unhandledrejection", function(e) {
+          if (e && e.reason) {
+            sendError(e.reason.message || String(e.reason));
+          }
+        });
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>

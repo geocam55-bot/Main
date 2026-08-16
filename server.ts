@@ -2141,16 +2141,15 @@ async function startServer() {
   // Log incoming API requests to a file for diagnostics
   app.use((req, res, next) => {
     if (req.url.startsWith('/api/')) {
-      const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}\n`;
-      console.log(`[API] ${req.method} ${req.url}`);
-      try {
-        const logDir = path.join(process.cwd(), 'data');
-        if (!fs.existsSync(logDir)) {
-          fs.mkdirSync(logDir, { recursive: true });
-        }
-        fs.appendFileSync(path.join(logDir, 'api_requests.log'), logLine);
-      } catch (err) {
-        console.error('Failed to write to api_requests.log:', err);
+      if (!req.url.includes('/api/log') && !req.url.includes('/api/client-error')) {
+        const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}\n`;
+        try {
+          const logDir = path.join(process.cwd(), 'data');
+          if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+          }
+          fs.appendFileSync(path.join(logDir, 'api_requests.log'), logLine);
+        } catch (err) {}
       }
     }
     next();
