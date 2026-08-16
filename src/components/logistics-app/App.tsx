@@ -232,7 +232,20 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const path = window.location.pathname.toLowerCase();
+      const search = new URLSearchParams(window.location.search);
+      const tabParam = search.get('tab') || search.get('view');
+      const hash = window.location.hash.toLowerCase();
+
+      if (path.includes('/driver') || tabParam === 'driver' || tabParam === 'epod' || hash.includes('driver')) {
+        return 'driver';
+      }
+      if (tabParam) return tabParam;
+    } catch (e) {}
+    return 'dashboard';
+  });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
   const [activeNavDropdown, setActiveNavDropdown] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState<boolean>(false);
@@ -2899,17 +2912,18 @@ export default function App() {
 
                           <button
                             onClick={() => {
-                              setActiveTab('epod');
+                              setActiveTab('driver');
                               setIsMobileNavOpen(false);
+                              try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
                             }}
                             className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer ${
-                              activeTab === 'epod'
+                              activeTab === 'driver' || activeTab === 'epod'
                                 ? 'bg-blue-800 text-white shadow-sm'
                                 : 'text-slate-700 hover:bg-slate-50'
                             }`}
                           >
                             <TruckIcon className="h-4 w-4 text-emerald-600" />
-                            <span>Driver ePOD & Route Dispatch</span>
+                            <span>Driver App (5-Screen Flow)</span>
                           </button>
 
                           <button
@@ -3131,13 +3145,17 @@ export default function App() {
                       </button>
 
                       <button
-                        onClick={() => { setActiveTab('epod'); setActiveNavDropdown(null); }}
+                        onClick={() => { 
+                          setActiveTab('driver'); 
+                          setActiveNavDropdown(null); 
+                          try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
+                        }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'epod' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'driver' || activeTab === 'epod' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
                         <TruckIcon className="h-4 w-4 text-emerald-600" />
-                        <span>Driver ePOD & Route Dispatch</span>
+                        <span>Driver App (5-Screen Flow)</span>
                       </button>
                       <button
                         onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
@@ -3320,7 +3338,7 @@ export default function App() {
             />
           )}
           
-          {activeTab === 'epod' && (
+          {['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
             <DriverMobileApp 
               deliveries={deliveries}
               trucks={trucks}
