@@ -239,13 +239,33 @@ export default function App() {
       const tabParam = search.get('tab') || search.get('view');
       const hash = window.location.hash.toLowerCase();
 
-      if (path.includes('/driver') || tabParam === 'driver' || tabParam === 'epod' || hash.includes('driver')) {
+      if (path.includes('/driver') || tabParam === 'driver' || tabParam === 'epod' || tabParam === 'driver-app' || hash.includes('driver')) {
         return 'driver';
       }
       if (tabParam) return tabParam;
     } catch (e) {}
     return 'dashboard';
   });
+
+  // Keep activeTab synchronized if URL parameters or history changes
+  useEffect(() => {
+    const handleUrlSync = () => {
+      try {
+        const path = window.location.pathname.toLowerCase();
+        const search = new URLSearchParams(window.location.search);
+        const tabParam = search.get('tab') || search.get('view');
+        const hash = window.location.hash.toLowerCase();
+        if (path.includes('/driver') || tabParam === 'driver' || tabParam === 'epod' || tabParam === 'driver-app' || hash.includes('driver')) {
+          setActiveTab('driver');
+        } else if (tabParam) {
+          setActiveTab(tabParam);
+        }
+      } catch (e) {}
+    };
+    handleUrlSync();
+    window.addEventListener('popstate', handleUrlSync);
+    return () => window.removeEventListener('popstate', handleUrlSync);
+  }, []);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
   const [activeNavDropdown, setActiveNavDropdown] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState<boolean>(false);
@@ -541,15 +561,15 @@ export default function App() {
     const isUser = !isAdmin && !isDispatcher && !isDriver && !isPicker;
 
     if (isDriver) {
-      if (!['epod', 'inspections', 'fuel', 'scanner'].includes(activeTab)) {
-        setActiveTab('epod');
+      if (!['driver', 'driver-app', 'driver-mobile', 'epod', 'inspections', 'fuel', 'scanner'].includes(activeTab)) {
+        setActiveTab('driver');
       }
     } else if (isPicker) {
       if (activeTab !== 'scanner') {
         setActiveTab('scanner');
       }
     } else if (isUser) {
-      if (!['dashboard', 'queue'].includes(activeTab)) {
+      if (!['dashboard', 'queue', 'driver', 'driver-app', 'driver-mobile', 'epod'].includes(activeTab)) {
         setActiveTab('dashboard');
       }
     }
@@ -3226,6 +3246,24 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* Direct Quick Launch: Driver App */}
+              <button
+                onClick={() => {
+                  setActiveTab('driver');
+                  setActiveNavDropdown(null);
+                  try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
+                }}
+                className={`ml-auto flex items-center space-x-2 px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer shadow-sm ${
+                  activeTab === 'driver' || activeTab === 'epod'
+                    ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80'
+                }`}
+              >
+                <TruckIcon className="h-3.5 w-3.5 text-current" />
+                <span>Driver Mobile Portal</span>
+                <span className="text-[9px] uppercase px-1.5 py-0.2 bg-emerald-700 text-white rounded font-mono font-bold">5-Screen</span>
+              </button>
               
             </div>
           </div>
