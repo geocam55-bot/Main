@@ -3175,7 +3175,7 @@ export default function App() {
                         }`}
                       >
                         <TruckIcon className="h-4 w-4 text-emerald-600" />
-                        <span>Driver App (5-Screen Flow)</span>
+                        <span>Driver Mobile App</span>
                       </button>
                       <button
                         onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
@@ -3262,7 +3262,6 @@ export default function App() {
               >
                 <TruckIcon className="h-3.5 w-3.5 text-current" />
                 <span>Driver Mobile Portal</span>
-                <span className="text-[9px] uppercase px-1.5 py-0.2 bg-emerald-700 text-white rounded font-mono font-bold">5-Screen</span>
               </button>
               
             </div>
@@ -3271,7 +3270,11 @@ export default function App() {
       </header>
 
       {/* Main Core Body */}
-      <main className="flex-1 max-w-[1920px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 flex flex-col space-y-6 overflow-x-hidden" id="prospaces-body">
+      <main className={`flex-1 w-full mx-auto flex flex-col overflow-x-hidden ${
+        ['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) 
+          ? 'p-0 max-w-full bg-slate-950 min-h-screen' 
+          : 'max-w-[1920px] px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6'
+      }`} id="prospaces-body">
 
         {/* Secondary Sub-navigation for Fleet Setup */}
         {['stores', 'trucks', 'gps', 'users', 'architecture'].includes(activeTab) && (
@@ -3490,23 +3493,22 @@ export default function App() {
 
       </main>
 
-      {/* Corporate Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-6 border-t border-slate-800 text-center text-xs mt-12" id="prospaces-footer">
-        <div className="max-w-[1920px] mx-auto px-4 space-y-2">
-          <p className="font-medium text-slate-300">{currentTenant.name} &bull; ProSpaces Portal</p>
-          <p className="text-[10px] text-slate-500 font-mono">
-            Drafted for presentation regarding independent mobile routing platforms &bull; Part of ProSpaces Delivery and Logistics &bull; Workspace tenant: {currentTenant.code}
-          </p>
-          <div className="flex items-center justify-center space-x-4 pt-1 text-[10px] text-slate-500">
-            <span className="flex items-center">
-              <Shield className="h-3 w-3 mr-1 text-slate-600" />
-              Authenticated Session Secure ({currentUser.role}: {currentUser.email})
-            </span>
-            <span>&bull;</span>
-            <span>Local Database Persistent (Active)</span>
+      {/* Corporate Footer - Hidden on Driver Mobile App for native experience */}
+      {!['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
+        <footer className="bg-slate-900 text-slate-400 py-6 border-t border-slate-800 text-center text-xs mt-12" id="prospaces-footer">
+          <div className="max-w-[1920px] mx-auto px-4 space-y-2">
+            <p className="font-medium text-slate-300">{currentTenant.name} &bull; ProSpaces Logistics</p>
+            <div className="flex items-center justify-center space-x-4 pt-1 text-[10px] text-slate-500">
+              <span className="flex items-center">
+                <Shield className="h-3 w-3 mr-1 text-slate-600" />
+                Authenticated Session Secure ({currentUser.role}: {currentUser.email})
+              </span>
+              <span>&bull;</span>
+              <span>Cloud Fleet Sync Active</span>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      )}
 
       {showChangePasswordModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="change-password-modal">

@@ -1,54 +1,34 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { DeliveryRecord, Truck, User, DeliveryStatus, HistoryEvent, getDeliveryPhotos } from '../types';
+import { DeliveryRecord, Truck, User, DeliveryStatus } from '../types';
 import { 
   Truck as TruckIcon,
   MapPin, 
   CheckCircle2, 
   Clock, 
-  Search, 
-  Filter, 
   Phone, 
   Navigation, 
   Camera, 
-  Upload, 
   FileText, 
-  Printer, 
-  RotateCcw, 
   Check, 
   AlertCircle, 
-  UserCheck, 
   ChevronRight, 
   ChevronLeft,
-  Layers, 
-  Smartphone, 
-  Monitor, 
-  ShieldCheck, 
-  Copy, 
-  ExternalLink,
-  Sparkles,
   Calendar,
   PackageCheck,
-  Eye,
   X,
   RefreshCw,
-  Send,
   Building2,
   Bell,
   User as UserIcon,
   DollarSign,
   Shield,
-  HelpCircle,
   LogOut,
-  Sliders,
-  CheckSquare,
-  Square,
   Navigation2,
-  Lock,
-  ArrowRight,
-  Maximize2,
-  Minimize2,
-  Grid,
-  Radio
+  ExternalLink,
+  Fuel,
+  Activity,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { createClient } from '../../../utils/supabase/client';
 
@@ -100,7 +80,7 @@ export default function DriverMobileApp({
     return null;
   });
 
-  // Screen Management:
+  // Active Screen: 'login' | 'home' | 'route' | 'stop' | 'earnings'
   const [activeScreen, setActiveScreen] = useState<'login' | 'home' | 'route' | 'stop' | 'earnings'>(() => {
     if (!currentUser && !localStorage.getItem('prospaces_driver_auth') && !localStorage.getItem('prospaces_active_user')) {
       return 'login';
@@ -108,10 +88,7 @@ export default function DriverMobileApp({
     return initialScreen;
   });
 
-  // View Mode: 'phone' (Interactive Single Phone) vs 'panoramic' (All 5 Screens Side-by-Side)
-  const [viewMode, setViewMode] = useState<'phone' | 'panoramic'>('phone');
-
-  // Real Login & Driver Auth State
+  // Login Form State
   const [driverIdInput, setDriverIdInput] = useState<string>('');
   const [driverPasswordInput, setDriverPasswordInput] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
@@ -144,7 +121,7 @@ export default function DriverMobileApp({
       return [];
     }
 
-    // Filter deliveries: first try matching this driver or assigned truck, otherwise show active tenant deliveries
+    // Filter deliveries: match this driver or assigned truck, otherwise show active deliveries
     let driverDeliveries = deliveries.filter(d => {
       if (!driverUser) return true;
       const isDriverMatch = (d.assignedDriver && d.assignedDriver.toLowerCase() === driverUser.name?.toLowerCase()) ||
@@ -157,7 +134,6 @@ export default function DriverMobileApp({
       driverDeliveries = deliveries;
     }
 
-    // Map each delivery to a stop
     return driverDeliveries.map((del, idx) => {
       const isDelivered = del.status === DeliveryStatus.DELIVERED;
       const isPicked = del.status === DeliveryStatus.PICKED_AND_LOADED;
@@ -209,10 +185,9 @@ export default function DriverMobileApp({
   const [signedFormPhoto, setSignedFormPhoto] = useState<string | null>(null);
   const [hasDrawnSignature, setHasDrawnSignature] = useState<boolean>(false);
   const [podSubmittedToast, setPodSubmittedToast] = useState<boolean>(false);
-  const [navigationSimulating, setNavigationSimulating] = useState<boolean>(false);
-  const [truckPinOffset, setTruckPinOffset] = useState<{ x: number; y: number }>({ x: 195, y: 110 });
+  const [isSubmittingPOD, setIsSubmittingPOD] = useState<boolean>(false);
 
-  // Update receiver name when active stop changes
+  // Update receiver name and existing photos when active stop changes
   useEffect(() => {
     const stop = liveStops[activeStopIndex];
     if (stop) {
@@ -223,22 +198,9 @@ export default function DriverMobileApp({
     }
   }, [activeStopIndex, liveStops]);
 
-  // Canvas Ref for interactive drawing
+  // Canvas Ref for interactive signature drawing
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawingRef = useRef<boolean>(false);
-
-  // Update items checklist
-  const handleToggleItemCheck = (itemIdx: number) => {
-    setStops(prevStops => {
-      const copy = [...prevStops];
-      const curStop = { ...copy[activeStopIndex] };
-      const curItems = [...curStop.items];
-      curItems[itemIdx] = { ...curItems[itemIdx], checked: !curItems[itemIdx].checked };
-      curStop.items = curItems;
-      copy[activeStopIndex] = curStop;
-      return copy;
-    });
-  };
 
   // Canvas drawing functions
   const clearCanvas = () => {
@@ -295,7 +257,7 @@ export default function DriverMobileApp({
     isDrawingRef.current = false;
   };
 
-  // Real Login Handler
+  // Real Driver Sign-in
   const handleDriverSignIn = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsLoggingIn(true);
@@ -306,11 +268,9 @@ export default function DriverMobileApp({
       const cleanId = driverIdInput.trim();
       const cleanPass = driverPasswordInput.trim();
 
-      // Check if entering email or driver ID
       const isEmail = cleanId.includes('@');
       const emailToAuth = isEmail ? cleanId : `${cleanId.toLowerCase().replace(/[^a-z0-9]/g, '')}@ronaatlantic.ca`;
 
-      // 1. Try Supabase Auth
       let authSuccess = false;
       let authenticatedUser: any = null;
 
@@ -329,12 +289,9 @@ export default function DriverMobileApp({
             phone: data.user.user_metadata?.phone || '(902) 555-0100'
           };
         }
-      } catch (authErr) {
-        // Continue to check database users table
-      }
+      } catch (authErr) {}
 
       if (!authSuccess) {
-        // 2. Query Supabase database users / profiles
         try {
           const { data: dbUsers } = await supabase
             .from('users')
@@ -345,13 +302,10 @@ export default function DriverMobileApp({
             authenticatedUser = dbUsers[0];
             authSuccess = true;
           }
-        } catch (dbErr) {
-          // Fallback to memory props
-        }
+        } catch (dbErr) {}
       }
 
       if (!authSuccess) {
-        // 3. Match against existing users prop
         const matchedUser = users.find(u => 
           (u.email && u.email.toLowerCase() === cleanId.toLowerCase()) || 
           (u.name && u.name.toLowerCase().includes(cleanId.toLowerCase())) ||
@@ -383,16 +337,25 @@ export default function DriverMobileApp({
     }
   };
 
-  // Submit Proof of Delivery (Screen 4) directly to Supabase and parent state
+  // Submit Proof of Delivery (ePOD) directly to Supabase and parent state
   const handleSubmitPOD = async () => {
     const curStop = liveStops[activeStopIndex];
     if (!curStop) return;
 
+    setIsSubmittingPOD(true);
     const deliveryToUpdate = curStop.delivery || deliveries.find(d => d.id === curStop.id);
 
     if (deliveryToUpdate) {
       const deliveredTimestamp = new Date().toISOString();
-      const signatureData = hasDrawnSignature ? 'data:image/png;base64,Driver_Customer_POD_Signature' : (receiverName || 'Signed on Device');
+      let signatureData = receiverName || 'Signed on Mobile Device';
+      
+      const canvas = canvasRef.current;
+      if (canvas && hasDrawnSignature) {
+        try {
+          signatureData = canvas.toDataURL('image/png');
+        } catch (e) {}
+      }
+
       const photosArray = [cargoPhoto, signedFormPhoto].filter(Boolean) as string[];
 
       const updated: DeliveryRecord = {
@@ -408,7 +371,7 @@ export default function DriverMobileApp({
             timestamp: deliveredTimestamp,
             location: curStop.address,
             operator: driverUser?.name || 'Driver',
-            notes: `Proof of Delivery submitted & signed by ${receiverName || 'Receiver'}`
+            notes: `Proof of Delivery completed & signed by ${receiverName || 'Receiver'}`
           }
         ]
       };
@@ -434,6 +397,7 @@ export default function DriverMobileApp({
       }
     }
 
+    setIsSubmittingPOD(false);
     setPodSubmittedToast(true);
     setTimeout(() => {
       setPodSubmittedToast(false);
@@ -443,7 +407,7 @@ export default function DriverMobileApp({
         setActiveStopIndex(prev => prev + 1);
         setActiveScreen('route');
       }
-    }, 1800);
+    }, 1500);
   };
 
   // Logout
@@ -491,987 +455,741 @@ export default function DriverMobileApp({
     const driverList = users.filter(u => u.role?.toLowerCase() === 'driver');
     if (driverList.length > 0) return driverList;
     return [
-      { id: 'ALEX-408', name: 'Alex Rivera', email: 'alex.driver@ronaatlantic.ca', role: 'Driver' },
-      { id: 'GEORGE-101', name: 'George Campbell', email: 'george.campbell@ronaatlantic.ca', role: 'Driver' }
+      { id: 'GEORGE-101', name: 'George Campbell', email: 'george.campbell@ronaatlantic.ca', role: 'Driver' },
+      { id: 'ALEX-408', name: 'Alex Rivera', email: 'alex.driver@ronaatlantic.ca', role: 'Driver' }
     ];
   }, [users]);
 
+  // Open external Turn-by-Turn GPS
+  const openExternalMaps = (address: string) => {
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   // ════════════════════════════════════════════════════════════════════════════
-  // 1. RENDER SCREEN 1: WELCOME / SIGN IN
+  // 1. SCREEN: SIGN IN / DRIVER AUTH
   // ════════════════════════════════════════════════════════════════════════════
-  const renderScreen1Login = () => (
-    <div className="flex flex-col h-full bg-white text-slate-900 justify-between p-6 sm:p-8 select-none">
-      {/* Top Status Bar */}
-      <div className="flex items-center justify-between text-xs font-semibold text-slate-800 pt-1 pb-4">
-        <span>{currentTime}</span>
-        <div className="flex items-center space-x-1.5 text-slate-800">
-          <span className="text-[10px] tracking-tighter font-bold">5G</span>
-          <div className="flex items-end space-x-0.5 h-3">
-            <span className="w-0.5 h-1.5 bg-slate-800 rounded-xs"></span>
-            <span className="w-0.5 h-2 bg-slate-800 rounded-xs"></span>
-            <span className="w-0.5 h-2.5 bg-slate-800 rounded-xs"></span>
-            <span className="w-0.5 h-3 bg-slate-800 rounded-xs"></span>
-          </div>
-          <div className="w-5 h-2.5 border border-slate-800 rounded-xs p-0.5 flex items-center">
-            <div className="w-full h-full bg-slate-800 rounded-xs"></div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Login Card Body */}
-      <div className="flex-1 flex flex-col items-center justify-center my-auto w-full max-w-xs mx-auto">
-        
-        {/* Brand Logo & Wordmark */}
-        <div className="flex items-center justify-center space-x-3 mb-8">
-          <div className="relative flex items-center justify-center">
-            <div className="h-16 w-16 rounded-2xl bg-white border border-blue-100 shadow-sm flex items-center justify-center p-1 relative">
-              <svg className="w-12 h-12" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 10H34C43.941 10 52 18.059 52 28C52 37.941 43.941 46 34 46H24V54H12V10Z" fill="#1E6DF7" />
-                <path d="M24 22H34C37.314 22 40 24.686 40 28C40 31.314 37.314 34 34 34H24V22Z" fill="white" />
-                <path d="M18 42H36V49H32.5C32.5 47.6 31.4 46.5 30 46.5C28.6 46.5 27.5 47.6 27.5 49H22.5C22.5 47.6 21.4 46.5 20 46.5C18.6 46.5 17.5 47.6 17.5 49H16V45L18 42Z" fill="#0F172A" />
-                <circle cx="20" cy="49" r="2" fill="#1E6DF7" />
-                <circle cx="30" cy="49" r="2" fill="#1E6DF7" />
-                <path d="M6 44H12M8 47H14" stroke="#1E6DF7" strokeWidth="2" strokeLinecap="round" />
-              </svg>
+  if (activeScreen === 'login' || !driverUser) {
+    return (
+      <div className="w-full min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-8 border border-slate-200">
+          
+          {/* Brand Header */}
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="h-16 w-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-600 mb-4 shadow-sm">
+              <TruckIcon className="h-8 w-8" />
             </div>
-          </div>
-          <div className="text-left">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">ProSpaces</h1>
-            <p className="text-lg font-bold text-slate-700 leading-tight">Logistics</p>
-          </div>
-        </div>
-
-        {/* Welcome Text */}
-        <h2 className="text-2xl font-extrabold text-slate-900 mb-6 tracking-tight">Welcome, Driver.</h2>
-
-        {/* Login Form */}
-        <form onSubmit={handleDriverSignIn} className="w-full space-y-3.5">
-          <div>
-            <input 
-              type="text"
-              value={driverIdInput}
-              onChange={(e) => setDriverIdInput(e.target.value)}
-              placeholder="Driver ID or Email"
-              className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-xs"
-              required
-            />
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-tight">ProSpaces Logistics</h1>
+            <p className="text-sm font-bold text-blue-600 mt-0.5">Driver Mobile Portal</p>
           </div>
 
-          <div>
-            <input 
-              type="password"
-              value={driverPasswordInput}
-              onChange={(e) => setDriverPasswordInput(e.target.value)}
-              placeholder="Password"
-              className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-xs"
-              required
-            />
-          </div>
-
-          {loginError && (
-            <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium flex items-center space-x-1.5">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{loginError}</span>
+          {/* Form */}
+          <form onSubmit={handleDriverSignIn} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Driver ID or Email</label>
+              <input 
+                type="text"
+                value={driverIdInput}
+                onChange={(e) => setDriverIdInput(e.target.value)}
+                placeholder="e.g. GEORGE-101 or email"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                required
+              />
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={isLoggingIn}
-            className="w-full py-3.5 bg-[#1E6DF7] hover:bg-[#1557CD] active:bg-[#0D47A1] text-white font-extrabold text-sm uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2 mt-2"
-          >
-            {isLoggingIn ? (
-              <span className="flex items-center space-x-2">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Verifying Supabase...</span>
-              </span>
-            ) : (
-              <span>SIGN IN</span>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Password / PIN</label>
+              <input 
+                type="password"
+                value={driverPasswordInput}
+                onChange={(e) => setDriverPasswordInput(e.target.value)}
+                placeholder="Enter password"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                required
+              />
+            </div>
+
+            {loginError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{loginError}</span>
+              </div>
             )}
-          </button>
-        </form>
 
-        {/* Live Drivers Fast Selector from Supabase */}
-        <div className="mt-6 pt-4 border-t border-slate-100 w-full flex flex-col items-center">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">Live Fleet Drivers</span>
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            {availableDrivers.slice(0, 3).map((drv) => (
-              <button
-                key={drv.id}
-                type="button"
-                onClick={() => {
-                  setDriverUser(drv);
-                  localStorage.setItem('prospaces_driver_auth', JSON.stringify(drv));
-                  setActiveScreen('home');
-                }}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg text-[11px] font-bold transition-all border border-slate-200"
-              >
-                {drv.name?.split(' ')[0]} ({drv.id})
-              </button>
-            ))}
-          </div>
-        </div>
-
-      </div>
-
-      {/* Bottom Home Indicator Bar */}
-      <div className="w-32 h-1 bg-slate-900 rounded-full mx-auto mt-4"></div>
-    </div>
-  );
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // 2. RENDER SCREEN 2: HOME / ACTIVE ROUTE OVERVIEW
-  // ════════════════════════════════════════════════════════════════════════════
-  const renderScreen2Home = () => (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-900 select-none overflow-y-auto">
-      
-      {/* Blue Top Header Section */}
-      <div className="bg-[#1E6DF7] text-white pt-4 pb-12 px-6 rounded-b-[32px] shadow-sm relative">
-        {/* Status Bar */}
-        <div className="flex items-center justify-between text-xs font-semibold text-white/90 pb-4">
-          <span>{currentTime}</span>
-          <div className="flex items-center space-x-1.5">
-            <span className="text-[10px]">5G</span>
-            <div className="flex items-end space-x-0.5 h-3">
-              <span className="w-0.5 h-1.5 bg-white rounded-xs"></span>
-              <span className="w-0.5 h-2 bg-white rounded-xs"></span>
-              <span className="w-0.5 h-2.5 bg-white rounded-xs"></span>
-              <span className="w-0.5 h-3 bg-white rounded-xs"></span>
-            </div>
-            <div className="w-5 h-2.5 border border-white rounded-xs p-0.5 flex items-center">
-              <div className="w-full h-full bg-white rounded-xs"></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Greeting & Notification Bell */}
-        <div className="flex items-center justify-between mt-2">
-          <div>
-            <h2 className="text-2xl font-black tracking-tight leading-tight">Good Morning,</h2>
-            <h2 className="text-2xl font-black tracking-tight leading-tight">{driverUser?.name?.split(' ')[0] || 'Driver'}.</h2>
-          </div>
-          <button 
-            type="button"
-            onClick={() => setActiveScreen('earnings')}
-            className="h-11 w-11 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center relative transition-all cursor-pointer"
-            title="Notifications & Profile"
-          >
-            <Bell className="h-5 w-5 text-white" />
-            <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-[#1E6DF7]"></span>
-          </button>
-        </div>
-      </div>
-
-      {/* Floating Active Route Card */}
-      <div className="px-5 -mt-8 relative z-10">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-xl p-5 text-center">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Today's Route:</p>
-          <h3 className="text-3xl font-black text-slate-900 tracking-tight mt-0.5 mb-4">{routeNumber}</h3>
-
-          {/* 3 Metric Columns */}
-          <div className="grid grid-cols-3 divide-x divide-slate-100 bg-slate-50/70 rounded-xl py-3 px-2 border border-slate-100 mb-4">
-            <div>
-              <span className="text-xl font-black text-slate-900 block">{totalStopsCount}</span>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">STOPS</span>
-            </div>
-            <div>
-              <span className="text-xl font-black text-slate-900 block">{completedStopsCount}</span>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">DONE</span>
-            </div>
-            <div>
-              <span className="text-lg font-black text-slate-900 block">
-                {totalStopsCount > 0 ? `${Math.max(1, Math.floor(totalStopsCount * 0.8))}h ${totalStopsCount * 15 % 60}m` : '0h'}
-              </span>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">EST. TIME</span>
-            </div>
-          </div>
-
-          {/* View Active Route Button */}
-          <button
-            type="button"
-            onClick={() => setActiveScreen('route')}
-            className="w-full py-3.5 bg-[#1E6DF7] hover:bg-[#1557CD] active:bg-[#0D47A1] text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
-          >
-            VIEW ACTIVE ROUTE
-          </button>
-        </div>
-      </div>
-
-      {/* Live Deliveries Queue Preview */}
-      <div className="px-5 mt-6 flex-1">
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h4 className="text-sm font-bold text-slate-800">Assigned Live Stops</h4>
-          <span className="text-[11px] font-semibold text-blue-600">
-            {completedStopsCount} of {totalStopsCount} complete
-          </span>
-        </div>
-
-        <div className="space-y-2.5">
-          {liveStops.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-500">
-              <PackageCheck className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-              <p className="text-xs font-semibold">No stops scheduled currently.</p>
-              <p className="text-[11px] text-slate-400 mt-1">Live updates from Supabase will appear here automatically.</p>
-            </div>
-          ) : (
-            liveStops.slice(0, 3).map((st, idx) => (
-              <div 
-                key={st.id}
-                onClick={() => {
-                  setActiveStopIndex(idx);
-                  setActiveScreen('stop');
-                }}
-                className="bg-white border border-slate-200/80 rounded-2xl p-4 flex items-center justify-between hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer"
-              >
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                      Stop {st.stopNumber}
-                    </span>
-                    <h5 className="text-xs font-bold text-slate-900">{st.customerName}</h5>
-                  </div>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate max-w-[200px]">{st.address}</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-slate-400" />
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Bottom Bar Controls */}
-      <div className="p-4 bg-white border-t border-slate-100 mt-4 flex items-center justify-around text-xs font-bold text-slate-500">
-        <button 
-          onClick={() => setActiveScreen('home')}
-          className="flex flex-col items-center text-blue-600 space-y-1 cursor-pointer"
-        >
-          <Building2 className="h-5 w-5" />
-          <span className="text-[10px]">Home</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('route')}
-          className="flex flex-col items-center hover:text-blue-600 space-y-1 cursor-pointer"
-        >
-          <Navigation className="h-5 w-5" />
-          <span className="text-[10px]">Route</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('stop')}
-          className="flex flex-col items-center hover:text-blue-600 space-y-1 cursor-pointer"
-        >
-          <FileText className="h-5 w-5" />
-          <span className="text-[10px]">ePOD</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('earnings')}
-          className="flex flex-col items-center hover:text-blue-600 space-y-1 cursor-pointer"
-        >
-          <UserIcon className="h-5 w-5" />
-          <span className="text-[10px]">Profile</span>
-        </button>
-      </div>
-
-      {/* Bottom Home Indicator */}
-      <div className="w-32 h-1 bg-slate-900 rounded-full mx-auto my-2"></div>
-    </div>
-  );
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // 3. RENDER SCREEN 3: ACTIVE ROUTE MAP & STOP TIMELINE
-  // ════════════════════════════════════════════════════════════════════════════
-  const renderScreen3Route = () => (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-900 select-none overflow-hidden">
-      
-      {/* Top Header Bar */}
-      <div className="bg-white border-b border-slate-200 px-4 pt-3 pb-3 flex items-center justify-between relative z-20">
-        <button
-          type="button"
-          onClick={() => setActiveScreen('home')}
-          className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-700 transition-colors cursor-pointer"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <h3 className="text-sm font-black text-slate-900">Route {routeNumber}</h3>
-        <div className="w-7"></div>
-      </div>
-
-      {/* Stylized Vector Map Component */}
-      <div className="relative h-56 bg-slate-200 overflow-hidden border-b border-slate-300">
-        
-        <svg className="w-full h-full object-cover" viewBox="0 0 400 220" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="400" height="220" fill="#EBF2F7" />
-          
-          <path d="M20 15H110V70H20Z" fill="#D5EAD8" rx="8" />
-          <path d="M280 40H380V120H280Z" fill="#D5EAD8" rx="8" />
-          <path d="M40 140H120V205H40Z" fill="#D5EAD8" rx="8" />
-
-          <path d="M0 60H400" stroke="#FFFFFF" strokeWidth="12" />
-          <path d="M0 125H400" stroke="#FFFFFF" strokeWidth="14" />
-          <path d="M0 185H400" stroke="#FFFFFF" strokeWidth="10" />
-
-          <path d="M80 0V220" stroke="#FFFFFF" strokeWidth="12" />
-          <path d="M160 0V220" stroke="#FFFFFF" strokeWidth="14" />
-          <path d="M240 0V220" stroke="#FFFFFF" strokeWidth="12" />
-          <path d="M320 0V220" stroke="#FFFFFF" strokeWidth="10" />
-
-          <path 
-            d="M 90 170 L 170 170 L 170 120 L 220 70 L 300 70 L 310 120 L 250 165 L 210 165 L 180 130" 
-            stroke="#1E6DF7" 
-            strokeWidth="5" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-          />
-
-          {liveStops.map((st, idx) => {
-            const isSel = idx === activeStopIndex;
-            const isComp = st.status === 'completed';
-            const pinX = 80 + (idx * 55) % 280;
-            const pinY = 60 + (idx * 35) % 130;
-
-            return (
-              <g key={st.id} transform={`translate(${pinX}, ${pinY})`}>
-                <circle cx="0" cy="0" r={isSel ? 13 : 10} fill={isComp ? '#10B981' : (isSel ? '#1E6DF7' : '#3B82F6')} />
-                {isSel && <circle cx="0" cy="0" r="17" stroke="#1E6DF7" strokeWidth="2" opacity="0.4" className="animate-ping" />}
-                <text x="0" y="3.5" fill="white" fontSize={isSel ? "11" : "10"} fontWeight="900" textAnchor="middle">
-                  {st.stopNumber}
-                </text>
-              </g>
-            );
-          })}
-
-          <g transform={`translate(${truckPinOffset.x}, ${truckPinOffset.y})`}>
-            <rect x="-12" y="-12" width="24" height="24" rx="12" fill="#0F172A" />
-            <path d="M-6 -2H2V3H-1V4H-4V3H-6V-2Z" fill="white" />
-            <path d="M2 0H5L7 3V4H5V3H3V0Z" fill="white" />
-            <circle cx="-3" cy="4" r="1" fill="#1E6DF7" />
-            <circle cx="4" cy="4" r="1" fill="#1E6DF7" />
-          </g>
-        </svg>
-
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
-          <button
-            type="button"
-            onClick={() => {
-              setNavigationSimulating(true);
-              setTruckPinOffset({ x: 175, y: 122 });
-              setTimeout(() => {
-                setNavigationSimulating(false);
-                setActiveScreen('stop');
-              }, 1200);
-            }}
-            className="px-5 py-2.5 bg-[#1E6DF7] hover:bg-[#1557CD] text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg flex items-center space-x-2 cursor-pointer transition-all border border-white/20"
-          >
-            <Navigation2 className="h-3.5 w-3.5 fill-current" />
-            <span>{navigationSimulating ? 'NAVIGATING...' : 'START NAVIGATION'}</span>
-          </button>
-        </div>
-
-      </div>
-
-      {/* Stops Timeline List from Live Deliveries */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {liveStops.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 text-center text-slate-500">
-            <TruckIcon className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-            <p className="text-xs font-bold text-slate-700">No Stops on this Route</p>
-            <p className="text-[11px] text-slate-400 mt-1">Check back once the dispatcher assigns deliveries.</p>
-          </div>
-        ) : (
-          liveStops.map((stop, idx) => {
-            const isSelected = idx === activeStopIndex;
-            const isCompleted = stop.status === 'completed';
-
-            return (
-              <div
-                key={stop.id}
-                onClick={() => {
-                  setActiveStopIndex(idx);
-                  setActiveScreen('stop');
-                }}
-                className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center space-x-3 relative ${
-                  isSelected 
-                    ? 'bg-blue-50/60 border-[#1E6DF7] shadow-xs' 
-                    : isCompleted
-                    ? 'bg-white border-slate-200 opacity-80'
-                    : 'bg-white border-slate-200'
-                }`}
-              >
-                <div className={`h-8 w-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
-                  isCompleted 
-                    ? 'bg-emerald-500 text-white' 
-                    : isSelected 
-                    ? 'bg-[#1E6DF7] text-white' 
-                    : 'bg-slate-200 text-slate-600'
-                }`}>
-                  {isCompleted ? <Check className="h-4 w-4 stroke-[3]" /> : stop.stopNumber}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                      STOP {stop.stopNumber}:
-                    </span>
-                    {isCompleted && (
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                        Completed
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 truncate">{stop.customerName}</h4>
-                  <p className="text-[11px] text-slate-500 truncate">{stop.address}</p>
-                </div>
-
-                <ChevronRight className={`h-4 w-4 ${isSelected ? 'text-[#1E6DF7]' : 'text-slate-400'}`} />
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Bottom Sticky Action Button */}
-      <div className="p-4 bg-white border-t border-slate-200">
-        <button
-          type="button"
-          onClick={() => setActiveScreen('stop')}
-          className="w-full py-3.5 bg-[#1E6DF7] hover:bg-[#1557CD] active:bg-[#0D47A1] text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
-        >
-          ARRIVED AT STOP
-        </button>
-      </div>
-
-      {/* Bottom Home Indicator */}
-      <div className="w-32 h-1 bg-slate-900 rounded-full mx-auto my-2"></div>
-    </div>
-  );
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // 4. RENDER SCREEN 4: DELIVERY AT STOP (ePOD & PHOTO PROOF)
-  // ════════════════════════════════════════════════════════════════════════════
-  const renderScreen4Stop = () => (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-900 select-none overflow-y-auto">
-      
-      {/* Top Header */}
-      <div className="bg-white border-b border-slate-200 px-4 pt-3 pb-3 flex items-center justify-between sticky top-0 z-20">
-        <button
-          type="button"
-          onClick={() => setActiveScreen('route')}
-          className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-700 transition-colors cursor-pointer"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <h3 className="text-sm font-black text-slate-900">Stop {currentStop.stopNumber} POD</h3>
-        <div className="w-7"></div>
-      </div>
-
-      {/* Content Container */}
-      <div className="p-4 space-y-4 flex-1">
-        
-        {/* Customer Card */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
-              <UserIcon className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer:</span>
-              <h4 className="text-sm font-black text-slate-900 leading-tight">{currentStop.customerName}</h4>
-              <p className="text-xs text-slate-500 mt-0.5">{currentStop.address}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Photo Proof Section */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">Photo Proof</h4>
-          
-          <div className="grid grid-cols-2 gap-3">
-            {/* Photo 1: Cargo at Door */}
-            <label className="border border-slate-200 bg-slate-50/70 hover:bg-blue-50/50 hover:border-blue-300 rounded-2xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all h-28 relative overflow-hidden group">
-              <input 
-                type="file" 
-                accept="image/*" 
-                capture="environment"
-                className="hidden" 
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    const r = new FileReader();
-                    r.onload = () => setCargoPhoto(r.result as string);
-                    r.readAsDataURL(f);
-                  }
-                }}
-              />
-              {cargoPhoto ? (
-                <img src={cargoPhoto} alt="Cargo at door" className="absolute inset-0 w-full h-full object-cover" />
-              ) : (
-                <>
-                  <Camera className="h-6 w-6 text-slate-400 mb-1.5 group-hover:text-blue-600" />
-                  <span className="text-[11px] font-bold text-slate-700 leading-tight">Cargo at Door</span>
-                </>
-              )}
-            </label>
-
-            {/* Photo 2: Signed Form */}
-            <label className="border border-slate-200 bg-slate-50/70 hover:bg-blue-50/50 hover:border-blue-300 rounded-2xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all h-28 relative overflow-hidden group">
-              <input 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    const r = new FileReader();
-                    r.onload = () => setSignedFormPhoto(r.result as string);
-                    r.readAsDataURL(f);
-                  }
-                }}
-              />
-              {signedFormPhoto ? (
-                <img src={signedFormPhoto} alt="Signed form" className="absolute inset-0 w-full h-full object-cover" />
-              ) : (
-                <>
-                  <FileText className="h-6 w-6 text-slate-400 mb-1.5 group-hover:text-blue-600" />
-                  <span className="text-[11px] font-bold text-slate-700 leading-tight">Signed Form</span>
-                </>
-              )}
-            </label>
-          </div>
-        </div>
-
-        {/* Driver Signature Pad Card */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Receiver Signature</h4>
             <button
-              type="button"
-              onClick={clearCanvas}
-              className="text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-sm uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center space-x-2 mt-2"
             >
-              Clear
+              {isLoggingIn ? (
+                <span className="flex items-center space-x-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Connecting to Fleet...</span>
+                </span>
+              ) : (
+                <span>SIGN IN TO ROUTE</span>
+              )}
             </button>
-          </div>
+          </form>
 
-          <div className="border border-slate-300 bg-slate-50/50 rounded-xl h-24 relative overflow-hidden flex items-center justify-center">
-            <canvas
-              ref={canvasRef}
-              width={320}
-              height={96}
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-              className="w-full h-full cursor-crosshair touch-none absolute inset-0 z-10"
-            />
-            {hasDrawnSignature && !isDrawingRef.current && (
-              <span className="font-serif italic text-2xl text-slate-800 tracking-wider pointer-events-none select-none">
-                {receiverName || 'Signature On File'}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Receiver Name Input */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-xs">
-          <input
-            type="text"
-            value={receiverName}
-            onChange={(e) => setReceiverName(e.target.value)}
-            placeholder="Receiver Full Name"
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-      </div>
-
-      {/* Bottom Sticky Action Button */}
-      <div className="p-4 bg-white border-t border-slate-200 sticky bottom-0 z-20">
-        <button
-          type="button"
-          onClick={handleSubmitPOD}
-          className="w-full py-3.5 bg-[#1E6DF7] hover:bg-[#1557CD] active:bg-[#0D47A1] text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          <span>SUBMIT POD</span>
-        </button>
-      </div>
-
-      {/* Success Toast */}
-      {podSubmittedToast && (
-        <div className="fixed inset-x-6 top-16 z-50 bg-emerald-600 text-white py-3 px-4 rounded-2xl shadow-2xl flex items-center justify-center space-x-2 text-xs font-bold animate-in fade-in slide-in-from-top-4">
-          <CheckCircle2 className="h-4 w-4 text-white" />
-          <span>Proof of Delivery Recorded in Supabase!</span>
-        </div>
-      )}
-
-      {/* Bottom Home Indicator */}
-      <div className="w-32 h-1 bg-slate-900 rounded-full mx-auto my-2"></div>
-    </div>
-  );
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // 5. RENDER SCREEN 5: EARNINGS & SETTINGS
-  // ════════════════════════════════════════════════════════════════════════════
-  const renderScreen5Earnings = () => (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-900 select-none overflow-y-auto">
-      
-      {/* Top Header */}
-      <div className="bg-white border-b border-slate-200 px-5 pt-4 pb-3 flex items-center justify-between sticky top-0 z-20">
-        <h3 className="text-base font-black text-slate-900">Earnings</h3>
-        <div className="h-8 w-8 rounded-full overflow-hidden border border-slate-300 bg-blue-100 flex items-center justify-center font-bold text-blue-700 text-xs">
-          {driverUser?.name?.charAt(0) || 'D'}
-        </div>
-      </div>
-
-      {/* Main Container */}
-      <div className="p-4 space-y-4 flex-1">
-        
-        {/* Hero Card: THIS WEEK */}
-        <div className="bg-[#48D5B5] text-slate-950 rounded-2xl p-5 shadow-sm text-center">
-          <span className="text-[11px] font-black uppercase tracking-wider text-slate-800/80 block">THIS WEEK:</span>
-          <h2 className="text-3xl font-black text-slate-950 tracking-tight mt-1">${weeklyEarnings}</h2>
-        </div>
-
-        {/* Daily Bar Chart Card with Real Metrics */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block text-center mb-3">
-            COMPLETED DELIVERIES & TALLY
-          </span>
-
-          <div className="flex items-end justify-between h-28 px-3 pt-2">
-            {[
-              { day: 'Mon', count: Math.min(completedStopsCount, 2), height: '60%' },
-              { day: 'Tue', count: Math.min(completedStopsCount, 3), height: '75%' },
-              { day: 'Wed', count: Math.min(completedStopsCount, 4), height: '90%' },
-              { day: 'Thu', count: Math.min(completedStopsCount, 1), height: '40%' },
-              { day: 'Fri', count: completedStopsCount, height: `${Math.min(100, Math.max(30, completedStopsCount * 25))}%` }
-            ].map((col, idx) => (
-              <div key={idx} className="flex flex-col items-center flex-1 h-full justify-end group">
-                <div 
-                  className="w-7 bg-[#48D5B5] hover:bg-[#32B89A] rounded-t-md transition-all relative"
-                  style={{ height: col.height }}
+          {/* Quick Driver Profile Switcher */}
+          <div className="mt-8 pt-6 border-t border-slate-100">
+            <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block text-center mb-3">
+              Fast Select Active Driver
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {availableDrivers.map((drv) => (
+                <button
+                  key={drv.id}
+                  type="button"
+                  onClick={() => {
+                    setDriverUser(drv);
+                    localStorage.setItem('prospaces_driver_auth', JSON.stringify(drv));
+                    setActiveScreen('home');
+                  }}
+                  className="px-3 py-2.5 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-slate-700 hover:text-blue-700 rounded-xl text-xs font-bold transition-all border border-slate-200 flex items-center justify-between cursor-pointer"
                 >
-                  <span className="opacity-0 group-hover:opacity-100 absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-slate-800 bg-white px-1 rounded shadow-xs transition-opacity whitespace-nowrap">
-                    {col.count} stops
+                  <span className="truncate">{drv.name}</span>
+                  <span className="text-[10px] text-slate-400 font-mono ml-1">{drv.id}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // MAIN DRIVER APPLICATION SHELL (MOBILE-FIRST RESPONSIVE CONTAINER)
+  // ════════════════════════════════════════════════════════════════════════════
+  return (
+    <div className="w-full min-h-screen bg-slate-950 flex flex-col items-center justify-start antialiased selection:bg-blue-600 selection:text-white">
+      
+      {/* Centered Mobile Application Body */}
+      <div className="w-full max-w-md min-h-screen bg-slate-50 flex flex-col relative shadow-2xl sm:border-x border-slate-200">
+        
+        {/* ── 1. SCREEN: HOME / OVERVIEW ── */}
+        {activeScreen === 'home' && (
+          <div className="flex-1 flex flex-col pb-20 select-none overflow-y-auto">
+            
+            {/* Header with Driver Greeting */}
+            <div className="bg-blue-600 text-white pt-6 pb-12 px-5 rounded-b-[28px] shadow-sm relative">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="bg-white/20 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                      {assignedTruck ? `${assignedTruck.name}` : 'Truck 101'}
+                    </span>
+                    <span className="flex items-center text-[10px] font-semibold text-emerald-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+                      Live Synced
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-black tracking-tight leading-tight">
+                    Good Day, {driverUser?.name?.split(' ')[0] || 'Driver'}!
+                  </h2>
+                </div>
+
+                <button 
+                  type="button"
+                  onClick={() => setActiveScreen('earnings')}
+                  className="h-11 w-11 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center relative transition-all cursor-pointer"
+                >
+                  <Bell className="h-5 w-5 text-white" />
+                  <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-blue-600"></span>
+                </button>
+              </div>
+            </div>
+
+            {/* Active Route Summary Card */}
+            <div className="px-4 -mt-8 relative z-10">
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-lg p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Today's Assigned Route</span>
+                  <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                    {currentTime}
                   </span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 mt-2">{col.day}</span>
+                
+                <h3 className="text-3xl font-black text-slate-900 tracking-tight mb-4">{routeNumber}</h3>
+
+                {/* Progress Indicators */}
+                <div className="grid grid-cols-3 divide-x divide-slate-100 bg-slate-50 rounded-xl py-3 px-2 border border-slate-100 mb-4 text-center">
+                  <div>
+                    <span className="text-xl font-black text-slate-900 block">{totalStopsCount}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TOTAL STOPS</span>
+                  </div>
+                  <div>
+                    <span className="text-xl font-black text-emerald-600 block">{completedStopsCount}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">COMPLETED</span>
+                  </div>
+                  <div>
+                    <span className="text-xl font-black text-blue-600 block">{Math.max(0, totalStopsCount - completedStopsCount)}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">REMAINING</span>
+                  </div>
+                </div>
+
+                {/* Primary Action Button */}
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen('route')}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
+                >
+                  <Navigation className="h-4 w-4" />
+                  <span>START / VIEW ROUTE NAVIGATION</span>
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Settings Menu List */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">SETTINGS & VEHICLE</h4>
-
-          <div className="space-y-1">
-            <button 
-              onClick={() => alert(`Driver Profile:\nName: ${driverUser?.name || 'Driver'}\nEmail: ${driverUser?.email}\nID: ${driverUser?.id}`)}
-              className="w-full flex items-center space-x-3 py-2.5 px-2 hover:bg-slate-50 rounded-xl transition-colors text-left"
-            >
-              <UserIcon className="h-4 w-4 text-slate-600" />
-              <span className="text-xs font-bold text-slate-800">Profile ({driverUser?.name || 'Driver'})</span>
-            </button>
-
-            <button 
-              onClick={() => alert(`Assigned Truck: ${assignedTruck?.name || 'Unit 408'}\nLicense: ${assignedTruck?.licensePlate || 'AB-4902'}\nStatus: ${assignedTruck?.status || 'Active'}`)}
-              className="w-full flex items-center space-x-3 py-2.5 px-2 hover:bg-slate-50 rounded-xl transition-colors text-left"
-            >
-              <TruckIcon className="h-4 w-4 text-slate-600" />
-              <span className="text-xs font-bold text-slate-800">Vehicle Info ({assignedTruck?.name || 'Truck'})</span>
-            </button>
-
-            <button 
-              onClick={() => alert('Support Line: 1-800-555-RONA\nFleet Dispatch: Connected via Supabase')}
-              className="w-full flex items-center space-x-3 py-2.5 px-2 hover:bg-slate-50 rounded-xl transition-colors text-left"
-            >
-              <HelpCircle className="h-4 w-4 text-slate-600" />
-              <span className="text-xs font-bold text-slate-800">Support & Dispatch</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Logout Button */}
-        <button
-          type="button"
-          onClick={handleDriverLogout}
-          className="w-full py-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-800 hover:text-rose-600 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-        >
-          LOGOUT
-        </button>
-
-      </div>
-
-      {/* Bottom Bar Controls */}
-      <div className="p-4 bg-white border-t border-slate-100 mt-auto flex items-center justify-around text-xs font-bold text-slate-500">
-        <button 
-          onClick={() => setActiveScreen('home')}
-          className="flex flex-col items-center hover:text-blue-600 space-y-1 cursor-pointer"
-        >
-          <Building2 className="h-5 w-5" />
-          <span className="text-[10px]">Home</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('route')}
-          className="flex flex-col items-center hover:text-blue-600 space-y-1 cursor-pointer"
-        >
-          <Navigation className="h-5 w-5" />
-          <span className="text-[10px]">Route</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('stop')}
-          className="flex flex-col items-center hover:text-blue-600 space-y-1 cursor-pointer"
-        >
-          <FileText className="h-5 w-5" />
-          <span className="text-[10px]">ePOD</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('earnings')}
-          className="flex flex-col items-center text-blue-600 space-y-1 cursor-pointer"
-        >
-          <UserIcon className="h-5 w-5" />
-          <span className="text-[10px]">Profile</span>
-        </button>
-      </div>
-
-      {/* Bottom Home Indicator */}
-      <div className="w-32 h-1 bg-slate-900 rounded-full mx-auto my-2"></div>
-    </div>
-  );
-
-  return (
-    <div className="w-full min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-start p-4 sm:p-6 lg:p-8 font-sans antialiased selection:bg-blue-600 selection:text-white">
-      
-      {/* ── TOP CONTROL BAR ── */}
-      <div className="w-full max-w-7xl mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-950/80 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md">
-        
-        {/* Brand & Route Title */}
-        <div className="flex items-center space-x-3.5">
-          <div className="h-11 w-11 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-            <TruckIcon className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-lg font-black text-white tracking-tight">ProSpaces Logistics &bull; Driver Mobile App</h1>
-              <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                Live URI: /logistics/driver
-              </span>
             </div>
-            <p className="text-xs text-slate-400">
-              Interactive 5-Screen Driver Experience &bull; Route R-408 Dispatched to {driverUser?.name || 'Alex Rivera'}
-            </p>
-          </div>
-        </div>
 
-        {/* Switcher Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          
-          {/* Mode Switcher (Single Phone vs 5-Screens Panoramic) */}
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setViewMode('phone')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                viewMode === 'phone'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Smartphone className="h-3.5 w-3.5" />
-              <span>Single Phone View</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('panoramic')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                viewMode === 'panoramic'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Grid className="h-3.5 w-3.5" />
-              <span>All 5 Screens Flow</span>
-            </button>
-          </div>
+            {/* Upcoming Stops List */}
+            <div className="px-4 mt-6 flex-1">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <h4 className="text-sm font-bold text-slate-900">Assigned Delivery Stops</h4>
+                <span className="text-xs font-semibold text-blue-600">
+                  {completedStopsCount} of {totalStopsCount} done
+                </span>
+              </div>
 
-          {/* Quick Jump Buttons (When in Phone mode) */}
-          {viewMode === 'phone' && (
-            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
-              <button
-                type="button"
-                onClick={() => setActiveScreen('login')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreen === 'login' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                1. Sign In
-              </button>
+              <div className="space-y-2.5">
+                {liveStops.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-500">
+                    <PackageCheck className="h-8 w-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-800">No active stops assigned</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Stops dispatched in Supabase will show here instantly.</p>
+                  </div>
+                ) : (
+                  liveStops.map((st, idx) => (
+                    <div 
+                      key={st.id}
+                      onClick={() => {
+                        setActiveStopIndex(idx);
+                        setActiveScreen('stop');
+                      }}
+                      className={`bg-white border rounded-2xl p-4 flex items-center justify-between transition-all cursor-pointer hover:shadow-sm ${
+                        st.status === 'completed' 
+                          ? 'border-emerald-200/80 bg-emerald-50/20' 
+                          : idx === activeStopIndex 
+                          ? 'border-blue-500 ring-2 ring-blue-500/10' 
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                          st.status === 'completed' ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {st.status === 'completed' ? <Check className="h-4 w-4 stroke-[3]" /> : st.stopNumber}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <h5 className="text-xs font-bold text-slate-900 truncate">{st.customerName}</h5>
+                            {st.status === 'completed' && (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
+                                DELIVERED
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium truncate max-w-[220px]">{st.address}</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ── 2. SCREEN: ACTIVE ROUTE MAP & STOPS ── */}
+        {activeScreen === 'route' && (
+          <div className="flex-1 flex flex-col pb-20 select-none overflow-hidden">
+            
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20">
               <button
                 type="button"
                 onClick={() => setActiveScreen('home')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreen === 'home' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-700 transition-colors cursor-pointer"
               >
-                2. Home
+                <ChevronLeft className="h-5 w-5" />
               </button>
+              <div className="text-center">
+                <h3 className="text-sm font-black text-slate-900 leading-tight">Route {routeNumber} Navigation</h3>
+                <span className="text-[10px] font-bold text-slate-400">{liveStops.length} stops scheduled</span>
+              </div>
               <button
                 type="button"
-                onClick={() => setActiveScreen('route')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreen === 'route' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                onClick={() => openExternalMaps(currentStop.address)}
+                className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors cursor-pointer"
+                title="Open in Google Maps"
               >
-                3. Route
+                <ExternalLink className="h-4 w-4" />
               </button>
+            </div>
+
+            {/* Interactive Vector Route Map */}
+            <div className="relative h-60 bg-slate-200 overflow-hidden border-b border-slate-300 shrink-0">
+              <svg className="w-full h-full object-cover" viewBox="0 0 400 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="240" fill="#EBF2F7" />
+                
+                {/* City Blocks */}
+                <path d="M20 15H110V70H20Z" fill="#D5EAD8" rx="8" />
+                <path d="M280 40H380V120H280Z" fill="#D5EAD8" rx="8" />
+                <path d="M40 140H120V215H40Z" fill="#D5EAD8" rx="8" />
+
+                {/* Roads */}
+                <path d="M0 60H400" stroke="#FFFFFF" strokeWidth="14" />
+                <path d="M0 130H400" stroke="#FFFFFF" strokeWidth="16" />
+                <path d="M0 195H400" stroke="#FFFFFF" strokeWidth="12" />
+
+                <path d="M80 0V240" stroke="#FFFFFF" strokeWidth="14" />
+                <path d="M160 0V240" stroke="#FFFFFF" strokeWidth="16" />
+                <path d="M240 0V240" stroke="#FFFFFF" strokeWidth="14" />
+                <path d="M320 0V240" stroke="#FFFFFF" strokeWidth="12" />
+
+                {/* Route Path */}
+                <path 
+                  d="M 85 185 L 165 185 L 165 130 L 235 75 L 315 75 L 320 130 L 245 175 L 205 175 L 175 140" 
+                  stroke="#2563EB" 
+                  strokeWidth="5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                />
+
+                {/* Stop Markers */}
+                {liveStops.map((st, idx) => {
+                  const isSel = idx === activeStopIndex;
+                  const isComp = st.status === 'completed';
+                  const pinX = 80 + (idx * 55) % 280;
+                  const pinY = 60 + (idx * 35) % 140;
+
+                  return (
+                    <g key={st.id} transform={`translate(${pinX}, ${pinY})`} className="cursor-pointer" onClick={() => setActiveStopIndex(idx)}>
+                      <circle cx="0" cy="0" r={isSel ? 14 : 10} fill={isComp ? '#10B981' : (isSel ? '#2563EB' : '#64748B')} />
+                      {isSel && <circle cx="0" cy="0" r="18" stroke="#2563EB" strokeWidth="2" opacity="0.5" className="animate-ping" />}
+                      <text x="0" y="3.5" fill="white" fontSize={isSel ? "11" : "9"} fontWeight="900" textAnchor="middle">
+                        {st.stopNumber}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Driver Truck Pin */}
+                <g transform="translate(180, 130)">
+                  <rect x="-14" y="-14" width="28" height="28" rx="14" fill="#0F172A" />
+                  <path d="M-6 -3H3V4H0V5H-3V4H-6V-3Z" fill="white" />
+                  <path d="M3 -1H7L9 3V5H7V4H4V-1Z" fill="white" />
+                  <circle cx="-3" cy="5" r="1.2" fill="#2563EB" />
+                  <circle cx="5" cy="5" r="1.2" fill="#2563EB" />
+                </g>
+              </svg>
+
+              {/* Turn-by-Turn GPS Button */}
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 w-full px-4 max-w-xs">
+                <button
+                  type="button"
+                  onClick={() => openExternalMaps(currentStop.address)}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center space-x-2 cursor-pointer transition-all border border-white/20"
+                >
+                  <Navigation2 className="h-4 w-4 fill-current" />
+                  <span>START GPS TO STOP {currentStop.stopNumber}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Stops Timeline List */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
+              {liveStops.map((stop, idx) => {
+                const isSelected = idx === activeStopIndex;
+                const isCompleted = stop.status === 'completed';
+
+                return (
+                  <div
+                    key={stop.id}
+                    onClick={() => {
+                      setActiveStopIndex(idx);
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center space-x-3 ${
+                      isSelected 
+                        ? 'bg-blue-50/70 border-blue-500 shadow-sm' 
+                        : isCompleted
+                        ? 'bg-white border-slate-200 opacity-80'
+                        : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className={`h-8 w-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                      isCompleted 
+                        ? 'bg-emerald-500 text-white' 
+                        : isSelected 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {isCompleted ? <Check className="h-4 w-4 stroke-[3]" /> : stop.stopNumber}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          STOP {stop.stopNumber}
+                        </span>
+                        {isCompleted && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                            Done
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-900 truncate">{stop.customerName}</h4>
+                      <p className="text-[11px] text-slate-500 truncate">{stop.address}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveStopIndex(idx);
+                        setActiveScreen('stop');
+                      }}
+                      className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer shrink-0"
+                    >
+                      POD
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom Arrived Action Button */}
+            <div className="p-4 bg-white border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => setActiveScreen('stop')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreen === 'stop' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
               >
-                4. Stop POD
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveScreen('earnings')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  activeScreen === 'earnings' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                5. Earnings
+                <MapPin className="h-4 w-4" />
+                <span>ARRIVED AT STOP {currentStop.stopNumber} &bull; OPEN POD</span>
               </button>
             </div>
-          )}
+
+          </div>
+        )}
+
+        {/* ── 3. SCREEN: PROOF OF DELIVERY (ePOD) ── */}
+        {activeScreen === 'stop' && (
+          <div className="flex-1 flex flex-col pb-20 select-none overflow-y-auto">
+            
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20">
+              <button
+                type="button"
+                onClick={() => setActiveScreen('route')}
+                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-700 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <h3 className="text-sm font-black text-slate-900">Stop {currentStop.stopNumber} Proof of Delivery</h3>
+              <div className="w-7"></div>
+            </div>
+
+            {/* Stop Information & POD Form */}
+            <div className="p-4 space-y-4 flex-1">
+              
+              {/* Customer Details Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer Destination</span>
+                    <h4 className="text-base font-black text-slate-900 leading-tight mt-0.5">{currentStop.customerName}</h4>
+                    <p className="text-xs text-slate-600 mt-1">{currentStop.address}</p>
+                    {currentStop.notes && (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2 mt-2 font-medium border border-amber-200/60">
+                        <strong>Note:</strong> {currentStop.notes}
+                      </p>
+                    )}
+                  </div>
+                  {currentStop.phone && (
+                    <a
+                      href={`tel:${currentStop.phone}`}
+                      className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl border border-emerald-200 transition-colors shrink-0 cursor-pointer"
+                      title="Call Customer"
+                    >
+                      <Phone className="h-4 w-4" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Photo Proof Section */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">
+                  1. Delivery Photo Proof
+                </h4>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Photo 1: Cargo at Door */}
+                  <label className="border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 rounded-2xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all h-28 relative overflow-hidden group">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="environment"
+                      className="hidden" 
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          const r = new FileReader();
+                          r.onload = () => setCargoPhoto(r.result as string);
+                          r.readAsDataURL(f);
+                        }
+                      }}
+                    />
+                    {cargoPhoto ? (
+                      <img src={cargoPhoto} alt="Cargo at door" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                      <>
+                        <Camera className="h-6 w-6 text-slate-400 mb-1 group-hover:text-blue-600" />
+                        <span className="text-[11px] font-bold text-slate-700 leading-tight">Cargo at Door</span>
+                      </>
+                    )}
+                  </label>
+
+                  {/* Photo 2: Signed Paper / Bill of Lading */}
+                  <label className="border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 rounded-2xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all h-28 relative overflow-hidden group">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          const r = new FileReader();
+                          r.onload = () => setSignedFormPhoto(r.result as string);
+                          r.readAsDataURL(f);
+                        }
+                      }}
+                    />
+                    {signedFormPhoto ? (
+                      <img src={signedFormPhoto} alt="Signed form" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                      <>
+                        <FileText className="h-6 w-6 text-slate-400 mb-1 group-hover:text-blue-600" />
+                        <span className="text-[11px] font-bold text-slate-700 leading-tight">Signed Slip / BOL</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              {/* Customer Signature Pad */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    2. Receiver Signature
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={clearCanvas}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+                  >
+                    Clear Signature
+                  </button>
+                </div>
+
+                <div className="border border-slate-300 bg-slate-50 rounded-xl h-28 relative overflow-hidden flex items-center justify-center">
+                  <canvas
+                    ref={canvasRef}
+                    width={360}
+                    height={112}
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                    className="w-full h-full cursor-crosshair touch-none absolute inset-0 z-10"
+                  />
+                  {!hasDrawnSignature && (
+                    <span className="text-xs font-medium text-slate-400 pointer-events-none select-none">
+                      Draw customer signature here
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Receiver Name */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  3. Receiver Printed Name
+                </label>
+                <input
+                  type="text"
+                  value={receiverName}
+                  onChange={(e) => setReceiverName(e.target.value)}
+                  placeholder="Enter receiver full name"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+            </div>
+
+            {/* Bottom Submit POD Action Button */}
+            <div className="p-4 bg-white border-t border-slate-200 sticky bottom-0 z-20">
+              <button
+                type="button"
+                onClick={handleSubmitPOD}
+                disabled={isSubmittingPOD}
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
+              >
+                {isSubmittingPOD ? (
+                  <span className="flex items-center space-x-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Syncing with Supabase...</span>
+                  </span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>CONFIRM DELIVERY & SUBMIT ePOD</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Success Toast */}
+            {podSubmittedToast && (
+              <div className="fixed inset-x-4 top-20 z-50 bg-emerald-600 text-white py-3 px-4 rounded-2xl shadow-2xl flex items-center justify-center space-x-2 text-xs font-bold animate-in fade-in slide-in-from-top-4">
+                <CheckCircle2 className="h-4 w-4 text-white" />
+                <span>Proof of Delivery Recorded in Supabase!</span>
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* ── 4. SCREEN: DRIVER PROFILE & EARNINGS ── */}
+        {activeScreen === 'earnings' && (
+          <div className="flex-1 flex flex-col pb-20 select-none overflow-y-auto">
+            
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between sticky top-0 z-20">
+              <div>
+                <h3 className="text-base font-black text-slate-900">Driver Portal & Earnings</h3>
+                <p className="text-xs text-slate-500 font-medium">{driverUser?.name || 'Driver'}</p>
+              </div>
+              <div className="h-9 w-9 rounded-full overflow-hidden border border-slate-300 bg-blue-100 flex items-center justify-center font-bold text-blue-700 text-sm">
+                {driverUser?.name?.charAt(0) || 'D'}
+              </div>
+            </div>
+
+            {/* Earnings & Vehicle Info */}
+            <div className="p-4 space-y-4 flex-1">
+              
+              {/* Earnings Card */}
+              <div className="bg-emerald-500 text-slate-950 rounded-2xl p-5 shadow-sm text-center">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-900/80 block">
+                  THIS WEEK'S ESTIMATED COMPENSATION:
+                </span>
+                <h2 className="text-4xl font-black text-slate-950 tracking-tight mt-1 mb-1">
+                  ${weeklyEarnings}
+                </h2>
+                <span className="text-[11px] font-bold text-slate-900">
+                  {completedStopsCount} of {totalStopsCount} route deliveries completed
+                </span>
+              </div>
+
+              {/* Assigned Vehicle Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+                  <TruckIcon className="h-4 w-4 text-blue-600" />
+                  <span>Assigned Vehicle Status</span>
+                </h4>
+                
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-slate-50 rounded-xl">
+                    <span className="text-[10px] text-slate-400 font-bold block">VEHICLE</span>
+                    <span className="font-bold text-slate-900">{assignedTruck?.name || 'Freightliner M2'}</span>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-xl">
+                    <span className="text-[10px] text-slate-400 font-bold block">LICENSE PLATE</span>
+                    <span className="font-bold text-slate-900">{assignedTruck?.licensePlate || 'NS-4921'}</span>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-xl">
+                    <span className="text-[10px] text-slate-400 font-bold block">FUEL LEVEL</span>
+                    <span className="font-bold text-emerald-600">{assignedTruck?.fuelLevel || '84% Full'}</span>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-xl">
+                    <span className="text-[10px] text-slate-400 font-bold block">INSPECTION</span>
+                    <span className="font-bold text-emerald-600">Passed Pre-Trip</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Logout / Switch Driver */}
+              <button
+                type="button"
+                onClick={handleDriverLogout}
+                className="w-full py-3.5 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-800 hover:text-rose-600 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>SIGN OUT DRIVER</span>
+              </button>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* ── PERSISTENT NATIVE MOBILE BOTTOM NAVIGATION BAR ── */}
+        <div className="fixed sm:absolute bottom-0 inset-x-0 bg-white border-t border-slate-200 py-2.5 px-4 flex items-center justify-around text-xs font-bold text-slate-500 z-30 shadow-lg max-w-md mx-auto">
+          
+          <button 
+            type="button"
+            onClick={() => setActiveScreen('home')}
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
+              activeScreen === 'home' ? 'text-blue-600' : 'hover:text-slate-800'
+            }`}
+          >
+            <Building2 className="h-5 w-5" />
+            <span className="text-[10px]">Home</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setActiveScreen('route')}
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
+              activeScreen === 'route' ? 'text-blue-600' : 'hover:text-slate-800'
+            }`}
+          >
+            <Navigation className="h-5 w-5" />
+            <span className="text-[10px]">Route Map</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setActiveScreen('stop')}
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
+              activeScreen === 'stop' ? 'text-blue-600' : 'hover:text-slate-800'
+            }`}
+          >
+            <FileText className="h-5 w-5" />
+            <span className="text-[10px]">ePOD Proof</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setActiveScreen('earnings')}
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
+              activeScreen === 'earnings' ? 'text-blue-600' : 'hover:text-slate-800'
+            }`}
+          >
+            <UserIcon className="h-5 w-5" />
+            <span className="text-[10px]">Profile</span>
+          </button>
 
         </div>
 
       </div>
-
-      {/* ── MAIN CONTENT VIEW ── */}
-      {viewMode === 'phone' ? (
-        /* ══════════════════════════════════════════════════════════════
-           SINGLE INTERACTIVE PHONE DEVICE SIMULATOR
-           ══════════════════════════════════════════════════════════════ */
-        <div className="flex flex-col items-center justify-center my-auto">
-          
-          {/* Phone Shell Frame */}
-          <div className="w-[360px] sm:w-[390px] h-[780px] bg-slate-950 rounded-[48px] p-3 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] border-4 border-slate-800 relative flex flex-col">
-            
-            {/* Speaker & Dynamic Island / Camera Notch */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 w-28 h-5 bg-slate-950 rounded-full z-40 flex items-center justify-center">
-              <div className="w-10 h-3.5 bg-slate-900 rounded-full flex items-center justify-end pr-1.5">
-                <div className="h-2 w-2 rounded-full bg-blue-950/80 border border-blue-500/30"></div>
-              </div>
-            </div>
-
-            {/* Inner Phone Screen */}
-            <div className="w-full h-full bg-white rounded-[38px] overflow-hidden flex flex-col relative">
-              {activeScreen === 'login' && renderScreen1Login()}
-              {activeScreen === 'home' && renderScreen2Home()}
-              {activeScreen === 'route' && renderScreen3Route()}
-              {activeScreen === 'stop' && renderScreen4Stop()}
-              {activeScreen === 'earnings' && renderScreen5Earnings()}
-            </div>
-
-          </div>
-
-          {/* Quick Navigation Caption */}
-          <div className="mt-4 text-center">
-            <span className="text-xs font-mono text-slate-400">
-              Viewing Screen: <strong className="text-blue-400 capitalize">{activeScreen}</strong> &bull; Click anywhere in app to navigate
-            </span>
-          </div>
-
-        </div>
-      ) : (
-        /* ══════════════════════════════════════════════════════════════
-           PANORAMIC ALL 5 SCREENS FLOW (MATCHING MOCKUP IMAGE)
-           ══════════════════════════════════════════════════════════════ */
-        <div className="w-full max-w-[1920px] overflow-x-auto pb-10">
-          
-          <div className="min-w-[1700px] flex items-center justify-center gap-6 py-6 px-4">
-            
-            {/* Screen 1: Welcome Driver */}
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono">1. Welcome / Sign In</span>
-              <div className="w-[300px] h-[640px] bg-slate-950 rounded-[40px] p-2.5 shadow-2xl border-2 border-slate-800 flex flex-col">
-                <div className="w-full h-full bg-white rounded-[32px] overflow-hidden">
-                  {renderScreen1Login()}
-                </div>
-              </div>
-            </div>
-
-            {/* Arrow & Truck 1 */}
-            <div className="flex flex-col items-center justify-center text-blue-400">
-              <TruckIcon className="h-6 w-6 text-blue-400 mb-1" />
-              <ArrowRight className="h-6 w-6 text-slate-600 animate-pulse" />
-            </div>
-
-            {/* Screen 2: Home Route Overview */}
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-bold text-blue-400 mb-2 uppercase tracking-wider font-mono">2. Home / Active Route</span>
-              <div className="w-[300px] h-[640px] bg-slate-950 rounded-[40px] p-2.5 shadow-2xl border-2 border-blue-500/50 flex flex-col">
-                <div className="w-full h-full bg-white rounded-[32px] overflow-hidden">
-                  {renderScreen2Home()}
-                </div>
-              </div>
-            </div>
-
-            {/* Arrow 2 */}
-            <div className="flex flex-col items-center justify-center text-blue-400">
-              <ArrowRight className="h-6 w-6 text-slate-600 animate-pulse" />
-            </div>
-
-            {/* Screen 3: Route R-408 Map */}
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono">3. Route Navigation</span>
-              <div className="w-[300px] h-[640px] bg-slate-950 rounded-[40px] p-2.5 shadow-2xl border-2 border-slate-800 flex flex-col">
-                <div className="w-full h-full bg-white rounded-[32px] overflow-hidden">
-                  {renderScreen3Route()}
-                </div>
-              </div>
-            </div>
-
-            {/* Arrow 3 */}
-            <div className="flex flex-col items-center justify-center text-blue-400">
-              <ArrowRight className="h-6 w-6 text-slate-600 animate-pulse" />
-            </div>
-
-            {/* Screen 4: Stop ePOD */}
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono">4. Delivery POD</span>
-              <div className="w-[300px] h-[640px] bg-slate-950 rounded-[40px] p-2.5 shadow-2xl border-2 border-slate-800 flex flex-col">
-                <div className="w-full h-full bg-white rounded-[32px] overflow-hidden">
-                  {renderScreen4Stop()}
-                </div>
-              </div>
-            </div>
-
-            {/* Arrow & Delivery Box */}
-            <div className="flex flex-col items-center justify-center text-blue-400">
-              <TruckIcon className="h-6 w-6 text-blue-400 mb-1" />
-              <ArrowRight className="h-6 w-6 text-slate-600 animate-pulse" />
-            </div>
-
-            {/* Screen 5: Earnings & Settings */}
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono">5. Earnings & Settings</span>
-              <div className="w-[300px] h-[640px] bg-slate-950 rounded-[40px] p-2.5 shadow-2xl border-2 border-slate-800 flex flex-col">
-                <div className="w-full h-full bg-white rounded-[32px] overflow-hidden">
-                  {renderScreen5Earnings()}
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-      )}
 
     </div>
   );
