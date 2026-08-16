@@ -2595,8 +2595,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-gray-800 antialiased selection:bg-blue-600 selection:text-white w-full max-w-full overflow-x-hidden" id="main-app-container">
       
-      {/* Super Admin Top Controller Banner when in App Workspace Mode */}
-      {currentUser.role === 'SUPER_ADMIN' && (
+      {/* Super Admin Top Controller Banner when in App Workspace Mode (Hidden in driver mobile app) */}
+      {currentUser.role === 'SUPER_ADMIN' && !['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
         <div className="bg-slate-950 text-amber-300 px-4 py-2 flex flex-wrap items-center justify-between text-xs border-b border-amber-500/30 shadow-md gap-2 z-50">
           <div className="flex items-center space-x-2.5">
             <span className="bg-amber-500 text-slate-950 text-[10px] uppercase font-mono px-2 py-0.5 rounded font-black tracking-wider shadow-xs">
@@ -2638,8 +2638,9 @@ export default function App() {
         </div>
       )}
       
-      {/* Enterprise Sticky Brand Header & Unified Navigation */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-200" id="prospaces-header">
+      {/* Enterprise Sticky Brand Header & Unified Navigation (Hidden when in standalone Driver App) */}
+      {!['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-200" id="prospaces-header">
         <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-3">
           
           {/* Logo & title context */}
@@ -3268,6 +3269,7 @@ export default function App() {
           </div>
         </div>
       </header>
+      )}
 
       {/* Main Core Body */}
       <main className={`flex-1 w-full mx-auto flex flex-col overflow-x-hidden ${
@@ -3386,6 +3388,7 @@ export default function App() {
               users={users}
               currentUser={currentUser}
               onAddOrUpdateDelivery={handleAddOrUpdateDelivery}
+              onBackToPortal={() => setActiveTab('dashboard')}
             />
           )}
           {activeTab === 'scanner' && (

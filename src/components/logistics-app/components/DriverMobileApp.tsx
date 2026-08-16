@@ -28,9 +28,21 @@ import {
   Fuel,
   Activity,
   Layers,
-  Sparkles
+  Sparkles,
+  Gauge,
+  CheckSquare,
+  Square,
+  Wrench,
+  Compass,
+  ArrowRight,
+  Info,
+  Copy,
+  Trash2,
+  Maximize2
 } from 'lucide-react';
 import { createClient } from '../../../utils/supabase/client';
+import DriverRouteMap from './DriverRouteMap';
+import { getGpsForLocation } from '../lib/mapHelpers';
 
 interface DriverMobileAppProps {
   deliveries: DeliveryRecord[];
@@ -39,6 +51,7 @@ interface DriverMobileAppProps {
   currentUser: User | null;
   onAddOrUpdateDelivery: (del: DeliveryRecord) => void;
   onLogout?: () => void;
+  onBackToPortal?: () => void;
   initialScreen?: 'login' | 'home' | 'route' | 'stop' | 'earnings';
 }
 
@@ -64,6 +77,7 @@ export default function DriverMobileApp({
   currentUser, 
   onAddOrUpdateDelivery,
   onLogout,
+  onBackToPortal,
   initialScreen = 'home'
 }: DriverMobileAppProps) {
   
@@ -88,86 +102,143 @@ export default function DriverMobileApp({
     return initialScreen;
   });
 
+  // Real-time Supabase Trucks Database Fleet State
+  const [liveSupabaseTrucks, setLiveSupabaseTrucks] = useState<Truck[]>(trucks);
+  const [isFetchingTrucks, setIsFetchingTrucks] = useState<boolean>(false);
+  const [lastTruckSyncTime, setLastTruckSyncTime] = useState<string>('');
+  const [selectedTruckIdOverride, setSelectedTruckIdOverride] = useState<string | null>(null);
+
+  // Modals for Driver Actions
+  const [showVehicleInspectionModal, setShowVehicleInspectionModal] = useState<boolean>(false);
+  const [showFuelUpdateModal, setShowFuelUpdateModal] = useState<boolean>(false);
+  const [showTruckSwitcherModal, setShowTruckSwitcherModal] = useState<boolean>(false);
+  const [fuelInputVal, setFuelInputVal] = useState<number>(85);
+  const [odometerInputVal, setOdometerInputVal] = useState<number>(142380);
+  const [isSavingVehicleData, setIsSavingVehicleData] = useState<boolean>(false);
+  const [vehicleSavedToast, setVehicleSavedToast] = useState<string | null>(null);
+
+  // Pre-Trip Inspection Checklist
+  const [inspectionChecks, setInspectionChecks] = useState<{ [key: string]: boolean }>({
+    tires: true,
+    brakes: true,
+    lights: true,
+    cargoSecure: true,
+    fluids: true,
+    mirrors: true,
+    emergencyKit: true
+  });
+
   // Login Form State
   const [driverIdInput, setDriverIdInput] = useState<string>('');
   const [driverPasswordInput, setDriverPasswordInput] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
+  // Live query Supabase for fresh Truck Telematics & Details
+  const fetchLiveSupabaseTrucks = async () => {
+    setIsFetchingTrucks(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('trucks').select('*');
+      if (data && data.length > 0) {
+        const mapped: Truck[] = data.map((d: any) => ({
+          id: d.id,
+          name: d.name || `${d.make || 'Freightliner'} ${d.model || 'M2'} - ${d.id}`,
+          licensePlate: d.license_plate || d.licensePlate || 'NS-4921-X',
+          vin: d.vin || d.vin_number || '1FVACWDT8KH198273',
+          make: d.make || 'Freightliner',
+          model: d.model || 'M2 106',
+          year: d.year || 2024,
+          status: d.status || 'Active',
+          fuelLevel: typeof d.fuel_level === 'number' ? `${d.fuel_level}%` : (d.fuel_level || d.fuelLevel || '84% Full'),
+          fuelConsumption: d.fuel_consumption || '24.5 L/100km',
+          fuelTankCapacity: d.fuel_tank_capacity || 260,
+          currentMileage: d.current_mileage || d.currentMileage || 142380,
+          inspectionStatus: d.inspection_status || 'Passed Pre-Trip (Today)',
+          lastServiceDate: d.last_service_date || '2026-07-15',
+          nextServiceDue: d.next_service_due || '2026-09-15',
+          assignedDriverId: d.assigned_driver_id || d.assignedDriverId || '',
+          assignedDriverName: d.assigned_driver_name || d.assignedDriverName || '',
+          storeBranchId: d.store_branch_id || d.storeBranchId || 'STORE-001',
+          capacityWeightKg: d.capacity_weight_kg || 15000,
+          capacityVolumeM3: d.capacity_volume_m3 || 42,
+          telemetry: {
+            battery: d.telemetry?.battery || '13.8 V (Optimal)',
+            tirePressure: d.telemetry?.tirePressure || '105 PSI (All Corners)',
+            coolantTemp: d.telemetry?.coolantTemp || '88°C (Normal)',
+            engineHours: d.telemetry?.engineHours || '3,480 hrs',
+            oilLife: d.telemetry?.oilLife || '92%'
+          }
+        }));
+        setLiveSupabaseTrucks(mapped);
+        setLastTruckSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      }
+    } catch (err) {
+      console.warn('Supabase truck live query error:', err);
+    } finally {
+      setIsFetchingTrucks(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveSupabaseTrucks();
+  }, []);
+
   // Active truck assigned to this driver in Supabase
   const assignedTruck = useMemo(() => {
-    if (!driverUser) return trucks[0] || null;
-    const dNameNorm = (driverUser.name || '').trim().toLowerCase();
-    const dIdNorm = driverUser.id;
-    return trucks.find(t => {
-      const tDrvNorm = (t.driver || '').trim().toLowerCase();
-      return (tDrvNorm !== 'no driver' && tDrvNorm !== 'unassigned' && tDrvNorm === dNameNorm) ||
-             (t.assignedDriverId && t.assignedDriverId === dIdNorm);
-    }) || trucks[0] || null;
-  }, [trucks, driverUser]);
-
-  // Derive dynamic Route Number from assigned truck
-  const routeNumber = useMemo(() => {
-    if (assignedTruck) {
-      const num = assignedTruck.name?.replace(/[^0-9]/g, '') || assignedTruck.id?.replace(/[^0-9]/g, '') || '101';
-      return `R-${num}`;
+    if (selectedTruckIdOverride) {
+      const found = liveSupabaseTrucks.find(t => t.id === selectedTruckIdOverride);
+      if (found) return found;
     }
-    return 'R-101';
+    if (!driverUser) return liveSupabaseTrucks[0] || trucks[0] || null;
+    const dNameNorm = (driverUser.name || '').trim().toLowerCase();
+    const dIdNorm = (driverUser.id || '').trim().toLowerCase();
+    
+    // Check match in live Supabase trucks
+    const matchedLive = liveSupabaseTrucks.find(t => {
+      const tDriverId = (t.assignedDriverId || '').trim().toLowerCase();
+      const tDriverName = (t.assignedDriverName || '').trim().toLowerCase();
+      return (tDriverId && tDriverId === dIdNorm) || (tDriverName && tDriverName.includes(dNameNorm));
+    });
+    if (matchedLive) return matchedLive;
+
+    // Fallback to prop trucks
+    const matchedProp = trucks.find(t => {
+      const tDriverId = (t.assignedDriverId || '').trim().toLowerCase();
+      const tDriverName = (t.assignedDriverName || '').trim().toLowerCase();
+      return (tDriverId && tDriverId === dIdNorm) || (tDriverName && tDriverName.includes(dNameNorm));
+    });
+    return matchedProp || liveSupabaseTrucks[0] || trucks[0] || null;
+  }, [driverUser, liveSupabaseTrucks, trucks, selectedTruckIdOverride]);
+
+  // Sync initial modal values when assigned truck changes
+  useEffect(() => {
+    if (assignedTruck) {
+      const numericFuel = parseInt(String(assignedTruck.fuelLevel).replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(numericFuel)) setFuelInputVal(numericFuel);
+      if (assignedTruck.currentMileage) setOdometerInputVal(assignedTruck.currentMileage);
+    }
   }, [assignedTruck]);
 
-  // Dynamically derive live stops from Supabase deliveries for this driver / truck
-  const liveStops = useMemo<DriverStop[]>(() => {
-    if (!deliveries || deliveries.length === 0) {
-      return [];
-    }
-
-    // Filter deliveries: match this driver or assigned truck, otherwise show active deliveries
-    let driverDeliveries = deliveries.filter(d => {
-      if (!driverUser) return true;
-      const isDriverMatch = (d.assignedDriver && d.assignedDriver.toLowerCase() === driverUser.name?.toLowerCase()) ||
-                            (d.assignedDriver && d.assignedDriver === driverUser.id);
-      const isTruckMatch = assignedTruck && (d.assignedTruck === assignedTruck.id || d.assignedTruck === assignedTruck.name);
-      return isDriverMatch || isTruckMatch;
-    });
-
-    if (driverDeliveries.length === 0) {
-      driverDeliveries = deliveries;
-    }
-
-    return driverDeliveries.map((del, idx) => {
-      const isDelivered = del.status === DeliveryStatus.DELIVERED;
-      const isPicked = del.status === DeliveryStatus.PICKED_AND_LOADED;
-
-      return {
-        id: del.id,
-        deliveryRecordId: del.id,
-        stopNumber: idx + 1,
-        customerName: del.customerName || 'Valued Customer',
-        address: del.deliveryAddress || 'Atlantic Logistics Route',
-        items: [
-          { name: del.invoiceNumber ? `Invoice #${del.invoiceNumber}` : `Sales Order ${del.epicorSalesOrder || del.id}`, quantity: 1, checked: isDelivered },
-          ...(del.weight ? [{ name: `Weight: ${del.weight}`, quantity: 1, checked: isDelivered }] : [])
-        ],
-        status: isDelivered ? 'completed' : (isPicked ? 'active' : 'pending'),
-        phone: del.phone || '(902) 555-0100',
-        notes: del.destinationNotes || 'Standard safe drop-off',
-        lat: 44.6680 + (idx * 0.007),
-        lng: -63.5820 + (idx * 0.005),
-        delivery: del
-      };
-    });
-  }, [deliveries, driverUser, assignedTruck]);
-
+  // Active Stop Management
   const [activeStopIndex, setActiveStopIndex] = useState<number>(0);
   
-  // Keep active stop within bounds
-  useEffect(() => {
-    if (activeStopIndex >= liveStops.length && liveStops.length > 0) {
-      setActiveStopIndex(0);
-    }
-  }, [liveStops.length, activeStopIndex]);
+  // ePOD Capture State
+  const [receiverName, setReceiverName] = useState<string>('');
+  const [cargoPhoto, setCargoPhoto] = useState<string | null>(null);
+  const [signedFormPhoto, setSignedFormPhoto] = useState<string | null>(null);
+  const [deliveryNotes, setDeliveryNotes] = useState<string>('');
+  const [isSubmittingPOD, setIsSubmittingPOD] = useState<boolean>(false);
+  const [podSubmittedToast, setPodSubmittedToast] = useState<boolean>(false);
+  const [copiedAddressToast, setCopiedAddressToast] = useState<boolean>(false);
+  const [photoPreviewModal, setPhotoPreviewModal] = useState<string | null>(null);
 
-  // Real-time Clock
+  // Touch Signature Canvas Reference
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isDrawing, setIsDrawing] = useState<boolean>(false);
+  const [hasDrawnSignature, setHasDrawnSignature] = useState<boolean>(false);
+
+  // Time display
   const [currentTime, setCurrentTime] = useState<string>('');
   useEffect(() => {
     const updateTime = () => {
@@ -175,69 +246,104 @@ export default function DriverMobileApp({
       setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     };
     updateTime();
-    const interval = setInterval(updateTime, 10000);
+    const interval = setInterval(updateTime, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Proof of Delivery Form State (Screen 4)
-  const [receiverName, setReceiverName] = useState<string>('');
-  const [cargoPhoto, setCargoPhoto] = useState<string | null>(null);
-  const [signedFormPhoto, setSignedFormPhoto] = useState<string | null>(null);
-  const [hasDrawnSignature, setHasDrawnSignature] = useState<boolean>(false);
-  const [podSubmittedToast, setPodSubmittedToast] = useState<boolean>(false);
-  const [isSubmittingPOD, setIsSubmittingPOD] = useState<boolean>(false);
+  // Filter deliveries assigned to this driver or general route
+  const driverDeliveries = useMemo(() => {
+    if (!driverUser) return deliveries;
+    const dNameNorm = (driverUser.name || '').trim().toLowerCase();
+    const dIdNorm = (driverUser.id || '').trim().toLowerCase();
 
-  // Update receiver name and existing photos when active stop changes
+    const matched = deliveries.filter(d => {
+      const delDriverId = (d.assignedDriverId || '').trim().toLowerCase();
+      const delDriverName = (d.assignedDriverName || '').trim().toLowerCase();
+      return (delDriverId && delDriverId === dIdNorm) || (delDriverName && delDriverName.includes(dNameNorm));
+    });
+
+    if (matched.length > 0) return matched;
+    // Fallback: Return all active deliveries if no specific assignment
+    return deliveries;
+  }, [deliveries, driverUser]);
+
+  // Map deliveries into rich Driver Stop objects
+  const liveStops: DriverStop[] = useMemo(() => {
+    if (driverDeliveries && driverDeliveries.length > 0) {
+      return driverDeliveries.map((del, idx) => {
+        const coords = del.destinationCoords || getGpsForLocation(del.deliveryAddress || '');
+        return {
+          id: del.id,
+          deliveryRecordId: del.id,
+          stopNumber: idx + 1,
+          customerName: del.customerName || `Client #${del.id}`,
+          address: del.deliveryAddress || 'Address on file',
+          items: (del.items || []).map((it: any) => ({
+            name: it.description || it.name || 'Delivery Item',
+            quantity: it.quantity || 1,
+            checked: del.status === DeliveryStatus.DELIVERED
+          })),
+          status: del.status === DeliveryStatus.DELIVERED ? 'completed' : idx === 0 ? 'active' : 'pending',
+          phone: del.customerPhone || '',
+          notes: del.notes || '',
+          lat: coords.lat,
+          lng: coords.lng,
+          delivery: del
+        };
+      });
+    }
+
+    return [];
+  }, [driverDeliveries]);
+
+  // Current active stop
+  const currentStop = liveStops[activeStopIndex] || liveStops[0];
+
+  // Auto-fill receiver name with customer name when stop changes
   useEffect(() => {
-    const stop = liveStops[activeStopIndex];
-    if (stop) {
-      setReceiverName(stop.customerName || '');
-      setCargoPhoto(stop.delivery?.deliveryPhotos?.[0] || stop.delivery?.deliveryPhoto || null);
-      setSignedFormPhoto(stop.delivery?.deliveryPhotos?.[1] || null);
-      setHasDrawnSignature(!!stop.delivery?.customerSignature);
+    if (currentStop) {
+      setReceiverName(currentStop.customerName || '');
+      clearSignature();
+      setCargoPhoto(null);
+      setSignedFormPhoto(null);
     }
-  }, [activeStopIndex, liveStops]);
+  }, [activeStopIndex]);
 
-  // Canvas Ref for interactive signature drawing
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const isDrawingRef = useRef<boolean>(false);
-
-  // Canvas drawing functions
-  const clearCanvas = () => {
+  // Setup HTML5 Signature Pad
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    }
-    setHasDrawnSignature(false);
-  };
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }, [activeScreen]);
+
+  // Signature Drawing Handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    isDrawingRef.current = true;
-    setHasDrawnSignature(true);
-
     const rect = canvas.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+
+    const x = (clientX - rect.left) * (canvas.width / rect.width);
+    const y = (clientY - rect.top) * (canvas.height / rect.height);
 
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#0F172A';
+    setIsDrawing(true);
+    setHasDrawnSignature(true);
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
+    if (!isDrawing) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -246,64 +352,67 @@ export default function DriverMobileApp({
     const rect = canvas.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+
+    const x = (clientX - rect.left) * (canvas.width / rect.width);
+    const y = (clientY - rect.top) * (canvas.height / rect.height);
 
     ctx.lineTo(x, y);
     ctx.stroke();
   };
 
   const stopDrawing = () => {
-    isDrawingRef.current = false;
+    setIsDrawing(false);
   };
 
-  // Real Driver Sign-in
-  const handleDriverSignIn = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawnSignature(false);
+  };
+
+  // Photo Upload Handler (Camera or Gallery)
+  const handlePhotoCapture = (type: 'cargo' | 'slip', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          if (type === 'cargo') setCargoPhoto(reader.result);
+          if (type === 'slip') setSignedFormPhoto(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Driver Sign In
+  const handleDriverSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsLoggingIn(true);
     setLoginError(null);
 
     try {
-      const supabase = createClient();
       const cleanId = driverIdInput.trim();
-      const cleanPass = driverPasswordInput.trim();
-
       const isEmail = cleanId.includes('@');
-      const emailToAuth = isEmail ? cleanId : `${cleanId.toLowerCase().replace(/[^a-z0-9]/g, '')}@ronaatlantic.ca`;
-
+      let authenticatedUser: User | null = null;
       let authSuccess = false;
-      let authenticatedUser: any = null;
 
+      // Try Supabase auth / profiles lookup
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: isEmail ? cleanId : emailToAuth,
-          password: cleanPass
-        });
-        if (!error && data.user) {
+        const supabase = createClient();
+        const { data: dbUsers } = await supabase
+          .from('users')
+          .select('*')
+          .or(`email.ilike.${cleanId},id.ilike.${cleanId},name.ilike.%${cleanId}%`);
+
+        if (dbUsers && dbUsers.length > 0) {
+          authenticatedUser = dbUsers[0];
           authSuccess = true;
-          authenticatedUser = {
-            id: data.user.id,
-            name: data.user.user_metadata?.name || data.user.user_metadata?.full_name || 'Driver',
-            email: data.user.email,
-            role: 'Driver',
-            phone: data.user.user_metadata?.phone || '(902) 555-0100'
-          };
         }
-      } catch (authErr) {}
-
-      if (!authSuccess) {
-        try {
-          const { data: dbUsers } = await supabase
-            .from('users')
-            .select('*')
-            .or(`email.ilike.%${cleanId}%,name.ilike.%${cleanId}%,id.eq.${cleanId}`);
-
-          if (dbUsers && dbUsers.length > 0) {
-            authenticatedUser = dbUsers[0];
-            authSuccess = true;
-          }
-        } catch (dbErr) {}
-      }
+      } catch (dbErr) {}
 
       if (!authSuccess) {
         const matchedUser = users.find(u => 
@@ -330,6 +439,7 @@ export default function DriverMobileApp({
       setDriverUser(authenticatedUser);
       localStorage.setItem('prospaces_driver_auth', JSON.stringify(authenticatedUser));
       setActiveScreen('home');
+      fetchLiveSupabaseTrucks();
     } catch (err: any) {
       setLoginError(err.message || 'Invalid Driver credentials. Please try again.');
     } finally {
@@ -407,7 +517,69 @@ export default function DriverMobileApp({
         setActiveStopIndex(prev => prev + 1);
         setActiveScreen('route');
       }
-    }, 1500);
+    }, 1400);
+  };
+
+  // Submit Pre-Trip Inspection to Supabase
+  const handleSaveInspection = async () => {
+    if (!assignedTruck) return;
+    setIsSavingVehicleData(true);
+
+    const allPassed = Object.values(inspectionChecks).every(Boolean);
+    const statusText = allPassed ? `Passed Pre-Trip (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : 'Flagged Maintenance Required';
+
+    try {
+      const supabase = createClient();
+      await supabase
+        .from('trucks')
+        .update({
+          inspection_status: statusText,
+          last_service_date: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', assignedTruck.id);
+
+      setLiveSupabaseTrucks(prev => prev.map(t => t.id === assignedTruck.id ? { ...t, inspectionStatus: statusText } : t));
+      setVehicleSavedToast('Pre-Trip Inspection recorded in Supabase!');
+      setShowVehicleInspectionModal(false);
+      setTimeout(() => setVehicleSavedToast(null), 3000);
+    } catch (err) {
+      console.warn('Inspection write error:', err);
+    } finally {
+      setIsSavingVehicleData(false);
+    }
+  };
+
+  // Submit Fuel Reading to Supabase
+  const handleSaveFuelLevel = async () => {
+    if (!assignedTruck) return;
+    setIsSavingVehicleData(true);
+
+    const fuelStr = `${fuelInputVal}% Full`;
+
+    try {
+      const supabase = createClient();
+      await supabase
+        .from('trucks')
+        .update({
+          fuel_level: fuelInputVal,
+          current_mileage: odometerInputVal
+        })
+        .eq('id', assignedTruck.id);
+
+      setLiveSupabaseTrucks(prev => prev.map(t => t.id === assignedTruck.id ? { 
+        ...t, 
+        fuelLevel: fuelStr,
+        currentMileage: odometerInputVal
+      } : t));
+
+      setVehicleSavedToast('Fuel & Odometer updated in Supabase!');
+      setShowFuelUpdateModal(false);
+      setTimeout(() => setVehicleSavedToast(null), 3000);
+    } catch (err) {
+      console.warn('Fuel write error:', err);
+    } finally {
+      setIsSavingVehicleData(false);
+    }
   };
 
   // Logout
@@ -418,52 +590,35 @@ export default function DriverMobileApp({
     if (onLogout) onLogout();
   };
 
-  const currentStop = liveStops[activeStopIndex] || liveStops[0] || {
-    id: 'NONE',
-    stopNumber: 1,
-    customerName: 'No Active Stop',
-    address: 'Awaiting route assignment from dispatcher',
-    items: [],
-    status: 'pending' as const,
-    lat: 44.6680,
-    lng: -63.5820
+  // Route Metrics
+  const totalStopsCount = liveStops.length;
+  const completedStopsCount = liveStops.filter(s => s.status === 'completed' || s.delivery?.status === DeliveryStatus.DELIVERED).length;
+  const routeNumber = assignedTruck ? `ROUTE #RT-${assignedTruck.id.replace(/[^0-9]/g, '') || '402'}` : 'ROUTE #RT-402';
+
+  // Driver Earnings Computation
+  const weeklyEarnings = useMemo(() => {
+    const basePay = 850;
+    const perStopRate = 28.50;
+    const amount = basePay + (completedStopsCount * perStopRate);
+    return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, [completedStopsCount]);
+
+  // Open Turn-by-Turn GPS Directions in Native Maps
+  const openExternalMaps = (address: string) => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const url = isIOS 
+      ? `https://maps.apple.com/?daddr=${encodeURIComponent(address)}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const completedStopsCount = liveStops.filter(s => s.status === 'completed').length;
-  const totalStopsCount = liveStops.length;
-
-  // Real delivered stats for this driver
-  const driverDeliveredRecords = useMemo(() => {
-    return deliveries.filter(d => {
-      if (d.status !== DeliveryStatus.DELIVERED) return false;
-      if (!driverUser) return true;
-      const matchName = d.assignedDriver && d.assignedDriver.toLowerCase() === driverUser.name?.toLowerCase();
-      const matchId = d.assignedDriver && d.assignedDriver === driverUser.id;
-      return matchName || matchId || true;
-    });
-  }, [deliveries, driverUser]);
-
-  // Real dynamic weekly earnings ($45 per delivered stop + base)
-  const weeklyEarnings = useMemo(() => {
-    const baseCount = Math.max(driverDeliveredRecords.length, completedStopsCount);
-    const amount = baseCount > 0 ? (baseCount * 45) + (baseCount * 12.5) : 0;
-    return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }, [driverDeliveredRecords.length, completedStopsCount]);
-
-  // Live driver list for fast login options
-  const availableDrivers = useMemo(() => {
-    const driverList = users.filter(u => u.role?.toLowerCase() === 'driver');
-    if (driverList.length > 0) return driverList;
-    return [
-      { id: 'GEORGE-101', name: 'George Campbell', email: 'george.campbell@ronaatlantic.ca', role: 'Driver' },
-      { id: 'ALEX-408', name: 'Alex Rivera', email: 'alex.driver@ronaatlantic.ca', role: 'Driver' }
-    ];
-  }, [users]);
-
-  // Open external Turn-by-Turn GPS
-  const openExternalMaps = (address: string) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  // Copy address helper
+  const copyAddress = (address: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(address);
+      setCopiedAddressToast(true);
+      setTimeout(() => setCopiedAddressToast(false), 2000);
+    }
   };
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -474,13 +629,13 @@ export default function DriverMobileApp({
       <div className="w-full min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-8 border border-slate-200">
           
-          {/* Brand Header */}
-          <div className="flex flex-col items-center text-center mb-8">
-            <div className="h-16 w-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-600 mb-4 shadow-sm">
+          {/* Standalone Brand Header */}
+          <div className="flex flex-col items-center text-center mb-7">
+            <div className="h-16 w-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-600 mb-3 shadow-xs">
               <TruckIcon className="h-8 w-8" />
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-tight">ProSpaces Logistics</h1>
-            <p className="text-sm font-bold text-blue-600 mt-0.5">Driver Mobile Portal</p>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-tight">ProSpaces Driver</h1>
+            <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mt-1">Mobile Terminal & Telematics</p>
           </div>
 
           {/* Form */}
@@ -491,19 +646,19 @@ export default function DriverMobileApp({
                 type="text"
                 value={driverIdInput}
                 onChange={(e) => setDriverIdInput(e.target.value)}
-                placeholder="e.g. GEORGE-101 or email"
+                placeholder="e.g. GEORGE-101 or driver email"
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Password / PIN</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">PIN / Password</label>
               <input 
                 type="password"
                 value={driverPasswordInput}
                 onChange={(e) => setDriverPasswordInput(e.target.value)}
-                placeholder="Enter password"
+                placeholder="Enter PIN"
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
                 required
               />
@@ -524,7 +679,7 @@ export default function DriverMobileApp({
               {isLoggingIn ? (
                 <span className="flex items-center space-x-2">
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Connecting to Fleet...</span>
+                  <span>Connecting to Fleet Database...</span>
                 </span>
               ) : (
                 <span>SIGN IN TO ROUTE</span>
@@ -532,59 +687,56 @@ export default function DriverMobileApp({
             </button>
           </form>
 
-          {/* Quick Driver Profile Switcher */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block text-center mb-3">
-              Fast Select Active Driver
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {availableDrivers.map((drv) => (
-                <button
-                  key={drv.id}
-                  type="button"
-                  onClick={() => {
-                    setDriverUser(drv);
-                    localStorage.setItem('prospaces_driver_auth', JSON.stringify(drv));
-                    setActiveScreen('home');
-                  }}
-                  className="px-3 py-2.5 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-slate-700 hover:text-blue-700 rounded-xl text-xs font-bold transition-all border border-slate-200 flex items-center justify-between cursor-pointer"
-                >
-                  <span className="truncate">{drv.name}</span>
-                  <span className="text-[10px] text-slate-400 font-mono ml-1">{drv.id}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
         </div>
       </div>
     );
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // MAIN DRIVER APPLICATION SHELL (MOBILE-FIRST RESPONSIVE CONTAINER)
+  // MAIN DRIVER APPLICATION SHELL (MOBILE-FIRST STANDALONE CONTAINER)
   // ════════════════════════════════════════════════════════════════════════════
   return (
     <div className="w-full min-h-screen bg-slate-950 flex flex-col items-center justify-start antialiased selection:bg-blue-600 selection:text-white">
       
       {/* Centered Mobile Application Body */}
-      <div className="w-full max-w-md min-h-screen bg-slate-50 flex flex-col relative shadow-2xl sm:border-x border-slate-200">
+      <div className="w-full max-w-md min-h-screen bg-slate-50 flex flex-col relative shadow-2xl sm:border-x border-slate-800">
         
+        {/* Global Toast for Action Feedback */}
+        {vehicleSavedToast && (
+          <div className="fixed inset-x-4 top-4 z-50 bg-emerald-600 text-white py-3 px-4 rounded-2xl shadow-2xl flex items-center justify-center space-x-2 text-xs font-bold animate-in fade-in slide-in-from-top-4 max-w-sm mx-auto">
+            <CheckCircle2 className="h-4 w-4 text-white shrink-0" />
+            <span>{vehicleSavedToast}</span>
+          </div>
+        )}
+
+        {copiedAddressToast && (
+          <div className="fixed inset-x-4 top-4 z-50 bg-slate-900 text-white py-2.5 px-4 rounded-xl shadow-xl flex items-center justify-center space-x-2 text-xs font-bold animate-in fade-in max-w-xs mx-auto">
+            <Check className="h-4 w-4 text-emerald-400" />
+            <span>Address copied to clipboard!</span>
+          </div>
+        )}
+
         {/* ── 1. SCREEN: HOME / OVERVIEW ── */}
         {activeScreen === 'home' && (
-          <div className="flex-1 flex flex-col pb-20 select-none overflow-y-auto">
+          <div className="flex-1 flex flex-col pb-24 select-none overflow-y-auto">
             
-            {/* Header with Driver Greeting */}
-            <div className="bg-blue-600 text-white pt-6 pb-12 px-5 rounded-b-[28px] shadow-sm relative">
+            {/* Native Mobile Status Bar & Greeting */}
+            <div className="bg-blue-600 text-white pt-5 pb-10 px-5 rounded-b-[28px] shadow-sm relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="bg-white/20 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
-                      {assignedTruck ? `${assignedTruck.name}` : 'Truck 101'}
-                    </span>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <button 
+                      onClick={() => setShowTruckSwitcherModal(true)}
+                      className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full flex items-center space-x-1 cursor-pointer transition-all"
+                      title="Switch Vehicle"
+                    >
+                      <TruckIcon className="h-3 w-3 mr-0.5" />
+                      <span>{assignedTruck ? assignedTruck.name.split(' ')[0] : 'Truck 101'}</span>
+                      <ChevronRight className="h-2.5 w-2.5 opacity-70" />
+                    </button>
                     <span className="flex items-center text-[10px] font-semibold text-emerald-300">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-                      Live Synced
+                      Supabase Live
                     </span>
                   </div>
                   <h2 className="text-2xl font-black tracking-tight leading-tight">
@@ -592,20 +744,22 @@ export default function DriverMobileApp({
                   </h2>
                 </div>
 
-                <button 
-                  type="button"
-                  onClick={() => setActiveScreen('earnings')}
-                  className="h-11 w-11 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center relative transition-all cursor-pointer"
-                >
-                  <Bell className="h-5 w-5 text-white" />
-                  <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-blue-600"></span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button 
+                    type="button"
+                    onClick={() => setActiveScreen('earnings')}
+                    className="h-10 w-10 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center relative transition-all cursor-pointer"
+                    title="Profile & Telematics"
+                  >
+                    <UserIcon className="h-5 w-5 text-white" />
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Active Route Summary Card */}
-            <div className="px-4 -mt-8 relative z-10">
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-lg p-5">
+            <div className="px-4 -mt-6 relative z-10">
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Today's Assigned Route</span>
                   <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
@@ -613,7 +767,7 @@ export default function DriverMobileApp({
                   </span>
                 </div>
                 
-                <h3 className="text-3xl font-black text-slate-900 tracking-tight mb-4">{routeNumber}</h3>
+                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3.5">{routeNumber}</h3>
 
                 {/* Progress Indicators */}
                 <div className="grid grid-cols-3 divide-x divide-slate-100 bg-slate-50 rounded-xl py-3 px-2 border border-slate-100 mb-4 text-center">
@@ -631,376 +785,469 @@ export default function DriverMobileApp({
                   </div>
                 </div>
 
-                {/* Primary Action Button */}
-                <button
-                  type="button"
-                  onClick={() => setActiveScreen('route')}
-                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
-                >
-                  <Navigation className="h-4 w-4" />
-                  <span>START / VIEW ROUTE NAVIGATION</span>
-                </button>
+                {/* Primary Action Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveScreen('route')}
+                    className="py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+                  >
+                    <Navigation className="h-4 w-4" />
+                    <span>ROUTE MAP</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveScreen('stop')}
+                    className="py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span>ePOD PROOF</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Vehicle Telematics Snapshot from Live Supabase */}
+            <div className="px-4 mt-4">
+              <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <TruckIcon className="h-4 w-4 text-blue-400" />
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-200">
+                      {assignedTruck?.name || 'Assigned Vehicle'}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={fetchLiveSupabaseTrucks}
+                    disabled={isFetchingTrucks}
+                    className="text-[10px] font-mono text-blue-400 hover:text-blue-300 flex items-center space-x-1 cursor-pointer"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${isFetchingTrucks ? 'animate-spin' : ''}`} />
+                    <span>Live Sync</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-slate-800 text-center">
+                  <div className="bg-slate-800/80 p-2 rounded-xl">
+                    <span className="text-[9px] text-slate-400 block font-bold">PLATE</span>
+                    <span className="text-xs font-black text-amber-400 font-mono">{assignedTruck?.licensePlate || 'NS-4921'}</span>
+                  </div>
+                  <div className="bg-slate-800/80 p-2 rounded-xl">
+                    <span className="text-[9px] text-slate-400 block font-bold">FUEL</span>
+                    <span className="text-xs font-black text-emerald-400">{assignedTruck?.fuelLevel || '84%'}</span>
+                  </div>
+                  <div className="bg-slate-800/80 p-2 rounded-xl">
+                    <span className="text-[9px] text-slate-400 block font-bold">PRE-TRIP</span>
+                    <span className="text-xs font-black text-blue-400">Passed</span>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Upcoming Stops List */}
-            <div className="px-4 mt-6 flex-1">
+            <div className="px-4 mt-5 flex-1">
               <div className="flex items-center justify-between mb-3 px-1">
-                <h4 className="text-sm font-bold text-slate-900">Assigned Delivery Stops</h4>
-                <span className="text-xs font-semibold text-blue-600">
-                  {completedStopsCount} of {totalStopsCount} done
+                <h4 className="text-sm font-bold text-slate-900">Today's Stop Sequence</h4>
+                <span className="text-xs font-bold text-blue-600">
+                  {completedStopsCount}/{totalStopsCount} Done
                 </span>
               </div>
 
               <div className="space-y-2.5">
-                {liveStops.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-500">
-                    <PackageCheck className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-slate-800">No active stops assigned</p>
-                    <p className="text-[11px] text-slate-400 mt-1">Stops dispatched in Supabase will show here instantly.</p>
-                  </div>
-                ) : (
-                  liveStops.map((st, idx) => (
+                {liveStops.map((stop, idx) => {
+                  const isCompleted = stop.status === 'completed' || stop.delivery?.status === DeliveryStatus.DELIVERED;
+                  const isCurrent = idx === activeStopIndex;
+
+                  return (
                     <div 
-                      key={st.id}
+                      key={stop.id}
                       onClick={() => {
                         setActiveStopIndex(idx);
-                        setActiveScreen('stop');
+                        setActiveScreen('route');
                       }}
-                      className={`bg-white border rounded-2xl p-4 flex items-center justify-between transition-all cursor-pointer hover:shadow-sm ${
-                        st.status === 'completed' 
-                          ? 'border-emerald-200/80 bg-emerald-50/20' 
-                          : idx === activeStopIndex 
-                          ? 'border-blue-500 ring-2 ring-blue-500/10' 
-                          : 'border-slate-200'
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                        isCurrent 
+                          ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-500/20 shadow-xs' 
+                          : isCompleted
+                            ? 'bg-emerald-50/40 border-emerald-200 opacity-80'
+                            : 'bg-white border-slate-200/80 hover:border-slate-300'
                       }`}
                     >
                       <div className="flex items-center space-x-3 min-w-0">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
-                          st.status === 'completed' ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700'
+                        <div className={`h-8 w-8 rounded-xl font-mono font-black text-xs flex items-center justify-center shrink-0 ${
+                          isCompleted 
+                            ? 'bg-emerald-500 text-white' 
+                            : isCurrent
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'bg-slate-100 text-slate-700'
                         }`}>
-                          {st.status === 'completed' ? <Check className="h-4 w-4 stroke-[3]" /> : st.stopNumber}
+                          {isCompleted ? <Check className="h-4 w-4" /> : stop.stopNumber}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <h5 className="text-xs font-bold text-slate-900 truncate">{st.customerName}</h5>
-                            {st.status === 'completed' && (
-                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
-                                DELIVERED
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-500 font-medium truncate max-w-[220px]">{st.address}</p>
+                          <h5 className="text-xs font-black text-slate-900 truncate">{stop.customerName}</h5>
+                          <p className="text-[11px] text-slate-500 truncate mt-0.5">{stop.address}</p>
                         </div>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+
+                      <div className="shrink-0 ml-2">
+                        {isCompleted ? (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-md">
+                            Delivered
+                          </span>
+                        ) : isCurrent ? (
+                          <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md animate-pulse">
+                            Next Stop
+                          </span>
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
+                        )}
+                      </div>
                     </div>
-                  ))
-                )}
+                  );
+                })}
               </div>
             </div>
 
           </div>
         )}
 
-        {/* ── 2. SCREEN: ACTIVE ROUTE MAP & STOPS ── */}
+        {/* ── 2. SCREEN: ROUTE MAP & GPS NAVIGATION ── */}
         {activeScreen === 'route' && (
           <div className="flex-1 flex flex-col pb-20 select-none overflow-hidden">
             
-            {/* Header */}
-            <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20">
-              <button
-                type="button"
-                onClick={() => setActiveScreen('home')}
-                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-700 transition-colors cursor-pointer"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <div className="text-center">
-                <h3 className="text-sm font-black text-slate-900 leading-tight">Route {routeNumber} Navigation</h3>
-                <span className="text-[10px] font-bold text-slate-400">{liveStops.length} stops scheduled</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => openExternalMaps(currentStop.address)}
-                className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl transition-colors cursor-pointer"
-                title="Open in Google Maps"
-              >
-                <ExternalLink className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Interactive Vector Route Map */}
-            <div className="relative h-60 bg-slate-200 overflow-hidden border-b border-slate-300 shrink-0">
-              <svg className="w-full h-full object-cover" viewBox="0 0 400 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="400" height="240" fill="#EBF2F7" />
-                
-                {/* City Blocks */}
-                <path d="M20 15H110V70H20Z" fill="#D5EAD8" rx="8" />
-                <path d="M280 40H380V120H280Z" fill="#D5EAD8" rx="8" />
-                <path d="M40 140H120V215H40Z" fill="#D5EAD8" rx="8" />
-
-                {/* Roads */}
-                <path d="M0 60H400" stroke="#FFFFFF" strokeWidth="14" />
-                <path d="M0 130H400" stroke="#FFFFFF" strokeWidth="16" />
-                <path d="M0 195H400" stroke="#FFFFFF" strokeWidth="12" />
-
-                <path d="M80 0V240" stroke="#FFFFFF" strokeWidth="14" />
-                <path d="M160 0V240" stroke="#FFFFFF" strokeWidth="16" />
-                <path d="M240 0V240" stroke="#FFFFFF" strokeWidth="14" />
-                <path d="M320 0V240" stroke="#FFFFFF" strokeWidth="12" />
-
-                {/* Route Path */}
-                <path 
-                  d="M 85 185 L 165 185 L 165 130 L 235 75 L 315 75 L 320 130 L 245 175 L 205 175 L 175 140" 
-                  stroke="#2563EB" 
-                  strokeWidth="5" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                />
-
-                {/* Stop Markers */}
-                {liveStops.map((st, idx) => {
-                  const isSel = idx === activeStopIndex;
-                  const isComp = st.status === 'completed';
-                  const pinX = 80 + (idx * 55) % 280;
-                  const pinY = 60 + (idx * 35) % 140;
-
-                  return (
-                    <g key={st.id} transform={`translate(${pinX}, ${pinY})`} className="cursor-pointer" onClick={() => setActiveStopIndex(idx)}>
-                      <circle cx="0" cy="0" r={isSel ? 14 : 10} fill={isComp ? '#10B981' : (isSel ? '#2563EB' : '#64748B')} />
-                      {isSel && <circle cx="0" cy="0" r="18" stroke="#2563EB" strokeWidth="2" opacity="0.5" className="animate-ping" />}
-                      <text x="0" y="3.5" fill="white" fontSize={isSel ? "11" : "9"} fontWeight="900" textAnchor="middle">
-                        {st.stopNumber}
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* Driver Truck Pin */}
-                <g transform="translate(180, 130)">
-                  <rect x="-14" y="-14" width="28" height="28" rx="14" fill="#0F172A" />
-                  <path d="M-6 -3H3V4H0V5H-3V4H-6V-3Z" fill="white" />
-                  <path d="M3 -1H7L9 3V5H7V4H4V-1Z" fill="white" />
-                  <circle cx="-3" cy="5" r="1.2" fill="#2563EB" />
-                  <circle cx="5" cy="5" r="1.2" fill="#2563EB" />
-                </g>
-              </svg>
-
-              {/* Turn-by-Turn GPS Button */}
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 w-full px-4 max-w-xs">
-                <button
-                  type="button"
-                  onClick={() => openExternalMaps(currentStop.address)}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center space-x-2 cursor-pointer transition-all border border-white/20"
+            {/* Top Navigation Bar */}
+            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={() => setActiveScreen('home')}
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-600"
                 >
-                  <Navigation2 className="h-4 w-4 fill-current" />
-                  <span>START GPS TO STOP {currentStop.stopNumber}</span>
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Route Map & Turn-by-Turn</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                    Stop {activeStopIndex + 1} of {liveStops.length} &bull; {currentStop?.customerName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-1.5">
+                <button 
+                  type="button"
+                  onClick={() => openExternalMaps(currentStop?.address || 'Dartmouth, NS')}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center space-x-1 shadow-sm transition-all cursor-pointer"
+                >
+                  <Navigation2 className="h-3.5 w-3.5" />
+                  <span>START GPS</span>
                 </button>
               </div>
             </div>
 
-            {/* Stops Timeline List */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
-              {liveStops.map((stop, idx) => {
-                const isSelected = idx === activeStopIndex;
-                const isCompleted = stop.status === 'completed';
-
-                return (
-                  <div
-                    key={stop.id}
-                    onClick={() => {
-                      setActiveStopIndex(idx);
-                    }}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center space-x-3 ${
-                      isSelected 
-                        ? 'bg-blue-50/70 border-blue-500 shadow-sm' 
-                        : isCompleted
-                        ? 'bg-white border-slate-200 opacity-80'
-                        : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <div className={`h-8 w-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
-                      isCompleted 
-                        ? 'bg-emerald-500 text-white' 
-                        : isSelected 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-slate-200 text-slate-700'
-                    }`}>
-                      {isCompleted ? <Check className="h-4 w-4 stroke-[3]" /> : stop.stopNumber}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          STOP {stop.stopNumber}
-                        </span>
-                        {isCompleted && (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                            Done
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="text-xs font-bold text-slate-900 truncate">{stop.customerName}</h4>
-                      <p className="text-[11px] text-slate-500 truncate">{stop.address}</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveStopIndex(idx);
-                        setActiveScreen('stop');
-                      }}
-                      className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer shrink-0"
-                    >
-                      POD
-                    </button>
+            {/* Real Interactive Google Maps Route Canvas */}
+            <div className="relative flex-1 bg-slate-950 overflow-hidden flex flex-col min-h-[340px]">
+              {liveStops.length > 0 ? (
+                <DriverRouteMap
+                  stops={liveStops}
+                  activeStopIndex={activeStopIndex}
+                  onSelectStop={(idx) => setActiveStopIndex(idx)}
+                  truckName={assignedTruck?.name || 'Unit 101'}
+                  truckUnitNumber={assignedTruck?.id?.replace(/[^0-9]/g, '') || '101'}
+                />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
+                  <div className="h-12 w-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                    <Navigation className="h-6 w-6" />
                   </div>
-                );
-              })}
+                  <h4 className="text-sm font-black text-white mb-1">No Active Dispatches</h4>
+                  <p className="text-xs text-slate-400">There are no pending delivery stops assigned to your route today.</p>
+                </div>
+              )}
             </div>
 
-            {/* Bottom Arrived Action Button */}
-            <div className="p-4 bg-white border-t border-slate-200">
-              <button
-                type="button"
-                onClick={() => setActiveScreen('stop')}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
-              >
-                <MapPin className="h-4 w-4" />
-                <span>ARRIVED AT STOP {currentStop.stopNumber} &bull; OPEN POD</span>
-              </button>
+            {/* Bottom Stop Navigation Details Card */}
+            <div className="bg-white border-t border-slate-200 p-4 shadow-xl z-20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="h-6 w-6 rounded-lg bg-blue-600 text-white font-mono font-black text-xs flex items-center justify-center">
+                    {currentStop?.stopNumber || 1}
+                  </span>
+                  <span className="text-xs font-black text-slate-900 truncate max-w-[200px]">
+                    {currentStop?.customerName || 'No Stop Selected'}
+                  </span>
+                </div>
+                {liveStops.length > 0 && (
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => setActiveStopIndex(prev => Math.max(0, prev - 1))}
+                      disabled={activeStopIndex === 0}
+                      className="p-1 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="text-[10px] font-mono font-bold text-slate-500 px-1">
+                      {activeStopIndex + 1}/{liveStops.length}
+                    </span>
+                    <button
+                      onClick={() => setActiveStopIndex(prev => Math.min(liveStops.length - 1, prev + 1))}
+                      disabled={activeStopIndex === liveStops.length - 1}
+                      className="p-1 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Address & Actions */}
+              {currentStop && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 mb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-2 min-w-0">
+                      <MapPin className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                      <p className="text-xs font-medium text-slate-700 leading-snug">{currentStop.address}</p>
+                    </div>
+                    <div className="flex items-center space-x-1 shrink-0 ml-2">
+                      <button 
+                        onClick={() => copyAddress(currentStop.address || '')}
+                        className="p-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-600 cursor-pointer"
+                        title="Copy Address"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      {currentStop.phone && (
+                        <a 
+                          href={`tel:${currentStop.phone}`}
+                          className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200"
+                          title="Call Customer"
+                        >
+                          <Phone className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  {currentStop.notes && (
+                    <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg p-2 mt-2 border border-amber-200/60 font-medium">
+                      <strong>Instructions:</strong> {currentStop.notes}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Main Action Button */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen('stop')}
+                  disabled={!currentStop}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>ARRIVED AT STOP &bull; OPEN ePOD</span>
+                </button>
+              </div>
+
             </div>
 
           </div>
         )}
 
-        {/* ── 3. SCREEN: PROOF OF DELIVERY (ePOD) ── */}
+        {/* ── 3. SCREEN: ePOD PROOF OF DELIVERY ── */}
         {activeScreen === 'stop' && (
-          <div className="flex-1 flex flex-col pb-20 select-none overflow-y-auto">
+          <div className="flex-1 flex flex-col pb-24 select-none overflow-y-auto">
             
             {/* Header */}
-            <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20">
-              <button
-                type="button"
-                onClick={() => setActiveScreen('route')}
-                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-700 transition-colors cursor-pointer"
+            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={() => setActiveScreen('home')}
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-600"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">ePOD Delivery Proof</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                    Stop {activeStopIndex + 1} &bull; {currentStop?.customerName}
+                  </p>
+                </div>
+              </div>
+
+              {/* Stop Switcher Dropdown */}
+              <select
+                value={activeStopIndex}
+                onChange={(e) => setActiveStopIndex(Number(e.target.value))}
+                className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1 focus:outline-none cursor-pointer"
               >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <h3 className="text-sm font-black text-slate-900">Stop {currentStop.stopNumber} Proof of Delivery</h3>
-              <div className="w-7"></div>
+                {liveStops.map((st, i) => (
+                  <option key={st.id} value={i}>
+                    Stop {i + 1}: {st.customerName.split(' ')[0]}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Stop Information & POD Form */}
-            <div className="p-4 space-y-4 flex-1">
+            {/* ePOD Form Container */}
+            <div className="p-4 space-y-4">
               
-              {/* Customer Details Card */}
+              {/* Customer & Address Overview */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer Destination</span>
-                    <h4 className="text-base font-black text-slate-900 leading-tight mt-0.5">{currentStop.customerName}</h4>
-                    <p className="text-xs text-slate-600 mt-1">{currentStop.address}</p>
-                    {currentStop.notes && (
-                      <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2 mt-2 font-medium border border-amber-200/60">
-                        <strong>Note:</strong> {currentStop.notes}
-                      </p>
-                    )}
-                  </div>
-                  {currentStop.phone && (
-                    <a
-                      href={`tel:${currentStop.phone}`}
-                      className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl border border-emerald-200 transition-colors shrink-0 cursor-pointer"
-                      title="Call Customer"
-                    >
-                      <Phone className="h-4 w-4" />
-                    </a>
-                  )}
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">RECIPIENT & SITE</h4>
+                  <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
+                    {currentStop?.id}
+                  </span>
                 </div>
+                <h3 className="text-base font-black text-slate-900">{currentStop?.customerName}</h3>
+                <p className="text-xs text-slate-600 mt-1 flex items-start space-x-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                  <span>{currentStop?.address}</span>
+                </p>
+                {currentStop?.phone && (
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Contact Phone:</span>
+                    <a href={`tel:${currentStop.phone}`} className="font-bold text-blue-600 hover:underline flex items-center space-x-1">
+                      <Phone className="h-3 w-3" />
+                      <span>{currentStop.phone}</span>
+                    </a>
+                  </div>
+                )}
               </div>
 
-              {/* Photo Proof Section */}
+              {/* Manifest Package Checklist */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">
-                  1. Delivery Photo Proof
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5 flex items-center space-x-1.5">
+                  <PackageCheck className="h-4 w-4 text-blue-600" />
+                  <span>Package / Cargo Checklist ({currentStop?.items?.length || 0} items)</span>
                 </h4>
                 
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Photo 1: Cargo at Door */}
-                  <label className="border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 rounded-2xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all h-28 relative overflow-hidden group">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      capture="environment"
-                      className="hidden" 
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) {
-                          const r = new FileReader();
-                          r.onload = () => setCargoPhoto(r.result as string);
-                          r.readAsDataURL(f);
-                        }
-                      }}
-                    />
-                    {cargoPhoto ? (
-                      <img src={cargoPhoto} alt="Cargo at door" className="absolute inset-0 w-full h-full object-cover" />
-                    ) : (
-                      <>
-                        <Camera className="h-6 w-6 text-slate-400 mb-1 group-hover:text-blue-600" />
-                        <span className="text-[11px] font-bold text-slate-700 leading-tight">Cargo at Door</span>
-                      </>
-                    )}
-                  </label>
-
-                  {/* Photo 2: Signed Paper / Bill of Lading */}
-                  <label className="border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 rounded-2xl p-3 flex flex-col items-center justify-center text-center cursor-pointer transition-all h-28 relative overflow-hidden group">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) {
-                          const r = new FileReader();
-                          r.onload = () => setSignedFormPhoto(r.result as string);
-                          r.readAsDataURL(f);
-                        }
-                      }}
-                    />
-                    {signedFormPhoto ? (
-                      <img src={signedFormPhoto} alt="Signed form" className="absolute inset-0 w-full h-full object-cover" />
-                    ) : (
-                      <>
-                        <FileText className="h-6 w-6 text-slate-400 mb-1 group-hover:text-blue-600" />
-                        <span className="text-[11px] font-bold text-slate-700 leading-tight">Signed Slip / BOL</span>
-                      </>
-                    )}
-                  </label>
+                <div className="space-y-1.5">
+                  {currentStop?.items?.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded-xl text-xs">
+                      <div className="flex items-center space-x-2">
+                        <CheckSquare className="h-4 w-4 text-emerald-600" />
+                        <span className="font-bold text-slate-800">{item.name}</span>
+                      </div>
+                      <span className="font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {item.quantity} units
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Customer Signature Pad */}
+              {/* Photo Proof Upload Section */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+                  <Camera className="h-4 w-4 text-blue-600" />
+                  <span>Delivery Photo Proof (Required)</span>
+                </h4>
+
+                <div className="grid grid-cols-2 gap-3">
+                  
+                  {/* Photo 1: Cargo at Door */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1.5">
+                      1. Cargo at Door / Site
+                    </label>
+                    {cargoPhoto ? (
+                      <div className="relative rounded-xl overflow-hidden border border-slate-300 aspect-video bg-slate-100 group">
+                        <img src={cargoPhoto} alt="Cargo proof" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setCargoPhoto(null)}
+                          className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full shadow-md"
+                          title="Remove Photo"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl bg-slate-50 hover:bg-blue-50/50 cursor-pointer transition-all aspect-video">
+                        <Camera className="h-6 w-6 text-slate-400 mb-1" />
+                        <span className="text-[10px] font-bold text-slate-600">Take Photo</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          capture="environment"
+                          onChange={(e) => handlePhotoCapture('cargo', e)}
+                          className="hidden" 
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Photo 2: Paper BOL / Signed Slip */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1.5">
+                      2. Signed BOL Slip
+                    </label>
+                    {signedFormPhoto ? (
+                      <div className="relative rounded-xl overflow-hidden border border-slate-300 aspect-video bg-slate-100 group">
+                        <img src={signedFormPhoto} alt="Signed BOL" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setSignedFormPhoto(null)}
+                          className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full shadow-md"
+                          title="Remove Photo"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl bg-slate-50 hover:bg-blue-50/50 cursor-pointer transition-all aspect-video">
+                        <FileText className="h-6 w-6 text-slate-400 mb-1" />
+                        <span className="text-[10px] font-bold text-slate-600">BOL Document</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => handlePhotoCapture('slip', e)}
+                          className="hidden" 
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Digital Touch Signature Pad */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    2. Receiver Signature
+                    Customer Touch Signature
                   </h4>
-                  <button
-                    type="button"
-                    onClick={clearCanvas}
-                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-                  >
-                    Clear Signature
-                  </button>
+                  {hasDrawnSignature && (
+                    <button 
+                      type="button" 
+                      onClick={clearSignature}
+                      className="text-[11px] font-bold text-rose-600 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
 
-                <div className="border border-slate-300 bg-slate-50 rounded-xl h-28 relative overflow-hidden flex items-center justify-center">
-                  <canvas
+                {/* Receiver Name Input */}
+                <div className="mb-2.5">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Printed Receiver Name
+                  </label>
+                  <input 
+                    type="text"
+                    value={receiverName}
+                    onChange={(e) => setReceiverName(e.target.value)}
+                    placeholder="Enter receiver's name"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                {/* Canvas */}
+                <div className="relative border-2 border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                  <canvas 
                     ref={canvasRef}
-                    width={360}
-                    height={112}
+                    width={380}
+                    height={140}
                     onMouseDown={startDrawing}
                     onMouseMove={draw}
                     onMouseUp={stopDrawing}
@@ -1008,73 +1255,58 @@ export default function DriverMobileApp({
                     onTouchStart={startDrawing}
                     onTouchMove={draw}
                     onTouchEnd={stopDrawing}
-                    className="w-full h-full cursor-crosshair touch-none absolute inset-0 z-10"
+                    className="w-full h-[120px] touch-none cursor-crosshair"
                   />
                   {!hasDrawnSignature && (
-                    <span className="text-xs font-medium text-slate-400 pointer-events-none select-none">
-                      Draw customer signature here
-                    </span>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-xs font-semibold">
+                      Sign with finger or stylus here
+                    </div>
                   )}
+                  <div className="absolute bottom-2 inset-x-4 border-b border-dashed border-slate-300 pointer-events-none" />
                 </div>
               </div>
 
-              {/* Receiver Name */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  3. Receiver Printed Name
-                </label>
-                <input
-                  type="text"
-                  value={receiverName}
-                  onChange={(e) => setReceiverName(e.target.value)}
-                  placeholder="Enter receiver full name"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
-
-            </div>
-
-            {/* Bottom Submit POD Action Button */}
-            <div className="p-4 bg-white border-t border-slate-200 sticky bottom-0 z-20">
+              {/* Submit ePOD Button */}
               <button
                 type="button"
                 onClick={handleSubmitPOD}
                 disabled={isSubmittingPOD}
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2"
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-sm uppercase tracking-wider rounded-2xl shadow-xl transition-all cursor-pointer flex items-center justify-center space-x-2"
               >
                 {isSubmittingPOD ? (
                   <span className="flex items-center space-x-2">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Syncing with Supabase...</span>
+                    <RefreshCw className="h-5 w-5 animate-spin" />
+                    <span>Recording in Supabase...</span>
                   </span>
                 ) : (
                   <>
-                    <CheckCircle2 className="h-4 w-4" />
+                    <CheckCircle2 className="h-5 w-5" />
                     <span>CONFIRM DELIVERY & SUBMIT ePOD</span>
                   </>
                 )}
               </button>
+
             </div>
 
             {/* Success Toast */}
             {podSubmittedToast && (
-              <div className="fixed inset-x-4 top-20 z-50 bg-emerald-600 text-white py-3 px-4 rounded-2xl shadow-2xl flex items-center justify-center space-x-2 text-xs font-bold animate-in fade-in slide-in-from-top-4">
-                <CheckCircle2 className="h-4 w-4 text-white" />
-                <span>Proof of Delivery Recorded in Supabase!</span>
+              <div className="fixed inset-x-4 top-20 z-50 bg-emerald-600 text-white py-3 px-4 rounded-2xl shadow-2xl flex items-center justify-center space-x-2 text-xs font-bold animate-in fade-in slide-in-from-top-4 max-w-sm mx-auto">
+                <CheckCircle2 className="h-5 w-5 text-white shrink-0" />
+                <span>Proof of Delivery recorded & synced to Supabase!</span>
               </div>
             )}
 
           </div>
         )}
 
-        {/* ── 4. SCREEN: DRIVER PROFILE & EARNINGS ── */}
+        {/* ── 4. SCREEN: DRIVER PROFILE & LIVE SUPABASE VEHICLE TELEMATICS ── */}
         {activeScreen === 'earnings' && (
-          <div className="flex-1 flex flex-col pb-20 select-none overflow-y-auto">
+          <div className="flex-1 flex flex-col pb-24 select-none overflow-y-auto">
             
-            {/* Header */}
-            <div className="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between sticky top-0 z-20">
+            {/* Top Bar */}
+            <div className="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between sticky top-0 z-20 shadow-xs">
               <div>
-                <h3 className="text-base font-black text-slate-900">Driver Portal & Earnings</h3>
+                <h3 className="text-base font-black text-slate-900">Driver Portal & Fleet Telematics</h3>
                 <p className="text-xs text-slate-500 font-medium">{driverUser?.name || 'Driver'}</p>
               </div>
               <div className="h-9 w-9 rounded-full overflow-hidden border border-slate-300 bg-blue-100 flex items-center justify-center font-bold text-blue-700 text-sm">
@@ -1082,7 +1314,7 @@ export default function DriverMobileApp({
               </div>
             </div>
 
-            {/* Earnings & Vehicle Info */}
+            {/* Profile Content */}
             <div className="p-4 space-y-4 flex-1">
               
               {/* Earnings Card */}
@@ -1098,41 +1330,153 @@ export default function DriverMobileApp({
                 </span>
               </div>
 
-              {/* Assigned Vehicle Card */}
+              {/* Assigned Vehicle Status from Live Supabase Table */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
-                  <TruckIcon className="h-4 w-4 text-blue-600" />
-                  <span>Assigned Vehicle Status</span>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
+                    <TruckIcon className="h-4 w-4 text-blue-600" />
+                    <span>Assigned Vehicle (Live Supabase Table)</span>
+                  </h4>
+
+                  <button
+                    onClick={fetchLiveSupabaseTrucks}
+                    disabled={isFetchingTrucks}
+                    className="p-1 rounded-lg hover:bg-slate-100 text-blue-600 flex items-center space-x-1 text-[10px] font-bold cursor-pointer"
+                    title="Refresh Telematics from Supabase"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isFetchingTrucks ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
+                {/* Primary Truck Badge */}
+                <div className="p-3 bg-slate-900 text-white rounded-xl mb-3 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-black text-white">{assignedTruck?.name || 'Freightliner M2 106'}</h5>
+                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      VIN: {assignedTruck?.vin || '1FVACWDT8KH198273'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowTruckSwitcherModal(true)}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                  >
+                    Switch Truck
+                  </button>
+                </div>
+                
+                {/* 6 Real Database Attributes Grid */}
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">LICENSE PLATE</span>
+                    <span className="font-bold text-slate-900 font-mono text-sm">{assignedTruck?.licensePlate || assignedTruck?.truckNumber || 'NS-FL-101'}</span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">FUEL LEVEL</span>
+                    <span className="font-bold text-emerald-600 text-sm">{assignedTruck?.fuelLevel || '100%'}</span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">ODOMETER (KM)</span>
+                    <span className="font-bold text-slate-900 font-mono text-sm">
+                      {typeof assignedTruck?.currentMileage === 'number' 
+                        ? `${assignedTruck.currentMileage.toLocaleString()} km` 
+                        : 'N/A'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">INSPECTION STATUS</span>
+                    <span className="font-bold text-emerald-600 text-xs truncate block">
+                      {assignedTruck?.inspectionStatus || assignedTruck?.safetyInspectionStatus || 'Verified'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">MAX PAYLOAD</span>
+                    <span className="font-bold text-slate-900 font-mono">
+                      {assignedTruck?.capacityWeightKg 
+                        ? `${assignedTruck.capacityWeightKg.toLocaleString()} kg (${assignedTruck.capacityVolumeM3 || '35'} m³)` 
+                        : 'Class 3 Heavy Payload'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">NEXT SERVICE DUE</span>
+                    <span className="font-bold text-blue-600 font-mono">
+                      {assignedTruck?.nextServiceDueDate || assignedTruck?.registrationDueDate || 'Inspection Valid'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action Buttons for Vehicle Maintenance & Log */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => setShowVehicleInspectionModal(true)}
+                    className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center justify-center space-x-1 cursor-pointer transition-all"
+                  >
+                    <Shield className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Log Pre-Trip</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowFuelUpdateModal(true)}
+                    className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center justify-center space-x-1 cursor-pointer transition-all"
+                  >
+                    <Fuel className="h-3.5 w-3.5 text-amber-600" />
+                    <span>Log Fuel Level</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Driver Credentials Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center space-x-1.5">
+                  <UserIcon className="h-4 w-4 text-blue-600" />
+                  <span>Driver Profile & License</span>
                 </h4>
                 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 bg-slate-50 rounded-xl">
-                    <span className="text-[10px] text-slate-400 font-bold block">VEHICLE</span>
-                    <span className="font-bold text-slate-900">{assignedTruck?.name || 'Freightliner M2'}</span>
+                <div className="space-y-1.5 text-xs text-slate-700">
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Driver ID:</span>
+                    <span className="font-mono font-bold">{driverUser?.id || 'DRV-101'}</span>
                   </div>
-                  <div className="p-2.5 bg-slate-50 rounded-xl">
-                    <span className="text-[10px] text-slate-400 font-bold block">LICENSE PLATE</span>
-                    <span className="font-bold text-slate-900">{assignedTruck?.licensePlate || 'NS-4921'}</span>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Commercial License:</span>
+                    <span className="font-bold text-slate-900">Class 3 with Air Brakes</span>
                   </div>
-                  <div className="p-2.5 bg-slate-50 rounded-xl">
-                    <span className="text-[10px] text-slate-400 font-bold block">FUEL LEVEL</span>
-                    <span className="font-bold text-emerald-600">{assignedTruck?.fuelLevel || '84% Full'}</span>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-400">Assigned Branch:</span>
+                    <span className="font-bold text-slate-900">Dartmouth Regional Depot</span>
                   </div>
-                  <div className="p-2.5 bg-slate-50 rounded-xl">
-                    <span className="text-[10px] text-slate-400 font-bold block">INSPECTION</span>
-                    <span className="font-bold text-emerald-600">Passed Pre-Trip</span>
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-400">Email:</span>
+                    <span className="font-medium text-slate-900">{driverUser?.email || 'driver@ronaatlantic.ca'}</span>
                   </div>
                 </div>
               </div>
+
+              {/* Back to Dispatch Hub if launched from Web Portal */}
+              {onBackToPortal && (
+                <button
+                  type="button"
+                  onClick={onBackToPortal}
+                  className="w-full py-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-2"
+                >
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  <span>RETURN TO DISPATCH PORTAL</span>
+                </button>
+              )}
 
               {/* Logout / Switch Driver */}
               <button
                 type="button"
                 onClick={handleDriverLogout}
-                className="w-full py-3.5 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-800 hover:text-rose-600 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-2"
+                className="w-full py-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-800 hover:text-rose-600 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-2"
               >
                 <LogOut className="h-4 w-4" />
-                <span>SIGN OUT DRIVER</span>
+                <span>SIGN OUT DRIVER TERMINAL</span>
               </button>
 
             </div>
@@ -1140,14 +1484,14 @@ export default function DriverMobileApp({
           </div>
         )}
 
-        {/* ── PERSISTENT NATIVE MOBILE BOTTOM NAVIGATION BAR ── */}
-        <div className="fixed sm:absolute bottom-0 inset-x-0 bg-white border-t border-slate-200 py-2.5 px-4 flex items-center justify-around text-xs font-bold text-slate-500 z-30 shadow-lg max-w-md mx-auto">
+        {/* ── PERSISTENT STANDALONE MOBILE BOTTOM NAVIGATION BAR ── */}
+        <div className="fixed sm:absolute bottom-0 inset-x-0 bg-white border-t border-slate-200 py-2 px-3 flex items-center justify-around text-xs font-bold text-slate-500 z-30 shadow-lg max-w-md mx-auto">
           
           <button 
             type="button"
             onClick={() => setActiveScreen('home')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
-              activeScreen === 'home' ? 'text-blue-600' : 'hover:text-slate-800'
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
+              activeScreen === 'home' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
             }`}
           >
             <Building2 className="h-5 w-5" />
@@ -1157,8 +1501,8 @@ export default function DriverMobileApp({
           <button 
             type="button"
             onClick={() => setActiveScreen('route')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
-              activeScreen === 'route' ? 'text-blue-600' : 'hover:text-slate-800'
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
+              activeScreen === 'route' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
             }`}
           >
             <Navigation className="h-5 w-5" />
@@ -1168,8 +1512,8 @@ export default function DriverMobileApp({
           <button 
             type="button"
             onClick={() => setActiveScreen('stop')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
-              activeScreen === 'stop' ? 'text-blue-600' : 'hover:text-slate-800'
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
+              activeScreen === 'stop' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
             }`}
           >
             <FileText className="h-5 w-5" />
@@ -1179,8 +1523,8 @@ export default function DriverMobileApp({
           <button 
             type="button"
             onClick={() => setActiveScreen('earnings')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors ${
-              activeScreen === 'earnings' ? 'text-blue-600' : 'hover:text-slate-800'
+            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
+              activeScreen === 'earnings' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
             }`}
           >
             <UserIcon className="h-5 w-5" />
@@ -1190,6 +1534,210 @@ export default function DriverMobileApp({
         </div>
 
       </div>
+
+      {/* ── MODAL 1: PRE-TRIP VEHICLE INSPECTION (Direct Supabase Sync) ── */}
+      {showVehicleInspectionModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl border border-slate-200 text-left">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+              <div className="flex items-center space-x-2">
+                <Shield className="h-5 w-5 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-900">Pre-Trip Inspection Log</h3>
+              </div>
+              <button 
+                onClick={() => setShowVehicleInspectionModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-3">
+              Verify the following items on <strong>{assignedTruck?.name}</strong> before hitting the road. This logs directly to the live Supabase fleet table.
+            </p>
+
+            <div className="space-y-2 mb-4">
+              {[
+                { key: 'tires', label: 'Tires & Lug Nuts (Pressure & Tread)' },
+                { key: 'brakes', label: 'Air Brake System & PSI Pressure' },
+                { key: 'lights', label: 'Headlights, Signals & Brake Lights' },
+                { key: 'cargoSecure', label: 'Cargo Straps & Roll-Up Door Lock' },
+                { key: 'fluids', label: 'Oil, Coolant & Washer Fluid Levels' },
+                { key: 'mirrors', label: 'Mirrors & Clean Windshield' },
+                { key: 'emergencyKit', label: 'Triangles, Fire Extinguisher & First Aid' }
+              ].map(item => (
+                <label 
+                  key={item.key}
+                  className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 cursor-pointer hover:bg-blue-50/60 transition-all"
+                >
+                  <span>{item.label}</span>
+                  <input 
+                    type="checkbox"
+                    checked={inspectionChecks[item.key] || false}
+                    onChange={(e) => setInspectionChecks(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                    className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowVehicleInspectionModal(false)}
+                className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveInspection}
+                disabled={isSavingVehicleData}
+                className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+              >
+                {isSavingVehicleData ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                <span>Save to Supabase</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 2: FUEL & ODOMETER LOG (Direct Supabase Sync) ── */}
+      {showFuelUpdateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl border border-slate-200 text-left">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+              <div className="flex items-center space-x-2">
+                <Fuel className="h-5 w-5 text-amber-600" />
+                <h3 className="text-sm font-black text-slate-900">Update Fuel & Mileage</h3>
+              </div>
+              <button 
+                onClick={() => setShowFuelUpdateModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Current Fuel Level: <strong className="text-blue-600 font-mono">{fuelInputVal}%</strong>
+                </label>
+                <input 
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={fuelInputVal}
+                  onChange={(e) => setFuelInputVal(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-mono mt-1">
+                  <span>Empty (0%)</span>
+                  <span>Half (50%)</span>
+                  <span>Full (100%)</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Current Odometer (KM)
+                </label>
+                <input 
+                  type="number"
+                  value={odometerInputVal}
+                  onChange={(e) => setOdometerInputVal(Number(e.target.value))}
+                  placeholder="e.g. 142380"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFuelUpdateModal(false)}
+                className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveFuelLevel}
+                disabled={isSavingVehicleData}
+                className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+              >
+                {isSavingVehicleData ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                <span>Save Reading</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: SWITCH ASSIGNED TRUCK (Live Supabase Fleet) ── */}
+      {showTruckSwitcherModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl border border-slate-200 text-left">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+              <div className="flex items-center space-x-2">
+                <TruckIcon className="h-5 w-5 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-900">Switch Assigned Truck</h3>
+              </div>
+              <button 
+                onClick={() => setShowTruckSwitcherModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-3">
+              Select the vehicle you are operating today from the live Supabase fleet:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
+              {liveSupabaseTrucks.map(trk => {
+                const isCurrent = trk.id === assignedTruck?.id;
+                return (
+                  <button
+                    key={trk.id}
+                    onClick={() => {
+                      setSelectedTruckIdOverride(trk.id);
+                      setShowTruckSwitcherModal(false);
+                      setVehicleSavedToast(`Active vehicle switched to ${trk.name}`);
+                      setTimeout(() => setVehicleSavedToast(null), 2500);
+                    }}
+                    className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                      isCurrent 
+                        ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-500/20'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                    }`}
+                  >
+                    <div>
+                      <h5 className="text-xs font-black text-slate-900">{trk.name}</h5>
+                      <span className="text-[10px] font-mono text-slate-500">
+                        {trk.licensePlate} &bull; Fuel: {trk.fuelLevel}
+                      </span>
+                    </div>
+                    {isCurrent && <CheckCircle2 className="h-4 w-4 text-blue-600" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTruckSwitcherModal(false)}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );
