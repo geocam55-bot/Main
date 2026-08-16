@@ -103,6 +103,7 @@ const About = lazyNamed(() => import('./components/About'), 'About');
 const PortalMessagesAdmin = lazyNamed(() => import('./components/MessagingHub'), 'MessagingHub');
 const SubscriptionBilling = lazyNamed(() => import('./components/subscription/SubscriptionBilling'), 'SubscriptionBilling');
 const KnowledgeBase = lazyNamed(() => import('./components/KnowledgeBase'), 'KnowledgeBase');
+const LogisticsApp = React.lazy(() => import('./components/logistics-app/App'));
 // Planners
 const KitchenPlanner = lazyNamed(() => import('./components/planners/KitchenPlanner'), 'KitchenPlanner');
 const DeckPlanner = lazyNamed(() => import('./components/planners/DeckPlanner'), 'DeckPlanner');
@@ -231,6 +232,19 @@ function getPublicRoute(): React.ReactElement | null {
   if (urlParams.get('view') === 'privacy-policy' || path === '/privacy-policy') return <PrivacyPolicy />;
   if (urlParams.get('view') === 'terms-of-service' || path === '/terms-of-service') return <TermsOfService />;
   if (urlParams.get('view') === 'customer-portal' || path === '/portal') return <CustomerPortal />;
+  if (
+    path.startsWith('/logistics') ||
+    path.startsWith('/driver') ||
+    urlParams.get('view') === 'driver' ||
+    urlParams.get('view') === 'logistics' ||
+    urlParams.get('tab') === 'driver'
+  ) {
+    return (
+      <React.Suspense fallback={<div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white font-medium">Loading Logistics...</div>}>
+        <LogisticsApp />
+      </React.Suspense>
+    );
+  }
 
   return null;
 }
