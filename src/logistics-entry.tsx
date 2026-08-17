@@ -143,6 +143,14 @@ function LogisticsEntryApp() {
         setAccessDeniedMessage(null);
         setAccessToken(undefined);
         setLoading(false);
+        localStorage.removeItem('prospaces_active_tenant');
+        localStorage.removeItem('prospaces_active_user');
+        localStorage.removeItem('prospaces_cached_user');
+        localStorage.removeItem('prospaces_driver_auth');
+        localStorage.removeItem('prospaces_keep_logged_in');
+        sessionStorage.removeItem('prospaces_session_active');
+        sessionStorage.removeItem('accessed_from_crm');
+        sessionStorage.removeItem('prospaces_keep_logged_in');
         return;
       }
       if (event === 'TOKEN_REFRESHED') {

@@ -200,12 +200,15 @@ export default function LandingPage({
             <div className="hidden md:flex items-center space-x-3">
               <button 
                 onClick={() => { 
-                  if (typeof window !== 'undefined' && window.location.pathname.includes('logistics.html')) {
-                    window.close();
-                    setTimeout(() => { window.location.href = '/logistics.html'; }, 300);
-                  } else {
-                    window.location.href = '/'; 
-                  }
+                  localStorage.removeItem('prospaces_active_tenant');
+                  localStorage.removeItem('prospaces_active_user');
+                  localStorage.removeItem('prospaces_cached_user');
+                  localStorage.removeItem('prospaces_driver_auth');
+                  localStorage.removeItem('prospaces_keep_logged_in');
+                  sessionStorage.removeItem('prospaces_session_active');
+                  sessionStorage.removeItem('accessed_from_crm');
+                  sessionStorage.removeItem('prospaces_keep_logged_in');
+                  window.location.href = '/'; 
                 }}
                 className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center space-x-1.5"
               >
@@ -259,12 +262,15 @@ export default function LandingPage({
                 <div className="border-t border-slate-100 pt-3 flex flex-col space-y-2">
                   <button 
                     onClick={() => { 
-                      if (typeof window !== 'undefined' && window.location.pathname.includes('logistics.html')) {
-                        window.close();
-                        setTimeout(() => { window.location.href = '/logistics.html'; }, 300);
-                      } else {
-                        window.location.href = '/'; 
-                      }
+                      localStorage.removeItem('prospaces_active_tenant');
+                      localStorage.removeItem('prospaces_active_user');
+                      localStorage.removeItem('prospaces_cached_user');
+                      localStorage.removeItem('prospaces_driver_auth');
+                      localStorage.removeItem('prospaces_keep_logged_in');
+                      sessionStorage.removeItem('prospaces_session_active');
+                      sessionStorage.removeItem('accessed_from_crm');
+                      sessionStorage.removeItem('prospaces_keep_logged_in');
+                      window.location.href = '/'; 
                     }}
                     className="w-full py-2.5 bg-slate-100 text-slate-800 font-bold text-sm rounded-xl text-center cursor-pointer"
                   >

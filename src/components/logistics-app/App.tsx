@@ -283,9 +283,6 @@ export default function App() {
 
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
     try {
-      sessionStorage.setItem('accessed_from_crm', 'true');
-      sessionStorage.setItem('prospaces_session_active', 'true');
-
       const cached = localStorage.getItem('prospaces_active_tenant');
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -299,41 +296,31 @@ export default function App() {
         }
       }
 
-      const crmUserStr = localStorage.getItem('prospaces_cached_user') || localStorage.getItem('prospaces_active_user');
-      if (crmUserStr) {
-        const crmUser = JSON.parse(crmUserStr);
-        const defaultTenant: Tenant = {
-          id: crmUser?.organization_id || crmUser?.organizationId || 'rona_atlantic',
-          name: 'RONA Atlantic Logistics',
-          code: 'RONA',
-          description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
-          logoBadge: '🏢',
-          regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
-          primaryColor: 'blue'
-        };
-        localStorage.setItem('prospaces_active_tenant', JSON.stringify(defaultTenant));
-        return defaultTenant;
+      const activeUserStr = localStorage.getItem('prospaces_active_user');
+      const crmUserStr = localStorage.getItem('prospaces_cached_user');
+      if (activeUserStr || crmUserStr) {
+        const crmUser = JSON.parse(activeUserStr || crmUserStr || '{}');
+        if (crmUser && (crmUser.email || crmUser.id)) {
+          const defaultTenant: Tenant = {
+            id: crmUser?.organization_id || crmUser?.organizationId || 'rona_atlantic',
+            name: 'RONA Atlantic Logistics',
+            code: 'RONA',
+            description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
+            logoBadge: '🏢',
+            regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
+            primaryColor: 'blue'
+          };
+          localStorage.setItem('prospaces_active_tenant', JSON.stringify(defaultTenant));
+          return defaultTenant;
+        }
       }
     } catch (e) {}
 
-    const defaultTenant: Tenant = {
-      id: 'rona_atlantic',
-      name: 'RONA Atlantic Logistics',
-      code: 'RONA',
-      description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
-      logoBadge: '🏢',
-      regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
-      primaryColor: 'blue'
-    };
-    localStorage.setItem('prospaces_active_tenant', JSON.stringify(defaultTenant));
-    return defaultTenant;
+    return null;
   });
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      sessionStorage.setItem('accessed_from_crm', 'true');
-      sessionStorage.setItem('prospaces_session_active', 'true');
-
       const cached = localStorage.getItem('prospaces_active_user');
       if (cached) {
         const u = JSON.parse(cached);
@@ -367,17 +354,7 @@ export default function App() {
       }
     } catch (e) {}
 
-    const fallbackUser: User = {
-      id: "USR-57008",
-      name: "George Campbell",
-      email: "george.campbell@ronaatlantic.ca",
-      role: "Admin" as any,
-      phone: "(902) 555-0199",
-      status: "Active",
-      associatedStoreId: "DC-WINAMILL"
-    };
-    localStorage.setItem('prospaces_active_user', JSON.stringify(fallbackUser));
-    return fallbackUser;
+    return null;
   });
 
   // State to switch between Super Admin Tenant Maintenance and Tenant Application Workspace
@@ -402,7 +379,12 @@ export default function App() {
 
         const activeUserStr = localStorage.getItem('prospaces_active_user');
         const activeTenantStr = localStorage.getItem('prospaces_active_tenant');
-        const crmUserStr = localStorage.getItem('prospaces_cached_user');
+
+        if (!activeUserStr) {
+          if (currentUser) setCurrentUser(null);
+          if (currentTenant) setCurrentTenant(null);
+          return;
+        }
 
         if (activeUserStr && activeTenantStr) {
           const u = JSON.parse(activeUserStr);
@@ -417,35 +399,6 @@ export default function App() {
           }
           if (t && (!currentTenant || currentTenant.id !== t.id)) {
             setCurrentTenant(t);
-          }
-        } else if (crmUserStr && (!currentUser || !currentTenant)) {
-          const crmUser = JSON.parse(crmUserStr);
-          if (crmUser && (crmUser.email || crmUser.id)) {
-            const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
-              ? "SUPER_ADMIN"
-              : ((crmUser.role === 'admin' || crmUser.role === 'Admin') ? "Admin" : (crmUser.role || "Admin"));
-            const autoUser: User = {
-              id: crmUser.id || "USR-57008",
-              name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
-              email: crmUser.email || "george.campbell@prospaces.com",
-              role: autoUserRole as any,
-              phone: crmUser.phone || "(902) 555-0199",
-              status: "Active",
-              associatedStoreId: "DC-WINAMILL"
-            };
-            const autoTenant: Tenant = {
-              id: crmUser.organization_id || crmUser.organizationId || 'prospaces',
-              name: 'ProSpaces Logistics',
-              code: 'PS',
-              description: 'Corporate logistics tracking for ProSpaces distributor and dealer stores.',
-              logoBadge: '🏢',
-              regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax)',
-              primaryColor: 'blue'
-            };
-            localStorage.setItem('prospaces_active_user', JSON.stringify(autoUser));
-            localStorage.setItem('prospaces_active_tenant', JSON.stringify(autoTenant));
-            setCurrentUser(autoUser);
-            setCurrentTenant(autoTenant);
           }
         }
       } catch (e) {}
@@ -904,8 +857,10 @@ export default function App() {
     localStorage.removeItem('prospaces_active_tenant');
     localStorage.removeItem('prospaces_active_user');
     localStorage.removeItem('prospaces_cached_user');
+    localStorage.removeItem('prospaces_driver_auth');
     localStorage.removeItem('prospaces_keep_logged_in');
     sessionStorage.removeItem('prospaces_session_active');
+    sessionStorage.removeItem('accessed_from_crm');
     sessionStorage.removeItem('prospaces_keep_logged_in');
     setActiveTab('dashboard');
     // Clear operational state completely on sign out
@@ -2538,7 +2493,7 @@ export default function App() {
                           className="w-full flex items-center space-x-3 px-3 py-2.5 text-xs text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-black text-left cursor-pointer"
                         >
                           <LogOut className="h-4 w-4 text-rose-400" />
-                          <span>Logoff & switch tenant</span>
+                          <span>Logoff</span>
                         </button>
                       </div>
                     </div>
@@ -2789,7 +2744,7 @@ export default function App() {
                         className="w-full flex items-center space-x-3 px-3 py-2.5 text-xs text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-black text-left cursor-pointer"
                       >
                         <LogOut className="h-4 w-4 text-rose-400" />
-                        <span>Logoff & switch tenant</span>
+                        <span>Logoff</span>
                       </button>
                     </div>
                   </div>
@@ -3385,6 +3340,7 @@ export default function App() {
             <DriverMobileApp 
               deliveries={deliveries}
               trucks={trucks}
+              branches={branches}
               users={users}
               currentUser={currentUser}
               onAddOrUpdateDelivery={handleAddOrUpdateDelivery}
