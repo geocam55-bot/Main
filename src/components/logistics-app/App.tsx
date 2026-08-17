@@ -2254,7 +2254,7 @@ export default function App() {
 
 
   if (!currentTenant || !currentUser) {
-    if (showLogin) {
+    if (showLogin || ['driver', 'driver-app', 'driver-mobile', 'epod'].includes(activeTab)) {
       return (
         <LoginScreen 
           onLoginSuccess={(tenant, user) => {
@@ -2263,6 +2263,9 @@ export default function App() {
           }} 
           tenantsList={allTenants} 
           onBackToLanding={() => { 
+            // If they are on a driver URL, taking them to the landing page might be confusing,
+            // but we'll respect the back button by redirecting them to the dashboard/landing state
+            setActiveTab('dashboard');
             setShowLogin(false);
           }}
         />
