@@ -943,6 +943,73 @@ export async function saveTruckDirect(truck: any, tenantId: string) {
   }
 }
 
+// Save or update an individual delivery directly in Supabase
+export async function saveDeliveryDirect(d: any, tenantId: string) {
+  const supabase = getFrontendSupabase();
+  if (!supabase) return;
+  const tid = String(tenantId);
+
+  const fullMeta = {
+    id: String(d.id),
+    tenantId: tid,
+    invoiceNumber: String(d.invoiceNumber || d.orderNumber || d.id || ""),
+    epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
+    customerName: String(d.customerName || d.customer || "N/A"),
+    deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
+    phone: String(d.phone || ""),
+    originBranch: String(d.originBranch || "DC-WINAMILL"),
+    weight: d.weight,
+    orderTotal: d.orderTotal,
+    destinationNotes: d.destinationNotes,
+    status: String(d.status || "REGISTERED"),
+    registeredAt: String(d.registeredAt || d.date || new Date().toISOString()),
+    pickedAt: d.pickedAt,
+    deliveredAt: d.deliveredAt,
+    returnedAt: d.returnedAt,
+    returnReason: d.returnReason,
+    assignedTruck: d.assignedTruck,
+    assignedDriver: d.assignedDriver,
+    assignedPicker: d.assignedPicker,
+    customerSignature: d.customerSignature,
+    deliveryPhoto: d.deliveryPhoto,
+    deliveryPhotos: d.deliveryPhotos || (d.deliveryPhoto ? [d.deliveryPhoto] : []),
+    pdfUrl: d.pdfUrl,
+    documentType: d.documentType,
+    scheduledDate: d.scheduledDate,
+    scheduledSlot: d.scheduledSlot,
+    deliveryCategory: d.deliveryCategory,
+    history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
+  };
+
+  const payload: any = {
+    id: String(d.id),
+    tenantId: tid,
+    orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
+    customer: String(d.customerName || d.customer || "N/A"),
+    destination: String(d.deliveryAddress || d.destination || "N/A"),
+    scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
+    assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
+    assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
+    status: String(d.status || "REGISTERED"),
+    eta: String(d.eta || "N/A"),
+    pickup_location: String(d.originBranch || "DC-WINAMILL"),
+    items: [JSON.stringify({ _meta: fullMeta })]
+  };
+
+  let obj = { ...payload };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { error } = await supabase.from("deliveries").upsert(obj);
+    if (!error) break;
+    const errMsg = error.message || String(error);
+    const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
+    if (colMatch && colMatch[1] && obj[colMatch[1]] !== undefined) {
+      delete obj[colMatch[1]];
+    } else {
+      break;
+    }
+  }
+}
+
 // Delete record directly
 export async function deleteRecordDirect(table: string, id: string, tenantId: string) {
   const supabase = getFrontendSupabase();

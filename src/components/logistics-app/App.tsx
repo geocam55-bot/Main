@@ -16,6 +16,7 @@ import {
   fetchTenantStateDirect, 
   saveTenantStateDirect, 
   saveTruckDirect,
+  saveDeliveryDirect,
   saveUserHeartbeatDirect,
   deleteRecordDirect, 
   clearAllDirect,
@@ -1929,20 +1930,50 @@ export default function App() {
 
   // Sync with Supabase when deliveries change
   const handleAddOrUpdateDelivery = async (newRecord: DeliveryRecord) => {
-    if (!currentTenant) return;
+    const tenantId = currentTenant?.id || (currentUser as any)?.organization_id || 'rona_atlantic';
     lastMutationTimeRef.current = Date.now();
+
+    const recordToSave: DeliveryRecord = {
+      ...newRecord,
+      tenantId: newRecord.tenantId || tenantId
+    };
+
+    const newIdClean = (recordToSave.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const newOrderClean = (recordToSave.epicorSalesOrder || recordToSave.invoiceNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
     const updated = [...deliveries];
-    const index = updated.findIndex(d => d.id === newRecord.id);
+    const index = updated.findIndex(d => {
+      if (d.id === recordToSave.id) return true;
+      if (d.epicorSalesOrder && recordToSave.epicorSalesOrder && d.epicorSalesOrder === recordToSave.epicorSalesOrder) return true;
+      if (d.invoiceNumber && recordToSave.invoiceNumber && d.invoiceNumber === recordToSave.invoiceNumber) return true;
+      
+      const dIdClean = (d.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const dOrderClean = (d.epicorSalesOrder || d.invoiceNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      if (newIdClean && dIdClean && (dIdClean === newIdClean || dIdClean.includes(newIdClean) || newIdClean.includes(dIdClean))) return true;
+      if (newOrderClean && dOrderClean && (dOrderClean === newOrderClean)) return true;
+      return false;
+    });
+
     if (index >= 0) {
-      updated[index] = newRecord;
+      updated[index] = recordToSave;
     } else {
-      updated.unshift(newRecord);
+      updated.unshift(recordToSave);
     }
     setDeliveries(updated);
-    if (currentTenant.id) {
-      localStorage.setItem(`prospaces_deliveries_tenant_${currentTenant.id}`, JSON.stringify(updated));
+
+    try {
+      localStorage.setItem(`prospaces_deliveries_tenant_${tenantId}`, JSON.stringify(updated));
+    } catch {}
+
+    // 1. Direct Supabase write for instant guaranteed database consistency
+    try {
+      await saveDeliveryDirect(recordToSave, tenantId);
+    } catch (directErr) {
+      console.warn("Direct saveDeliveryDirect notice:", directErr);
     }
-    await syncStateToSupabase(currentTenant.id, updated, trucks, branches, users);
+
+    // 2. Multi-tenant full state sync
+    await syncStateToSupabase(tenantId, updated, trucks, branches, users);
   };
 
   const deleteRecordWithFallback = async (table: string, id: string, tenantId: string) => {

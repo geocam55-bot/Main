@@ -47,6 +47,7 @@ import { createClient } from '../../../utils/supabase/client';
 import DriverRouteMap from './DriverRouteMap';
 import { getGpsForLocation, sanitizeGpsCoordinates } from '../lib/mapHelpers';
 import { getTruckSpecs, FLEET_COMPLETE_TRUCKS } from '../truckSpecs';
+import { saveDeliveryDirect } from '../lib/supabaseClient';
 
 interface DriverMobileAppProps {
   deliveries: DeliveryRecord[];
@@ -591,7 +592,19 @@ export default function DriverMobileApp({
     if (!curStop) return;
 
     setIsSubmittingPOD(true);
-    const deliveryToUpdate = curStop.delivery || deliveries.find(d => d.id === curStop.id);
+    const cleanCurId = (curStop.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const cleanOrderNum = (curStop.orderNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+    const deliveryToUpdate = curStop.delivery || deliveries.find(d => {
+      if (d.id === curStop.id) return true;
+      if (d.epicorSalesOrder && (d.epicorSalesOrder === curStop.id || d.epicorSalesOrder === curStop.orderNumber)) return true;
+      if (d.invoiceNumber && (d.invoiceNumber === curStop.id || d.invoiceNumber === curStop.orderNumber)) return true;
+      const dIdClean = (d.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const dOrderClean = (d.epicorSalesOrder || d.invoiceNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      if (cleanCurId && dIdClean && (dIdClean === cleanCurId || dIdClean.includes(cleanCurId) || cleanCurId.includes(dIdClean))) return true;
+      if (cleanOrderNum && dOrderClean && (dOrderClean === cleanOrderNum)) return true;
+      return false;
+    }) || deliveries[0];
 
     if (deliveryToUpdate) {
       const deliveredTimestamp = new Date().toISOString();
@@ -622,29 +635,20 @@ export default function DriverMobileApp({
           {
             status: DeliveryStatus.DELIVERED,
             timestamp: deliveredTimestamp,
-            location: curStop.address,
+            location: curStop.address || deliveryToUpdate.deliveryAddress || 'Customer Location',
             operator: driverUser?.name || 'Driver',
             notes: `Proof of Delivery completed & signed by ${receiverName || 'Receiver'}`
           }
         ]
       };
 
-      // 1. Update in parent state
+      // 1. Update in parent state & local storage
       onAddOrUpdateDelivery(updated);
 
       // 2. Direct write to Supabase
       try {
-        const supabase = createClient();
-        await supabase
-          .from('deliveries')
-          .update({
-            status: DeliveryStatus.DELIVERED,
-            delivered_at: deliveredTimestamp,
-            customer_signature: signatureData,
-            delivery_photos: photosArray,
-            history: updated.history
-          })
-          .eq('id', updated.id);
+        const tenantId = updated.tenantId || deliveryToUpdate.tenantId || (driverUser as any)?.organization_id || 'rona_atlantic';
+        await saveDeliveryDirect(updated, tenantId);
       } catch (err) {
         console.warn('Supabase direct sync notice:', err);
       }

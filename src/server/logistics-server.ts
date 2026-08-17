@@ -2523,6 +2523,7 @@ app.use((req, res, next) => {
           const destinationNotes = d.destinationNotes || meta.destinationNotes;
           const customerSignature = d.customerSignature || meta.customerSignature;
           const deliveryPhoto = d.deliveryPhoto || meta.deliveryPhoto;
+          const deliveryPhotos = d.deliveryPhotos || meta.deliveryPhotos || (deliveryPhoto ? [deliveryPhoto] : undefined);
           const pdfUrl = d.pdfUrl || meta.pdfUrl;
           const documentType = d.documentType || meta.documentType;
           const weight = d.weight || meta.weight;
@@ -2556,6 +2557,7 @@ app.use((req, res, next) => {
             assignedPicker,
             customerSignature,
             deliveryPhoto,
+            deliveryPhotos,
             pdfUrl,
             documentType,
             scheduledDate,
@@ -2827,6 +2829,7 @@ app.use((req, res, next) => {
           assignedPicker: d.assignedPicker,
           customerSignature: d.customerSignature,
           deliveryPhoto: d.deliveryPhoto,
+          deliveryPhotos: d.deliveryPhotos || (d.deliveryPhoto ? [d.deliveryPhoto] : []),
           pdfUrl: d.pdfUrl,
           documentType: d.documentType,
           scheduledDate: d.scheduledDate,
