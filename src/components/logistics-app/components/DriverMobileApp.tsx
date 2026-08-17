@@ -338,6 +338,7 @@ export default function DriverMobileApp({
 
   // Active Stop Management
   const [activeStopIndex, setActiveStopIndex] = useState<number>(0);
+  const [isLiveGpsActive, setIsLiveGpsActive] = useState<boolean>(false);
   
   // ePOD Capture State
   const [receiverName, setReceiverName] = useState<string>('');
