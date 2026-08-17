@@ -2858,11 +2858,15 @@ app.use((req, res, next) => {
           id: String(d.id),
           tenantId: String(tenantId),
           tenant_id: String(tenantId), // fallback
+          orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
           invoiceNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || ""),
           epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
+          customer: String(d.customerName || d.customer || "N/A"),
           customerName: String(d.customerName || d.customer || "N/A"),
+          destination: String(d.deliveryAddress || d.destination || "N/A"),
           deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
           phone: String(d.phone || "000-000-0000"),
+          eta: String(d.eta || "N/A"),
           originBranch: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
           weight: d.weight ? String(d.weight) : null,
           orderTotal: d.orderTotal ? String(d.orderTotal) : null,
@@ -2884,7 +2888,8 @@ app.use((req, res, next) => {
           tracking_number: d.trackingNumber || d.tracking_number || null,
           pickup_location: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
           dropoff_location: String(d.deliveryAddress || d.destination || "N/A"),
-          documentType: d.documentType || null
+          documentType: d.documentType || null,
+          items: [JSON.stringify({ _meta: fullMeta })]
         };
       });
 
