@@ -155,29 +155,16 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
     }
 
     if (!existingKey) {
-      const fallbackDriver = getFallbackDriverName(truck.id || truck.name, truck.driver);
+      const fallbackDriver = truck.driver !== undefined ? (truck.driver.trim() || 'No Driver') : getFallbackDriverName(truck.id || truck.name, truck.driver);
       map.set(idKey, { ...truck, driver: fallbackDriver });
     } else {
       const existing = map.get(existingKey)!;
-      const isTruckDriverValid = truck.driver && !['no driver', 'unassigned', 'driver', ''].includes(truck.driver.trim().toLowerCase());
-      const isExistingDriverValid = existing.driver && !['no driver', 'unassigned', 'driver', ''].includes(existing.driver.trim().toLowerCase());
-
-      let driverName = getFallbackDriverName(truck.id || truck.name, existing.driver || truck.driver);
-      if (isTruckDriverValid && isExistingDriverValid) {
-        if (truck.assignedDriverId && !existing.assignedDriverId) {
-          driverName = truck.driver;
-        } else if (existing.assignedDriverId && !truck.assignedDriverId) {
-          driverName = existing.driver;
-        } else {
-          driverName = truck.driver || existing.driver;
-        }
-      } else if (isTruckDriverValid) {
-        driverName = truck.driver;
-      } else if (isExistingDriverValid) {
-        driverName = existing.driver;
+      let driverName = existing.driver || 'No Driver';
+      if (truck.driver !== undefined && truck.driver !== null) {
+        driverName = truck.driver.trim() || 'No Driver';
       }
 
-      const assignedDriverId = truck.assignedDriverId || existing.assignedDriverId;
+      const assignedDriverId = truck.assignedDriverId !== undefined ? truck.assignedDriverId : existing.assignedDriverId;
       const branchId = truck.branchId || (truck as any).branch_id || existing.branchId || (existing as any).branch_id || '';
 
       const gpsLat = truck.gpsLat !== undefined && !isNaN(truck.gpsLat) ? truck.gpsLat : (existing.gpsLat ?? truck.lat);
@@ -207,29 +194,10 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
     }
   }
 
-  // ENFORCE STRICT UNIQUE DRIVER ASSIGNMENT PER VEHICLE
-  // Each driver can be assigned to at most one vehicle at a time.
-  const assignedDriversSeen = new Set<string>();
-  const result: Truck[] = [];
-
-  for (const truck of map.values()) {
-    const drv = truck.driver ? truck.driver.trim() : 'No Driver';
-    const drvNorm = drv.toLowerCase();
-
-    if (drvNorm !== 'no driver' && drvNorm !== 'unassigned' && drvNorm !== 'driver' && drvNorm !== '') {
-      if (assignedDriversSeen.has(drvNorm)) {
-        // Driver is already assigned to a previous vehicle in the fleet list
-        result.push({ ...truck, driver: 'No Driver' });
-      } else {
-        assignedDriversSeen.add(drvNorm);
-        result.push({ ...truck, driver: drv });
-      }
-    } else {
-      result.push({ ...truck, driver: 'No Driver' });
-    }
-  }
-
-  return result;
+  return Array.from(map.values()).map(truck => ({
+    ...truck,
+    driver: truck.driver ? truck.driver.trim() : 'No Driver'
+  }));
 }
 
 export default function App() {

@@ -99,13 +99,32 @@ export function serializeToType(
   return clean || "Commercial Truck";
 }
 
+export function sanitizeDateForDb(val: any): string | null {
+  if (!val || typeof val !== 'string' || val.trim() === '') return null;
+  const str = val.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.substring(0, 10);
+  }
+  const parsed = Date.parse(str);
+  if (!isNaN(parsed)) {
+    return new Date(parsed).toISOString().substring(0, 10);
+  }
+  return null;
+}
+
+export function sanitizeNumberForDb(val: any): number | null {
+  if (val === null || val === undefined || val === '') return null;
+  const num = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+  return isNaN(num) ? null : num;
+}
+
 export function deserializeType(truck: any): any {
   if (!truck) return truck;
   const rawType = truck.type || "";
   const cleanType = rawType.split("||")[0].trim() || "Commercial Truck";
 
   // Check direct DB columns / object properties first
-  let registrationDueDate = truck.registrationDueDate || truck.registration_due_date || "";
+  let registrationDueDate = truck.registrationDueDate || truck.registration_due_date || truck.registrationExpiryDate || truck.registration_expiry_date || "";
   let imageUrl: string | undefined = truck.imageUrl || truck.image_url || truck.image || undefined;
   let lat: number | undefined = truck.lat !== undefined ? truck.lat : (truck.current_latitude !== undefined ? truck.current_latitude : undefined);
   let lng: number | undefined = truck.lng !== undefined ? truck.lng : (truck.current_longitude !== undefined ? truck.current_longitude : undefined);
@@ -195,11 +214,16 @@ export function deserializeType(truck: any): any {
     gpsLng = sanGps.lng;
   }
 
+  const driverVal = truck.driver || truck.driver_name || truck.assigned_driver_id || 'No Driver';
+
   return {
     ...truck,
     type: cleanType,
+    driver: driverVal,
+    assignedDriverId: truck.assignedDriverId || truck.assigned_driver_id || (driverVal !== 'No Driver' ? driverVal : undefined),
     imageUrl: imageUrl || truck.image_url || truck.imageUrl,
     registrationDueDate,
+    registrationExpiryDate: truck.registrationExpiryDate || truck.registration_expiry_date || registrationDueDate || '',
     ...(lat !== undefined && !isNaN(lat) ? { lat } : {}),
     ...(lng !== undefined && !isNaN(lng) ? { lng } : {}),
     gpsSource: gpsSource || (gpsDeviceId && gpsDeviceId !== 'DISABLED' ? 'truck' : 'mobile'),
@@ -222,18 +246,22 @@ export function deserializeType(truck: any): any {
     licensePlate: truck.license_plate || truck.licensePlate,
     make: truck.make,
     model: truck.model,
-    year: truck.year,
+    year: truck.year ? Number(truck.year) : undefined,
     color: truck.color,
-    capacityWeightKg: truck.capacity_weight_kg || truck.capacityWeightKg,
-    capacityVolumeM3: truck.capacity_volume_m3 || truck.capacityVolumeM3,
-    fuelType: truck.fuel_type || truck.fuelType,
-    currentMileage: truck.current_mileage || truck.currentMileage,
+    vehicleType: truck.vehicle_type || truck.vehicleType || cleanType,
+    capacityWeightKg: truck.capacity_weight_kg !== undefined && truck.capacity_weight_kg !== null ? Number(truck.capacity_weight_kg) : (truck.capacityWeightKg !== undefined ? Number(truck.capacityWeightKg) : undefined),
+    capacityVolumeM3: truck.capacity_volume_m3 !== undefined && truck.capacity_volume_m3 !== null ? Number(truck.capacity_volume_m3) : (truck.capacityVolumeM3 !== undefined ? Number(truck.capacityVolumeM3) : undefined),
+    fuelType: truck.fuel_type || truck.fuelType || 'Diesel',
+    fuelTankCapacity: truck.fuel_tank_capacity !== undefined ? Number(truck.fuel_tank_capacity) : (truck.fuelTankCapacity !== undefined ? Number(truck.fuelTankCapacity) : undefined),
+    currentMileage: truck.current_mileage !== undefined && truck.current_mileage !== null ? Number(truck.current_mileage) : (truck.currentMileage !== undefined ? Number(truck.currentMileage) : undefined),
     lastServiceDate: truck.last_service_date || truck.lastServiceDate,
     nextServiceDueDate: truck.next_service_due_date || truck.nextServiceDueDate,
     insurancePolicyNumber: truck.insurance_policy_number || truck.insurancePolicyNumber,
     insuranceExpiryDate: truck.insurance_expiry_date || truck.insuranceExpiryDate,
     userField1: truck.user_field_1 || truck.userField1,
-    userField2: truck.user_field_2 || truck.userField2
+    userField2: truck.user_field_2 || truck.userField2,
+    isRefrigerated: truck.is_refrigerated !== undefined ? Boolean(truck.is_refrigerated) : Boolean(truck.isRefrigerated),
+    isLiftgateEquipped: truck.is_liftgate_equipped !== undefined ? Boolean(truck.is_liftgate_equipped) : Boolean(truck.isLiftgateEquipped)
   };
 }
 
@@ -692,38 +720,67 @@ export async function saveTenantStateDirect(
     associatedStoreId: u.associatedStoreId
   }));
 
-  const serializedTrucks = uniqueTrucks.map(t => ({
-    id: t.id,
-    tenantId: t.tenantId || tenantId,
-    name: t.name,
-    type: serializeToType(
-      t.type,
-      t.registrationDueDate,
-      t.imageUrl
-    ),
-    driver: t.driver,
-    branchId: t.branchId || t.branch_id || null,
-    branch_id: t.branchId || t.branch_id || null,
-    image_url: t.imageUrl || null,
-    registration_due_date: t.registrationDueDate || null,
-    truck_number: t.truckNumber || null,
-    vin: t.vin || null,
-    license_plate: t.licensePlate || null,
-    make: t.make || null,
-    model: t.model || null,
-    year: t.year || null,
-    color: t.color || null,
-    capacity_weight_kg: t.capacityWeightKg || null,
-    capacity_volume_m3: t.capacityVolumeM3 || null,
-    fuel_type: t.fuelType || null,
-    current_mileage: t.currentMileage || null,
-    last_service_date: t.lastServiceDate || null,
-    next_service_due_date: t.nextServiceDueDate || null,
-    insurance_policy_number: t.insurancePolicyNumber || null,
-    insurance_expiry_date: t.insuranceExpiryDate || null,
-    user_field_1: t.userField1 || null,
-    user_field_2: t.userField2 || null
-  }));
+  const serializedTrucks = uniqueTrucks.map(t => {
+    const driverVal = t.driver || t.driver_name || t.assigned_driver_id || 'No Driver';
+    const assignedDriverIdVal = t.assignedDriverId || t.assigned_driver_id || (driverVal !== 'No Driver' ? driverVal : null);
+    const branchIdVal = t.branchId || t.branch_id || null;
+    const regDate = sanitizeDateForDb(t.registrationDueDate || t.registration_due_date || t.registrationExpiryDate);
+    const lastSvcDate = sanitizeDateForDb(t.lastServiceDate || t.last_service_date);
+    const nextSvcDate = sanitizeDateForDb(t.nextServiceDueDate || t.next_service_due_date);
+    const insExpDate = sanitizeDateForDb(t.insuranceExpiryDate || t.insurance_expiry_date);
+
+    return {
+      id: String(t.id),
+      tenantId: t.tenantId || tenantId,
+      name: t.name || `Truck ${t.id}`,
+      type: serializeToType(t.type, regDate || undefined, t.imageUrl),
+      driver: driverVal,
+      driver_name: driverVal,
+      assigned_driver_id: assignedDriverIdVal,
+      assignedDriverId: assignedDriverIdVal,
+      branchId: branchIdVal,
+      branch_id: branchIdVal,
+      image_url: t.imageUrl || t.image_url || null,
+      imageUrl: t.imageUrl || t.image_url || null,
+      registration_due_date: regDate,
+      registrationDueDate: regDate,
+      registration_expiry_date: regDate,
+      registrationExpiryDate: regDate,
+      truck_number: t.truckNumber || t.truck_number || null,
+      truckNumber: t.truckNumber || t.truck_number || null,
+      vin: t.vin || null,
+      license_plate: t.licensePlate || t.license_plate || null,
+      licensePlate: t.licensePlate || t.license_plate || null,
+      make: t.make || null,
+      model: t.model || null,
+      year: sanitizeNumberForDb(t.year),
+      color: t.color || null,
+      vehicle_type: t.vehicleType || t.vehicle_type || t.type || null,
+      capacity_weight_kg: sanitizeNumberForDb(t.capacityWeightKg || t.capacity_weight_kg),
+      capacityWeightKg: sanitizeNumberForDb(t.capacityWeightKg || t.capacity_weight_kg),
+      capacity_volume_m3: sanitizeNumberForDb(t.capacityVolumeM3 || t.capacity_volume_m3),
+      capacityVolumeM3: sanitizeNumberForDb(t.capacityVolumeM3 || t.capacity_volume_m3),
+      fuel_type: t.fuelType || t.fuel_type || null,
+      fuelType: t.fuelType || t.fuel_type || null,
+      fuel_tank_capacity: sanitizeNumberForDb(t.fuelTankCapacity || t.fuel_tank_capacity),
+      current_mileage: sanitizeNumberForDb(t.currentMileage || t.current_mileage),
+      currentMileage: sanitizeNumberForDb(t.currentMileage || t.current_mileage),
+      last_service_date: lastSvcDate,
+      lastServiceDate: lastSvcDate,
+      next_service_due_date: nextSvcDate,
+      nextServiceDueDate: nextSvcDate,
+      insurance_policy_number: t.insurancePolicyNumber || t.insurance_policy_number || null,
+      insurancePolicyNumber: t.insurancePolicyNumber || t.insurance_policy_number || null,
+      insurance_expiry_date: insExpDate,
+      insuranceExpiryDate: insExpDate,
+      user_field_1: t.userField1 || t.user_field_1 || null,
+      userField1: t.userField1 || t.user_field_1 || null,
+      user_field_2: t.userField2 || t.user_field_2 || null,
+      userField2: t.userField2 || t.user_field_2 || null,
+      is_refrigerated: t.isRefrigerated ?? false,
+      is_liftgate_equipped: t.isLiftgateEquipped ?? false
+    };
+  });
 
   const mappedBranches = uniqueBranches.map(b => {
     let rawAddr = b.address || "";
@@ -867,9 +924,38 @@ export async function saveTenantStateDirect(
   });
 
   // Perform parallel upserts including GPS telemetry tables
+  const truckUpsertPromise = (async () => {
+    let payload = serializedTrucks;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const { error } = await supabase.from("trucks").upsert(payload);
+      if (!error) break;
+      const errMsg = error.message || String(error);
+      const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
+      const missingCol = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
+      if (missingCol) {
+        payload = payload.map((t: any) => {
+          const c = { ...t };
+          delete c[missingCol];
+          return c;
+        });
+      } else {
+        // Essential columns fallback
+        payload = payload.map((t: any) => ({
+          id: t.id,
+          tenantId: t.tenantId,
+          name: t.name,
+          type: t.type,
+          driver: t.driver,
+          branchId: t.branchId,
+          branch_id: t.branch_id
+        }));
+      }
+    }
+  })();
+
   await Promise.allSettled([
     supabase.from("branches").upsert(mappedBranches),
-    supabase.from("trucks").upsert(serializedTrucks),
+    truckUpsertPromise,
     supabase.from("users").upsert(serializedUsers),
     supabase.from("deliveries").upsert(mappedDeliveries),
     supabase.from("gps_units_setup").upsert(gpsUnitsToUpsert),
@@ -888,54 +974,91 @@ export async function saveTruckDirect(truck: any, tenantId: string) {
   const supabase = getFrontendSupabase();
   if (!supabase) return;
   const tid = String(tenantId);
+
+  const driverVal = truck.driver || truck.driver_name || truck.assigned_driver_id || 'No Driver';
+  const assignedDriverIdVal = truck.assignedDriverId || truck.assigned_driver_id || (driverVal !== 'No Driver' ? driverVal : null);
+  const branchIdVal = truck.branchId || truck.branch_id || null;
+  const regDate = sanitizeDateForDb(truck.registrationDueDate || truck.registration_due_date || truck.registrationExpiryDate);
+  const lastSvcDate = sanitizeDateForDb(truck.lastServiceDate || truck.last_service_date);
+  const nextSvcDate = sanitizeDateForDb(truck.nextServiceDueDate || truck.next_service_due_date);
+  const insExpDate = sanitizeDateForDb(truck.insuranceExpiryDate || truck.insurance_expiry_date);
+
   const serialized: any = {
     id: String(truck.id),
     tenantId: tid,
+    tenant_id: tid,
     name: truck.name || `Truck ${truck.id}`,
-    type: serializeToType(truck.type, truck.registrationDueDate, truck.imageUrl),
-    driver: truck.driver || 'No Driver',
-    branchId: truck.branchId || truck.branch_id || null,
-    branch_id: truck.branchId || truck.branch_id || null,
+    type: serializeToType(truck.type, regDate || undefined, truck.imageUrl),
+    driver: driverVal,
+    driver_name: driverVal,
+    assigned_driver_id: assignedDriverIdVal,
+    assignedDriverId: assignedDriverIdVal,
+    branchId: branchIdVal,
+    branch_id: branchIdVal,
     image_url: truck.imageUrl || truck.image_url || null,
-    registration_due_date: truck.registrationDueDate || null,
-    truck_number: truck.truckNumber || null,
+    imageUrl: truck.imageUrl || truck.image_url || null,
+    registration_due_date: regDate,
+    registrationDueDate: regDate,
+    registration_expiry_date: regDate,
+    registrationExpiryDate: regDate,
+    truck_number: truck.truckNumber || truck.truck_number || null,
+    truckNumber: truck.truckNumber || truck.truck_number || null,
     vin: truck.vin || null,
-    license_plate: truck.licensePlate || null,
+    license_plate: truck.licensePlate || truck.license_plate || null,
+    licensePlate: truck.licensePlate || truck.license_plate || null,
     make: truck.make || null,
     model: truck.model || null,
-    year: truck.year || null,
+    year: sanitizeNumberForDb(truck.year),
     color: truck.color || null,
-    capacity_weight_kg: truck.capacityWeightKg || null,
-    capacity_volume_m3: truck.capacityVolumeM3 || null,
-    fuel_type: truck.fuelType || null,
-    current_mileage: truck.currentMileage || null,
-    last_service_date: truck.lastServiceDate || null,
-    next_service_due_date: truck.nextServiceDueDate || null,
-    insurance_policy_number: truck.insurancePolicyNumber || null,
-    insurance_expiry_date: truck.insuranceExpiryDate || null,
-    user_field_1: truck.userField1 || null,
-    user_field_2: truck.userField2 || null
+    vehicle_type: truck.vehicleType || truck.vehicle_type || truck.type || null,
+    capacity_weight_kg: sanitizeNumberForDb(truck.capacityWeightKg || truck.capacity_weight_kg),
+    capacityWeightKg: sanitizeNumberForDb(truck.capacityWeightKg || truck.capacity_weight_kg),
+    capacity_volume_m3: sanitizeNumberForDb(truck.capacityVolumeM3 || truck.capacity_volume_m3),
+    capacityVolumeM3: sanitizeNumberForDb(truck.capacityVolumeM3 || truck.capacity_volume_m3),
+    fuel_type: truck.fuelType || truck.fuel_type || null,
+    fuelType: truck.fuelType || truck.fuel_type || null,
+    fuel_tank_capacity: sanitizeNumberForDb(truck.fuelTankCapacity || truck.fuel_tank_capacity),
+    current_mileage: sanitizeNumberForDb(truck.currentMileage || truck.current_mileage),
+    currentMileage: sanitizeNumberForDb(truck.currentMileage || truck.current_mileage),
+    last_service_date: lastSvcDate,
+    lastServiceDate: lastSvcDate,
+    next_service_due_date: nextSvcDate,
+    nextServiceDueDate: nextSvcDate,
+    insurance_policy_number: truck.insurancePolicyNumber || truck.insurance_policy_number || null,
+    insurancePolicyNumber: truck.insurancePolicyNumber || truck.insurance_policy_number || null,
+    insurance_expiry_date: insExpDate,
+    insuranceExpiryDate: insExpDate,
+    user_field_1: truck.userField1 || truck.user_field_1 || null,
+    userField1: truck.userField1 || truck.user_field_1 || null,
+    user_field_2: truck.userField2 || truck.user_field_2 || null,
+    userField2: truck.userField2 || truck.user_field_2 || null,
+    is_refrigerated: truck.isRefrigerated ?? false,
+    is_liftgate_equipped: truck.isLiftgateEquipped ?? false
   };
 
   let payload = { ...serialized };
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 25; attempt++) {
     const { error } = await supabase.from("trucks").upsert(payload);
-    if (!error) break;
+    if (!error) {
+      console.log(`[saveTruckDirect] Successfully persisted truck ${truck.id} (driver: ${driverVal})`);
+      break;
+    }
     const errMsg = error.message || String(error);
+    console.warn(`[saveTruckDirect] Upsert notice (attempt ${attempt + 1}):`, errMsg);
     const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
-    if (colMatch && colMatch[1] && payload[colMatch[1]] !== undefined) {
-      delete payload[colMatch[1]];
+    const colToStrip = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
+    if (colToStrip && payload[colToStrip] !== undefined) {
+      delete payload[colToStrip];
     } else {
       // Fallback to essential columns
-      const fallbackPayload = {
+      const fallbackPayload: any = {
         id: serialized.id,
         tenantId: serialized.tenantId,
         name: serialized.name,
         type: serialized.type,
         driver: serialized.driver,
         branchId: serialized.branchId,
-        image_url: serialized.image_url,
-        registration_due_date: serialized.registration_due_date
+        branch_id: serialized.branch_id
       };
       await supabase.from("trucks").upsert(fallbackPayload).catch(console.warn);
       break;
