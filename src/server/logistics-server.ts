@@ -2853,21 +2853,38 @@ app.use((req, res, next) => {
           history: d.history || []
         };
 
-        // Construct object using ONLY columns known to exist in Supabase 'deliveries' table, with _meta in items.
         // Guarantee non-null string fallbacks for all NOT NULL table constraints.
         return {
           id: String(d.id),
           tenantId: String(tenantId),
-          orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
-          customer: String(d.customerName || d.customer || "N/A"),
-          destination: String(d.deliveryAddress || d.destination || "N/A"),
-          scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
-          assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
-          assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
+          tenant_id: String(tenantId), // fallback
+          invoiceNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || ""),
+          epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
+          customerName: String(d.customerName || d.customer || "N/A"),
+          deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
+          phone: String(d.phone || "000-000-0000"),
+          originBranch: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
+          weight: d.weight ? String(d.weight) : null,
+          orderTotal: d.orderTotal ? String(d.orderTotal) : null,
+          pdfUrl: d.pdfUrl || null,
+          destinationNotes: d.destinationNotes || null,
           status: String(d.status || "REGISTERED"),
-          eta: String(d.eta || "N/A"),
-          pickup_location: String(d.originBranch || "DC-WINAMILL"),
-          items: [JSON.stringify({ _meta: fullMeta })]
+          registeredAt: String(d.registeredAt || d.date || new Date().toISOString()),
+          pickedAt: d.pickedAt || null,
+          deliveredAt: d.deliveredAt || null,
+          returnedAt: d.returnedAt || null,
+          returnReason: d.returnReason || null,
+          assignedTruck: d.assignedTruck || d.assignedTruckId || null,
+          assignedDriver: d.assignedDriver || d.assignedDriverId || null,
+          customerSignature: d.customerSignature || null,
+          deliveryPhoto: d.deliveryPhoto || (d.deliveryPhotos && d.deliveryPhotos.length > 0 ? d.deliveryPhotos[0] : null),
+          history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : [],
+          priority: d.priority || 'Medium',
+          scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
+          tracking_number: d.trackingNumber || d.tracking_number || null,
+          pickup_location: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
+          dropoff_location: String(d.deliveryAddress || d.destination || "N/A"),
+          documentType: d.documentType || null
         };
       });
 
@@ -3104,7 +3121,7 @@ app.use((req, res, next) => {
         let attempts = 0;
         let lastErrMsg = '';
         console.log("DEBUG UPSERT deliveriesToUpsert[0]:", deliveriesToUpsert[0]);
-        while (!success && attempts < 15) {
+        while (!success && attempts < 35) {
           try {
             const { error } = await supabase.from("deliveries").upsert(deliveriesToUpsert);
             if (error) throw error;
@@ -3124,7 +3141,7 @@ app.use((req, res, next) => {
             ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
 
             if (isMissingColumnError) {
-              const match = errMsg.match(/column "([^"]+)"|column ([^\s]+) of relation|'([^']+)' column/);
+              const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
               let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
               
               if (!colToStrip) {
@@ -3137,6 +3154,11 @@ app.use((req, res, next) => {
                 else if (errMsg.includes("customerSignature")) colToStrip = "customerSignature";
                 else if (errMsg.includes("deliveryPhoto")) colToStrip = "deliveryPhoto";
                 else if (errMsg.includes("documentType")) colToStrip = "documentType";
+                else if (errMsg.includes("priority")) colToStrip = "priority";
+                else if (errMsg.includes("tracking_number")) colToStrip = "tracking_number";
+                else if (errMsg.includes("pickup_location")) colToStrip = "pickup_location";
+                else if (errMsg.includes("dropoff_location")) colToStrip = "dropoff_location";
+                else if (errMsg.includes("scheduled_date")) colToStrip = "scheduled_date";
               }
               
               if (colToStrip) {
@@ -3149,7 +3171,7 @@ app.use((req, res, next) => {
               } else {
                 console.log(`[Deliveries Sync] Stripping all potential new columns due to unidentified column error: ${errMsg}`);
                 deliveriesToUpsert = deliveriesToUpsert.map(d => {
-                  const { pdfUrl, weight, orderTotal, assignedPicker, destinationNotes, customerSignature, deliveryPhoto, ...rest } = d;
+                  const { pdfUrl, weight, orderTotal, assignedPicker, destinationNotes, customerSignature, deliveryPhoto, priority, tracking_number, pickup_location, dropoff_location, scheduled_date, documentType, ...rest } = d;
                   return rest;
                 });
               }

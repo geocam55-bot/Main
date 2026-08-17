@@ -1072,62 +1072,55 @@ export async function saveDeliveryDirect(d: any, tenantId: string) {
   if (!supabase) return;
   const tid = String(tenantId);
 
-  const fullMeta = {
-    id: String(d.id),
-    tenantId: tid,
-    invoiceNumber: String(d.invoiceNumber || d.orderNumber || d.id || ""),
-    epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
-    customerName: String(d.customerName || d.customer || "N/A"),
-    deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
-    phone: String(d.phone || ""),
-    originBranch: String(d.originBranch || "DC-WINAMILL"),
-    weight: d.weight,
-    orderTotal: d.orderTotal,
-    destinationNotes: d.destinationNotes,
-    status: String(d.status || "REGISTERED"),
-    registeredAt: String(d.registeredAt || d.date || new Date().toISOString()),
-    pickedAt: d.pickedAt,
-    deliveredAt: d.deliveredAt,
-    returnedAt: d.returnedAt,
-    returnReason: d.returnReason,
-    assignedTruck: d.assignedTruck,
-    assignedDriver: d.assignedDriver,
-    assignedPicker: d.assignedPicker,
-    customerSignature: d.customerSignature,
-    deliveryPhoto: d.deliveryPhoto,
-    deliveryPhotos: d.deliveryPhotos || (d.deliveryPhoto ? [d.deliveryPhoto] : []),
-    pdfUrl: d.pdfUrl,
-    documentType: d.documentType,
-    scheduledDate: d.scheduledDate,
-    scheduledSlot: d.scheduledSlot,
-    deliveryCategory: d.deliveryCategory,
-    history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
-  };
-
   const payload: any = {
     id: String(d.id),
     tenantId: tid,
-    orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
-    customer: String(d.customerName || d.customer || "N/A"),
-    destination: String(d.deliveryAddress || d.destination || "N/A"),
-    scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
-    assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
-    assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
+    tenant_id: tid,
+    invoiceNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || ""),
+    epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
+    customerName: String(d.customerName || d.customer || "N/A"),
+    deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
+    phone: String(d.phone || "000-000-0000"),
+    originBranch: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
+    weight: d.weight ? String(d.weight) : null,
+    orderTotal: d.orderTotal ? String(d.orderTotal) : null,
+    pdfUrl: d.pdfUrl || null,
+    destinationNotes: d.destinationNotes || null,
     status: String(d.status || "REGISTERED"),
-    eta: String(d.eta || "N/A"),
-    pickup_location: String(d.originBranch || "DC-WINAMILL"),
-    items: [JSON.stringify({ _meta: fullMeta })]
+    registeredAt: String(d.registeredAt || d.date || new Date().toISOString()),
+    pickedAt: d.pickedAt || null,
+    deliveredAt: d.deliveredAt || null,
+    returnedAt: d.returnedAt || null,
+    returnReason: d.returnReason || null,
+    assignedTruck: d.assignedTruck || d.assignedTruckId || null,
+    assignedDriver: d.assignedDriver || d.assignedDriverId || null,
+    customerSignature: d.customerSignature || null,
+    deliveryPhoto: d.deliveryPhoto || (d.deliveryPhotos && d.deliveryPhotos.length > 0 ? d.deliveryPhotos[0] : null),
+    history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : [],
+    priority: d.priority || 'Medium',
+    scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
+    tracking_number: d.trackingNumber || d.tracking_number || null,
+    pickup_location: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
+    dropoff_location: String(d.deliveryAddress || d.destination || "N/A"),
+    documentType: d.documentType || null
   };
 
   let obj = { ...payload };
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 15; attempt++) {
     const { error } = await supabase.from("deliveries").upsert(obj);
-    if (!error) break;
+    if (!error) {
+      console.log(`[saveDeliveryDirect] Successfully persisted delivery ${d.id} with status ${d.status}`);
+      break;
+    }
     const errMsg = error.message || String(error);
+    console.warn(`[saveDeliveryDirect] Upsert notice (attempt ${attempt + 1}):`, errMsg);
     const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
-    if (colMatch && colMatch[1] && obj[colMatch[1]] !== undefined) {
-      delete obj[colMatch[1]];
+    const colToStrip = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
+    
+    if (colToStrip && obj[colToStrip] !== undefined) {
+      delete obj[colToStrip];
     } else {
+      // Emergency fallback if column can't be parsed
       break;
     }
   }

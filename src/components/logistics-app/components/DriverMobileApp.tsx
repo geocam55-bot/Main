@@ -373,16 +373,29 @@ export default function DriverMobileApp({
     const dNameNorm = (driverUser.name || '').trim().toLowerCase();
     const dIdNorm = (driverUser.id || '').trim().toLowerCase();
 
+    const truckIdNorm = assignedTruck ? String(assignedTruck.id).trim().toLowerCase() : '';
+    const truckNameNorm = assignedTruck ? String(assignedTruck.name).trim().toLowerCase() : '';
+
     const matched = deliveries.filter(d => {
-      const delDriverId = (d.assignedDriverId || '').trim().toLowerCase();
-      const delDriverName = (d.assignedDriverName || '').trim().toLowerCase();
-      return (delDriverId && delDriverId === dIdNorm) || (delDriverName && delDriverName.includes(dNameNorm));
+      const delDriverId = (d.assignedDriverId || d.assignedDriver || '').trim().toLowerCase();
+      const delDriverName = (d.assignedDriverName || d.assignedDriver || '').trim().toLowerCase();
+      
+      const isDriverMatch = (delDriverId && delDriverId === dIdNorm) || (delDriverName && (delDriverName === dNameNorm || delDriverName.includes(dNameNorm)));
+
+      const delTruckId = (d.assignedTruckId || d.assignedTruck || '').trim().toLowerCase();
+      const delTruckName = (d.assignedTruck || '').trim().toLowerCase();
+      
+      const isTruckMatch = truckIdNorm && truckNameNorm && 
+        ((delTruckId && (delTruckId === truckIdNorm || delTruckId.includes(truckIdNorm))) || 
+         (delTruckName && (delTruckName === truckNameNorm || delTruckName.includes(truckNameNorm))));
+
+      return isDriverMatch || isTruckMatch;
     });
 
     if (matched.length > 0) return matched;
     // Fallback: Return all active deliveries if no specific assignment
     return deliveries;
-  }, [deliveries, driverUser]);
+  }, [deliveries, driverUser, assignedTruck]);
 
   // Map deliveries into rich Driver Stop objects
   const liveStops: DriverStop[] = useMemo(() => {
