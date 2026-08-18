@@ -1,4 +1,7 @@
 {
   "buildCommand": "npm run build",
-  "public": "dist"
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/(?!api)(:path*)?", "destination": "/index.html" }
+  ]
 }
