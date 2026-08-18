@@ -1,6 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-
-export default async (req: VercelRequest, res: VercelResponse) => {
+export default async (req, res) => {
   try {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -34,8 +32,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         status: "ACTIVE_SYNC (TOKEN)"
       }
     });
-  } catch (error: any) {
-    console.error("[API /telematics/status] Error:", error);
+  } catch (error) {
     res.status(500).json({
       status: "error",
       error: error.message || "Status check failed"

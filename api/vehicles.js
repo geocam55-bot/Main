@@ -1,8 +1,6 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-
 const FLEET_COMPLETE_API_URL = "https://api.fleetcomplete.com/login/token";
 
-async function getValidToken(): Promise<string | null> {
+async function getValidToken() {
   try {
     const username = process.env.FLEET_COMPLETE_USERNAME;
     const password = process.env.FLEET_COMPLETE_PASSWORD;
@@ -23,19 +21,17 @@ async function getValidToken(): Promise<string | null> {
     });
 
     if (!response.ok) {
-      console.error("[Fleet Complete] Token request failed:", response.statusText);
       return null;
     }
 
-    const data: any = await response.json();
+    const data = await response.json();
     return data.token || null;
   } catch (error) {
-    console.error("[Fleet Complete] Token fetch error:", error);
     return null;
   }
 }
 
-async function getVehiclePositions(): Promise<any[]> {
+async function getVehiclePositions() {
   try {
     const token = await getValidToken();
     if (!token) {
@@ -53,15 +49,14 @@ async function getVehiclePositions(): Promise<any[]> {
       return [];
     }
 
-    const data: any = await response.json();
+    const data = await response.json();
     return Array.isArray(data) ? data : [];
   } catch (error) {
-    console.error("[Fleet Complete] Vehicle positions fetch error:", error);
     return [];
   }
 }
 
-export default async (req: VercelRequest, res: VercelResponse) => {
+export default async (req, res) => {
   try {
     const vehicles = await getVehiclePositions();
     
@@ -72,8 +67,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       fleetId: "abb3c44d-0588-486d-9e49-441d9639727c",
       vehicles: vehicles || []
     });
-  } catch (error: any) {
-    console.error("[API /vehicles] Error:", error);
+  } catch (error) {
     res.status(500).json({
       success: false,
       error: error.message || "Failed to fetch vehicles"
