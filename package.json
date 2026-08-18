@@ -61,6 +61,7 @@
     "multer": "^2.1.1",
     "nodemailer": "^9.0.5",
     "path": "*",
+    "puppeteer": "^25.8.0",
     "react": "^18.3.1",
     "react-day-picker": "*",
     "react-dnd": "*",
