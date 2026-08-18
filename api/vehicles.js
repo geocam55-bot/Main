@@ -1,74 +1,66 @@
-const FLEET_COMPLETE_API_URL = "https://api.fleetcomplete.com/login/token";
-
-async function getValidToken() {
+module.exports = async (req, res) => {
   try {
+    res.setHeader("Content-Type", "application/json");
+
     const username = process.env.FLEET_COMPLETE_USERNAME;
     const password = process.env.FLEET_COMPLETE_PASSWORD;
     const apiKey = process.env.FLEET_COMPLETE_API_KEY;
 
-    if (apiKey) {
-      return apiKey;
+    if (!apiKey && (!username || !password)) {
+      return res.status(500).json({
+        success: false,
+        error: "Fleet Complete credentials missing"
+      });
     }
 
-    if (!username || !password) {
-      return null;
+    // Get token from Fleet Complete
+    let token = apiKey;
+    
+    if (!token && username && password) {
+      const tokenRes = await fetch("https://api.fleetcomplete.com/login/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!tokenRes.ok) {
+        console.error("[API] Token fetch failed:", tokenRes.status);
+        return res.status(500).json({ success: false, error: "Failed to authenticate with Fleet Complete" });
+      }
+
+      const tokenData = await tokenRes.json();
+      token = tokenData.token;
     }
 
-    const response = await fetch(FLEET_COMPLETE_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    return data.token || null;
-  } catch (error) {
-    return null;
-  }
-}
-
-async function getVehiclePositions() {
-  try {
-    const token = await getValidToken();
     if (!token) {
-      return [];
+      return res.status(500).json({ success: false, error: "No valid Fleet Complete token" });
     }
 
-    const response = await fetch("https://api.fleetcomplete.com/v1.0/vehicle/positions", {
+    // Fetch vehicles from Fleet Complete
+    const vehiclesRes = await fetch("https://api.fleetcomplete.com/v1.0/vehicle/positions", {
+      method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
 
-    if (!response.ok) {
-      return [];
+    if (!vehiclesRes.ok) {
+      console.error("[API] Vehicles fetch failed:", vehiclesRes.status);
+      return res.status(500).json({ success: false, error: "Failed to fetch vehicles" });
     }
 
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    return [];
-  }
-}
+    const vehicles = await vehiclesRes.json();
 
-module.exports = async (req, res) => {
-  try {
-    const vehicles = await getVehiclePositions();
-    
-    res.setHeader("Content-Type", "application/json");
     res.status(200).json({
       success: true,
       source: "fleet_complete",
       isStale: false,
       fleetId: "abb3c44d-0588-486d-9e49-441d9639727c",
-      vehicles: vehicles || []
+      vehicles: Array.isArray(vehicles) ? vehicles : []
     });
   } catch (error) {
+    console.error("[API /vehicles] Error:", error);
     res.status(500).json({
       success: false,
       error: error.message || "Failed to fetch vehicles"
