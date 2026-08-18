@@ -1,9 +1,4 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "routes": [
-    { "src": "/api/vehicles", "methods": ["GET"], "dest": "/api/vehicles.ts" },
-    { "src": "/api/telematics/status", "methods": ["GET"], "dest": "/api/telematics/status.ts" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  "outputDirectory": "dist"
 }
