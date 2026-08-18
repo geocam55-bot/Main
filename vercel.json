@@ -1,7 +1,17 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "server.cjs": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/server.cjs"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
