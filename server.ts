@@ -3068,3 +3068,4 @@ self.addEventListener('activate', (event) => {
 }
 
 startServer();
+// Trigger Vercel redeploy with serverless API fixes
