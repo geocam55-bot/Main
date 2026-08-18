@@ -1,3 +1,4 @@
+// Deployment: Vercel redeploy with env vars active (2026-08-18)
 import express from 'express';
 import path from 'path';
 import cors from 'cors';
