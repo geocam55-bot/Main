@@ -2949,7 +2949,7 @@ self.addEventListener('activate', (event) => {
   app.use("/upload", express.static(rootUploadsDir));
   app.use("/upload", express.static(rootUploadDir));
 
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction = process.env.NODE_ENV === "production" && process.env.USE_STATIC_BUILD === "true";
 
   if (!isProduction) {
     const vite = await createViteServer({

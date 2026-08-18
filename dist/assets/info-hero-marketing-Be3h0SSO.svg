@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" fill="none">
+  <!-- Background -->
+  <rect width="800" height="400" rx="24" fill="#FFF1F2"/>
+  
+  <!-- Email campaign builder -->
+  <rect x="40" y="50" width="440" height="300" rx="16" fill="white" stroke="#FECDD3" stroke-width="1.5"/>
+  <text x="60" y="80" fill="#9F1239" font-size="14" font-weight="700">Campaign Builder</text>
+  <text x="60" y="96" fill="#64748B" font-size="10">Spring Renovation Sale — Email Campaign</text>
+  
+  <!-- Email preview -->
+  <rect x="60" y="112" width="400" height="220" rx="12" fill="#FFF5F5" stroke="#FCA5A5" stroke-width="1"/>
+  
+  <!-- Email header -->
+  <rect x="60" y="112" width="400" height="50" rx="12" fill="linear-gradient(135deg, #E11D48, #F97316)"/>
+  <rect x="60" y="112" width="400" height="50" rx="12" fill="#E11D48"/>
+  <text x="260" y="142" text-anchor="middle" fill="white" font-size="16" font-weight="700">Spring Renovation Sale 🏠</text>
+  
+  <!-- Email body -->
+  <text x="80" y="182" fill="#374151" font-size="10">Hi {{first_name}},</text>
+  <text x="80" y="198" fill="#374151" font-size="10">This spring, save up to 25% on deck &amp; patio materials.</text>
+  <text x="80" y="214" fill="#374151" font-size="10">We've hand-picked our best-selling composite options...</text>
+  
+  <!-- CTA button in email -->
+  <rect x="80" y="230" width="120" height="32" rx="6" fill="#E11D48"/>
+  <text x="140" y="250" text-anchor="middle" fill="white" font-size="11" font-weight="600">Shop Now →</text>
+  
+  <!-- Product cards in email -->
+  <rect x="80" y="274" width="110" height="48" rx="6" fill="#FEF2F2" stroke="#FECDD3" stroke-width="0.5"/>
+  <text x="135" y="292" text-anchor="middle" fill="#1E293B" font-size="9" font-weight="600">Trex Select</text>
+  <text x="135" y="306" text-anchor="middle" fill="#E11D48" font-size="10" font-weight="700">$38.50/ft</text>
+  
+  <rect x="200" y="274" width="110" height="48" rx="6" fill="#FEF2F2" stroke="#FECDD3" stroke-width="0.5"/>
+  <text x="255" y="292" text-anchor="middle" fill="#1E293B" font-size="9" font-weight="600">TimberTech Edge</text>
+  <text x="255" y="306" text-anchor="middle" fill="#E11D48" font-size="10" font-weight="700">$42.00/ft</text>
+  
+  <rect x="320" y="274" width="110" height="48" rx="6" fill="#FEF2F2" stroke="#FECDD3" stroke-width="0.5"/>
+  <text x="375" y="292" text-anchor="middle" fill="#1E293B" font-size="9" font-weight="600">Azek Vintage</text>
+  <text x="375" y="306" text-anchor="middle" fill="#E11D48" font-size="10" font-weight="700">$56.75/ft</text>
+
+  <!-- Campaign stats panel -->
+  <rect x="510" y="50" width="260" height="130" rx="14" fill="white" stroke="#FECDD3" stroke-width="1.5"/>
+  <text x="530" y="78" fill="#9F1239" font-size="13" font-weight="700">Campaign Performance</text>
+  
+  <text x="530" y="102" fill="#64748B" font-size="10">Sent</text>
+  <text x="750" y="102" text-anchor="end" fill="#1E293B" font-size="11" font-weight="700">4,820</text>
+  
+  <text x="530" y="122" fill="#64748B" font-size="10">Opened</text>
+  <text x="750" y="122" text-anchor="end" fill="#22C55E" font-size="11" font-weight="700">2,168 (45%)</text>
+  
+  <text x="530" y="142" fill="#64748B" font-size="10">Clicked</text>
+  <text x="750" y="142" text-anchor="end" fill="#0EA5E9" font-size="11" font-weight="700">684 (14%)</text>
+  
+  <text x="530" y="162" fill="#64748B" font-size="10">Converted</text>
+  <text x="750" y="162" text-anchor="end" fill="#E11D48" font-size="11" font-weight="700">142 ($82K)</text>
+
+  <!-- Lead funnel -->
+  <rect x="510" y="196" width="260" height="154" rx="14" fill="white" stroke="#FECDD3" stroke-width="1.5"/>
+  <text x="530" y="224" fill="#9F1239" font-size="13" font-weight="700">Lead Funnel</text>
+  
+  <!-- Funnel bars -->
+  <rect x="530" y="238" width="220" height="18" rx="4" fill="#FCA5A5" opacity="0.3"/>
+  <rect x="530" y="238" width="220" height="18" rx="4" fill="#E11D48" opacity="0.7"/>
+  <text x="540" y="251" fill="white" font-size="9" font-weight="600">Website Visitors — 12,400</text>
+  
+  <rect x="550" y="262" width="180" height="18" rx="4" fill="#FB923C" opacity="0.3"/>
+  <rect x="550" y="262" width="180" height="18" rx="4" fill="#F97316" opacity="0.7"/>
+  <text x="560" y="275" fill="white" font-size="9" font-weight="600">Leads Captured — 840</text>
+  
+  <rect x="570" y="286" width="140" height="18" rx="4" fill="#FCD34D" opacity="0.3"/>
+  <rect x="570" y="286" width="140" height="18" rx="4" fill="#EAB308" opacity="0.7"/>
+  <text x="580" y="299" fill="white" font-size="9" font-weight="600">Qualified — 320</text>
+  
+  <rect x="590" y="310" width="100" height="18" rx="4" fill="#86EFAC" opacity="0.3"/>
+  <rect x="590" y="310" width="100" height="18" rx="4" fill="#22C55E" opacity="0.7"/>
+  <text x="600" y="323" fill="white" font-size="9" font-weight="600">Closed — 142</text>
+</svg>

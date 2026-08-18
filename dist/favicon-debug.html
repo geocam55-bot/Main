@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Favicon Debug - ProSpaces CRM</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    h1 {
+      color: #9333ea;
+      margin-bottom: 0.5rem;
+      font-size: 2rem;
+    }
+    
+    .subtitle {
+      color: #6b7280;
+      margin-bottom: 2rem;
+      font-size: 0.875rem;
+    }
+    
+    .test-grid {
+      display: grid;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    
+    .test-item {
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      transition: all 0.2s;
+    }
+    
+    .test-item:hover {
+      border-color: #9333ea;
+      box-shadow: 0 4px 12px rgba(147, 51, 234, 0.1);
+    }
+    
+    .status {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    
+    .status.loading {
+      background: #fbbf24;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    .status.success {
+      background: #10b981;
+    }
+    
+    .status.error {
+      background: #ef4444;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .test-info {
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .test-name {
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 0.25rem;
+    }
+    
+    .test-url {
+      font-size: 0.75rem;
+      color: #6b7280;
+      font-family: 'Monaco', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .test-result {
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+    
+    .preview {
+      width: 48px;
+      height: 48px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f9fafb;
+      flex-shrink: 0;
+    }
+    
+    .preview img {
+      max-width: 32px;
+      max-height: 32px;
+    }
+    
+    .summary {
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .summary h2 {
+      color: #111827;
+      margin-bottom: 1rem;
+      font-size: 1.25rem;
+    }
+    
+    .summary-stats {
+      display: flex;
+      gap: 2rem;
+    }
+    
+    .stat {
+      flex: 1;
+    }
+    
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+    
+    .stat-value.success { color: #10b981; }
+    .stat-value.error { color: #ef4444; }
+    .stat-value.loading { color: #fbbf24; }
+    
+    .stat-label {
+      color: #6b7280;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    
+    button {
+      flex: 1;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.875rem;
+    }
+    
+    .btn-primary {
+      background: #9333ea;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #7e22ce;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(147, 51, 234, 0.3);
+    }
+    
+    .btn-secondary {
+      background: white;
+      color: #9333ea;
+      border: 2px solid #9333ea;
+    }
+    
+    .btn-secondary:hover {
+      background: #f3e8ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Favicon Debugging Tool</h1>
+    <p class="subtitle">Testing favicon availability on ProSpaces CRM</p>
+    
+    <div class="summary">
+      <h2>Test Summary</h2>
+      <div class="summary-stats">
+        <div class="stat">
+          <div class="stat-value success" id="success-count">0</div>
+          <div class="stat-label">Working</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value error" id="error-count">0</div>
+          <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value loading" id="loading-count">6</div>
+          <div class="stat-label">Testing</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="test-grid" id="test-grid"></div>
+    
+    <div class="actions">
+      <button class="btn-primary" onclick="runTests()">🔄 Retest All</button>
+      <button class="btn-secondary" onclick="window.location.href='/'">← Back to App</button>
+    </div>
+  </div>
+  
+  <script>
+    const tests = [
+      { name: 'favicon.ico', url: '/favicon.ico', type: 'image' },
+      { name: 'favicon.svg', url: '/favicon.svg', type: 'image' },
+      { name: 'favicon-16x16.png', url: '/favicon-16x16.png', type: 'image' },
+      { name: 'favicon-32x32.png', url: '/favicon-32x32.png', type: 'image' },
+      { name: 'manifest.json', url: '/manifest.json', type: 'json' },
+      { name: 'service-worker.js', url: '/service-worker.js', type: 'js' }
+    ];
+    
+    let results = {
+      success: 0,
+      error: 0,
+      loading: tests.length
+    };
+    
+    function updateSummary() {
+      document.getElementById('success-count').textContent = results.success;
+      document.getElementById('error-count').textContent = results.error;
+      document.getElementById('loading-count').textContent = results.loading;
+    }
+    
+    function createTestItem(test) {
+      return `
+        <div class="test-item" id="test-${test.name}">
+          <div class="status loading"></div>
+          <div class="test-info">
+            <div class="test-name">${test.name}</div>
+            <div class="test-url">${window.location.origin}${test.url}</div>
+            <div class="test-result">Testing...</div>
+          </div>
+          ${test.type === 'image' ? '<div class="preview" id="preview-' + test.name + '"></div>' : ''}
+        </div>
+      `;
+    }
+    
+    async function testFile(test) {
+      const item = document.getElementById(`test-${test.name}`);
+      const status = item.querySelector('.status');
+      const result = item.querySelector('.test-result');
+      const preview = document.getElementById(`preview-${test.name}`);
+      
+      try {
+        const response = await fetch(test.url, { 
+          method: 'HEAD',
+          cache: 'no-cache'
+        });
+        
+        if (response.ok) {
+          status.className = 'status success';
+          const size = response.headers.get('content-length');
+          result.textContent = `✅ Available (${size ? (parseInt(size) / 1024).toFixed(2) + ' KB' : 'size unknown'})`;
+          
+          if (test.type === 'image' && preview) {
+            const img = document.createElement('img');
+            img.src = test.url + '?t=' + Date.now();
+            img.onerror = () => {
+              preview.innerHTML = '❌';
+            };
+            preview.appendChild(img);
+          }
+          
+          results.success++;
+        } else {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      } catch (error) {
+        status.className = 'status error';
+        result.textContent = `❌ Failed: ${error.message}`;
+        results.error++;
+        
+        if (preview) {
+          preview.innerHTML = '❌';
+        }
+      } finally {
+        results.loading--;
+        updateSummary();
+      }
+    }
+    
+    function runTests() {
+      results = { success: 0, error: 0, loading: tests.length };
+      updateSummary();
+      
+      const grid = document.getElementById('test-grid');
+      grid.innerHTML = tests.map(test => createTestItem(test)).join('');
+      
+      tests.forEach(test => testFile(test));
+    }
+    
+    // Run tests on load
+    window.addEventListener('load', runTests);
+  </script>
+</body>
+</html>

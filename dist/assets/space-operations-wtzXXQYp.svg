@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180">
+  <defs>
+    <linearGradient id="so-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A1A10"/>
+      <stop offset="50%" stop-color="#0E2418"/>
+      <stop offset="100%" stop-color="#081408"/>
+    </linearGradient>
+    <radialGradient id="so-center-glow" cx="50%" cy="50%">
+      <stop offset="0%" stop-color="#4CAF50" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#4CAF50" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="so-gear-main" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8AB88C"/>
+      <stop offset="50%" stop-color="#5C8A5E"/>
+      <stop offset="100%" stop-color="#3A6A3C"/>
+    </linearGradient>
+    <linearGradient id="so-gear-silver" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#C8D4D8"/>
+      <stop offset="50%" stop-color="#90A0A8"/>
+      <stop offset="100%" stop-color="#607078"/>
+    </linearGradient>
+    <linearGradient id="so-gear-gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#D4B870"/>
+      <stop offset="50%" stop-color="#A8904A"/>
+      <stop offset="100%" stop-color="#806828"/>
+    </linearGradient>
+    <filter id="so-shadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="so-glow">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="240" height="180" fill="url(#so-bg)"/>
+  <rect width="240" height="180" fill="url(#so-center-glow)"/>
+
+  <!-- Large main gear (center-left) -->
+  <g filter="url(#so-shadow)" transform="translate(95,88)">
+    <!-- Gear body -->
+    <circle cx="0" cy="0" r="42" fill="url(#so-gear-main)" opacity="0.9"/>
+    <!-- Teeth -->
+    <g fill="#6A9A6C">
+      <rect x="-5" y="-50" width="10" height="14" rx="2"/>
+      <rect x="-5" y="36" width="10" height="14" rx="2"/>
+      <rect x="-50" y="-5" width="14" height="10" rx="2"/>
+      <rect x="36" y="-5" width="14" height="10" rx="2"/>
+      <rect x="28" y="-32" width="10" height="14" rx="2" transform="rotate(45,33,-25)"/>
+      <rect x="-38" y="-32" width="10" height="14" rx="2" transform="rotate(-45,-33,-25)"/>
+      <rect x="28" y="18" width="10" height="14" rx="2" transform="rotate(-45,33,25)"/>
+      <rect x="-38" y="18" width="10" height="14" rx="2" transform="rotate(45,-33,25)"/>
+    </g>
+    <!-- Inner ring -->
+    <circle cx="0" cy="0" r="28" fill="none" stroke="#4A7A4C" stroke-width="2" opacity="0.5"/>
+    <!-- Spokes -->
+    <line x1="-22" y1="0" x2="22" y2="0" stroke="#3A5A3C" stroke-width="3" opacity="0.6"/>
+    <line x1="0" y1="-22" x2="0" y2="22" stroke="#3A5A3C" stroke-width="3" opacity="0.6"/>
+    <line x1="-16" y1="-16" x2="16" y2="16" stroke="#3A5A3C" stroke-width="2.5" opacity="0.5"/>
+    <line x1="16" y1="-16" x2="-16" y2="16" stroke="#3A5A3C" stroke-width="2.5" opacity="0.5"/>
+    <!-- Center hub -->
+    <circle cx="0" cy="0" r="10" fill="#2A4A2C"/>
+    <circle cx="0" cy="0" r="6" fill="#1A2A1C"/>
+    <circle cx="0" cy="0" r="3" fill="#4CAF50" opacity="0.6"/>
+    <!-- Highlight -->
+    <ellipse cx="-12" cy="-14" rx="10" ry="6" fill="white" opacity="0.06" transform="rotate(-30)"/>
+  </g>
+
+  <!-- Medium silver gear (upper-right, interlocking) -->
+  <g filter="url(#so-shadow)" transform="translate(163,52)">
+    <circle cx="0" cy="0" r="28" fill="url(#so-gear-silver)" opacity="0.85"/>
+    <!-- Teeth -->
+    <g fill="#A0B4BC">
+      <rect x="-4" y="-34" width="8" height="10" rx="1.5"/>
+      <rect x="-4" y="24" width="8" height="10" rx="1.5"/>
+      <rect x="-34" y="-4" width="10" height="8" rx="1.5"/>
+      <rect x="24" y="-4" width="10" height="8" rx="1.5"/>
+      <rect x="16" y="-24" width="8" height="10" rx="1.5" transform="rotate(45,20,-19)"/>
+      <rect x="-24" y="-24" width="8" height="10" rx="1.5" transform="rotate(-45,-20,-19)"/>
+      <rect x="16" y="14" width="8" height="10" rx="1.5" transform="rotate(-45,20,19)"/>
+      <rect x="-24" y="14" width="8" height="10" rx="1.5" transform="rotate(45,-20,19)"/>
+    </g>
+    <!-- Spokes -->
+    <circle cx="0" cy="0" r="18" fill="none" stroke="#788890" stroke-width="1.5" opacity="0.5"/>
+    <line x1="-14" y1="0" x2="14" y2="0" stroke="#607078" stroke-width="2.5" opacity="0.6"/>
+    <line x1="0" y1="-14" x2="0" y2="14" stroke="#607078" stroke-width="2.5" opacity="0.6"/>
+    <!-- Center -->
+    <circle cx="0" cy="0" r="7" fill="#506068"/>
+    <circle cx="0" cy="0" r="4" fill="#384850"/>
+    <circle cx="0" cy="0" r="2" fill="#C8D4D8" opacity="0.4"/>
+    <!-- Highlight -->
+    <ellipse cx="-8" cy="-10" rx="7" ry="4" fill="white" opacity="0.06" transform="rotate(-30)"/>
+  </g>
+
+  <!-- Small gold gear (lower-right) -->
+  <g filter="url(#so-shadow)" transform="translate(175,115)">
+    <circle cx="0" cy="0" r="18" fill="url(#so-gear-gold)" opacity="0.85"/>
+    <!-- Teeth -->
+    <g fill="#C0A058">
+      <rect x="-3" y="-22" width="6" height="8" rx="1"/>
+      <rect x="-3" y="14" width="6" height="8" rx="1"/>
+      <rect x="-22" y="-3" width="8" height="6" rx="1"/>
+      <rect x="14" y="-3" width="8" height="6" rx="1"/>
+      <rect x="10" y="-16" width="6" height="8" rx="1" transform="rotate(45,13,-12)"/>
+      <rect x="-16" y="-16" width="6" height="8" rx="1" transform="rotate(-45,-13,-12)"/>
+      <rect x="10" y="8" width="6" height="8" rx="1" transform="rotate(-45,13,12)"/>
+      <rect x="-16" y="8" width="6" height="8" rx="1" transform="rotate(45,-13,12)"/>
+    </g>
+    <!-- Center -->
+    <circle cx="0" cy="0" r="5" fill="#6A5020"/>
+    <circle cx="0" cy="0" r="2.5" fill="#4A3818"/>
+    <circle cx="0" cy="0" r="1.5" fill="#D4B870" opacity="0.4"/>
+  </g>
+
+  <!-- Ambient particles -->
+  <circle cx="30" cy="30" r="1" fill="#4CAF50" opacity="0.2"/>
+  <circle cx="210" cy="160" r="0.8" fill="#4CAF50" opacity="0.15"/>
+  <circle cx="20" cy="140" r="0.6" fill="#4CAF50" opacity="0.12"/>
+  <circle cx="220" cy="20" r="0.7" fill="#4CAF50" opacity="0.1"/>
+
+  <!-- Floor reflection -->
+  <ellipse cx="120" cy="160" rx="80" ry="12" fill="#4CAF50" opacity="0.03"/>
+</svg>

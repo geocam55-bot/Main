@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" fill="none">
+  <!-- Background -->
+  <rect width="800" height="400" rx="24" fill="#FFF7ED"/>
+  
+  <!-- Blueprint grid -->
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#FDBA74" stroke-width="0.3" opacity="0.4"/>
+    </pattern>
+  </defs>
+  <rect x="40" y="60" width="480" height="280" rx="16" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1" opacity="0.5"/>
+  <rect x="40" y="60" width="480" height="280" rx="16" fill="url(#grid)"/>
+  
+  <!-- House blueprint outline -->
+  <text x="280" y="90" text-anchor="middle" fill="#92400E" font-size="12" font-weight="700" letter-spacing="2">DECK DESIGN — THOMPSON RESIDENCE</text>
+  
+  <!-- Deck shape -->
+  <rect x="100" y="120" width="360" height="180" rx="4" fill="none" stroke="#D97706" stroke-width="2" stroke-dasharray="8 4"/>
+  <rect x="120" y="140" width="320" height="140" rx="2" fill="#FDE68A" opacity="0.4" stroke="#B45309" stroke-width="1.5"/>
+  
+  <!-- Deck boards -->
+  <line x1="120" y1="168" x2="440" y2="168" stroke="#D97706" stroke-width="0.5" opacity="0.5"/>
+  <line x1="120" y1="196" x2="440" y2="196" stroke="#D97706" stroke-width="0.5" opacity="0.5"/>
+  <line x1="120" y1="224" x2="440" y2="224" stroke="#D97706" stroke-width="0.5" opacity="0.5"/>
+  <line x1="120" y1="252" x2="440" y2="252" stroke="#D97706" stroke-width="0.5" opacity="0.5"/>
+  
+  <!-- Dimension lines -->
+  <line x1="120" y1="310" x2="440" y2="310" stroke="#78350F" stroke-width="1"/>
+  <line x1="120" y1="305" x2="120" y2="315" stroke="#78350F" stroke-width="1"/>
+  <line x1="440" y1="305" x2="440" y2="315" stroke="#78350F" stroke-width="1"/>
+  <text x="280" y="328" text-anchor="middle" fill="#78350F" font-size="12" font-weight="600">24 ft</text>
+  
+  <line x1="470" y1="140" x2="470" y2="280" stroke="#78350F" stroke-width="1"/>
+  <line x1="465" y1="140" x2="475" y2="140" stroke="#78350F" stroke-width="1"/>
+  <line x1="465" y1="280" x2="475" y2="280" stroke="#78350F" stroke-width="1"/>
+  <text x="490" y="215" text-anchor="middle" fill="#78350F" font-size="12" font-weight="600" transform="rotate(90,490,215)">16 ft</text>
+  
+  <!-- Stair symbol -->
+  <rect x="250" y="271" width="60" height="9" fill="#F59E0B" opacity="0.6" stroke="#B45309" stroke-width="0.5"/>
+  <rect x="255" y="263" width="50" height="8" fill="#F59E0B" opacity="0.4" stroke="#B45309" stroke-width="0.5"/>
+  <rect x="260" y="256" width="40" height="7" fill="#F59E0B" opacity="0.2" stroke="#B45309" stroke-width="0.5"/>
+  <text x="280" y="296" text-anchor="middle" fill="#92400E" font-size="8">STAIRS</text>
+  
+  <!-- Railing indicators -->
+  <line x1="120" y1="140" x2="120" y2="280" stroke="#B45309" stroke-width="3"/>
+  <line x1="440" y1="140" x2="440" y2="280" stroke="#B45309" stroke-width="3"/>
+  <line x1="120" y1="140" x2="250" y2="140" stroke="#B45309" stroke-width="3"/>
+  <line x1="310" y1="140" x2="440" y2="140" stroke="#B45309" stroke-width="3"/>
+  
+  <!-- Material estimate panel -->
+  <rect x="550" y="70" width="220" height="270" rx="16" fill="white" stroke="#FED7AA" stroke-width="1.5"/>
+  <text x="660" y="100" text-anchor="middle" fill="#92400E" font-size="13" font-weight="700">Material Estimate</text>
+  <line x1="570" y1="112" x2="750" y2="112" stroke="#FED7AA" stroke-width="1"/>
+  
+  <text x="575" y="136" fill="#78350F" font-size="11" font-weight="600">Decking Boards</text>
+  <text x="745" y="136" text-anchor="end" fill="#B45309" font-size="11" font-weight="700">48 pcs</text>
+  
+  <text x="575" y="162" fill="#78350F" font-size="11" font-weight="600">Joists (2x8)</text>
+  <text x="745" y="162" text-anchor="end" fill="#B45309" font-size="11" font-weight="700">24 pcs</text>
+  
+  <text x="575" y="188" fill="#78350F" font-size="11" font-weight="600">Railing Posts</text>
+  <text x="745" y="188" text-anchor="end" fill="#B45309" font-size="11" font-weight="700">16 pcs</text>
+  
+  <text x="575" y="214" fill="#78350F" font-size="11" font-weight="600">Balusters</text>
+  <text x="745" y="214" text-anchor="end" fill="#B45309" font-size="11" font-weight="700">96 pcs</text>
+  
+  <text x="575" y="240" fill="#78350F" font-size="11" font-weight="600">Concrete Footings</text>
+  <text x="745" y="240" text-anchor="end" fill="#B45309" font-size="11" font-weight="700">12 pcs</text>
+  
+  <line x1="570" y1="256" x2="750" y2="256" stroke="#FED7AA" stroke-width="1"/>
+  <text x="575" y="280" fill="#78350F" font-size="13" font-weight="700">Total Estimate</text>
+  <text x="745" y="280" text-anchor="end" fill="#D97706" font-size="16" font-weight="800">$8,450</text>
+  
+  <rect x="570" y="296" width="180" height="30" rx="8" fill="#F59E0B"/>
+  <text x="660" y="316" text-anchor="middle" fill="white" font-size="12" font-weight="700">Generate Quote →</text>
+</svg>

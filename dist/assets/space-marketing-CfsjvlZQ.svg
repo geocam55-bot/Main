@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180">
+  <defs>
+    <linearGradient id="sm-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A0810"/>
+      <stop offset="50%" stop-color="#24101A"/>
+      <stop offset="100%" stop-color="#140608"/>
+    </linearGradient>
+    <radialGradient id="sm-center-glow" cx="50%" cy="50%">
+      <stop offset="0%" stop-color="#E11D48" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#E11D48" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sm-mega-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FB7185"/>
+      <stop offset="50%" stop-color="#E11D48"/>
+      <stop offset="100%" stop-color="#BE123C"/>
+    </linearGradient>
+    <linearGradient id="sm-mega-bell" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FDA4AF"/>
+      <stop offset="50%" stop-color="#FB7185"/>
+      <stop offset="100%" stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="sm-orange" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FDBA74"/>
+      <stop offset="50%" stop-color="#F97316"/>
+      <stop offset="100%" stop-color="#EA580C"/>
+    </linearGradient>
+    <linearGradient id="sm-amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <linearGradient id="sm-bar1" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#9F1239"/>
+      <stop offset="100%" stop-color="#E11D48"/>
+    </linearGradient>
+    <linearGradient id="sm-bar2" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#C2410C"/>
+      <stop offset="100%" stop-color="#F97316"/>
+    </linearGradient>
+    <linearGradient id="sm-bar3" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#B45309"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <filter id="sm-shadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="sm-glow">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="sm-softglow">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="240" height="180" fill="url(#sm-bg)"/>
+  <rect width="240" height="180" fill="url(#sm-center-glow)"/>
+
+  <!-- Mini bar chart (bottom-left) — campaign metrics -->
+  <g filter="url(#sm-shadow)" transform="translate(22, 95)">
+    <!-- Base line -->
+    <line x1="0" y1="55" x2="75" y2="55" stroke="#3A1520" stroke-width="1" opacity="0.6"/>
+    <!-- Bars -->
+    <rect x="4" y="30" width="12" height="25" rx="2" fill="url(#sm-bar1)" opacity="0.85"/>
+    <rect x="4" y="30" width="12" height="3" rx="1" fill="white" opacity="0.08"/>
+
+    <rect x="22" y="18" width="12" height="37" rx="2" fill="url(#sm-bar2)" opacity="0.85"/>
+    <rect x="22" y="18" width="12" height="3" rx="1" fill="white" opacity="0.08"/>
+
+    <rect x="40" y="8" width="12" height="47" rx="2" fill="url(#sm-bar3)" opacity="0.85"/>
+    <rect x="40" y="8" width="12" height="3" rx="1" fill="white" opacity="0.08"/>
+
+    <rect x="58" y="0" width="12" height="55" rx="2" fill="url(#sm-mega-body)" opacity="0.9"/>
+    <rect x="58" y="0" width="12" height="3" rx="1" fill="white" opacity="0.1"/>
+
+    <!-- Trend arrow -->
+    <polyline points="10,26 28,14 46,4 64,-4" fill="none" stroke="#FDA4AF" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+    <polygon points="64,-4 58,0 62,4" fill="#FDA4AF" opacity="0.5"/>
+  </g>
+
+  <!-- Megaphone (center) — the hero element -->
+  <g filter="url(#sm-shadow)" transform="translate(100, 42)">
+    <!-- Megaphone bell / cone — wide end pointing right -->
+    <path d="M 8,18 L 55,0 L 55,60 L 8,42 Z" fill="url(#sm-mega-bell)" opacity="0.92"/>
+    <!-- Bell highlight -->
+    <path d="M 8,18 L 55,0 L 55,8 L 8,22 Z" fill="white" opacity="0.06"/>
+
+    <!-- Handle / grip -->
+    <rect x="0" y="16" width="12" height="28" rx="4" fill="url(#sm-mega-body)" opacity="0.95"/>
+    <rect x="2" y="18" width="8" height="6" rx="2" fill="white" opacity="0.08"/>
+
+    <!-- Sound waves emanating from bell -->
+    <g stroke="#FB7185" fill="none" stroke-linecap="round" opacity="0.4">
+      <path d="M 60,22 Q 70,30 60,38" stroke-width="2"/>
+      <path d="M 66,16 Q 80,30 66,44" stroke-width="1.8" opacity="0.3"/>
+      <path d="M 72,10 Q 90,30 72,50" stroke-width="1.5" opacity="0.2"/>
+    </g>
+
+    <!-- Inner details -->
+    <ellipse cx="8" cy="30" rx="3" ry="10" fill="#BE123C" opacity="0.5"/>
+  </g>
+
+  <!-- Email envelope (top-left, floating) -->
+  <g filter="url(#sm-softglow)" transform="translate(30, 22)" opacity="0.7">
+    <rect x="0" y="0" width="32" height="22" rx="3" fill="#3A1A24" stroke="#E11D48" stroke-width="0.8" opacity="0.8"/>
+    <!-- Flap -->
+    <path d="M 0,0 L 16,12 L 32,0" fill="none" stroke="#FB7185" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+    <!-- Lines inside -->
+    <rect x="6" y="14" width="20" height="1.5" rx="0.5" fill="#E11D48" opacity="0.2"/>
+    <rect x="6" y="17" width="14" height="1.5" rx="0.5" fill="#E11D48" opacity="0.15"/>
+  </g>
+
+  <!-- Target / bullseye (top-right) -->
+  <g filter="url(#sm-softglow)" transform="translate(195, 18)" opacity="0.6">
+    <circle cx="16" cy="16" r="16" fill="none" stroke="#F97316" stroke-width="1.5" opacity="0.5"/>
+    <circle cx="16" cy="16" r="10" fill="none" stroke="#F97316" stroke-width="1.5" opacity="0.4"/>
+    <circle cx="16" cy="16" r="4" fill="#F97316" opacity="0.6"/>
+    <circle cx="16" cy="16" r="1.5" fill="#FCD34D" opacity="0.8"/>
+  </g>
+
+  <!-- Cursor / click icon (right side) -->
+  <g filter="url(#sm-softglow)" transform="translate(185, 75)" opacity="0.55">
+    <path d="M 0,0 L 0,18 L 5,14 L 9,22 L 12,20 L 8,13 L 14,12 Z" fill="url(#sm-orange)" opacity="0.8"/>
+  </g>
+
+  <!-- Heart / engagement icon (bottom-right) -->
+  <g transform="translate(190, 130)" opacity="0.45">
+    <path d="M 10,4 C 10,0 14,-1 16,2 C 18,-1 22,0 22,4 C 22,8 16,14 16,14 C 16,14 10,8 10,4 Z" fill="#FB7185"/>
+  </g>
+
+  <!-- At sign — email marketing hint (left floating) -->
+  <g transform="translate(18, 70)" opacity="0.35">
+    <circle cx="10" cy="10" r="9" fill="none" stroke="#FDA4AF" stroke-width="1.5"/>
+    <path d="M 14,10 A 4,4 0 1,0 14,10.1" fill="none" stroke="#FDA4AF" stroke-width="1.3"/>
+    <line x1="14" y1="7" x2="18" y2="13" stroke="#FDA4AF" stroke-width="1.3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Sparkle / notification dots (scattered) -->
+  <g filter="url(#sm-softglow)">
+    <circle cx="78" cy="28" r="2" fill="#FCD34D" opacity="0.5"/>
+    <circle cx="165" cy="52" r="1.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="140" cy="120" r="2" fill="#F97316" opacity="0.35"/>
+  </g>
+
+  <!-- Ambient particles -->
+  <circle cx="25" cy="160" r="1" fill="#E11D48" opacity="0.2"/>
+  <circle cx="220" cy="165" r="0.8" fill="#E11D48" opacity="0.15"/>
+  <circle cx="120" cy="8" r="0.7" fill="#F97316" opacity="0.12"/>
+  <circle cx="230" cy="90" r="0.6" fill="#E11D48" opacity="0.1"/>
+  <circle cx="10" cy="120" r="0.5" fill="#F97316" opacity="0.08"/>
+
+  <!-- Floor reflection -->
+  <ellipse cx="120" cy="165" rx="80" ry="10" fill="#E11D48" opacity="0.03"/>
+</svg>

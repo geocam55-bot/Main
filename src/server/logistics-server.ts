@@ -3123,73 +3123,48 @@ app.use((req, res, next) => {
 
       // 4. Deliveries with auto-columns stripping fallback for schema mismatch
       if (sanitizedDeliveries.length > 0) {
-        let deliveriesToUpsert = [...sanitizedDeliveries];
-        let success = false;
-        let attempts = 0;
-        let lastErrMsg = '';
-        console.log("DEBUG UPSERT deliveriesToUpsert[0]:", deliveriesToUpsert[0]);
-        while (!success && attempts < 35) {
-          try {
-            const { error } = await supabase.from("deliveries").upsert(deliveriesToUpsert);
-            if (error) throw error;
-            success = true;
-          } catch (dbErr: any) {
-            attempts++;
-            const errMsg = dbErr.message || String(dbErr);
-            lastErrMsg = errMsg;
-            console.log(`[Deliveries Sync] Adjusting deliveries payload (Attempt ${attempts}):`, errMsg);
-            
-            // Check for missing column error, e.g., 'column "pdfUrl" of relation "deliveries" does not exist' or error code "42703".
-            // Do NOT strip columns on NOT NULL constraint violations (code 23502)
-            const isMissingColumnError = (
-              dbErr.code === "42703" || 
-              dbErr.code === "PGRST204" || 
-              (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
-            ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+        const optionalDeliveryColumns = [
+          'pdfUrl', 'weight', 'orderTotal', 'assignedPicker', 'destinationNotes',
+          'customerSignature', 'deliveryPhoto', 'priority', 'tracking_number',
+          'pickup_location', 'dropoff_location', 'scheduled_date', 'documentType',
+          'history', 'scheduledDate', 'scheduledSlot', 'deliveryCategory', 'deliveryPhotos'
+        ];
 
-            if (isMissingColumnError) {
-              const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
-              let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
-              
-              if (!colToStrip) {
-                // If we couldn't match the column name, look for known new columns in errMsg
-                if (errMsg.includes("pdfUrl")) colToStrip = "pdfUrl";
-                else if (errMsg.includes("weight")) colToStrip = "weight";
-                else if (errMsg.includes("orderTotal")) colToStrip = "orderTotal";
-                else if (errMsg.includes("assignedPicker")) colToStrip = "assignedPicker";
-                else if (errMsg.includes("destinationNotes")) colToStrip = "destinationNotes";
-                else if (errMsg.includes("customerSignature")) colToStrip = "customerSignature";
-                else if (errMsg.includes("deliveryPhoto")) colToStrip = "deliveryPhoto";
-                else if (errMsg.includes("documentType")) colToStrip = "documentType";
-                else if (errMsg.includes("priority")) colToStrip = "priority";
-                else if (errMsg.includes("tracking_number")) colToStrip = "tracking_number";
-                else if (errMsg.includes("pickup_location")) colToStrip = "pickup_location";
-                else if (errMsg.includes("dropoff_location")) colToStrip = "dropoff_location";
-                else if (errMsg.includes("scheduled_date")) colToStrip = "scheduled_date";
-              }
-              
-              if (colToStrip) {
-                console.log(`[Deliveries Sync] Stripping missing column '${colToStrip}' from deliveries payload to bypass schema mismatch and retrying...`);
-                deliveriesToUpsert = deliveriesToUpsert.map(d => {
-                  const copy = { ...d };
-                  delete copy[colToStrip];
-                  return copy;
-                });
-              } else {
-                console.log(`[Deliveries Sync] Stripping all potential new columns due to unidentified column error: ${errMsg}`);
-                deliveriesToUpsert = deliveriesToUpsert.map(d => {
-                  const { pdfUrl, weight, orderTotal, assignedPicker, destinationNotes, customerSignature, deliveryPhoto, priority, tracking_number, pickup_location, dropoff_location, scheduled_date, documentType, ...rest } = d;
-                  return rest;
-                });
-              }
-            } else {
-              console.warn(`Deliveries sync failed (attempt ${attempts}):`, errMsg);
-              throw new Error(`Deliveries Sync Error: ${errMsg}`);
-            }
+        const deliveriesToUpsert = sanitizedDeliveries.map((delivery: any) => {
+          const copy = { ...delivery };
+          for (const col of optionalDeliveryColumns) {
+            if (col in copy) delete copy[col];
           }
-        }
-        if (!success) {
-          throw new Error(`Deliveries Sync failed after maximum retries due to persistent schema mismatch. Last error: ${lastErrMsg}`);
+          return copy;
+        });
+
+        try {
+          const { error } = await supabase.from("deliveries").upsert(deliveriesToUpsert);
+          if (error) throw error;
+        } catch (dbErr: any) {
+          const errMsg = dbErr.message || String(dbErr);
+          const isMissingColumnError = (
+            dbErr.code === "42703" ||
+            dbErr.code === "PGRST204" ||
+            (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+          ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+
+          if (isMissingColumnError) {
+            const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
+            const colToStrip = match ? (match[1] || match[2] || match[3]) : null;
+            const safeFallback = deliveriesToUpsert.map((d: any) => {
+              const copy = { ...d };
+              if (colToStrip) delete copy[colToStrip];
+              for (const extra of optionalDeliveryColumns) delete copy[extra];
+              return copy;
+            });
+
+            console.warn(`[Deliveries Sync] Removing optional schema mismatch column '${colToStrip || 'unknown'}' and retrying once.`);
+            const { error: retryError } = await supabase.from("deliveries").upsert(safeFallback);
+            if (retryError) throw retryError;
+          } else {
+            throw new Error(`Deliveries Sync Error: ${errMsg}`);
+          }
         }
       }
 
