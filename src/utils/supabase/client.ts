@@ -24,6 +24,17 @@ export function clearStaleAuthTokens() {
 export function handleAuthError(error: any): boolean {
   if (!error) return false;
   const msg = typeof error === 'string' ? error : error.message || error.error_description || (error.toString ? error.toString() : '');
+  
+  if (
+    msg.includes('Rate exceeded') ||
+    msg.includes('rate limit') ||
+    msg.includes('over_request_rate_limit') ||
+    msg.includes('429')
+  ) {
+    console.warn('[Supabase Auth] Rate limit encountered, preserving cached session and avoiding sign-out:', msg);
+    return true;
+  }
+
   if (
     msg.includes('Refresh Token') ||
     msg.includes('refresh_token') ||

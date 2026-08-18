@@ -176,11 +176,15 @@ function LogisticsEntryApp() {
     try {
       let profile = null;
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select('id, email, role, organization_id, name, avatar_url')
           .eq('id', session.user.id)
-          .single() as { data: any };
+          .single();
+        
+        if (error) {
+          throw error;
+        }
         profile = data;
       } catch (err) {
         console.warn('Profile fetch failed, using fallback from session or cache:', err);

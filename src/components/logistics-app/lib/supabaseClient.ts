@@ -489,7 +489,17 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
 
   if (rBranches.error || rTrucks.error || rUsers.error || rDeliveries.error) {
     const primaryError = rBranches.error || rTrucks.error || rUsers.error || rDeliveries.error;
-    throw new Error(primaryError?.message || "Failed to query tables directly from Supabase.");
+    const errorMsg = primaryError?.message || "";
+    if (
+      errorMsg.includes('Rate exceeded') ||
+      errorMsg.includes('rate limit') ||
+      errorMsg.includes('over_request_rate_limit') ||
+      errorMsg.includes('429')
+    ) {
+      console.warn('[Supabase API] Rate limit encountered during state fetch. Falling back to local/cached state.');
+      return { supabaseActive: false, error: 'Rate limit encountered - using local cache' };
+    }
+    throw new Error(errorMsg || "Failed to query tables directly from Supabase.");
   }
 
   const gpsUnits = rGpsUnits?.data || [];

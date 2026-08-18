@@ -38,6 +38,7 @@ import SuperAdminTenantsView from './components/SuperAdminTenantsView';
 import UserProfileModal, { renderUserAvatarHelper } from './components/UserProfileModal';
 import GpsSetup from './components/GpsSetup';
 import EnterpriseHub from './components/EnterpriseHub';
+import TelematicsDashboard from './components/TelematicsDashboard';
 import DriverMobileApp from './components/DriverMobileApp';
 import DriverTruckSelectModal from './components/DriverTruckSelectModal';
 import { FLEET_COMPLETE_TRUCKS } from './truckSpecs';
@@ -47,7 +48,7 @@ import {
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
-  Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2
+  Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2, Radio
 } from 'lucide-react';
 import prospacesLogo from './assets/images/logo_no_border_tight_1783077241511.jpg';
 
@@ -213,7 +214,7 @@ export default function App() {
       }
       if (tabParam) return tabParam;
     } catch (e) {}
-    return 'dashboard';
+    return 'telematics';
   });
 
   // Keep activeTab synchronized if URL parameters or history changes
@@ -2777,16 +2778,16 @@ export default function App() {
                           <div className="text-[9px] font-black tracking-wider uppercase text-slate-400 font-sans mt-3 mb-1 px-2 border-b border-slate-100 pb-1">Dispatcher Space</div>
                           <button
                             onClick={() => {
-                              setActiveTab('dashboard');
+                              setActiveTab('telematics');
                               setIsMobileNavOpen(false);
                             }}
                             className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer ${
-                              activeTab === 'dashboard'
+                              activeTab === 'telematics' || activeTab === 'dashboard'
                                 ? 'bg-blue-800 text-white shadow-sm'
                                 : 'text-slate-700 hover:bg-slate-50'
                             }`}
                           >
-                            <MapIcon className="h-4 w-4" />
+                            <MapIcon className="h-4 w-4 text-blue-400" />
                             <span>Map</span>
                           </button>
 
@@ -3015,12 +3016,12 @@ export default function App() {
                   <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'dispatcher' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
                     <div className="flex flex-col bg-white border border-slate-200 shadow-xl shadow-slate-200/50 rounded-xl p-1.5">
                       <button
-                        onClick={() => { setActiveTab('dashboard'); setActiveNavDropdown(null); }}
+                        onClick={() => { setActiveTab('telematics'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'telematics' || activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <MapIcon className="h-4 w-4" />
+                        <MapIcon className="h-4 w-4 text-blue-600" />
                         <span>Map</span>
                       </button>
 
@@ -3260,6 +3261,17 @@ export default function App() {
               <TruckIcon className="h-3.5 w-3.5 text-blue-600" />
               <span>Trucks</span>
             </button>
+            <button
+              onClick={() => setActiveTab('telematics')}
+              className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
+                activeTab === 'telematics' || activeTab === 'dashboard'
+                  ? 'bg-white text-blue-800 shadow-xs border border-slate-200/40'
+                  : 'text-gray-500 hover:bg-white/50 hover:text-gray-800'
+              }`}
+            >
+              <MapIcon className="h-3.5 w-3.5 text-blue-600" />
+              <span>Map</span>
+            </button>
             {currentUser?.role === 'Admin' && (
               <button
                 onClick={() => setActiveTab('gps')}
@@ -3299,18 +3311,8 @@ export default function App() {
         )}
         {/* Dynamic content area depending on tabs */}
         <div className="flex-1 transition-all duration-300" id="current-tab-view">
-          {activeTab === 'dashboard' && (
-            <Dashboard 
-              deliveries={deliveries} 
-              onSelectTab={setActiveTab} 
-              trucks={trucks} 
-              onAddOrUpdateDelivery={handleAddOrUpdateDelivery}
-              branches={branches}
-              onUpdateTruck={handleUpdateTruck}
-              users={users}
-              currentUser={currentUser}
-              onRefreshData={handleForceRefreshLive}
-            />
+          {(activeTab === 'telematics' || activeTab === 'dashboard') && (
+            <TelematicsDashboard />
           )}
           {activeTab === 'live-dashboard' && (
             <LiveDashboard 
@@ -3402,6 +3404,7 @@ export default function App() {
               branches={branches}
               onUpdateTruck={handleUpdateTruck}
               onRefreshData={() => setLoadTrigger(prev => prev + 1)}
+              onSelectTab={setActiveTab}
             />
           )}
           {activeTab === 'users' && (

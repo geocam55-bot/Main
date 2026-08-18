@@ -24,6 +24,17 @@ interface DriverRouteMapProps {
   onSelectStop: (index: number) => void;
   truckName?: string;
   truckUnitNumber?: string;
+  isLiveGpsActive?: boolean;
+  onToggleLiveGps?: () => void;
+}
+
+export interface RouteStats {
+  distanceText: string;
+  durationText: string;
+  nextInstruction: string;
+  summary: string;
+  distanceKm?: number;
+  durationMinutes?: number;
 }
 
 const API_KEY_STATIC =
@@ -51,10 +62,16 @@ function DriverRouteOverlay({
   stops,
   activeStopIndex,
   truckLocation,
+  isLiveGpsActive,
+  viewMode,
+  onRouteStatsCalculated,
 }: {
   stops: DriverStop[];
   activeStopIndex: number;
   truckLocation: { lat: number; lng: number };
+  isLiveGpsActive?: boolean;
+  viewMode?: 'follow-truck' | 'overview';
+  onRouteStatsCalculated?: (stats: RouteStats) => void;
 }) {
   const map = useMap();
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -77,6 +94,38 @@ function DriverRouteOverlay({
     stops.forEach(s => {
       if (s.lat && s.lng) bounds.extend({ lat: s.lat, lng: s.lng });
     });
+
+    const activeStop = stops[activeStopIndex] || stops[0];
+
+    // Helper fallback distance estimator
+    const calcApproxStats = () => {
+      if (!activeStop || !activeStop.lat || !activeStop.lng) return;
+      const dLat = (activeStop.lat - truckLocation.lat) * 111;
+      const dLng = (activeStop.lng - truckLocation.lng) * 85;
+      const distKm = Math.max(0.4, Math.round(Math.sqrt(dLat * dLat + dLng * dLng) * 10) / 10);
+      const mins = Math.max(2, Math.round(distKm * 1.8));
+      onRouteStatsCalculated?.({
+        distanceText: `${distKm} km`,
+        durationText: `${mins} min`,
+        nextInstruction: `Follow designated delivery corridor to ${activeStop.customerName}`,
+        summary: activeStop.customerName,
+        distanceKm: distKm,
+        durationMinutes: mins,
+      });
+    };
+
+    function drawFallbackPolyline() {
+      const pathCoords = [truckLocation, ...stops.map(s => ({ lat: s.lat, lng: s.lng }))];
+      const polyline = new window.google.maps.Polyline({
+        path: pathCoords,
+        strokeColor: '#2563eb',
+        strokeOpacity: 0.9,
+        strokeWeight: 6,
+        map
+      });
+      polylinesRef.current = [polyline];
+      calcApproxStats();
+    }
 
     // Try Google Maps DirectionsService
     if (window.google.maps.DirectionsService) {
@@ -108,11 +157,25 @@ function DriverRouteOverlay({
               suppressMarkers: true, // We render our own rich custom markers
               polylineOptions: {
                 strokeColor: '#2563eb',
-                strokeWeight: 5,
-                strokeOpacity: 0.85,
+                strokeWeight: 6,
+                strokeOpacity: 0.9,
               },
             });
             directionsRendererRef.current = renderer;
+
+            // Extract leg details for turn-by-turn HUD
+            const firstLeg = result.routes[0]?.legs[activeStopIndex] || result.routes[0]?.legs[0];
+            if (firstLeg) {
+              const rawStep = firstLeg.steps?.[0]?.instructions?.replace(/<[^>]*>?/gm, '') || `Proceed along route towards ${activeStop?.customerName}`;
+              onRouteStatsCalculated?.({
+                distanceText: firstLeg.distance?.text || '3.2 km',
+                durationText: firstLeg.duration?.text || '6 min',
+                nextInstruction: rawStep,
+                summary: result.routes[0]?.summary || activeStop.customerName,
+                distanceKm: (firstLeg.distance?.value || 3000) / 1000,
+                durationMinutes: Math.round((firstLeg.duration?.value || 360) / 60),
+              });
+            }
           } else {
             // Fallback: draw high-contrast polyline connecting points
             drawFallbackPolyline();
@@ -123,25 +186,17 @@ function DriverRouteOverlay({
       drawFallbackPolyline();
     }
 
-    function drawFallbackPolyline() {
-      const pathCoords = [truckLocation, ...stops.map(s => ({ lat: s.lat, lng: s.lng }))];
-      const polyline = new window.google.maps.Polyline({
-        path: pathCoords,
-        strokeColor: '#3b82f6',
-        strokeOpacity: 0.85,
-        strokeWeight: 4,
-        map
-      });
-      polylinesRef.current = [polyline];
-    }
-
-    // Fit map bounds to view all route elements
-    try {
-      map.fitBounds(bounds, { top: 40, bottom: 40, left: 40, right: 40 });
-    } catch {
-      // Fallback center
+    // Camera view adjustment based on isLiveGpsActive and viewMode
+    if (isLiveGpsActive && viewMode === 'follow-truck') {
       map.setCenter(truckLocation);
-      map.setZoom(13);
+      map.setZoom(16);
+    } else {
+      try {
+        map.fitBounds(bounds, { top: 60, bottom: 60, left: 40, right: 40 });
+      } catch {
+        map.setCenter(truckLocation);
+        map.setZoom(13);
+      }
     }
 
     return () => {
@@ -152,16 +207,20 @@ function DriverRouteOverlay({
         directionsRendererRef.current = null;
       }
     };
-  }, [map, stops, truckLocation]);
+  }, [map, stops, truckLocation, activeStopIndex, isLiveGpsActive, viewMode]);
 
-  // When active stop changes, smoothly pan to it
+  // When active stop changes, smoothly pan to it if overview or not follow mode
   useEffect(() => {
     if (!map || stops.length === 0) return;
-    const target = stops[activeStopIndex] || stops[0];
-    if (target && target.lat && target.lng) {
-      map.panTo({ lat: target.lat, lng: target.lng });
+    if (viewMode === 'follow-truck') {
+      map.panTo(truckLocation);
+    } else {
+      const target = stops[activeStopIndex] || stops[0];
+      if (target && target.lat && target.lng) {
+        map.panTo({ lat: target.lat, lng: target.lng });
+      }
     }
-  }, [map, activeStopIndex, stops]);
+  }, [map, activeStopIndex, stops, viewMode, truckLocation]);
 
   return null;
 }
@@ -456,7 +515,9 @@ export default function DriverRouteMap({
   activeStopIndex,
   onSelectStop,
   truckName = 'Fleet Unit #101',
-  truckUnitNumber = '101'
+  truckUnitNumber = '101',
+  isLiveGpsActive = false,
+  onToggleLiveGps,
 }: DriverRouteMapProps) {
   const [apiKey, setApiKey] = useState<string>(() => {
     if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
@@ -488,6 +549,15 @@ export default function DriverRouteMap({
   const [mapTypeId, setMapTypeId] = useState<string>('roadmap');
   const [manualKeyInput, setManualKeyInput] = useState<string>('');
   const [showKeyInputModal, setShowKeyInputModal] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'follow-truck' | 'overview'>('overview');
+  const [routeStats, setRouteStats] = useState<RouteStats | null>(null);
+
+  // When live GPS is toggled on, default to follow-truck perspective
+  useEffect(() => {
+    if (isLiveGpsActive) {
+      setViewMode('follow-truck');
+    }
+  }, [isLiveGpsActive]);
 
   // Fallback key discovery & API endpoint lookup
   useEffect(() => {
@@ -567,11 +637,13 @@ export default function DriverRouteMap({
     return DEPOT_COORDS;
   }, [stops, activeStopIndex]);
 
+  const activeStop = stops[activeStopIndex] || stops[0];
+
   // If no Google Maps key or auth error, render the Standalone Navigator so no black screen appears
   const useFallbackMap = !apiKey || mapAuthError;
 
   return (
-    <div className="relative w-full h-full min-h-[360px] bg-slate-950 overflow-hidden select-none flex flex-col">
+    <div id="driver-route-map-container" className="relative w-full h-full min-h-[360px] bg-slate-950 overflow-hidden select-none flex flex-col">
       
       {/* ── Key Input / API Configuration Modal ── */}
       {showKeyInputModal && (
@@ -655,6 +727,9 @@ export default function DriverRouteMap({
                 stops={stops}
                 activeStopIndex={activeStopIndex}
                 truckLocation={truckLocation}
+                isLiveGpsActive={isLiveGpsActive}
+                viewMode={viewMode}
+                onRouteStatsCalculated={(stats) => setRouteStats(stats)}
               />
 
               {/* Delivery Stop Advanced Markers */}
@@ -714,15 +789,60 @@ export default function DriverRouteMap({
               )}
             </Map>
 
-            {/* Top Status Header Overlay */}
-            <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-none z-10">
-              <div className="bg-slate-950/85 backdrop-blur-md text-slate-200 text-[10px] font-mono font-bold px-3 py-1.5 rounded-full border border-slate-800 shadow-xl flex items-center space-x-1.5 pointer-events-auto">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-                <span>Live GPS Active &bull; Unit #{truckUnitNumber}</span>
+            {/* Top Navigation HUD Card */}
+            <div className="absolute top-3 inset-x-3 flex flex-col space-y-2 pointer-events-none z-10">
+              <div className="flex items-center justify-between pointer-events-auto">
+                <div className={`backdrop-blur-md text-white text-[10px] font-mono font-bold px-3 py-1.5 rounded-full border shadow-xl flex items-center space-x-1.5 transition-all ${
+                  isLiveGpsActive ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/85 border-slate-800 text-slate-200'
+                }`}>
+                  <span className={`h-2 w-2 rounded-full ${isLiveGpsActive ? 'bg-emerald-400 animate-ping' : 'bg-blue-400'}`}></span>
+                  <span>{isLiveGpsActive ? 'Live GPS Active' : 'Route Ready'} &bull; Unit #{truckUnitNumber}</span>
+                </div>
+                <div className="bg-blue-600/95 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-xl flex items-center space-x-1">
+                  <span>Stop {activeStopIndex + 1} of {stops.length}</span>
+                </div>
               </div>
-              <div className="bg-blue-600/90 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-xl pointer-events-auto">
-                Stop {activeStopIndex + 1} of {stops.length}
-              </div>
+
+              {/* Turn-by-Turn Dynamic Navigation Ribbon */}
+              {activeStop && (
+                <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-2.5 text-white shadow-2xl pointer-events-auto flex items-center justify-between space-x-3">
+                  <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                    <div className="h-8 w-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
+                      <Navigation2 className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center space-x-2">
+                        <p className="text-[11px] font-black text-white truncate">
+                          {activeStop.customerName}
+                        </p>
+                        {routeStats && (
+                          <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded-md border border-emerald-800/60 shrink-0">
+                            {routeStats.distanceText} &bull; {routeStats.durationText}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-300 truncate">
+                        {routeStats?.nextInstruction || activeStop.address}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode(prev => prev === 'follow-truck' ? 'overview' : 'follow-truck')}
+                      className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                        viewMode === 'follow-truck'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold shadow-sm'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                      }`}
+                      title="Toggle Follow Truck / Full Route View"
+                    >
+                      {viewMode === 'follow-truck' ? 'Following' : 'Overview'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Bottom Left Floating Map Controls */}

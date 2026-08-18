@@ -77,9 +77,10 @@ interface GpsSetupProps {
   branches: Branch[];
   onUpdateTruck: (truck: Truck) => void;
   onRefreshData?: () => void;
+  onSelectTab?: (tab: string) => void;
 }
 
-export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshData }: GpsSetupProps) {
+export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshData, onSelectTab }: GpsSetupProps) {
   // Input states for building a GPS connection record
   const [selectedTruckId, setSelectedTruckId] = useState('');
   const [deviceId, setDeviceId] = useState('');
@@ -497,11 +498,23 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
     <div className="space-y-6 animate-fade-in" id="gps-setup-view">
       
       {/* Tab Header */}
-      <div>
-        <h4 className="font-sans font-bold text-gray-900 tracking-tight text-xl">Truck Hardware GPS Integration</h4>
-        <p className="text-xs text-gray-500">
-          Provision stationary IoT telematics gateways, configure SIM card network connectivity, and choose live telemetry sources.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h4 className="font-sans font-bold text-gray-900 tracking-tight text-xl">Truck Hardware GPS Integration</h4>
+          <p className="text-xs text-gray-500">
+            Provision stationary IoT telematics gateways, configure SIM card network connectivity, and choose live telemetry sources.
+          </p>
+        </div>
+        {onSelectTab && (
+          <button
+            type="button"
+            onClick={() => onSelectTab('telematics')}
+            className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center space-x-2 cursor-pointer self-start sm:self-auto"
+          >
+            <Radio className="h-4 w-4 text-blue-300 animate-pulse" />
+            <span>Open Live Telematics Fleet Map</span>
+          </button>
+        )}
       </div>
 
       {successMsg && (

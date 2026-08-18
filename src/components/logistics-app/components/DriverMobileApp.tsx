@@ -1095,11 +1095,17 @@ export default function DriverMobileApp({
               <div className="flex items-center space-x-1.5">
                 <button 
                   type="button"
-                  onClick={() => openExternalMaps(currentStop?.address || 'Dartmouth, NS')}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center space-x-1 shadow-sm transition-all cursor-pointer"
+                  onClick={() => {
+                    setIsLiveGpsActive(prev => !prev);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer ${
+                    isLiveGpsActive
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
                 >
-                  <Navigation2 className="h-3.5 w-3.5" />
-                  <span>START GPS</span>
+                  <Navigation2 className={`h-3.5 w-3.5 ${isLiveGpsActive ? 'animate-pulse' : ''}`} />
+                  <span>{isLiveGpsActive ? 'GPS ACTIVE' : 'START GPS'}</span>
                 </button>
               </div>
             </div>
@@ -1113,6 +1119,8 @@ export default function DriverMobileApp({
                   onSelectStop={(idx) => setActiveStopIndex(idx)}
                   truckName={assignedTruck?.name || 'Unit 101'}
                   truckUnitNumber={assignedTruck?.id?.replace(/[^0-9]/g, '') || '101'}
+                  isLiveGpsActive={isLiveGpsActive}
+                  onToggleLiveGps={() => setIsLiveGpsActive(prev => !prev)}
                 />
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
@@ -1174,6 +1182,14 @@ export default function DriverMobileApp({
                         title="Copy Address"
                       >
                         <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => openExternalMaps(currentStop.address || '')}
+                        className="p-1.5 bg-white hover:bg-slate-100 text-slate-600 rounded-lg border border-slate-200 cursor-pointer"
+                        title="Open in External Maps (Apple/Google Maps)"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
                       </button>
                       {currentStop.phone && (
                         <a 
