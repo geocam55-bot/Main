@@ -1,5 +1,4 @@
-import { VercelRequest, VercelResponse } from "@vercel/node";
-import { createClient } from "@supabase/supabase-js";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   try {
