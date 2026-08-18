@@ -56,10 +56,11 @@ async function getVehiclePositions() {
   }
 }
 
-export default async (req, res) => {
+module.exports = async (req, res) => {
   try {
     const vehicles = await getVehiclePositions();
     
+    res.setHeader("Content-Type", "application/json");
     res.status(200).json({
       success: true,
       source: "fleet_complete",

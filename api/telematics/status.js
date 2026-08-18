@@ -1,4 +1,4 @@
-export default async (req, res) => {
+module.exports = async (req, res) => {
   try {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -19,6 +19,7 @@ export default async (req, res) => {
       (fleetCompleteUsername && fleetCompletePassword)
     );
 
+    res.setHeader("Content-Type", "application/json");
     res.status(200).json({
       status: "active",
       timestamp: new Date().toISOString(),
