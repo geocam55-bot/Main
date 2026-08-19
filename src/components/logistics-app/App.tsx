@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { DeliveryRecord, Truck, Branch, User, Tenant } from './types';
-import { TENANTS } from './data';
+import { TENANTS, DEFAULT_BRANCHES, DEFAULT_TRUCKS, DEFAULT_USERS, DEFAULT_DELIVERIES } from './data';
 import { 
   getFrontendSupabase, 
   initializeFrontendSupabase,
@@ -379,10 +379,10 @@ export default function App() {
     return () => window.removeEventListener('storage', syncUserAndTenant);
   }, [currentUser, currentTenant]);
 
-  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
-  const [trucks, setTrucks] = useState<Truck[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>(() => DEFAULT_DELIVERIES);
+  const [trucks, setTrucks] = useState<Truck[]>(() => DEFAULT_TRUCKS);
+  const [branches, setBranches] = useState<Branch[]>(() => DEFAULT_BRANCHES);
+  const [users, setUsers] = useState<User[]>(() => DEFAULT_USERS);
   const [isFleetDropdownOpen, setIsFleetDropdownOpen] = useState(false);
 
   // User Profile Menu & Modal states
@@ -405,7 +405,7 @@ export default function App() {
   const [customDbKey, setCustomDbKey] = useState(() => localStorage.getItem('prospaces_custom_supabase_key') || '');
   const [configSaving, setConfigSaving] = useState(false);
   const [configMsg, setConfigMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  const [isDbInitializing, setIsDbInitializing] = useState(() => !!(localStorage.getItem('prospaces_custom_supabase_url') && localStorage.getItem('prospaces_custom_supabase_key')));
+  const [isDbInitializing, setIsDbInitializing] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [diagnosticsModal, setDiagnosticsModal] = useState<{
     show: boolean;
@@ -434,23 +434,16 @@ export default function App() {
   }, [activeNavDropdown]);
 
   // Load custom credentials from localStorage on mount and register them with the backend memory store.
-  // Performs a startup check to automatically prune credentials matching default environment variables
+  // Performs a startup check to automatically verify Supabase connection
   useEffect(() => {
     const runStartupCheck = async () => {
       try {
-        // Remove any other custom Supabase configurations to eliminate false data
-        localStorage.removeItem('prospaces_custom_supabase_url');
-        localStorage.removeItem('prospaces_custom_supabase_key');
-        setCustomDbUrl('');
-        setCustomDbKey('');
-        initializeFrontendSupabase('', '');
-
         const res = await fetch("/api/supabase-status");
         if (res.ok) {
           const contentType = res.headers.get("content-type") || "";
           if (contentType.includes("application/json")) {
             const data = await res.json();
-            if (data.configured && data.anonKey) {
+            if (data.configured && data.url && data.anonKey) {
               initializeFrontendSupabase(data.url, data.anonKey);
             }
           }
@@ -1333,9 +1326,9 @@ export default function App() {
         if (data.supabaseActive) {
           // Populate React state directly from live Supabase Tables and filter out recently deleted IDs
           const rawDeliveries = (data.deliveries || []).filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id));
-          const filteredTrucks = (data.trucks || []).filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
-          const filteredBranches = (data.branches || []).filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id));
-          const filteredUsers = (data.users || []).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
+          const filteredTrucks = (data.trucks && data.trucks.length > 0 ? data.trucks : DEFAULT_TRUCKS).filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
+          const filteredBranches = (data.branches && data.branches.length > 0 ? data.branches : DEFAULT_BRANCHES).filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id));
+          const filteredUsers = (data.users && data.users.length > 0 ? data.users : DEFAULT_USERS).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
 
           // Auto-rollover uncompleted past deliveries to the first available slot in the next day
           const { updatedDeliveries: filteredDeliveries, movedCount } = rolloverUncompletedDeliveries(rawDeliveries, filteredBranches);
@@ -1381,26 +1374,31 @@ export default function App() {
           if (isFirstLoadRef.current) {
             // First load on boot: prioritize local storage so we restore state correctly
             if (cachedBranches) {
-              rawDeliveries = cachedDeliveries ? JSON.parse(cachedDeliveries) : [];
-              rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : [];
+              rawDeliveries = cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES;
+              rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : DEFAULT_TRUCKS;
               rawBranches = JSON.parse(cachedBranches);
-              rawUsers = cachedUsers ? JSON.parse(cachedUsers) : [];
+              rawUsers = cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS;
               loadedFromCache = true;
             } else {
-              // No cache found, use backend's default seed data
-              rawDeliveries = data.deliveries || [];
-              rawTrucks = data.trucks || [];
-              rawBranches = data.branches || [];
-              rawUsers = data.users || [];
+              // No cache found, use backend's default seed data or defaults
+              rawDeliveries = (data.deliveries && data.deliveries.length > 0) ? data.deliveries : DEFAULT_DELIVERIES;
+              rawTrucks = (data.trucks && data.trucks.length > 0) ? data.trucks : DEFAULT_TRUCKS;
+              rawBranches = (data.branches && data.branches.length > 0) ? data.branches : DEFAULT_BRANCHES;
+              rawUsers = (data.users && data.users.length > 0) ? data.users : DEFAULT_USERS;
             }
             isFirstLoadRef.current = false;
           } else {
             // Subsequent polls: prefer server's latest data (with updated GPS coordinates)
-            rawDeliveries = (data.deliveries && data.deliveries.length > 0) ? data.deliveries : (cachedDeliveries ? JSON.parse(cachedDeliveries) : []);
-            rawTrucks = (data.trucks && data.trucks.length > 0) ? data.trucks : (cachedTrucks ? JSON.parse(cachedTrucks) : []);
-            rawBranches = (data.branches && data.branches.length > 0) ? data.branches : (cachedBranches ? JSON.parse(cachedBranches) : []);
-            rawUsers = (data.users && data.users.length > 0) ? data.users : (cachedUsers ? JSON.parse(cachedUsers) : []);
+            rawDeliveries = (data.deliveries && data.deliveries.length > 0) ? data.deliveries : (cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES);
+            rawTrucks = (data.trucks && data.trucks.length > 0) ? data.trucks : (cachedTrucks ? JSON.parse(cachedTrucks) : DEFAULT_TRUCKS);
+            rawBranches = (data.branches && data.branches.length > 0) ? data.branches : (cachedBranches ? JSON.parse(cachedBranches) : DEFAULT_BRANCHES);
+            rawUsers = (data.users && data.users.length > 0) ? data.users : (cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS);
           }
+
+          // Ensure not empty
+          if (!rawBranches || rawBranches.length === 0) rawBranches = DEFAULT_BRANCHES;
+          if (!rawTrucks || rawTrucks.length === 0) rawTrucks = DEFAULT_TRUCKS;
+          if (!rawUsers || rawUsers.length === 0) rawUsers = DEFAULT_USERS;
 
           // Keep localStorage warm with current state
           localStorage.setItem(`prospaces_deliveries_tenant_${tenantId}`, JSON.stringify(rawDeliveries));
@@ -1435,10 +1433,13 @@ export default function App() {
           const cachedBranches = localStorage.getItem(`prospaces_branches_tenant_${tenantId}`);
           const cachedUsers = localStorage.getItem(`prospaces_users_tenant_${tenantId}`);
 
-          const rawDeliveries = cachedDeliveries ? JSON.parse(cachedDeliveries) : [];
-          const rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : [];
-          const rawBranches = cachedBranches ? JSON.parse(cachedBranches) : [];
-          const rawUsers = cachedUsers ? JSON.parse(cachedUsers) : [];
+          let rawDeliveries = cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES;
+          let rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : DEFAULT_TRUCKS;
+          let rawBranches = cachedBranches ? JSON.parse(cachedBranches) : DEFAULT_BRANCHES;
+          let rawUsers = cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS;
+
+          if (!rawBranches || rawBranches.length === 0) rawBranches = DEFAULT_BRANCHES;
+          if (!rawTrucks || rawTrucks.length === 0) rawTrucks = DEFAULT_TRUCKS;
 
           setDeliveries(rawDeliveries.filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id)));
           setTrucks(deduplicateTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id))));

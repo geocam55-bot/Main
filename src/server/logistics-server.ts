@@ -3,6 +3,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { getValidToken, getVehiclePositions, FleetVehicleTelemetry, LAST_KNOWN_FLEET_COMPLETE_LOCATIONS } from "./fleetComplete";
+import { DEFAULT_BRANCHES, DEFAULT_TRUCKS, DEFAULT_USERS, DEFAULT_DELIVERIES } from "../components/logistics-app/data";
 import { GoogleGenAI, Type } from "@google/genai";
 // dotenv removed
 import { createClient } from "@supabase/supabase-js";
@@ -2284,11 +2285,12 @@ app.use((req, res, next) => {
 
   // Helper to construct default state for a given tenant ID
   function getDefaultTenantState(tid: string) {
+    const normalized = normalizeTenantId(tid);
     return {
-      branches: [],
-      trucks: [],
-      users: [],
-      deliveries: []
+      branches: DEFAULT_BRANCHES.map(b => ({ ...b, tenantId: normalized })),
+      trucks: DEFAULT_TRUCKS.map(t => ({ ...t, tenantId: normalized })),
+      users: DEFAULT_USERS.map(u => ({ ...u, tenantId: normalized })),
+      deliveries: DEFAULT_DELIVERIES.map(d => ({ ...d, tenantId: normalized }))
     };
   }
 
@@ -2409,6 +2411,32 @@ app.use((req, res, next) => {
         throw new Error(primaryError?.message || "Error pulling multi-tenant tables from Supabase.");
       }
 
+      // Auto-seed if database is completely empty
+      let fetchedBranches = rBranches.data || [];
+      let fetchedTrucks = rTrucks.data || [];
+      let fetchedUsers = rUsers.data || [];
+      let fetchedDeliveries = rDeliveries.data || [];
+
+      if (fetchedBranches.length === 0 && fetchedTrucks.length === 0 && fetchedUsers.length === 0) {
+        console.log(`[API] Database is empty for tenant ${tenantId}. Auto-seeding default records...`);
+        try {
+          await seedDefaultState(supabase, tenantId);
+          // Re-fetch after seeding
+          const [seedB, seedT, seedU, seedD] = await Promise.all([
+            supabase.from("branches").select("*").eq("tenantId", tenantId),
+            supabase.from("trucks").select("*").eq("tenantId", tenantId),
+            supabase.from("users").select("*").eq("tenantId", tenantId),
+            supabase.from("deliveries").select("*").eq("tenantId", tenantId)
+          ]);
+          fetchedBranches = seedB.data || [];
+          fetchedTrucks = seedT.data || [];
+          fetchedUsers = seedU.data || [];
+          fetchedDeliveries = seedD.data || [];
+        } catch (seedErr) {
+          console.warn("[API] Failed to auto-seed default state:", seedErr);
+        }
+      }
+
       const gpsUnitsList = (rGpsUnits && rGpsUnits.data) || [];
       const gpsUnitMap = new Map<string, any>();
       gpsUnitsList.forEach((g: any) => {
@@ -2416,9 +2444,9 @@ app.use((req, res, next) => {
         if (g.deviceId) gpsUnitMap.set(String(g.deviceId).toLowerCase(), g);
       });
 
-      const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
+      const deserializedUsers = fetchedUsers.map((u: any) => deserializeFromPhone(u));
       const inMemState = inMemoryTenantStates[String(tenantId)];
-      const deserializedTrucks = deduplicateServerTrucks((rTrucks.data || []).map((t: any) => {
+      const deserializedTrucks = deduplicateServerTrucks(fetchedTrucks.map((t: any) => {
         const dt = deserializeType(t);
         const matchedGps = gpsUnitMap.get(String(t.id).toLowerCase()) || (t.gps_device_id ? gpsUnitMap.get(String(t.gps_device_id).toLowerCase()) : null);
         if (matchedGps) {
@@ -2476,7 +2504,7 @@ app.use((req, res, next) => {
         return dt;
       }));
 
-      const deserializedBranches = (rBranches.data || []).map((b: any) => {
+      const deserializedBranches = fetchedBranches.map((b: any) => {
         let address = b.address || "";
         let closureRules = b.closureRules;
         let deliveryBoardConfig = b.deliveryBoardConfig;
@@ -2509,7 +2537,7 @@ app.use((req, res, next) => {
       supabaseTemporarilyDisabled = false;
       supabaseDisabledUntil = 0;
 
-        const rawDeliveries = rDeliveries.data || [];
+        const rawDeliveries = fetchedDeliveries;
         const enrichedDeliveries = rawDeliveries.map((d: any) => {
           let meta: any = {};
           if (d.items && Array.isArray(d.items) && d.items.length > 0) {
