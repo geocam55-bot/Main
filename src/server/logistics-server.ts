@@ -4181,11 +4181,14 @@ async function getActiveConnection() {
     }
   }
 
+  let fromFallback = false;
+
   if (!conn) {
     conn = inMemoryApiConnections.find(c => c.provider_name === 'Fleet Complete' && c.is_active);
   }
 
   if (!conn) {
+    fromFallback = true;
     conn = {
       id: "fc-connection-1",
       provider_name: "Fleet Complete",
@@ -4209,14 +4212,21 @@ async function getActiveConnection() {
   const envPass = process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || process.env.FLEETCOMPLETE_PASSWORD || process.env.FLEETCOMPLETE_PASS || process.env.VERCEL_FLEET_COMPLETE_PASS;
   const envApiKey = process.env.FLEET_COMPLETE_API_KEY || process.env.FLEETCOMPLETE_API_KEY;
 
-  if (envUser) {
-    decryptedConn.client_id = envUser;
-  }
-  if (envPass) {
-    decryptedConn.client_secret = envPass;
-  }
-  if (envApiKey && !decryptedConn.api_key) {
-    decryptedConn.api_key = envApiKey;
+  if (fromFallback) {
+    if (envUser) {
+      decryptedConn.client_id = envUser;
+    }
+    if (envPass) {
+      decryptedConn.client_secret = envPass;
+    }
+    if (envApiKey && !decryptedConn.api_key) {
+      decryptedConn.api_key = envApiKey;
+    }
+  } else {
+    // If user explicitly saved empty credentials in UI but env vars exist, use env vars as fallback
+    if (envUser && !decryptedConn.client_id) decryptedConn.client_id = envUser;
+    if (envPass && !decryptedConn.client_secret) decryptedConn.client_secret = envPass;
+    if (envApiKey && !decryptedConn.api_key) decryptedConn.api_key = envApiKey;
   }
 
   return decryptedConn;
