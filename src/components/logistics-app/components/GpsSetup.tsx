@@ -100,7 +100,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
   // Form inputs for Fleet Complete update
   const [configMode, setConfigMode] = useState<'apikey' | 'token'>('token');
   const [fcApiKey, setFcApiKey] = useState('');
-  const [fcClientId, setFcClientId] = useState('george.campbell@ronaatlantic.ca');
+  const [fcClientId, setFcClientId] = useState('');
   const [fcClientSecret, setFcClientSecret] = useState('••••••••••••');
   const [fcApiUrl, setFcApiUrl] = useState('https://api.fleetcomplete.com/login/token');
   
@@ -321,7 +321,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
       }
       body.api_key = fcApiKey.trim();
     } else {
-      const effectiveUser = fcClientId.trim() || 'george.campbell@ronaatlantic.ca';
+      const effectiveUser = fcClientId.trim() || '';
       body.client_id = effectiveUser;
       body.client_secret = fcClientSecret.trim() || '••••••••••••';
     }

@@ -3962,7 +3962,7 @@ Return the structured results in the required JSON format.`;
 
   async function fetchFleetCompleteTokenFromApi(apiUrl: string, clientId: string, clientSecret: string) {
     const url = apiUrl || "https://api.fleetcomplete.com/login/token";
-    const userToUse = clientId || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || process.env.FLEETCOMPLETE_USERNAME || process.env.FLEETCOMPLETE_USER || "george.campbell@ronaatlantic.ca";
+    const userToUse = clientId || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || process.env.FLEETCOMPLETE_USERNAME || process.env.FLEETCOMPLETE_USER || "";
     const passToUse = clientSecret || process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || process.env.FLEETCOMPLETE_PASSWORD || process.env.FLEETCOMPLETE_PASS || "";
 
     async function safeJsonParse(res: Response) {
@@ -4194,7 +4194,7 @@ async function getActiveConnection() {
       provider_name: "Fleet Complete",
       connection_type: "token",
       api_url: "https://api.fleetcomplete.com/login/token",
-      client_id: "george.campbell@ronaatlantic.ca",
+      client_id: "",
       client_secret: "",
       access_token: "fc_token_abb3c44d-0588-486d-9e49-441d9639727c",
       token_expires_at: new Date(Date.now() + 3600000 * 24 * 30).toISOString(),
@@ -4470,7 +4470,7 @@ async function getFleetId(token: string): Promise<string | null> {
         lastError: conn?.last_error || null,
         retryCount: conn?.retry_count || 0,
         cachedFleetId: cachedFleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
-        clientId: conn?.client_id || envUser || "george.campbell@ronaatlantic.ca",
+        clientId: conn?.client_id || envUser || "",
         hasSecret: !!(conn?.client_secret || envPass),
         apiKey: conn?.api_key || envApiKey || "",
         accessToken: conn?.access_token ? `${conn.access_token.substring(0, 12)}...` : 'fc_token_abb3c44d...',
@@ -4495,7 +4495,7 @@ async function getFleetId(token: string): Promise<string | null> {
         lastError: null,
         retryCount: 0,
         cachedFleetId: "abb3c44d-0588-486d-9e49-441d9639727c",
-        clientId: "george.campbell@ronaatlantic.ca",
+        clientId: "",
         hasSecret: true,
         status: 'active',
         message: 'Fleet Complete integration active via Supabase.'
@@ -4587,7 +4587,7 @@ async function getFleetId(token: string): Promise<string | null> {
       
       const existingConn = await getActiveConnection();
 
-      const userToSave = client_id || existingConn?.client_id || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || "george.campbell@ronaatlantic.ca";
+      const userToSave = client_id || existingConn?.client_id || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || "";
       const secretToSave = (client_secret && client_secret !== '••••••••••••') ? client_secret : (existingConn?.client_secret || process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || '');
 
       const conn = {
@@ -4598,6 +4598,9 @@ async function getFleetId(token: string): Promise<string | null> {
         api_key: api_key || existingConn?.api_key || '',
         client_id: userToSave,
         client_secret: secretToSave,
+        access_token: existingConn?.access_token || '',
+        refresh_token: existingConn?.refresh_token || '',
+        token_expires_at: existingConn?.token_expires_at || null,
         is_active: true,
         created_at: existingConn?.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString()
