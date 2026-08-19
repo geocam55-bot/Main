@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Truck, Branch } from '../types';
 import { 
-  Compass, Plus, Radio, Server, Wifi, Cpu, Settings2, Trash2, Edit2,
-  MapPin, Activity, CheckCircle2, ShieldAlert, Navigation2, Check,
-  Key, RefreshCw, Lock, User, Crosshair, History, ArrowRight, Sliders,
-  Search, Filter, Copy, Sparkles, Clock, UserCheck, RotateCcw
+  Compass, Radio, Server, CheckCircle2, ShieldAlert, Check,
+  Key, RefreshCw, Lock, User, Crosshair, History, Sliders,
+  Search, Filter, Sparkles, Clock, Activity, Zap, ExternalLink
 } from 'lucide-react';
 
 export interface CalibrationOverride {
@@ -28,6 +27,8 @@ const KNOWN_LOCATIONS = [
   { name: 'Dartmouth Regional Hub', lat: 44.67120, lng: -63.55810 },
   { name: 'Tantallon Supply Yard', lat: 44.66410, lng: -63.88210 },
   { name: 'Truro Regional Depot', lat: 45.36470, lng: -63.28010 },
+  { name: 'Moncton Depot & Yard', lat: 46.08780, lng: -64.77820 },
+  { name: 'Charlottetown PEI Depot', lat: 46.23820, lng: -63.13110 }
 ];
 
 const INITIAL_CALIBRATION_HISTORY: CalibrationOverride[] = [
@@ -41,7 +42,7 @@ const INITIAL_CALIBRATION_HISTORY: CalibrationOverride[] = [
     newLat: 44.70820,
     newLng: -63.59380,
     locationName: '500 Windmill Road Terminal Depot',
-    reason: 'Stationary depot docking correction after transceiver restart',
+    reason: 'Stationary depot docking calibration',
     timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString()
   },
   {
@@ -54,21 +55,8 @@ const INITIAL_CALIBRATION_HISTORY: CalibrationOverride[] = [
     newLat: 44.64880,
     newLng: -63.57520,
     locationName: 'Halifax Commercial Port Terminal',
-    reason: 'Hardware GPS drift compensation during crane loading',
+    reason: 'Depot dock loading coordinate alignment',
     timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString()
-  },
-  {
-    id: 'cal-ov-103',
-    truckId: 'TRUCK-27',
-    truckName: '2101 - Windmill F150',
-    performedBy: 'George (Dispatch Admin)',
-    previousLat: 44.62900,
-    previousLng: -63.66400,
-    newLat: 44.70820,
-    newLng: -63.59380,
-    locationName: '500 Windmill Road Terminal Depot',
-    reason: 'Manual override to terminal depot due to OBD-II signal obstruction',
-    timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString()
   }
 ];
 
@@ -81,13 +69,6 @@ interface GpsSetupProps {
 }
 
 export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshData, onSelectTab }: GpsSetupProps) {
-  // Input states for building a GPS connection record
-  const [selectedTruckId, setSelectedTruckId] = useState('');
-  const [deviceId, setDeviceId] = useState('');
-  const [serialNumber, setSerialNumber] = useState('');
-  const [deviceName, setDeviceName] = useState('Samsara VG54 Core Gateway');
-  const [simIccid, setSimIccid] = useState('Bell Mobility Business IoT');
-  
   // Status feedback states
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -113,6 +94,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
     refreshToken: 'test_refresh_token...'
   });
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [syncingFleet, setSyncingFleet] = useState(false);
   const [updatingCredentials, setUpdatingCredentials] = useState(false);
   
   // Form inputs for Fleet Complete update
@@ -122,11 +104,13 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
   const [fcClientSecret, setFcClientSecret] = useState('••••••••••••');
   const [fcApiUrl, setFcApiUrl] = useState('https://api.fleetcomplete.com/login/token');
   
-  
-  
   // Feedback specific to Fleet Complete panel
   const [fcSuccessMsg, setFcSuccessMsg] = useState<string | null>(null);
   const [fcErrorMsg, setFcErrorMsg] = useState<string | null>(null);
+
+  // Vehicle Table Search and Filter
+  const [vehicleSearch, setVehicleSearch] = useState('');
+  const [vehicleStatusFilter, setVehicleStatusFilter] = useState<'ALL' | 'ON' | 'OFF' | 'IDLE'>('ALL');
 
   // GPS Calibration Override Form States
   const [calTruckId, setCalTruckId] = useState('');
@@ -152,12 +136,8 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
     return INITIAL_CALIBRATION_HISTORY;
   });
 
-  // History filter states
-  const [historyFilterTruck, setHistoryFilterTruck] = useState('ALL');
-  const [historySearchTerm, setHistorySearchTerm] = useState('');
-
   // Persist calibration history to localStorage
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       localStorage.setItem('gps_calibration_history', JSON.stringify(calibrationHistory));
     } catch (e) {
@@ -166,16 +146,12 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
   }, [calibrationHistory]);
 
   // When calTruckId changes, pre-fill coordinate inputs with truck's current position
-  React.useEffect(() => {
+  useEffect(() => {
     if (calTruckId) {
       const selected = trucks.find(t => t.id === calTruckId);
       if (selected) {
-        const currentLat = selected.gpsSource === 'truck'
-          ? (selected.gpsLat ?? selected.lat ?? 44.6488)
-          : (selected.lat ?? selected.gpsLat ?? 44.6488);
-        const currentLng = selected.gpsSource === 'truck'
-          ? (selected.gpsLng ?? selected.lng ?? -63.5752)
-          : (selected.lng ?? selected.gpsLng ?? -63.5752);
+        const currentLat = selected.gpsLat ?? selected.lat ?? 44.6488;
+        const currentLng = selected.gpsLng ?? selected.lng ?? -63.5752;
 
         setCalLat(currentLat.toFixed(5));
         setCalLng(currentLng.toFixed(5));
@@ -223,12 +199,8 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
       return;
     }
 
-    const prevLat = targetTruck.gpsSource === 'truck'
-      ? (targetTruck.gpsLat ?? targetTruck.lat ?? 44.6488)
-      : (targetTruck.lat ?? targetTruck.gpsLat ?? 44.6488);
-    const prevLng = targetTruck.gpsSource === 'truck'
-      ? (targetTruck.gpsLng ?? targetTruck.lng ?? -63.5752)
-      : (targetTruck.lng ?? targetTruck.gpsLng ?? -63.5752);
+    const prevLat = targetTruck.gpsLat ?? targetTruck.lat ?? 44.6488;
+    const prevLng = targetTruck.gpsLng ?? targetTruck.lng ?? -63.5752;
 
     const newOverrideRecord: CalibrationOverride = {
       id: `cal-ov-${Date.now()}`,
@@ -266,25 +238,14 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
     }, 6000);
   };
 
-  const handleReapplyOverride = (override: CalibrationOverride) => {
-    setCalTruckId(override.truckId);
-    setCalLat(override.newLat.toFixed(5));
-    setCalLng(override.newLng.toFixed(5));
-    setCalLocationName(override.locationName || '');
-    setCalReason(`Re-applying override: ${override.reason}`);
-    const el = document.getElementById('gps-calibration-section');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  React.useEffect(() => {
+  useEffect(() => {
     fetchTelematicsStatus();
   }, []);
 
   const fetchTelematicsStatus = async () => {
     setLoadingStatus(true);
     try {
-      await fetch('/api/telematics/sync', { method: 'POST' }).catch(() => {});
-      const res = await fetch('/api/telematics/status');
+      const res = await fetch('/api/v1/telematics/status');
       if (res.ok) {
         const text = await res.text();
         let data: any = {};
@@ -304,18 +265,10 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
           }
         }
 
-        if (data.apiUrl) {
-          setFcApiUrl(data.apiUrl);
-        }
-        if (data.clientId) {
-          setFcClientId(data.clientId);
-        }
-        if (data.hasSecret || data.configured) {
-          setFcClientSecret('••••••••••••');
-        }
-        if (data.apiKey) {
-          setFcApiKey(data.apiKey);
-        }
+        if (data.apiUrl) setFcApiUrl(data.apiUrl);
+        if (data.clientId) setFcClientId(data.clientId);
+        if (data.hasSecret || data.configured) setFcClientSecret('••••••••••••');
+        if (data.apiKey) setFcApiKey(data.apiKey);
       }
       if (onRefreshData) {
         onRefreshData();
@@ -324,6 +277,28 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
       console.error('Failed to fetch telematics status', err);
     } finally {
       setLoadingStatus(false);
+    }
+  };
+
+  const handleSyncAllTelematics = async () => {
+    setSyncingFleet(true);
+    try {
+      const res = await fetch('/api/v1/telematics/sync', { method: 'POST' });
+      if (res.ok) {
+        setSuccessMsg('Fleet Complete telematics synchronized successfully across all fleet vehicles.');
+        await fetchTelematicsStatus();
+        if (onRefreshData) onRefreshData();
+      } else {
+        setErrorMsg('Telematics synchronization encountered an error.');
+      }
+    } catch (e: any) {
+      setErrorMsg('Failed to sync telematics: ' + e.message);
+    } finally {
+      setSyncingFleet(false);
+      setTimeout(() => {
+        setSuccessMsg(null);
+        setErrorMsg(null);
+      }, 5000);
     }
   };
 
@@ -352,7 +327,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
     }
 
     try {
-      const res = await fetch('/api/telematics/update-credentials', {
+      const res = await fetch('/api/v1/telematics/update-credentials', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -387,138 +362,58 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
     }
   };
 
-  // Filter trucks that do NOT have a stationary GPS configured yet, OR are currently selected for editing
-  const unconfiguredTrucks = trucks.filter(t => !t.gpsDeviceId || t.gpsDeviceId === 'DISABLED' || t.id === selectedTruckId);
+  // Filtered vehicles for telematics table
+  const filteredTrucks = trucks.filter(truck => {
+    const matchesSearch = !vehicleSearch.trim() || 
+      truck.name.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+      truck.id.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+      (truck.driver && truck.driver.toLowerCase().includes(vehicleSearch.toLowerCase()));
 
-  // Common pre-configured devices for easy setup
-  const DEVICE_MODELS = [
-    'Samsara VG54 Core Gateway',
-    'Geotab GO9 Telematics',
-    'CalAmp LMU-3030 OBD-II',
-    'Garmin Fleet 790 Android Pro',
-    'Sierra Wireless RV50X LTE',
-    'Fleet Complete MGS800 OBD-II',
-    'Fleet Complete FT1 Telematics'
-  ];
+    const ign = (truck.ignitionStatus || '').toUpperCase();
+    let matchesStatus = true;
+    if (vehicleStatusFilter === 'ON') matchesStatus = ign === 'ON' || (truck.speed && truck.speed > 0);
+    else if (vehicleStatusFilter === 'OFF') matchesStatus = ign === 'OFF' || (!truck.speed && ign !== 'IDLE');
+    else if (vehicleStatusFilter === 'IDLE') matchesStatus = ign === 'IDLE' || ign === 'IDLING';
 
-  // Common SIM carrier plans
-  const CARRIER_PLANS = [
-    'Bell Mobility Business IoT',
-    'Rogers Communications Enterprise LTE',
-    'Telus IoT Secure Fleet Plan',
-    'AT&T Mobility Global IoT (Roaming)',
-    'T-Mobile US LTE Fleet Custom'
-  ];
-
-  const handleBuildConnection = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedTruckId) {
-      setErrorMsg('Please select a vehicle from the registered fleet.');
-      return;
-    }
-    if (!deviceId.trim()) {
-      setErrorMsg('Please enter a stationary GPS Hardware Serial / Device ID.');
-      return;
-    }
-
-    const targetTruck = trucks.find(t => t.id === selectedTruckId);
-    if (!targetTruck) return;
-
-    const cleanType = (targetTruck.type || '').split('||')[0].trim() || 'Commercial Truck';
-    const updatedTruck: Truck = {
-      ...targetTruck,
-      type: cleanType,
-      gpsSource: 'truck', // Auto-switch to newly configured truck GPS
-      gpsDeviceId: deviceId.trim(),
-      gpsSerialNumber: serialNumber.trim(),
-      gpsDeviceName: deviceName,
-      gpsSimIccid: simIccid,
-      gpsStatus: 'Connected',
-      gpsLastHandshake: new Date().toISOString(),
-      gpsLat: targetTruck.gpsLat || targetTruck.lat || 44.68550,
-      gpsLng: targetTruck.gpsLng || targetTruck.lng || -63.58250
-    };
-
-    onUpdateTruck(updatedTruck);
-    
-    // Reset Form
-    setSelectedTruckId('');
-    setDeviceId('');
-    setSerialNumber('');
-    setErrorMsg(null);
-    setSuccessMsg(`Stationary GPS Hardware [${deviceId.trim()}] successfully paired with ${targetTruck.name}! Truck default tracking source set to 'Stationary Truck GPS'.`);
-    
-    setTimeout(() => {
-      setSuccessMsg(null);
-    }, 5000);
-  };
-
-  const handleToggleGpsSource = (truck: Truck, source: 'mobile' | 'truck') => {
-    const updated: Truck = {
-      ...truck,
-      gpsSource: source,
-      gpsLastHandshake: new Date().toISOString()
-    };
-    onUpdateTruck(updated);
-  };
-
-  const handleEditConnection = (truck: Truck) => {
-    setSelectedTruckId(truck.id);
-    setDeviceId(truck.gpsDeviceId && truck.gpsDeviceId !== 'DISABLED' ? truck.gpsDeviceId : '');
-    setSerialNumber(truck.gpsSerialNumber || '');
-    setDeviceName(truck.gpsDeviceName || 'Samsara VG54 Core Gateway');
-    setSimIccid(truck.gpsSimIccid || 'Bell Mobility Business IoT');
-    
-    // Smooth scroll to top for editing
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleRemoveConnection = (truck: Truck) => {
-    const updated: Truck = {
-      ...truck,
-      gpsSource: 'mobile',
-      gpsDeviceId: 'DISABLED',
-      gpsDeviceName: '',
-      gpsSerialNumber: '',
-      gpsSimIccid: '',
-      gpsStatus: 'Disconnected',
-      gpsLastHandshake: '',
-      gpsLat: undefined,
-      gpsLng: undefined
-    };
-    onUpdateTruck(updated);
-    setSuccessMsg(`Stationary GPS unit decoupled from ${truck.name}.`);
-    
-    setTimeout(() => {
-      setSuccessMsg(null);
-    }, 5000);
-  };
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in" id="gps-setup-view">
       
-      {/* Tab Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h4 className="font-sans font-bold text-gray-900 tracking-tight text-xl">Truck Hardware GPS Integration</h4>
+          <h4 className="font-sans font-bold text-gray-900 tracking-tight text-xl">Fleet Complete Telematics Integration</h4>
           <p className="text-xs text-gray-500">
-            Provision stationary IoT telematics gateways, configure SIM card network connectivity, and choose live telemetry sources.
+            Cloud-connected telematics gateway via official Fleet Complete API. Live GPS coordinates, OBD-II vehicle diagnostics, and ignition states sync automatically.
           </p>
         </div>
-        {onSelectTab && (
+        <div className="flex items-center space-x-2">
           <button
             type="button"
-            onClick={() => onSelectTab('telematics')}
-            className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center space-x-2 cursor-pointer self-start sm:self-auto"
+            onClick={handleSyncAllTelematics}
+            disabled={syncingFleet}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-60"
           >
-            <Radio className="h-4 w-4 text-blue-300 animate-pulse" />
-            <span>Open Live Telematics Fleet Map</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${syncingFleet ? 'animate-spin' : ''}`} />
+            <span>{syncingFleet ? 'Syncing...' : 'Sync Fleet Now'}</span>
           </button>
-        )}
+          {onSelectTab && (
+            <button
+              type="button"
+              onClick={() => onSelectTab('telematics')}
+              className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center space-x-2 cursor-pointer"
+            >
+              <Radio className="h-4 w-4 text-blue-300 animate-pulse" />
+              <span>Open Live Fleet Map</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-xs font-semibold flex items-start space-x-2 animate-pulse">
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-xs font-semibold flex items-start space-x-2 animate-fade-in">
           <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0 mt-0.5" />
           <span>{successMsg}</span>
         </div>
@@ -540,9 +435,9 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
             </div>
             <div>
               <h5 className="text-sm font-bold text-gray-900 flex items-center">
-                <span>Fleet Complete API Gateway Connection</span>
+                <span>Fleet Complete API Gateway Status</span>
               </h5>
-              <p className="text-[11px] text-gray-500">Manage live hardware telematics, update bearer tokens, or input system credentials.</p>
+              <p className="text-[11px] text-gray-500">Live cloud sync with api.fleetcomplete.com for Rona - Atlantic fleet telemetry.</p>
             </div>
           </div>
           <div className="flex items-center space-x-2 shrink-0">
@@ -709,14 +604,11 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
               ) : (
                 <>
                   <Key className="h-3.5 w-3.5" />
-                  <span>Update Settings</span>
+                  <span>Update Credentials</span>
                 </>
               )}
             </button>
           </div>
-          <p className="text-[10px] text-slate-500 italic mt-1 font-mono">
-            &bull; Database-backed secure storage. Tokens are encrypted at rest and automatically renewed by the background Connection Service.
-          </p>
         </form>
 
         {/* Connection Health Monitoring */}
@@ -724,11 +616,11 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
           <div className="bg-white border border-slate-200 rounded-xl p-4 mt-4">
             <h6 className="text-xs font-bold text-gray-800 mb-3 flex items-center border-b border-slate-100 pb-2">
               <Activity className="h-4 w-4 mr-2 text-slate-500" />
-              Connection Health Monitoring
+              Telematics Connection Health Monitoring
             </h6>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-1">
-                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Current Status</span>
+                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Status</span>
                 <div className="flex items-center space-x-1.5">
                   <span className={`h-2.5 w-2.5 rounded-full ${(!telematicsStatus.healthStatus || telematicsStatus.healthStatus === 'connected') ? 'bg-emerald-500' : telematicsStatus.healthStatus === 'expiring_soon' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
                   <span className="text-xs font-bold text-gray-800 capitalize">
@@ -739,237 +631,283 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
               <div className="space-y-1">
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last Connection</span>
                 <span className="text-xs text-gray-800 font-mono">
-                  {telematicsStatus.lastSuccessfulConnection && !isNaN(new Date(telematicsStatus.lastSuccessfulConnection).getTime()) ? new Date(telematicsStatus.lastSuccessfulConnection).toLocaleString() : new Date().toLocaleString()}
+                  {telematicsStatus.lastSuccessfulConnection && !isNaN(new Date(telematicsStatus.lastSuccessfulConnection).getTime()) ? new Date(telematicsStatus.lastSuccessfulConnection).toLocaleTimeString() : new Date().toLocaleTimeString()}
                 </span>
               </div>
               <div className="space-y-1">
-                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last API Request</span>
+                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last Telematics Stream</span>
                 <span className="text-xs text-gray-800 font-mono">
-                  {telematicsStatus.lastSuccessfulApiRequest && !isNaN(new Date(telematicsStatus.lastSuccessfulApiRequest).getTime()) ? new Date(telematicsStatus.lastSuccessfulApiRequest).toLocaleString() : new Date().toLocaleString()}
+                  {telematicsStatus.lastSuccessfulApiRequest && !isNaN(new Date(telematicsStatus.lastSuccessfulApiRequest).getTime()) ? new Date(telematicsStatus.lastSuccessfulApiRequest).toLocaleTimeString() : new Date().toLocaleTimeString()}
                 </span>
               </div>
-              {configMode === 'token' && (
-                <>
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Access Token</span>
-                    <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.accessToken || 'test_token_abb3c44d...'}
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Refresh Token</span>
-                    <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.refreshToken || 'test_refresh_token...'}
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Token Expires At</span>
-                    <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.tokenExpiresAt && !isNaN(new Date(telematicsStatus.tokenExpiresAt).getTime()) ? new Date(telematicsStatus.tokenExpiresAt).toLocaleString() : new Date(Date.now() + 30 * 24 * 3600 * 1000).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Last Token Refresh</span>
-                    <span className="text-xs text-gray-800 font-mono">
-                      {telematicsStatus.lastTokenRefresh && !isNaN(new Date(telematicsStatus.lastTokenRefresh).toLocaleString()) ? new Date(telematicsStatus.lastTokenRefresh).toLocaleString() : new Date().toLocaleString()}
-                    </span>
-                  </div>
-                </>
-              )}
-              {telematicsStatus.lastError && (
-                <div className="space-y-1 sm:col-span-2 md:col-span-3">
-                  <span className="text-[10px] text-rose-500 font-semibold uppercase tracking-wider block">Error Message</span>
-                  <span className="text-xs text-rose-700 font-mono bg-rose-50 p-2 rounded block">
-                    {telematicsStatus.lastError}
-                    {telematicsStatus.retryCount > 0 && ` (Retries: ${telematicsStatus.retryCount})`}
-                  </span>
-                </div>
-              )}
+              <div className="space-y-1">
+                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block">Active Fleet ID</span>
+                <span className="text-xs text-gray-800 font-mono truncate block" title={telematicsStatus.cachedFleetId || "abb3c44d-0588-486d-9e49-441d9639727c"}>
+                  {telematicsStatus.cachedFleetId || "abb3c44d-0588-486d-9e49-441d9639727c"}
+                </span>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left hand side: GPS Connection Builder Form */}
-        <div className="lg:col-span-5 bg-white border border-slate-100 p-5 rounded-2xl shadow-sm space-y-4">
-          <div className="flex items-center space-x-2 pb-2 border-b border-slate-50">
-            <Settings2 className="h-4 w-4 text-blue-600 animate-spin" style={{ animationDuration: '4s' }} />
-            <h5 className="text-sm font-bold text-gray-900">Configure IoT GPS Connection</h5>
+      {/* Fleet Complete Connected Telematics Table */}
+      <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h5 className="text-sm font-bold text-gray-900 flex items-center">
+              <Server className="h-4 w-4 mr-2 text-blue-600" />
+              <span>Fleet Complete Telematics Vehicle Units ({filteredTrucks.length} Vehicles)</span>
+            </h5>
+            <p className="text-[11px] text-gray-500">Live units synchronized directly from Fleet Complete telematics cloud.</p>
           </div>
 
-          <form onSubmit={handleBuildConnection} className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search unit or driver..."
+                value={vehicleSearch}
+                onChange={(e) => setVehicleSearch(e.target.value)}
+                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <select
+              value={vehicleStatusFilter}
+              onChange={(e: any) => setVehicleStatusFilter(e.target.value)}
+              className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="ALL">All Ignition States</option>
+              <option value="ON">Ignition ON / Moving</option>
+              <option value="OFF">Ignition OFF / Parked</option>
+              <option value="IDLE">Idling</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-100 text-xs">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 font-bold">
+                <th className="px-3 py-2 text-left">Unit Name & ID</th>
+                <th className="px-3 py-2 text-left">Driver / Branch</th>
+                <th className="px-3 py-2 text-left">GPS Coordinates</th>
+                <th className="px-3 py-2 text-center">Ignition</th>
+                <th className="px-3 py-2 text-center">Speed</th>
+                <th className="px-3 py-2 text-center">Gateway</th>
+                <th className="px-3 py-2 text-right">Quick Calibrate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredTrucks.map(truck => {
+                const ign = (truck.ignitionStatus || '').toUpperCase();
+                const speed = truck.speed || 0;
+                const isMoving = speed > 0 || ign === 'ON';
+                const currentLat = truck.gpsLat ?? truck.lat ?? 44.6488;
+                const currentLng = truck.gpsLng ?? truck.lng ?? -63.5752;
+
+                return (
+                  <tr key={truck.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <div className="font-bold text-gray-900">{truck.name}</div>
+                      <div className="text-[10px] text-gray-400 font-mono">{truck.id} {truck.licensePlate ? `• ${truck.licensePlate}` : ''}</div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="font-medium text-gray-800">{truck.driver || 'Unassigned'}</div>
+                      <div className="text-[10px] text-gray-400">{truck.branchId || 'Main Fleet'}</div>
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-gray-600 text-[11px]">
+                      {currentLat.toFixed(4)}, {currentLng.toFixed(4)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={`px-2 py-0.5 rounded-full font-mono text-[9px] font-bold ${
+                        ign === 'ON' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                        ign === 'IDLE' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                        'bg-slate-100 text-slate-700 border border-slate-200'
+                      }`}>
+                        {ign || 'OFF'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-mono font-bold text-gray-800">
+                      {speed} km/h
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-mono text-[9px] font-bold rounded-full border border-blue-100">
+                        Fleet Complete
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCalTruckId(truck.id);
+                          setCalLat(currentLat.toFixed(5));
+                          setCalLng(currentLng.toFixed(5));
+                          const el = document.getElementById('gps-calibration-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg text-[10px] font-bold border border-slate-200 hover:border-blue-200 transition-colors cursor-pointer"
+                      >
+                        Calibrate
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredTrucks.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-8 text-gray-400 italic">
+                    No vehicles found matching the filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* GPS Coordinate Calibration Section */}
+      <div id="gps-calibration-section" className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
+        <div className="flex items-center space-x-2 pb-2 border-b border-slate-100">
+          <Crosshair className="h-4 w-4 text-blue-600" />
+          <div>
+            <h5 className="text-sm font-bold text-gray-900">Depot Dock & Coordinate Calibration Override</h5>
+            <p className="text-[11px] text-gray-500">Fine-tune stationary dock coordinates or apply depot parking preset coordinates.</p>
+          </div>
+        </div>
+
+        {calSuccessMsg && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs font-semibold flex items-start space-x-2 animate-fade-in">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span>{calSuccessMsg}</span>
+          </div>
+        )}
+
+        {calErrorMsg && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs font-semibold flex items-start space-x-2">
+            <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <span>{calErrorMsg}</span>
+          </div>
+        )}
+
+        {/* Location Presets */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-gray-700 block">Quick Preset Locations</label>
+          <div className="flex flex-wrap gap-2">
+            {KNOWN_LOCATIONS.map(loc => (
+              <button
+                key={loc.name}
+                type="button"
+                onClick={() => handleSelectPresetLocation(loc)}
+                className="px-2.5 py-1 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+              >
+                {loc.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form onSubmit={handleApplyCalibration} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs font-semibold text-gray-700 block mb-1">Select Fleet Truck</label>
+              <label className="text-xs font-semibold text-gray-700 block mb-1">Target Vehicle</label>
               <select
                 required
-                value={selectedTruckId}
-                onChange={(e) => {
-                  const tid = e.target.value;
-                  setSelectedTruckId(tid);
-                  const trk = trucks.find(t => t.id === tid);
-                  if (trk) {
-                    if (trk.gpsDeviceId && trk.gpsDeviceId !== 'DISABLED') setDeviceId(trk.gpsDeviceId);
-                    if (trk.gpsSerialNumber) setSerialNumber(trk.gpsSerialNumber);
-                    if (trk.gpsDeviceName) setDeviceName(trk.gpsDeviceName);
-                    if (trk.gpsSimIccid) setSimIccid(trk.gpsSimIccid);
-                  }
-                }}
-                className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+                value={calTruckId}
+                onChange={(e) => setCalTruckId(e.target.value)}
+                className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs text-gray-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="">-- Choose registered Truck --</option>
-                {unconfiguredTrucks.map(truck => (
-                  <option key={truck.id} value={truck.id}>
-                    {truck.name} ({truck.id}) &bull; Driver: {truck.driver}
+                <option value="">-- Choose Truck --</option>
+                {trucks.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.id})
                   </option>
                 ))}
-                {unconfiguredTrucks.length === 0 && (
-                  <option disabled value="">(All trucks currently have GPS configured)</option>
-                )}
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">Device Hardware ID</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. SAMSARA-VG54-92"
-                  value={deviceId}
-                  onChange={(e) => setDeviceId(e.target.value)}
-                  className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs font-mono text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">Device Model</label>
-                <select
-                  value={deviceName}
-                  onChange={(e) => setDeviceName(e.target.value)}
-                  className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
-                >
-                  {DEVICE_MODELS.map(model => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700 block mb-1">Latitude</label>
+              <input
+                type="text"
+                required
+                placeholder="44.70820"
+                value={calLat}
+                onChange={(e) => setCalLat(e.target.value)}
+                className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs font-mono text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">GPS Serial Number</label>
-                <input
-                  type="text"
-                  placeholder="e.g. SN-12345678"
-                  value={serialNumber}
-                  onChange={(e) => setSerialNumber(e.target.value)}
-                  className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs font-mono text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">SIM Card / Cellular Carrier</label>
-                <select
-                  value={simIccid}
-                  onChange={(e) => setSimIccid(e.target.value)}
-                  className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
-                >
-                  {CARRIER_PLANS.map(plan => (
-                    <option key={plan} value={plan}>{plan}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center space-x-1.5 transition-colors shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Build Stationary GPS Connection Record</span>
-            </button>
-          </form>
-        </div>
-
-        {/* Right hand side: Configured GPS devices & tracking telemetry */}
-        <div className="lg:col-span-7 space-y-6">
-          
-          {/* Table 1: Stationary GPS Hardware Connections */}
-          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm space-y-3">
-            <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono flex items-center">
-              <Server className="h-4 w-4 mr-1.5 text-blue-600" />
-              Stationary GPS Hardwired Connections Table
-            </h5>
-            
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 font-bold">
-                    <th className="px-3 py-2 text-left">Vehicle / Driver</th>
-                    <th className="px-3 py-2 text-left">Hardware ID</th>
-                    <th className="px-3 py-2 text-left">SIM Profile</th>
-                    <th className="px-3 py-2 text-center">Net Status</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {trucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED').map(truck => (
-                    <tr key={truck.id} className="hover:bg-slate-50/50">
-                      <td className="px-3 py-2.5 font-sans">
-                        <div className="font-semibold text-gray-900">{truck.name}</div>
-                        <div className="text-[10px] text-gray-400 font-mono mt-0.5">{truck.id} &bull; {truck.driver}</div>
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-700 font-semibold">
-                        <div>{truck.gpsDeviceId}</div>
-                        {truck.gpsSerialNumber && <div className="text-[10px] text-gray-500 font-mono mt-0.5">SN: {truck.gpsSerialNumber}</div>}
-                        <div className="text-[9px] text-gray-400 font-sans mt-0.5">{truck.gpsDeviceName}</div>
-                      </td>
-                      <td className="px-3 py-2.5 text-slate-500 text-[10px]">
-                        {truck.gpsSimIccid}
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-mono font-bold text-[9px] rounded-full border border-emerald-200">
-                          {truck.gpsStatus}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEditConnection(truck)}
-                            className="p-1 hover:bg-blue-50 text-blue-500 hover:text-blue-700 border border-slate-100 hover:border-blue-100 rounded-md transition-colors cursor-pointer"
-                            title="Edit hardware connection"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveConnection(truck)}
-                            className="p-1 hover:bg-red-50 text-red-500 hover:text-red-700 border border-slate-100 hover:border-red-100 rounded-md transition-colors cursor-pointer"
-                            title="Decouple hardware connection"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {trucks.filter(t => t.gpsDeviceId && t.gpsDeviceId !== 'DISABLED').length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-gray-400 italic">
-                        No stationary GPS connection records built yet. Use the form on the left to provision physical telematics.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div>
+              <label className="text-xs font-semibold text-gray-700 block mb-1">Longitude</label>
+              <input
+                type="text"
+                required
+                placeholder="-63.59380"
+                value={calLng}
+                onChange={(e) => setCalLng(e.target.value)}
+                className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs font-mono text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
             </div>
           </div>
 
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-700 block mb-1">Location / Dock Label (Optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. 500 Windmill Road Yard Bay 3"
+                value={calLocationName}
+                onChange={(e) => setCalLocationName(e.target.value)}
+                className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
 
+            <div>
+              <label className="text-xs font-semibold text-gray-700 block mb-1">Reason / Note</label>
+              <input
+                type="text"
+                placeholder="e.g. Stationary dock alignment"
+                value={calReason}
+                onChange={(e) => setCalReason(e.target.value)}
+                className="w-full border bg-white border-slate-200 px-3 py-2 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 transition-colors cursor-pointer"
+          >
+            <Check className="h-4 w-4" />
+            <span>Apply Coordinate Calibration</span>
+          </button>
+        </form>
+
+        {/* History Log */}
+        {calibrationHistory.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <h6 className="text-xs font-bold text-gray-700 mb-2 flex items-center">
+              <History className="h-3.5 w-3.5 mr-1.5 text-gray-400" />
+              Calibration Override History
+            </h6>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {calibrationHistory.slice(0, 5).map(ov => (
+                <div key={ov.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-gray-800">{ov.truckName}</span>
+                    <span className="text-gray-400 font-mono text-[10px] ml-2">({ov.newLat.toFixed(4)}, {ov.newLng.toFixed(4)})</span>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{ov.reason} &bull; by {ov.performedBy}</p>
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-mono">
+                    {new Date(ov.timestamp).toLocaleDateString()} {new Date(ov.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

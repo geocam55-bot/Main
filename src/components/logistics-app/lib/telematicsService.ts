@@ -107,21 +107,24 @@ export function useTelematics({
           const driverInfo = v.driver ? {
             id: v.driver.id || `DRV-${index + 101}`,
             name: v.driver.name || `Driver ${index + 1}`,
-            phone: v.driver.phone || '+1 (902) 555-0199'
+            phone: v.driver.phone || undefined
           } : undefined;
 
-          const activeRoute = v.activeRoute ? {
+          const stopsList = Array.isArray(v.activeRoute?.stops) ? v.activeRoute.stops : [];
+          const completedStopsCount = stopsList.filter((s: any) => s.status === 'COMPLETED').length;
+
+          const activeRoute = v.activeRoute && (stopsList.length > 0 || v.activeRoute.routeId) ? {
             routeId: v.activeRoute.routeId || `RT-${v.vehicleId || index + 101}`,
             driverName: v.activeRoute.driverName || driverInfo?.name || 'Assigned Driver',
             driverId: v.activeRoute.driverId || driverInfo?.id,
-            scheduledETA: v.activeRoute.scheduledETA || v.activeRoute.eta || '14:35',
-            eta: v.activeRoute.eta || v.activeRoute.scheduledETA || '14:35',
-            nextStop: v.activeRoute.nextStop || '120 Commercial St, Depot B',
-            totalStops: typeof v.activeRoute.totalStops === 'number' ? v.activeRoute.totalStops : 8,
-            completedStops: typeof v.activeRoute.completedStops === 'number' ? v.activeRoute.completedStops : 3,
-            remainingDistance: v.activeRoute.remainingDistance || '4.2 km',
-            remainingDuration: v.activeRoute.remainingDuration || '15 min',
-            stops: v.activeRoute.stops || []
+            scheduledETA: v.activeRoute.scheduledETA || v.activeRoute.eta || undefined,
+            eta: v.activeRoute.eta || v.activeRoute.scheduledETA || undefined,
+            nextStop: v.activeRoute.nextStop || (stopsList.length > 0 ? stopsList[0].address : undefined),
+            totalStops: stopsList.length,
+            completedStops: completedStopsCount,
+            remainingDistance: v.activeRoute.remainingDistance || undefined,
+            remainingDuration: v.activeRoute.remainingDuration || undefined,
+            stops: stopsList
           } : null;
 
           const telemetryObj = {

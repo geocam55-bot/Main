@@ -3231,8 +3231,8 @@ export default function App() {
 
       {/* Main Core Body */}
       <main className={`flex-1 w-full mx-auto flex flex-col overflow-x-hidden ${
-        ['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) 
-          ? 'p-0 max-w-full bg-slate-950 min-h-screen' 
+        ['epod', 'driver', 'driver-app', 'driver-mobile', 'telematics', 'dashboard'].includes(activeTab) 
+          ? 'p-0 max-w-full min-h-screen' 
           : 'max-w-[1920px] px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6'
       }`} id="prospaces-body">
 

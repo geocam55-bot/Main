@@ -87,8 +87,8 @@ export default function TelematicsDashboard() {
     <div className="flex flex-col h-full min-h-screen bg-slate-50 text-slate-900 font-sans">
       
       {/* ── Top Telematics Header & KPI Summary Ribbon ── */}
-      <header className="bg-white border-b border-slate-200/90 sticky top-0 z-30 shadow-xs px-4 sm:px-6 py-3.5">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <header className="bg-white border-b border-slate-200/90 sticky top-0 z-30 shadow-xs px-4 sm:px-6 lg:px-8 py-3.5">
+        <div className="w-full flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           
           {/* Brand Title & Live Beacon */}
           <div className="flex items-center space-x-3">
@@ -142,7 +142,7 @@ export default function TelematicsDashboard() {
         </div>
 
         {/* ── Interactive KPI Filter Ribbon Bar ── */}
-        <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-3 pt-3 border-t border-slate-100">
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={() => setStatusFilter('ALL')}
@@ -226,10 +226,10 @@ export default function TelematicsDashboard() {
       </header>
 
       {/* ── Main Two-Column Telematics Layout ── */}
-      <main className="max-w-7xl mx-auto w-full flex-1 p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="w-full flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        {/* ── Left Column: Vehicle Telematics Directory (4 cols) ── */}
-        <div className="lg:col-span-4 flex flex-col space-y-4">
+        {/* ── Left Column: Vehicle Telematics Directory (aligned to left edge) ── */}
+        <div className="lg:col-span-4 xl:col-span-3 flex flex-col space-y-4">
           
           {/* Search & Status Filter Bar */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs space-y-3">
@@ -264,7 +264,7 @@ export default function TelematicsDashboard() {
           </div>
 
           {/* Vehicle List */}
-          <div className="space-y-2.5 max-h-[calc(100vh-340px)] overflow-y-auto pr-1">
+          <div className="space-y-2.5 max-h-[calc(100vh-320px)] lg:max-h-[660px] xl:max-h-[740px] overflow-y-auto pr-1">
             {vehicles.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500">
                 <AlertCircle className="h-8 w-8 text-slate-400 mx-auto mb-2" />
@@ -353,11 +353,11 @@ export default function TelematicsDashboard() {
           </div>
         </div>
 
-        {/* ── Right Column: Interactive Map & Live Telemetry HUD (8 cols) ── */}
-        <div className="lg:col-span-8 flex flex-col space-y-4">
+        {/* ── Right Column: Interactive Map & Live Telemetry HUD ── */}
+        <div className="lg:col-span-8 xl:col-span-9 flex flex-col space-y-4">
           
           {/* Interactive Google Map Telematics View */}
-          <div className="h-[460px] sm:h-[520px] rounded-2xl overflow-hidden shadow-xs border border-slate-200/90">
+          <div className="h-[540px] sm:h-[620px] lg:h-[680px] xl:h-[760px] w-full rounded-2xl overflow-hidden shadow-xs border border-slate-200/90">
             <TelematicsMapView
               vehicles={vehicles}
               selectedVehicleId={selectedVehicleId}

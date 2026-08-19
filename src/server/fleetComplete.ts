@@ -590,15 +590,30 @@ export async function getVehiclePositions(
           make
           model
           year
+          deactivated
           latestData {
             timestamp
             gps {
               latitude
               longitude
               speed
+              direction
+              altitude
+              satellites
+            }
+            address {
+              address
+              city
+              region
+              postalCode
+              country
+            }
+            odometer {
+              value
             }
             canBus {
               engineIdleTime
+              canEngineCoolantTemperature
             }
             ignition {
               engineStatus
@@ -613,7 +628,7 @@ export async function getVehiclePositions(
         method: 'POST',
         headers,
         body: JSON.stringify({ query }),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -635,11 +650,13 @@ export async function getVehiclePositions(
               const gps = latest.gps || {};
               const canBus = latest.canBus || {};
               const ignition = latest.ignition || {};
+              const odo = latest.odometer || {};
+              const addr = latest.address || {};
 
               const lat = typeof gps.latitude === 'number' ? gps.latitude : null;
               const lng = typeof gps.longitude === 'number' ? gps.longitude : null;
               const speed = typeof gps.speed === 'number' ? Math.round(gps.speed) : 0;
-              const heading = 180;
+              const heading = typeof gps.direction === 'number' ? Math.round(gps.direction) : 0;
               const engineIdleTime = typeof canBus.engineIdleTime === 'number' ? canBus.engineIdleTime : 0;
               const idlingMins = Math.floor(engineIdleTime / 60);
 
@@ -666,7 +683,19 @@ export async function getVehiclePositions(
                 make: v.make || undefined,
                 model: v.model || undefined,
                 year: v.year || undefined,
-                rawGps: { ...gps, vin: v.vin, plate: v.licensePlate, make: v.make, model: v.model, year: v.year, rawVehicle: v }
+                rawGps: {
+                  ...gps,
+                  odometer: odo?.value,
+                  address: addr?.address,
+                  city: addr?.city,
+                  region: addr?.region,
+                  vin: v.vin,
+                  plate: v.licensePlate,
+                  make: v.make,
+                  model: v.model,
+                  year: v.year,
+                  rawVehicle: v
+                }
               };
             });
 
