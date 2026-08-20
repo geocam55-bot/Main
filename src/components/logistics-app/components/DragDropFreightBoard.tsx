@@ -5,7 +5,7 @@ import {
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
   ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
-  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink, FileText
+  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink, FileText, MoreVertical
 } from 'lucide-react';
 import { isTruckAssignedToBranch } from '../lib/mapHelpers';
 import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/schedulingUtils';
@@ -366,6 +366,9 @@ export default function DragDropFreightBoard({
 
   // Expanded truck details ID
   const [expandedTruckId, setExpandedTruckId] = useState<string | null>(null);
+
+  // Active truck action menu dropdown ID
+  const [activeTruckMenuId, setActiveTruckMenuId] = useState<string | null>(null);
 
   // Date navigation handlers
   const handlePrevDay = () => {
@@ -1783,6 +1786,112 @@ export default function DragDropFreightBoard({
                               <span>OPEN {selectedShiftFilter !== 'ALL' ? `(${selectedShiftFilter})` : ''}</span>
                             </span>
                           )}
+
+                          {/* Truck Action Menu Dropdown */}
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveTruckMenuId(activeTruckMenuId === truck.id ? null : truck.id);
+                              }}
+                              className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                                activeTruckMenuId === truck.id
+                                  ? 'bg-slate-200 text-slate-900'
+                                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                              }`}
+                              title="Truck Actions & Options"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+
+                            {activeTruckMenuId === truck.id && (
+                              <div
+                                className="absolute right-0 top-7 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 text-xs select-none font-sans divide-y divide-slate-100 animate-in fade-in"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="py-1">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      setActiveTruckMenuId(null);
+                                      try {
+                                        await fetch('/api/telematics/ping', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ truckId: truck.id, name: truck.name })
+                                        });
+                                      } catch (e) {}
+                                    }}
+                                    className="w-full text-left px-3.5 py-1.5 hover:bg-teal-50 hover:text-teal-800 transition-colors flex items-center font-bold text-teal-700"
+                                  >
+                                    <span className="w-2 h-2 rounded-full bg-teal-500 mr-2 animate-pulse" />
+                                    Ping Live GPS
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTruckMenuId(null);
+                                      setPreviewTruck(truck);
+                                    }}
+                                    className="w-full text-left px-3.5 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                  >
+                                    View Specs & Photo
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTruckMenuId(null);
+                                      setExpandedTruckId(expandedTruckId === truck.id ? null : truck.id);
+                                    }}
+                                    className="w-full text-left px-3.5 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                  >
+                                    {expandedTruckId === truck.id ? 'Collapse Stops' : `View ${loadedDeliveries.length} Manifest Stops`}
+                                  </button>
+                                </div>
+
+                                {!isViewOnly && (
+                                  <div className="py-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveTruckMenuId(null);
+                                        toggleTruckFullStatus(truck.id);
+                                      }}
+                                      className="w-full text-left px-3.5 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                    >
+                                      {isManualFull ? 'Re-open Capacity' : 'Mark Truck Full'}
+                                    </button>
+                                  </div>
+                                )}
+
+                                <div className="py-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTruckMenuId(null);
+                                      const coordStr = `${gpsInfo.coordinatesText}`;
+                                      navigator.clipboard.writeText(coordStr);
+                                    }}
+                                    className="w-full text-left px-3.5 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors text-slate-700"
+                                  >
+                                    Copy GPS Coordinates
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTruckMenuId(null);
+                                      const shareLink = `https://prospaces.ca/track/${truck.id}`;
+                                      navigator.clipboard.writeText(shareLink);
+                                    }}
+                                    className="w-full text-left px-3.5 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors text-slate-700"
+                                  >
+                                    Copy Live Share Link
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 

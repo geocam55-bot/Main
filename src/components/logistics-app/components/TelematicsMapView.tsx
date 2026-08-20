@@ -627,56 +627,6 @@ export default function TelematicsMapView({
               </button>
             </div>
           </div>
-
-          {/* ── Bottom Selected Vehicle Telematics Quick Preview ── */}
-          {selectedVehicle && (
-            <div className="absolute bottom-3 inset-x-3 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3 shadow-xl z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-slate-900 animate-in fade-in slide-in-from-bottom-2">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className={`h-11 w-11 rounded-2xl ${getStatusColor(selectedVehicle.status).bg} flex items-center justify-center text-white shrink-0 shadow-md`}>
-                  <TruckIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center space-x-2">
-                    <h4 className="text-xs font-black text-slate-900 truncate">{selectedVehicle.truckName}</h4>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${getStatusColor(selectedVehicle.status).badge}`}>
-                      {selectedVehicle.status}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                    VIN: <span className="font-mono text-slate-700">{selectedVehicle.vin}</span> &bull; Plate: <span className="font-mono font-bold text-slate-900">{selectedVehicle.licensePlate}</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Telemetry Readouts Grid */}
-              <div className="grid grid-cols-4 gap-2 text-center border-t sm:border-t-0 sm:border-l border-slate-200 pt-2 sm:pt-0 sm:pl-3">
-                <div className="bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-200/60">
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Speed</span>
-                  <span className="text-xs font-mono font-black text-blue-600">
-                    {Math.round((selectedVehicle.telematics || selectedVehicle.telemetry)?.speed ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.speedMph ?? 0)} km/h
-                  </span>
-                </div>
-                <div className="bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-200/60">
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Heading</span>
-                  <span className="text-xs font-mono font-black text-slate-800">
-                    {(selectedVehicle.telematics || selectedVehicle.telemetry)?.heading ?? 0}&deg;
-                  </span>
-                </div>
-                <div className="bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-200/60">
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Fuel</span>
-                  <span className="text-xs font-mono font-black text-emerald-600">
-                    {(selectedVehicle.telematics || selectedVehicle.telemetry)?.fuelPercent ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.fuelLevel ?? 0}%
-                  </span>
-                </div>
-                <div className="bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-200/60">
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Ignition</span>
-                  <span className="text-xs font-mono font-black text-slate-800">
-                    {(selectedVehicle.telematics || selectedVehicle.telemetry)?.ignitionStatus ?? 'OFF'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </APIProvider>
     </div>

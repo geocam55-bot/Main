@@ -438,6 +438,7 @@ function MapInner({
   const lastFlownTruckIdRef = useRef<string | null>(null);
   const lastBoundsKeyRef = useRef<string>('');
   const [openPopup, setOpenPopup] = useState<any>(null);
+  const [popupActionMenuOpen, setPopupActionMenuOpen] = useState<boolean>(false);
 
   const trackEventsTruck = displayTrucks.find((t: any) => t.id === viewingTrackEventsTruckId);
   const trackWaypoints = useMemo(() => {
@@ -1058,10 +1059,115 @@ function MapInner({
                         <button type="button" className="p-0.5 hover:text-slate-900 transition-colors" title="GPS Signal Connected">
                           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9c3.9 3.9 3.9 10.2 0 14.1"/></svg>
                         </button>
-                        <button type="button" className="p-0.5 hover:text-slate-900 transition-colors cursor-pointer" title="Options">
-                          <MoreVertical className="w-4 h-4 text-slate-700" />
-                        </button>
-                        <button type="button" className="p-0.5 hover:text-slate-900 transition-colors cursor-pointer" onClick={() => setOpenPopup(null)} title="Close">
+
+                        {/* Truck Action Menu Dropdown */}
+                        <div className="relative">
+                          <button 
+                            type="button" 
+                            className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                              popupActionMenuOpen ? 'bg-slate-200 text-slate-900' : 'hover:bg-slate-100 text-slate-700 hover:text-slate-900'
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPopupActionMenuOpen(prev => !prev);
+                            }}
+                            title="Truck Action Menu"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+
+                          {popupActionMenuOpen && (
+                            <div 
+                              className="absolute right-0 top-7 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 text-xs select-none font-sans divide-y divide-slate-100 animate-in fade-in"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="py-1">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    setPopupActionMenuOpen(false);
+                                    try {
+                                      await fetch('/api/telematics/ping', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ truckId: truck.id, name: truck.name })
+                                      });
+                                      setSysLogs(prev => [`[${new Date().toLocaleTimeString()}] Live Telematics Ping OK: ${truck.name}`, ...prev.slice(0, 3)]);
+                                    } catch (e) {
+                                      // ignore
+                                    }
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-teal-50 hover:text-teal-800 transition-colors flex items-center font-bold text-teal-700"
+                                >
+                                  <span className="w-2 h-2 rounded-full bg-teal-500 mr-2 animate-pulse" />
+                                  Ping Live GPS
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPopupActionMenuOpen(false);
+                                    setViewingDetailsTruckId?.(truck.id);
+                                    setOpenPopup(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                >
+                                  Details & Specs
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPopupActionMenuOpen(false);
+                                    setViewingTripsTruckId?.(truck.id);
+                                    setOpenPopup(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                >
+                                  Trips & Manifest
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPopupActionMenuOpen(false);
+                                    setViewingTrackEventsTruckId?.(truck.id);
+                                    setOpenPopup(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                >
+                                  Track & Events
+                                </button>
+                              </div>
+                              <div className="py-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPopupActionMenuOpen(false);
+                                    const { lat, lng } = getTruckCoords(truck, simProgress, activeBranches);
+                                    const coordStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                                    navigator.clipboard.writeText(coordStr);
+                                    setSysLogs(prev => [`[${new Date().toLocaleTimeString()}] Coordinates copied for ${truck.name}: ${coordStr}`, ...prev.slice(0, 3)]);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors text-slate-700"
+                                >
+                                  Copy Coordinates
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPopupActionMenuOpen(false);
+                                    const shareLink = `https://prospaces.ca/track/${truck.id}`;
+                                    navigator.clipboard.writeText(shareLink);
+                                    setSysLogs(prev => [`[${new Date().toLocaleTimeString()}] Tracking link copied: ${shareLink}`, ...prev.slice(0, 3)]);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors text-slate-700"
+                                >
+                                  Live Share Link
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <button type="button" className="p-0.5 hover:text-slate-900 transition-colors cursor-pointer" onClick={() => { setOpenPopup(null); setPopupActionMenuOpen(false); }} title="Close">
                           <X className="w-4 h-4 text-slate-700" />
                         </button>
                       </div>

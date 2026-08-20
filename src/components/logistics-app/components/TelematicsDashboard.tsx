@@ -30,12 +30,33 @@ import {
   Layers, 
   SlidersHorizontal,
   Sliders,
-  Cpu
+  Cpu,
+  MoreVertical,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  Pin,
+  Calendar,
+  ChevronLeft,
+  Eye
 } from 'lucide-react';
 
 export default function TelematicsDashboard() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MOVING' | 'IDLE' | 'STOPPED'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+  const [viewingTripsFor, setViewingTripsFor] = useState<string | null>(null);
+  const [viewingDetailsFor, setViewingDetailsFor] = useState<string | null>(null);
+  
+  // Sidebar accordion states
+  const [accordions, setAccordions] = useState({
+    general: false,
+    pinned: true,
+    events: false,
+    maintenance: false,
+    sensors: false
+  });
   
   const {
     vehicles,
@@ -56,6 +77,8 @@ export default function TelematicsDashboard() {
     statusFilter,
     searchQuery
   });
+
+  const detailsVehicle = viewingDetailsFor ? vehicles.find(v => v.vehicleId === viewingDetailsFor) : null;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -231,275 +254,633 @@ export default function TelematicsDashboard() {
         {/* ── Left Column: Vehicle Telematics Directory (aligned to left edge) ── */}
         <div className="lg:col-span-4 xl:col-span-3 flex flex-col space-y-4">
           
-          {/* Search & Status Filter Bar */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs space-y-3">
-            <div className="relative">
-              <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search truck, VIN, plate, or driver..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
+          {viewingTripsFor ? (
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs flex flex-col max-h-[calc(100vh-320px)] lg:max-h-[660px] xl:max-h-[740px] overflow-hidden">
+                {/* Header with back button */}
+                <div className="p-3 border-b border-slate-200/90 flex items-center gap-2 shrink-0">
+                    <button onClick={() => setViewingTripsFor(null)} className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500">
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <h2 className="font-medium text-[15px] text-slate-900">Trips</h2>
+                </div>
 
-            {/* Filter Tabs */}
-            <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
-              {(['ALL', 'MOVING', 'IDLE', 'STOPPED'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setStatusFilter(tab)}
-                  className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    statusFilter === tab
-                      ? 'bg-white text-blue-900 shadow-xs font-black'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          </div>
+                {/* Filters section */}
+                <div className="p-4 border-b border-slate-200/90 space-y-4 bg-slate-50 shrink-0">
+                    <div>
+                        <label className="text-[11px] text-slate-500 mb-1.5 block">Date and time</label>
+                        <div className="flex items-center gap-2 bg-slate-200/60 p-2.5 rounded-lg text-xs font-medium text-slate-700">
+                            <Calendar className="w-4 h-4 text-slate-500" />
+                            Aug 19, 2026 12:00 AM - 11:59 PM
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label className="text-[11px] text-slate-500 mb-1.5 block">Asset</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="flex items-center justify-between bg-slate-200/60 p-2.5 rounded-lg text-xs font-medium text-slate-700 cursor-pointer">
+                                <span className="truncate">{vehicles.find(v => v.vehicleId === viewingTripsFor)?.truckName || viewingTripsFor}</span>
+                                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                            </div>
+                            <div className="flex items-center justify-between bg-slate-200/60 p-2.5 rounded-lg text-xs font-medium text-slate-700 cursor-pointer">
+                                <span className="truncate text-slate-400">Driver</span>
+                                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                            </div>
+                        </div>
+                    </div>
 
-          {/* Vehicle List */}
-          <div className="space-y-2.5 max-h-[calc(100vh-320px)] lg:max-h-[660px] xl:max-h-[740px] overflow-y-auto pr-1">
-            {vehicles.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500">
-                <AlertCircle className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-xs font-bold">No telemetry records match your filters.</p>
+                    <div className="relative">
+                        <MapPin className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input type="text" placeholder="Filter by location" className="w-full text-xs py-2.5 pl-9 pr-8 bg-slate-200/60 rounded-lg outline-none placeholder:text-slate-400" />
+                        <Filter className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-600" />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 pt-3 border-t border-slate-200/70">
+                        <div className="flex items-center gap-1" title="Trips">
+                            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" /> 13
+                        </div>
+                        <div className="flex items-center gap-1" title="Distance">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400" /> 249.3km
+                        </div>
+                        <div className="flex items-center gap-1" title="Driving Time">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" /> 3h 44m
+                        </div>
+                        <div className="flex items-center gap-1" title="Idle Time">
+                            <Pause className="w-3.5 h-3.5 text-slate-400" /> 46m
+                        </div>
+                        <div className="flex items-center gap-1 text-red-600 font-bold" title="Alerts">
+                            <AlertCircle className="w-3.5 h-3.5" /> 15
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Banner */}
+                <div className="p-3 bg-blue-50/50 border-b border-blue-100/50 flex gap-2.5 items-start shrink-0">
+                    <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <span className="text-[11px] text-blue-800 font-medium">For more details of all the assets data points please go to <a href="#" className="underline text-blue-700">Track & Events</a></span>
+                </div>
+
+                {/* Date Accordion & Scrollable Trips */}
+                <div className="flex-1 overflow-y-auto">
+                    <div className="flex items-center justify-between p-3.5 bg-slate-50/80 border-b border-slate-200/80 font-bold text-slate-900 text-xs shrink-0">
+                        <div className="flex items-center gap-2.5">
+                            <Eye className="w-4 h-4 text-slate-500" />
+                            Wed, Aug 19, 2026
+                        </div>
+                        <div className="flex items-center gap-3.5 text-[11px] text-slate-600">
+                            <div className="flex items-center gap-1.5 font-mono font-medium">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400" /> 249.3km
+                            </div>
+                            <div className="flex items-center gap-1 text-red-600 font-bold">
+                                <AlertCircle className="w-3.5 h-3.5" /> 15
+                            </div>
+                            <ChevronUp className="w-4 h-4 text-slate-400" />
+                        </div>
+                    </div>
+
+                    {/* Trip Items */}
+                    <div className="p-4 space-y-3">
+                        {/* Trip 1 */}
+                        <div className="relative">
+                            <div className="absolute left-1.5 top-9 bottom-4 w-px bg-slate-200" />
+                            <div className="text-[10px] text-slate-500 font-bold mb-1.5 uppercase tracking-wider">Business</div>
+                            <div className="flex gap-3">
+                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white" />
+                                </div>
+                                <div className="flex-1 text-[11px]">
+                                    <div className="flex gap-2">
+                                        <span className="font-bold text-slate-900 w-[72px] shrink-0">6:19 AM ADT</span>
+                                        <span className="text-slate-600 truncate">Windmill</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 mt-3">
+                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white" />
+                                </div>
+                                <div className="flex-1 text-[11px]">
+                                    <div className="flex gap-2">
+                                        <span className="font-bold text-slate-900 w-[72px] shrink-0">6:21 AM ADT</span>
+                                        <span className="text-slate-600 truncate">30 Waddell Ave, Dartmouth, NS</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 font-medium ml-6 pb-4 border-b border-slate-100">
+                                <div className="flex items-center gap-1.5">
+                                    <User className="w-3 h-3" /> No driver
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 0.21km</div>
+                                    <div className="flex items-center gap-1" title="Driving Time"><Clock className="w-3 h-3" /> 1m</div>
+                                    <div className="flex items-center gap-1" title="Idle Time"><Pause className="w-3 h-3" /> 1m</div>
+                                    <div className="flex items-center gap-1" title="Alerts"><AlertCircle className="w-3 h-3 text-slate-300" /> 0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Pause separator */}
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold bg-slate-100/80 border border-slate-200/60 w-fit px-2.5 py-1 rounded-md ml-1 my-1">
+                            <Pause className="w-3 h-3" /> Pause 1m
+                        </div>
+
+                        {/* Trip 2 */}
+                        <div className="relative mt-2">
+                            <div className="absolute left-1.5 top-9 bottom-4 w-px bg-slate-200" />
+                            <div className="text-[10px] text-slate-500 font-bold mb-1.5 uppercase tracking-wider">Business</div>
+                            <div className="flex gap-3">
+                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white" />
+                                </div>
+                                <div className="flex-1 text-[11px]">
+                                    <div className="flex gap-2">
+                                        <span className="font-bold text-slate-900 w-[72px] shrink-0">6:22 AM ADT</span>
+                                        <span className="text-slate-600 truncate">30 Waddell Ave, Dartmouth, NS</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 mt-3">
+                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white" />
+                                </div>
+                                <div className="flex-1 text-[11px]">
+                                    <div className="flex gap-2">
+                                        <span className="font-bold text-slate-900 w-[72px] shrink-0">6:26 AM ADT</span>
+                                        <span className="text-slate-600 truncate">500 Windmill Rd, Dartmouth, NS</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 font-medium ml-6 pb-4 border-b border-slate-100">
+                                <div className="flex items-center gap-1.5">
+                                    <User className="w-3 h-3" /> No driver
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 0.99km</div>
+                                    <div className="flex items-center gap-1" title="Driving Time"><Clock className="w-3 h-3" /> 3m</div>
+                                    <div className="flex items-center gap-1" title="Idle Time"><Pause className="w-3 h-3" /> 3m</div>
+                                    <div className="flex items-center gap-1" title="Alerts"><AlertCircle className="w-3 h-3 text-slate-300" /> 0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Pause separator */}
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold bg-slate-100/80 border border-slate-200/60 w-fit px-2.5 py-1 rounded-md ml-1 my-1">
+                            <Pause className="w-3 h-3" /> Pause 42m
+                        </div>
+
+                        {/* Trip 3 */}
+                        <div className="relative mt-2">
+                            <div className="absolute left-1.5 top-9 bottom-4 w-px bg-slate-200" />
+                            <div className="text-[10px] text-slate-500 font-bold mb-1.5 uppercase tracking-wider">Business</div>
+                            <div className="flex gap-3">
+                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white" />
+                                </div>
+                                <div className="flex-1 text-[11px]">
+                                    <div className="flex gap-2">
+                                        <span className="font-bold text-slate-900 w-[72px] shrink-0">7:08 AM ADT</span>
+                                        <span className="text-slate-600 truncate">500 Windmill Rd, Dartmouth, NS</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 mt-3">
+                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white" />
+                                </div>
+                                <div className="flex-1 text-[11px]">
+                                    <div className="flex gap-2">
+                                        <span className="font-bold text-slate-900 w-[72px] shrink-0">7:20 AM ADT</span>
+                                        <span className="text-slate-600 truncate">500 Windmill Rd, Dartmouth, NS</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 font-medium ml-6 pb-4">
+                                <div className="flex items-center gap-1.5">
+                                    <User className="w-3 h-3" /> No driver
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 3.81km</div>
+                                    <div className="flex items-center gap-1" title="Driving Time"><Clock className="w-3 h-3" /> 11m</div>
+                                    <div className="flex items-center gap-1" title="Idle Time"><Pause className="w-3 h-3" /> 6m</div>
+                                    <div className="flex items-center gap-1" title="Alerts"><AlertCircle className="w-3 h-3 text-slate-300" /> 0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+          ) : (
+            <>
+              {/* Search & Status Filter Bar */}
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs space-y-3">
+                <div className="relative">
+                  <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search truck, VIN, plate, or driver..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                  {(['ALL', 'MOVING', 'IDLE', 'STOPPED'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setStatusFilter(tab)}
+                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        statusFilter === tab
+                          ? 'bg-white text-blue-900 shadow-xs font-black'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
               </div>
-            ) : (
-              vehicles.map((v) => {
-                const isSelected = v.vehicleId === selectedVehicleId;
-                const stops = v.activeRoute?.stops || [];
-                const completed = v.activeRoute?.completedStops || 0;
 
-                return (
-                  <div
-                    key={v.vehicleId}
-                    onClick={() => setSelectedVehicleId(v.vehicleId)}
-                    className={`bg-white rounded-2xl p-3.5 border transition-all cursor-pointer shadow-xs hover:border-blue-300 ${
-                      isSelected 
-                        ? 'border-blue-600 ring-2 ring-blue-500/20 bg-blue-50/20' 
-                        : 'border-slate-200/90 hover:bg-slate-50/50'
-                    }`}
-                  >
-                    {/* Header: Name & Status */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-mono font-bold text-xs">
-                          #{v.vehicleId.slice(-3)}
-                        </div>
-                        <div>
-                          <h3 className="text-xs font-black text-slate-900 leading-snug">{v.truckName}</h3>
-                          <p className="text-[11px] text-slate-500 font-mono">{v.licensePlate} &bull; {v.model}</p>
-                        </div>
-                      </div>
-                      {getStatusBadge(v.status)}
-                    </div>
+              {/* Vehicle List */}
+              <div className="space-y-2.5 max-h-[calc(100vh-320px)] lg:max-h-[660px] xl:max-h-[740px] overflow-y-auto pr-1">
+                {vehicles.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500">
+                    <AlertCircle className="h-8 w-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold">No telemetry records match your filters.</p>
+                  </div>
+                ) : (
+                  vehicles.map((v) => {
+                    const isSelected = v.vehicleId === selectedVehicleId;
+                    const stops = v.activeRoute?.stops || [];
+                    const completed = v.activeRoute?.completedStops || 0;
 
-                    {/* Telemetry Metrics Bar */}
-                    <div className="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-slate-100 text-center">
-                      <div className="bg-slate-50 py-1 rounded-lg">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase block">Speed</span>
-                        <span className="text-xs font-mono font-black text-blue-700">
-                          {Math.round((v.telematics || v.telemetry)?.speed ?? (v.telematics || v.telemetry)?.speedMph ?? 0)} km/h
-                        </span>
-                      </div>
-                      <div className="bg-slate-50 py-1 rounded-lg">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase block">Heading</span>
-                        <span className="text-xs font-mono font-bold text-slate-700">
-                          {(v.telematics || v.telemetry)?.heading ?? 0}&deg;
-                        </span>
-                      </div>
-                      <div className="bg-slate-50 py-1 rounded-lg">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase block">Fuel</span>
-                        <span className="text-xs font-mono font-bold text-emerald-600">
-                          {(v.telematics || v.telemetry)?.fuelPercent ?? (v.telematics || v.telemetry)?.fuelLevel ?? 0}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Driver & Route Progress */}
-                    {v.activeRoute && (
-                      <div className="mt-2.5 space-y-1 bg-slate-50/60 p-2 rounded-xl border border-slate-200/50">
-                        <div className="flex items-center justify-between text-[11px] text-slate-600">
-                          <div className="flex items-center space-x-1.5 truncate">
-                            <User className="h-3 w-3 text-slate-400 shrink-0" />
-                            <span className="truncate font-medium">{v.driver?.name || v.activeRoute.driverName}</span>
+                    return (
+                      <div
+                        key={v.vehicleId}
+                        onClick={() => setSelectedVehicleId(v.vehicleId)}
+                        className={`bg-white rounded-2xl p-3.5 border transition-all cursor-pointer shadow-xs hover:border-blue-300 ${
+                          isSelected 
+                            ? 'border-blue-600 ring-2 ring-blue-500/20 bg-blue-50/20' 
+                            : 'border-slate-200/90 hover:bg-slate-50/50'
+                        }`}
+                      >
+                        {/* Header: Name & Status */}
+                        <div className="flex items-start justify-between relative">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-mono font-bold text-xs shrink-0">
+                              #{v.vehicleId.slice(-3)}
+                            </div>
+                            <div className="min-w-0 pr-2">
+                              <h3 className="text-xs font-black text-slate-900 leading-snug truncate">{v.truckName}</h3>
+                              <p className="text-[11px] text-slate-500 font-mono truncate">{v.licensePlate} &bull; {v.model}</p>
+                            </div>
                           </div>
-                          <span className="font-mono text-slate-500 shrink-0 ml-2 font-bold">
-                            {completed}/{stops.length || v.activeRoute.totalStops || 0} Stops
-                          </span>
+                          
+                          <div className="flex items-center gap-1 shrink-0 z-10">
+                            {getStatusBadge(v.status)}
+                            
+                            <div className="relative ml-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(activeActionMenuId === v.vehicleId ? null : v.vehicleId);
+                                }}
+                                className={`p-1.5 hover:bg-slate-200/50 rounded-md transition-colors cursor-pointer ${
+                                  activeActionMenuId === v.vehicleId ? 'text-teal-600 bg-teal-50' : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+
+                              {activeActionMenuId === v.vehicleId && (
+                                <div 
+                                  className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] text-slate-700 py-1 text-[11px] select-none font-sans divide-y divide-slate-100 animate-in fade-in"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="py-1">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        setActiveActionMenuId(null);
+                                        try {
+                                          await fetch('/api/telematics/ping', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ truckId: v.vehicleId, name: v.truckName })
+                                          });
+                                        } catch (e) {}
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-teal-50 hover:text-teal-800 transition-colors flex items-center font-bold text-teal-700"
+                                    >
+                                      <span className="w-2 h-2 rounded-full bg-teal-500 mr-2 animate-pulse" />
+                                      Ping Live GPS
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setViewingDetailsFor(v.vehicleId);
+                                        setViewingTripsFor(null);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                    >
+                                      Details & Specs
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setViewingTripsFor(v.vehicleId);
+                                        setViewingDetailsFor(null);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                    >
+                                      Trips
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setSelectedVehicleId(v.vehicleId);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-slate-700"
+                                    >
+                                      Track & Events
+                                    </button>
+                                  </div>
+                                  <div className="py-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        const coords = `${(v.telematics || v.telemetry)?.lat ?? 0}, ${(v.telematics || v.telemetry)?.lng ?? 0}`;
+                                        navigator.clipboard.writeText(coords);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors text-slate-700"
+                                    >
+                                      Copy Coordinates
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        navigator.clipboard.writeText(`https://prospaces.ca/track/${v.vehicleId}`);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors text-slate-700"
+                                    >
+                                      Live Share Link
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        {v.activeRoute.nextStop && (
-                          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/40">
-                            <span className="truncate pr-2 font-mono text-slate-600 font-medium">
-                              Next: {v.activeRoute.nextStop}
+
+                        {/* Telemetry Metrics Bar */}
+                        <div className="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-slate-100 text-center">
+                          <div className="bg-slate-50 py-1 rounded-lg">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Speed</span>
+                            <span className="text-xs font-mono font-black text-blue-700">
+                              {Math.round((v.telematics || v.telemetry)?.speed ?? (v.telematics || v.telemetry)?.speedMph ?? 0)} km/h
                             </span>
-                            <span className="font-mono text-blue-700 font-bold shrink-0">
-                              ETA {v.activeRoute.eta || v.activeRoute.scheduledETA}
+                          </div>
+                          <div className="bg-slate-50 py-1 rounded-lg">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Heading</span>
+                            <span className="text-xs font-mono font-bold text-slate-700">
+                              {(v.telematics || v.telemetry)?.heading ?? 0}&deg;
                             </span>
+                          </div>
+                          <div className="bg-slate-50 py-1 rounded-lg">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Fuel</span>
+                            <span className="text-xs font-mono font-bold text-emerald-600">
+                              {(v.telematics || v.telemetry)?.fuelPercent ?? (v.telematics || v.telemetry)?.fuelLevel ?? 0}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Driver & Route Progress */}
+                        {v.activeRoute && (
+                          <div className="mt-2.5 space-y-1 bg-slate-50/60 p-2 rounded-xl border border-slate-200/50">
+                            <div className="flex items-center justify-between text-[11px] text-slate-600">
+                              <div className="flex items-center space-x-1.5 truncate">
+                                <User className="h-3 w-3 text-slate-400 shrink-0" />
+                                <span className="truncate font-medium">{v.driver?.name || v.activeRoute.driverName}</span>
+                              </div>
+                              <span className="font-mono text-slate-500 shrink-0 ml-2 font-bold">
+                                {completed}/{stops.length || v.activeRoute.totalStops || 0} Stops
+                              </span>
+                            </div>
+                            {v.activeRoute.nextStop && (
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/40">
+                                <span className="truncate pr-2 font-mono text-slate-600 font-medium">
+                                  Next: {v.activeRoute.nextStop}
+                                </span>
+                                <span className="font-mono text-blue-700 font-bold shrink-0">
+                                  ETA {v.activeRoute.eta || v.activeRoute.scheduledETA}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── Right Column: Interactive Map & Live Telemetry HUD ── */}
-        <div className="lg:col-span-8 xl:col-span-9 flex flex-col space-y-4">
+        <div className="lg:col-span-8 xl:col-span-9 flex flex-col h-full relative">
           
           {/* Interactive Google Map Telematics View */}
-          <div className="h-[540px] sm:h-[620px] lg:h-[680px] xl:h-[760px] w-full rounded-2xl overflow-hidden shadow-xs border border-slate-200/90">
-            <TelematicsMapView
-              vehicles={vehicles}
-              selectedVehicleId={selectedVehicleId}
-              onSelectVehicle={(id) => setSelectedVehicleId(id)}
-              isStreaming={isStreaming}
-              onToggleStreaming={() => setIsStreaming(!isStreaming)}
-            />
-          </div>
+          <div className="flex-1 w-full rounded-2xl overflow-hidden shadow-xs border border-slate-200/90 relative flex bg-slate-100 min-h-[540px] lg:min-h-0">
+            <div className="flex-1 h-full relative">
+              <TelematicsMapView
+                vehicles={vehicles}
+                selectedVehicleId={selectedVehicleId}
+                onSelectVehicle={(id) => setSelectedVehicleId(id)}
+                isStreaming={isStreaming}
+                onToggleStreaming={() => setIsStreaming(!isStreaming)}
+              />
+            </div>
 
-          {/* ── Detailed Telemetry Inspector Panel ── */}
-          {selectedVehicle ? (
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-5">
-              
-              {/* Header Title */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 rounded-2xl bg-blue-900 text-white flex items-center justify-center font-black">
-                    <TruckIcon className="h-5 w-5 text-blue-300" />
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h2 className="text-sm font-black text-slate-950">{selectedVehicle.truckName}</h2>
-                      {getStatusBadge(selectedVehicle.status)}
-                    </div>
-                    <p className="text-xs text-slate-500 font-mono mt-0.5">
-                      Plate: {selectedVehicle.licensePlate} &bull; Driver: {selectedVehicle.driver?.name || selectedVehicle.activeRoute?.driverName || 'N/A'} &bull; Odometer: {(selectedVehicle.telematics || selectedVehicle.telemetry)?.odometer?.toLocaleString()} km
-                    </p>
-                  </div>
+            {/* ── Slide-over Detailed Inspector Panel ── */}
+            {detailsVehicle && (
+              <div className="w-80 sm:w-[350px] bg-white border-l border-slate-200 flex flex-col absolute right-0 top-0 bottom-0 z-10 shadow-2xl animate-in slide-in-from-right-8 text-sm">
+                
+                {/* Header Title */}
+                <div className="flex items-center justify-between p-4 border-b border-slate-200 shrink-0">
+                  <h2 className="text-[15px] font-medium text-slate-900 truncate">
+                    {detailsVehicle.truckName}
+                  </h2>
+                  <button
+                    onClick={() => setViewingDetailsFor(null)}
+                    className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500 hover:text-slate-900 shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
 
-                {selectedVehicle.activeRoute && (
-                  <div className="text-right">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Next Stop ETA</span>
-                    <span className="text-sm font-black text-blue-900 font-mono">{selectedVehicle.activeRoute.eta || selectedVehicle.activeRoute.scheduledETA}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Live Gauges & Engine Diagnostics */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* Speedometer Gauge */}
-                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70 flex flex-col items-center text-center">
-                  <Gauge className="h-5 w-5 text-blue-600 mb-1" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Live Speed</span>
-                  <span className="text-lg font-mono font-black text-blue-950 mt-0.5">
-                    {Math.round((selectedVehicle.telematics || selectedVehicle.telemetry)?.speed ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.speedMph ?? 0)} <span className="text-xs font-normal text-slate-500">km/h</span>
-                  </span>
-                </div>
-
-                {/* Heading Compass */}
-                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70 flex flex-col items-center text-center">
-                  <Compass className="h-5 w-5 text-indigo-600 mb-1" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Heading Bearing</span>
-                  <span className="text-lg font-mono font-black text-indigo-950 mt-0.5">
-                    {(selectedVehicle.telematics || selectedVehicle.telemetry)?.heading}&deg;
-                  </span>
-                </div>
-
-                {/* Fuel Level */}
-                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70 flex flex-col items-center text-center">
-                  <Fuel className="h-5 w-5 text-emerald-600 mb-1" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Fuel Level</span>
-                  <span className="text-lg font-mono font-black text-emerald-700 mt-0.5">
-                    {(selectedVehicle.telematics || selectedVehicle.telemetry)?.fuelPercent ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.fuelLevel}%
-                  </span>
-                </div>
-
-                {/* Ignition Status & Battery */}
-                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70 flex flex-col items-center text-center">
-                  <Zap className="h-5 w-5 text-amber-600 mb-1" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Ignition & Volt</span>
-                  <span className="text-lg font-mono font-black text-slate-900 mt-0.5">
-                    {(selectedVehicle.telematics || selectedVehicle.telemetry)?.ignitionStatus} <span className="text-xs font-normal text-slate-500 font-mono">{(selectedVehicle.telematics || selectedVehicle.telemetry)?.batteryVoltage}V</span>
-                  </span>
-                </div>
-              </div>
-
-              {/* Active Route Waypoints Sequence */}
-              {selectedVehicle.activeRoute && selectedVehicle.activeRoute.stops && selectedVehicle.activeRoute.stops.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
-                      <Navigation2 className="h-4 w-4 text-blue-600" />
-                      <span>Active Route Sequence ({selectedVehicle.activeRoute.routeId})</span>
-                    </h3>
-                    <span className="text-xs font-mono font-bold text-slate-500">
-                      {selectedVehicle.activeRoute.remainingDistance} remaining ({selectedVehicle.activeRoute.remainingDuration})
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    {selectedVehicle.activeRoute.stops.map((stop, idx) => {
-                      const isCompleted = stop.status === 'COMPLETED';
-                      const isActive = stop.status === 'ACTIVE';
-
-                      return (
-                        <div
-                          key={stop.id}
-                          className={`flex items-start justify-between p-3 rounded-xl border text-xs transition-all ${
-                            isCompleted
-                              ? 'bg-emerald-50/40 border-emerald-200/70 text-slate-700'
-                              : isActive
-                                ? 'bg-blue-50 border-blue-300 text-blue-950 ring-2 ring-blue-500/20'
-                                : 'bg-slate-50 border-slate-200/80 text-slate-600'
-                          }`}
-                        >
-                          <div className="flex items-start space-x-2.5 min-w-0">
-                            <div className={`h-6 w-6 rounded-lg flex items-center justify-center font-mono font-bold text-[11px] shrink-0 mt-0.5 ${
-                              isCompleted
-                                ? 'bg-emerald-600 text-white'
-                                : isActive
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-slate-200 text-slate-700'
-                            }`}>
-                              {isCompleted ? <Check className="h-3.5 w-3.5" /> : stop.stopNumber}
-                            </div>
-                            <div className="min-w-0">
-                              <h4 className="font-bold text-slate-900 truncate">{stop.customerName}</h4>
-                              <p className="text-[11px] text-slate-500 truncate">{stop.address}</p>
-                            </div>
-                          </div>
-
-                          <div className="text-right shrink-0 ml-3 font-mono">
-                            <span className="text-[11px] font-bold text-slate-700">{stop.estimatedArrival}</span>
-                            <span className={`block text-[10px] font-bold uppercase ${
-                              isCompleted ? 'text-emerald-600' : isActive ? 'text-blue-600' : 'text-slate-400'
-                            }`}>
-                              {stop.status}
-                            </span>
-                          </div>
+                <div className="flex-1 overflow-y-auto divide-y divide-slate-100 pb-8">
+                  
+                  {/* General */}
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setAccordions(prev => ({ ...prev, general: !prev.general }))}
+                      className="flex items-center justify-between px-4 py-3 text-slate-900 font-bold text-xs hover:bg-slate-50 transition-colors"
+                    >
+                      <span>General</span>
+                      {accordions.general ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                    </button>
+                    {accordions.general && (
+                      <div className="px-4 pb-4 space-y-2.5 text-[11px] animate-in slide-in-from-top-1 fade-in">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Asset ID</span>
+                          <span className="text-slate-900">{detailsVehicle.vehicleId}</span>
                         </div>
-                      );
-                    })}
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">License Plate</span>
+                          <span className="text-slate-900">{detailsVehicle.licensePlate}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Driver</span>
+                          <span className="text-slate-900">{detailsVehicle.driver?.name || 'No driver'}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Pinned Sensors */}
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setAccordions(prev => ({ ...prev, pinned: !prev.pinned }))}
+                      className="flex items-center justify-between px-4 py-3 text-slate-900 font-bold text-xs hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5 text-teal-700">
+                        <Pin className="h-3.5 w-3.5 fill-teal-700 -rotate-45" />
+                        <span>Your pinned sensors</span>
+                        <Info className="h-3 w-3 text-slate-400 cursor-help ml-0.5" />
+                      </div>
+                      {accordions.pinned ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                    </button>
+                    {accordions.pinned && (
+                      <div className="px-4 pb-4 space-y-3.5 text-xs animate-in slide-in-from-top-1 fade-in">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Fuel level</span>
+                          <span className="text-slate-900">{(detailsVehicle.telematics || detailsVehicle.telemetry)?.fuelPercent ?? (detailsVehicle.telematics || detailsVehicle.telemetry)?.fuelLevel ?? 0} %</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Ignition</span>
+                          <span className="text-slate-900">{(detailsVehicle.telematics || detailsVehicle.telemetry)?.ignitionStatus === 'ON' ? 'On' : 'Off'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Last ignition on</span>
+                          <span className="text-slate-900">1 minute ago</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Odometer</span>
+                          <span className="text-slate-900">{(detailsVehicle.telematics || detailsVehicle.telemetry)?.odometer?.toLocaleString()} km</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Operating hours</span>
+                          <span className="text-slate-900">419 h</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">PTO hours</span>
+                          <span className="text-slate-900">0 h</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Speed</span>
+                          <span className="text-slate-900">{Math.round((detailsVehicle.telematics || detailsVehicle.telemetry)?.speed ?? (detailsVehicle.telematics || detailsVehicle.telemetry)?.speedMph ?? 0)} km/h</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Latest Events */}
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setAccordions(prev => ({ ...prev, events: !prev.events }))}
+                      className="flex items-center justify-between px-4 py-3 text-slate-900 font-bold text-xs hover:bg-slate-50 transition-colors"
+                    >
+                      <span>Latest events</span>
+                      {accordions.events ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                    </button>
+                    {accordions.events && (
+                      <div className="px-4 pb-4 text-xs text-slate-500 italic">
+                        No recent critical events recorded today.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Maintenance Reminders */}
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setAccordions(prev => ({ ...prev, maintenance: !prev.maintenance }))}
+                      className="flex items-center justify-between px-4 py-3 text-slate-900 font-bold text-xs hover:bg-slate-50 transition-colors"
+                    >
+                      <span>Maintenance reminders</span>
+                      {accordions.maintenance ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                    </button>
+                    {accordions.maintenance && (
+                      <div className="px-4 pb-4 text-xs text-slate-500">
+                        <div className="flex items-center justify-between py-1">
+                          <span>PM Service A</span>
+                          <span className="text-emerald-600">In 5,420 km</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <span>Brake Inspection</span>
+                          <span className="text-amber-600">In 1,200 km</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sensors */}
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setAccordions(prev => ({ ...prev, sensors: !prev.sensors }))}
+                      className="flex items-center justify-between px-4 py-3 text-slate-900 font-bold text-xs hover:bg-slate-50 transition-colors"
+                    >
+                      <span>Sensors</span>
+                      {accordions.sensors ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                    </button>
+                    {accordions.sensors && (
+                      <div className="px-4 pb-4 text-[11px] text-slate-500 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span>Battery Voltage</span>
+                          <span className="text-slate-900">{(detailsVehicle.telematics || detailsVehicle.telemetry)?.batteryVoltage} V</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span>Coolant Temp</span>
+                          <span className="text-slate-900">82 °C</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span>Engine RPM</span>
+                          <span className="text-slate-900">1250 rpm</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl p-6 text-center border border-slate-200 text-slate-500">
-              <p className="text-xs font-bold">Select any vehicle from the list or click a marker on the map to inspect live diagnostics and route sequence.</p>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>
