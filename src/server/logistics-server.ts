@@ -2879,47 +2879,27 @@ app.use((req, res, next) => {
           scheduledDate: d.scheduledDate,
           scheduledSlot: d.scheduledSlot,
           deliveryCategory: d.deliveryCategory,
-          history: d.history || []
+          history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
         };
 
-        // Guarantee non-null string fallbacks for all NOT NULL table constraints.
+        // Standard columns matching the PostgreSQL schema with full metadata preserved in items
         return {
           id: String(d.id),
           tenantId: String(tenantId),
-          tenant_id: String(tenantId), // fallback
           orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
-          invoiceNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || ""),
-          epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
           customer: String(d.customerName || d.customer || "N/A"),
-          customerName: String(d.customerName || d.customer || "N/A"),
           destination: String(d.deliveryAddress || d.destination || "N/A"),
-          deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
-          phone: String(d.phone || "000-000-0000"),
-          eta: String(d.eta || "N/A"),
-          originBranch: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
-          weight: d.weight ? String(d.weight) : null,
-          orderTotal: d.orderTotal ? String(d.orderTotal) : null,
-          pdfUrl: d.pdfUrl || null,
-          destinationNotes: d.destinationNotes || null,
-          status: String(d.status || "REGISTERED"),
-          registeredAt: String(d.registeredAt || d.date || new Date().toISOString()),
-          pickedAt: d.pickedAt || null,
-          deliveredAt: d.deliveredAt || null,
-          returnedAt: d.returnedAt || null,
-          returnReason: d.returnReason || null,
-          assignedTruck: d.assignedTruck || d.assignedTruckId || null,
           assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
-          assignedDriver: d.assignedDriver || d.assignedDriverId || null,
           assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
-          customerSignature: d.customerSignature || null,
-          deliveryPhoto: d.deliveryPhoto || (d.deliveryPhotos && d.deliveryPhotos.length > 0 ? d.deliveryPhotos[0] : null),
-          history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : [],
-          priority: d.priority || 'Medium',
+          status: String(d.status || "REGISTERED"),
+          eta: String(d.eta || "N/A"),
+          priority: String(d.priority || 'Medium'),
           scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
           tracking_number: d.trackingNumber || d.tracking_number || null,
           pickup_location: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
           dropoff_location: String(d.deliveryAddress || d.destination || "N/A"),
-          documentType: d.documentType || null,
+          scheduled_slot: d.scheduledSlot || d.scheduled_slot || null,
+          delivery_category: d.deliveryCategory || d.delivery_category || null,
           items: [JSON.stringify({ _meta: fullMeta })]
         };
       });
@@ -3195,48 +3175,55 @@ app.use((req, res, next) => {
 
       // 4. Deliveries with auto-columns stripping fallback for schema mismatch
       if (sanitizedDeliveries.length > 0) {
-        const optionalDeliveryColumns = [
-          'pdfUrl', 'weight', 'orderTotal', 'assignedPicker', 'destinationNotes',
-          'customerSignature', 'deliveryPhoto', 'priority', 'tracking_number',
-          'pickup_location', 'dropoff_location', 'scheduled_date', 'documentType',
-          'history', 'scheduledDate', 'scheduledSlot', 'deliveryCategory', 'deliveryPhotos'
-        ];
-
-        const deliveriesToUpsert = sanitizedDeliveries.map((delivery: any) => {
-          const copy = { ...delivery };
-          for (const col of optionalDeliveryColumns) {
-            if (col in copy) delete copy[col];
-          }
-          return copy;
-        });
-
         try {
-          const { error } = await supabase.from("deliveries").upsert(deliveriesToUpsert);
-          if (error) throw error;
-        } catch (dbErr: any) {
-          const errMsg = dbErr.message || String(dbErr);
-          const isMissingColumnError = (
-            dbErr.code === "42703" ||
-            dbErr.code === "PGRST204" ||
-            (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
-          ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+          let currentDeliveryPayload = sanitizedDeliveries;
+          let deliveryAttempts = 0;
+          while (deliveryAttempts < 25) {
+            deliveryAttempts++;
+            const { error: dbErr } = await supabase.from("deliveries").upsert(currentDeliveryPayload);
+            if (!dbErr) break;
 
-          if (isMissingColumnError) {
-            const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
-            const colToStrip = match ? (match[1] || match[2] || match[3]) : null;
-            const safeFallback = deliveriesToUpsert.map((d: any) => {
-              const copy = { ...d };
-              if (colToStrip) delete copy[colToStrip];
-              for (const extra of optionalDeliveryColumns) delete copy[extra];
-              return copy;
-            });
+            const errMsg = dbErr.message || String(dbErr);
+            console.log(`[Deliveries Sync] Adjusting deliveries payload (Attempt ${deliveryAttempts}):`, errMsg);
 
-            console.warn(`[Deliveries Sync] Removing optional schema mismatch column '${colToStrip || 'unknown'}' and retrying once.`);
-            const { error: retryError } = await supabase.from("deliveries").upsert(safeFallback);
-            if (retryError) throw retryError;
-          } else {
-            throw new Error(`Deliveries Sync Error: ${errMsg}`);
+            const isMissingColumnError = (
+              dbErr.code === "42703" ||
+              dbErr.code === "PGRST204" ||
+              (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+            ) && !errMsg.includes("violates not-null constraint") && dbErr.code !== "23502";
+
+            if (isMissingColumnError) {
+              const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
+              let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
+
+              if (colToStrip) {
+                console.log(`[Deliveries Sync] Stripping missing column '${colToStrip}' and retrying...`);
+                currentDeliveryPayload = currentDeliveryPayload.map((d: any) => {
+                  const copy = { ...d };
+                  delete copy[colToStrip];
+                  return copy;
+                });
+              } else {
+                console.log(`[Deliveries Sync] Fallback: stripping extended delivery columns...`);
+                currentDeliveryPayload = currentDeliveryPayload.map((d: any) => ({
+                  id: d.id,
+                  tenantId: d.tenantId,
+                  orderNumber: d.orderNumber,
+                  customer: d.customer,
+                  destination: d.destination,
+                  assignedTruckId: d.assignedTruckId,
+                  assignedDriverId: d.assignedDriverId,
+                  status: d.status,
+                  eta: d.eta,
+                  items: d.items
+                }));
+              }
+            } else {
+              throw dbErr;
+            }
           }
+        } catch (dbErr: any) {
+          throw new Error(`Deliveries Sync Error: ${dbErr.message || String(dbErr)}`);
         }
       }
 
