@@ -653,18 +653,34 @@ export async function getVehiclePositions(
               const odo = latest.odometer || {};
               const addr = latest.address || {};
 
+              const rawTimestamp = latest.timestamp ? Number(latest.timestamp) : 0;
+              const timestamp = rawTimestamp > 0 ? new Date(rawTimestamp).toISOString() : new Date().toISOString();
+              const ageMinutes = rawTimestamp > 0 ? (Date.now() - rawTimestamp) / 60000 : 999999;
+              const isStale = ageMinutes > 20; // Dormant / parked overnight (packet older than 20 mins)
+
               const lat = typeof gps.latitude === 'number' ? gps.latitude : null;
               const lng = typeof gps.longitude === 'number' ? gps.longitude : null;
-              const speed = typeof gps.speed === 'number' ? Math.round(gps.speed) : 0;
               const heading = typeof gps.direction === 'number' ? Math.round(gps.direction) : 0;
               const engineIdleTime = typeof canBus.engineIdleTime === 'number' ? canBus.engineIdleTime : 0;
               const idlingMins = Math.floor(engineIdleTime / 60);
 
-              let ignitionStatus: 'ON' | 'OFF' | 'IDLING' | 'UNKNOWN' = 'UNKNOWN';
-              if (ignition.engineStatus === true) {
-                ignitionStatus = speed > 0 ? 'ON' : 'IDLING';
-              } else if (ignition.engineStatus === false) {
-                ignitionStatus = 'OFF';
+              let speed = 0;
+              let ignitionStatus: 'ON' | 'OFF' | 'IDLING' | 'UNKNOWN' = 'OFF';
+
+              if (!isStale) {
+                const rawGpsSpeed = typeof gps.speed === 'number' && !isNaN(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
+                const isEngineOn = ignition.engineStatus === true;
+
+                if (isEngineOn && rawGpsSpeed >= 5) {
+                  speed = rawGpsSpeed;
+                  ignitionStatus = 'ON';
+                } else if (isEngineOn) {
+                  speed = 0;
+                  ignitionStatus = 'IDLING';
+                } else {
+                  speed = 0;
+                  ignitionStatus = 'OFF';
+                }
               }
 
               return {
@@ -674,7 +690,7 @@ export async function getVehiclePositions(
                 lng,
                 speed,
                 heading,
-                timestamp: latest.timestamp ? new Date(latest.timestamp).toISOString() : new Date().toISOString(),
+                timestamp,
                 ignitionStatus,
                 idlingMins,
                 hardwareId: String(v.id),

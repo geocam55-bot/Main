@@ -48,6 +48,25 @@ const API_KEY_STATIC =
 // Default center: Dartmouth / Halifax Regional Logistics Corridor
 const REGIONAL_CENTER = { lat: 44.69098, lng: -63.59854 };
 
+// Helper functions to reliably extract lat/lng from various vehicle data formats
+export const getVehicleLat = (v: VehicleRecord): number => {
+  const tel = v.telematics || v.telemetry;
+  if (tel && typeof tel.latitude === 'number' && !isNaN(tel.latitude) && tel.latitude !== 0) return tel.latitude;
+  if (tel && typeof tel.lat === 'number' && !isNaN(tel.lat) && tel.lat !== 0) return tel.lat;
+  if (typeof (v as any).lat === 'number' && !isNaN((v as any).lat) && (v as any).lat !== 0) return (v as any).lat;
+  if (typeof (v as any).latitude === 'number' && !isNaN((v as any).latitude) && (v as any).latitude !== 0) return (v as any).latitude;
+  return 44.69098;
+};
+
+export const getVehicleLng = (v: VehicleRecord): number => {
+  const tel = v.telematics || v.telemetry;
+  if (tel && typeof tel.longitude === 'number' && !isNaN(tel.longitude) && tel.longitude !== 0) return tel.longitude;
+  if (tel && typeof tel.lng === 'number' && !isNaN(tel.lng) && tel.lng !== 0) return tel.lng;
+  if (typeof (v as any).lng === 'number' && !isNaN((v as any).lng) && (v as any).lng !== 0) return (v as any).lng;
+  if (typeof (v as any).longitude === 'number' && !isNaN((v as any).longitude) && (v as any).longitude !== 0) return (v as any).longitude;
+  return -63.59854;
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 // SUB-COMPONENT: DYNAMIC ROUTE POLYLINE & STOP OVERLAY
 // ════════════════════════════════════════════════════════════════════════════
@@ -73,8 +92,8 @@ function ActiveRoutePolyline({
     if (stops.length === 0) return;
 
     // Connect vehicle current live position to active stops sequence
-    const vLat = (vehicle.telematics || vehicle.telemetry)?.latitude ?? (vehicle.telematics || vehicle.telemetry)?.lat ?? 44.69098;
-    const vLng = (vehicle.telematics || vehicle.telemetry)?.longitude ?? (vehicle.telematics || vehicle.telemetry)?.lng ?? -63.59854;
+    const vLat = getVehicleLat(vehicle);
+    const vLng = getVehicleLng(vehicle);
     const path = [
       { lat: vLat, lng: vLng },
       ...stops.map(s => ({ lat: s.lat, lng: s.lng }))
@@ -138,27 +157,47 @@ function TrafficLayerToggle({ enabled }: { enabled: boolean }) {
 function MapCameraController({
   vehicles,
   selectedVehicle,
-  followSelected
+  followSelected,
+  fitKey
 }: {
   vehicles: VehicleRecord[];
   selectedVehicle: VehicleRecord | null;
   followSelected: boolean;
+  fitKey?: number;
 }) {
   const map = useMap();
+  const initialFitDone = useRef(false);
 
+  // Fit all vehicles into view on initial load or when manually triggered
   useEffect(() => {
     if (!map || !window.google?.maps) return;
 
     if (selectedVehicle && followSelected) {
-      const vLat = (selectedVehicle.telematics || selectedVehicle.telemetry)?.latitude ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.lat ?? 44.69098;
-      const vLng = (selectedVehicle.telematics || selectedVehicle.telemetry)?.longitude ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.lng ?? -63.59854;
+      const vLat = getVehicleLat(selectedVehicle);
+      const vLng = getVehicleLng(selectedVehicle);
       map.panTo({
         lat: vLat,
         lng: vLng
       });
       map.setZoom(15);
+    } else if ((!initialFitDone.current || fitKey) && vehicles.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
+      let count = 0;
+      vehicles.forEach(v => {
+        const lat = getVehicleLat(v);
+        const lng = getVehicleLng(v);
+        if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+          bounds.extend({ lat, lng });
+          count++;
+        }
+      });
+
+      if (count > 0) {
+        map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+        initialFitDone.current = true;
+      }
     }
-  }, [map, selectedVehicle, followSelected]);
+  }, [map, selectedVehicle, followSelected, vehicles, fitKey]);
 
   return null;
 }
@@ -175,8 +214,8 @@ function AnimatedVehicleMarker({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const initialLat = (vehicle.telematics || vehicle.telemetry)?.latitude ?? (vehicle.telematics || vehicle.telemetry)?.lat ?? 44.69098;
-  const initialLng = (vehicle.telematics || vehicle.telemetry)?.longitude ?? (vehicle.telematics || vehicle.telemetry)?.lng ?? -63.59854;
+  const initialLat = getVehicleLat(vehicle);
+  const initialLng = getVehicleLng(vehicle);
 
   const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number }>({
     lat: initialLat,
@@ -190,8 +229,8 @@ function AnimatedVehicleMarker({
 
   const animFrameRef = useRef<number | null>(null);
 
-  const targetLat = (vehicle.telematics || vehicle.telemetry)?.latitude ?? (vehicle.telematics || vehicle.telemetry)?.lat ?? 44.69098;
-  const targetLng = (vehicle.telematics || vehicle.telemetry)?.longitude ?? (vehicle.telematics || vehicle.telemetry)?.lng ?? -63.59854;
+  const targetLat = getVehicleLat(vehicle);
+  const targetLng = getVehicleLng(vehicle);
 
   useEffect(() => {
     const startLat = prevTargetRef.current.lat;
@@ -296,7 +335,7 @@ function AnimatedVehicleMarker({
         <div className="mt-1 px-2 py-0.5 bg-slate-900/95 backdrop-blur-xs border border-slate-800 text-white rounded-md text-[10px] font-mono font-bold shadow-md flex items-center space-x-1 whitespace-nowrap">
           <span>{vehicle.truckName.split('-')[0]?.trim() || `#${vehicle.vehicleId.slice(-3)}`}</span>
           {speed > 0 && (
-            <span className="text-emerald-400 font-extrabold">&bull; {Math.round(speed * 1.60934)} km/h</span>
+            <span className="text-emerald-400 font-extrabold">&bull; {Math.round(speed)} km/h</span>
           )}
         </div>
       </div>
@@ -326,6 +365,7 @@ export default function TelematicsMapView({
   const [mapTypeId, setMapTypeId] = useState<string>('roadmap');
   const [showTraffic, setShowTraffic] = useState<boolean>(false);
   const [followSelected, setFollowSelected] = useState<boolean>(true);
+  const [fitKey, setFitKey] = useState<number>(0);
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [manualKeyInput, setManualKeyInput] = useState<string>('');
 
@@ -454,6 +494,7 @@ export default function TelematicsMapView({
               vehicles={vehicles} 
               selectedVehicle={selectedVehicle} 
               followSelected={followSelected} 
+              fitKey={fitKey}
             />
 
             {/* ── Active Route Stops Pins ── */}
@@ -531,6 +572,16 @@ export default function TelematicsMapView({
             <div className="flex items-center space-x-1.5 pointer-events-auto">
               <button
                 type="button"
+                onClick={() => setFitKey(prev => prev + 1)}
+                className="px-2.5 py-1.5 bg-white/95 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 shadow-md transition-all cursor-pointer flex items-center space-x-1"
+                title="Fit All Fleet Vehicles in View"
+              >
+                <Maximize2 className="h-3.5 w-3.5 text-blue-600" />
+                <span className="hidden sm:inline">Fit Fleet</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setShowTraffic(prev => !prev)}
                 className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-md flex items-center space-x-1 ${
                   showTraffic 
@@ -602,7 +653,7 @@ export default function TelematicsMapView({
                 <div className="bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-200/60">
                   <span className="text-[9px] font-bold text-slate-500 uppercase block">Speed</span>
                   <span className="text-xs font-mono font-black text-blue-600">
-                    {Math.round(((selectedVehicle.telematics || selectedVehicle.telemetry)?.speedMph ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.speed ?? 0) * 1.60934)} km/h
+                    {Math.round((selectedVehicle.telematics || selectedVehicle.telemetry)?.speed ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.speedMph ?? 0)} km/h
                   </span>
                 </div>
                 <div className="bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-200/60">

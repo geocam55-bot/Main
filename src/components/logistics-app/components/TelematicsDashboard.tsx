@@ -305,7 +305,7 @@ export default function TelematicsDashboard() {
                       <div className="bg-slate-50 py-1 rounded-lg">
                         <span className="text-[9px] font-bold text-slate-400 uppercase block">Speed</span>
                         <span className="text-xs font-mono font-black text-blue-700">
-                          {Math.round(((v.telematics || v.telemetry)?.speedMph ?? (v.telematics || v.telemetry)?.speed ?? 0) * 1.60934)} km/h
+                          {Math.round((v.telematics || v.telemetry)?.speed ?? (v.telematics || v.telemetry)?.speedMph ?? 0)} km/h
                         </span>
                       </div>
                       <div className="bg-slate-50 py-1 rounded-lg">
@@ -403,7 +403,7 @@ export default function TelematicsDashboard() {
                   <Gauge className="h-5 w-5 text-blue-600 mb-1" />
                   <span className="text-[10px] font-bold text-slate-500 uppercase">Live Speed</span>
                   <span className="text-lg font-mono font-black text-blue-950 mt-0.5">
-                    {Math.round(((selectedVehicle.telematics || selectedVehicle.telemetry)?.speedMph ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.speed ?? 0) * 1.60934)} <span className="text-xs font-normal text-slate-500">km/h</span>
+                    {Math.round((selectedVehicle.telematics || selectedVehicle.telemetry)?.speed ?? (selectedVehicle.telematics || selectedVehicle.telemetry)?.speedMph ?? 0)} <span className="text-xs font-normal text-slate-500">km/h</span>
                   </span>
                 </div>
 

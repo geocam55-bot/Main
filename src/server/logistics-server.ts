@@ -4887,23 +4887,21 @@ async function getFleetId(token: string): Promise<string | null> {
         else if (rawIgnition === 'IDLE' || rawIgnition === 'IDLING') ignitionStatus = 'IDLE';
         else ignitionStatus = 'OFF';
 
-        // Check if truck is actively dispatched on an active in-transit delivery route in dispatch board
-        const truckStatusStr = String(deserialized.status || t.status || '').toLowerCase();
-        if (truckStatusStr === 'in transit' || truckStatusStr === 'moving' || truckStatusStr === 'active') {
-          if (rawSpeed <= 0) rawSpeed = 44;
-          ignitionStatus = 'ON';
-        } else if (truckStatusStr === 'idle' || truckStatusStr === 'idling' || truckStatusStr === 'loading') {
-          ignitionStatus = 'IDLE';
-        }
-
         // Evaluate vehicle state: MOVING, IDLE, or STOPPED
         let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
-        if (rawSpeed > 3 || (ignitionStatus === 'ON' && rawSpeed > 0)) {
+        if (liveMatch?.status) {
+          status = liveMatch.status;
+          if (status !== 'MOVING') {
+            rawSpeed = 0;
+          }
+        } else if (rawSpeed >= 5 && ignitionStatus === 'ON') {
           status = 'MOVING';
-        } else if (ignitionStatus === 'IDLE' || (ignitionStatus === 'ON' && rawSpeed <= 3)) {
+        } else if (ignitionStatus === 'IDLE' || (ignitionStatus === 'ON' && rawSpeed < 5)) {
           status = 'IDLE';
+          rawSpeed = 0;
         } else {
           status = 'STOPPED';
+          rawSpeed = 0;
         }
 
         const fuelLevel = typeof deserialized.fuelLevel === 'number' ? deserialized.fuelLevel : Math.max(25, Math.min(100, 85 - (index * 4)));
@@ -5009,7 +5007,7 @@ async function getFleetId(token: string): Promise<string | null> {
       const movingCount = vehicles.filter(v => v.status === 'MOVING').length;
       const idleCount = vehicles.filter(v => v.status === 'IDLE').length;
       const stoppedCount = vehicles.filter(v => v.status === 'STOPPED').length;
-      const avgSpeed = vehicles.length > 0 ? Math.round((vehicles.reduce((acc, v) => acc + (v.telematics?.speedMph || v.telematics?.speed || 0), 0) / vehicles.length) * 1.60934) : 0;
+      const avgSpeed = vehicles.length > 0 ? Math.round(vehicles.reduce((acc, v) => acc + (v.telematics?.speed ?? v.telematics?.speedMph ?? 0), 0) / vehicles.length) : 0;
       const avgFuel = vehicles.length > 0 ? Math.round(vehicles.reduce((acc, v) => acc + (v.telematics?.fuelPercent || v.telematics?.fuelLevel || 0), 0) / vehicles.length) : 0;
 
       return res.json({

@@ -16,6 +16,7 @@ export default async function handler(req, res) {
     // Search filter
     if (search) {
       list = list.filter(v => 
+        (v.truckName && v.truckName.toLowerCase().includes(search)) ||
         (v.name && v.name.toLowerCase().includes(search)) ||
         (v.id && String(v.id).toLowerCase().includes(search)) ||
         (v.vin && v.vin.toLowerCase().includes(search)) ||
@@ -25,30 +26,40 @@ export default async function handler(req, res) {
 
     // Status filter
     if (statusFilter === 'moving') {
-      list = list.filter(v => v.motionStatus === 'MOVING' || (v.speed && v.speed > 0));
-    } else if (statusFilter === 'idling') {
-      list = list.filter(v => v.motionStatus === 'IDLING' || v.ignitionStatus === 'IDLING');
-    } else if (statusFilter === 'parked' || statusFilter === 'stopped') {
-      list = list.filter(v => v.motionStatus === 'PARKED' || v.ignitionStatus === 'OFF');
+      list = list.filter(v => v.status === 'MOVING' || v.motionStatus === 'MOVING' || (v.speed && v.speed > 3));
+    } else if (statusFilter === 'idle' || statusFilter === 'idling') {
+      list = list.filter(v => v.status === 'IDLE' || v.motionStatus === 'IDLE' || v.ignitionStatus === 'IDLE');
+    } else if (statusFilter === 'stopped' || statusFilter === 'parked' || statusFilter === 'off') {
+      list = list.filter(v => v.status === 'STOPPED' || v.motionStatus === 'PARKED' || v.ignitionStatus === 'OFF');
     }
 
-    const movingCount = (result.vehicles || []).filter(v => v.motionStatus === 'MOVING' || (v.speed && v.speed > 0)).length;
-    const idlingCount = (result.vehicles || []).filter(v => v.motionStatus === 'IDLING' || v.ignitionStatus === 'IDLING').length;
-    const parkedCount = (result.vehicles || []).filter(v => v.motionStatus === 'PARKED' || v.ignitionStatus === 'OFF').length;
+    const allVehicles = result.vehicles || [];
+    const movingCount = allVehicles.filter(v => v.status === 'MOVING' || v.motionStatus === 'MOVING' || (v.speed && v.speed > 3)).length;
+    const idlingCount = allVehicles.filter(v => v.status === 'IDLE' || v.motionStatus === 'IDLE' || v.ignitionStatus === 'IDLE').length;
+    const parkedCount = allVehicles.filter(v => v.status === 'STOPPED' || v.motionStatus === 'PARKED' || v.ignitionStatus === 'OFF').length;
+    const avgSpeed = allVehicles.length > 0 ? Math.round(allVehicles.reduce((acc, v) => acc + (v.speed || 0), 0) / allVehicles.length) : 0;
+    const avgFuel = allVehicles.length > 0 ? Math.round(allVehicles.reduce((acc, v) => acc + (v.telematics?.fuelPercent || 75), 0) / allVehicles.length) : 75;
 
     res.status(200).json({
       success: true,
       data: list,
       vehicles: list,
       count: list.length,
-      totalCount: (result.vehicles || []).length,
+      totalCount: allVehicles.length,
       summary: {
-        total: (result.vehicles || []).length,
+        total: allVehicles.length,
+        totalVehicles: allVehicles.length,
         moving: movingCount,
+        movingCount: movingCount,
         idling: idlingCount,
-        parked: parkedCount
+        idleCount: idlingCount,
+        parked: parkedCount,
+        stoppedCount: parkedCount,
+        averageSpeed: avgSpeed,
+        averageFuelLevel: avgFuel,
+        totalActiveDeliveries: 0
       },
-      source: "fleet_complete",
+      source: result.source || "fleet_complete",
       fleetId: result.fleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
       timestamp: new Date().toISOString()
     });

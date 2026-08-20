@@ -161,16 +161,25 @@ export function useTelematics({
         });
 
         setVehicles(normalizedVehicles);
+        
+        const vList = normalizedVehicles;
+        const moving = vList.filter(v => v.status === 'MOVING').length;
+        const idle = vList.filter(v => v.status === 'IDLE').length;
+        const stopped = vList.filter(v => v.status === 'STOPPED').length;
+        const avgSpd = vList.length > 0 ? Math.round(vList.reduce((a, b) => a + (b.telematics.speedMph || b.telematics.speed || 0), 0) / vList.length) : 0;
+        const avgFuel = vList.length > 0 ? Math.round(vList.reduce((a, b) => a + (b.telematics.fuelPercent || b.telematics.fuelLevel || 75), 0) / vList.length) : 75;
+
         if (data.summary) {
-          setSummary(data.summary);
+          setSummary({
+            totalVehicles: typeof data.summary.totalVehicles === 'number' ? data.summary.totalVehicles : (typeof data.summary.total === 'number' ? data.summary.total : vList.length),
+            movingCount: typeof data.summary.movingCount === 'number' ? data.summary.movingCount : (typeof data.summary.moving === 'number' ? data.summary.moving : moving),
+            idleCount: typeof data.summary.idleCount === 'number' ? data.summary.idleCount : (typeof data.summary.idling === 'number' ? data.summary.idling : idle),
+            stoppedCount: typeof data.summary.stoppedCount === 'number' ? data.summary.stoppedCount : (typeof data.summary.parked === 'number' ? data.summary.parked : stopped),
+            averageSpeed: typeof data.summary.averageSpeed === 'number' ? data.summary.averageSpeed : avgSpd,
+            averageFuelLevel: typeof data.summary.averageFuelLevel === 'number' ? data.summary.averageFuelLevel : avgFuel,
+            totalActiveDeliveries: typeof data.summary.totalActiveDeliveries === 'number' ? data.summary.totalActiveDeliveries : vList.reduce((a, b) => a + (b.activeRoute?.stops?.length || b.activeRoute?.totalStops || 0), 0)
+          });
         } else {
-          // Compute summary fallback
-          const vList = normalizedVehicles;
-          const moving = vList.filter(v => v.status === 'MOVING').length;
-          const idle = vList.filter(v => v.status === 'IDLE').length;
-          const stopped = vList.filter(v => v.status === 'STOPPED').length;
-          const avgSpd = vList.length > 0 ? Math.round(vList.reduce((a, b) => a + (b.telematics.speedMph || b.telematics.speed), 0) / vList.length) : 0;
-          const avgFuel = vList.length > 0 ? Math.round(vList.reduce((a, b) => a + (b.telematics.fuelPercent || b.telematics.fuelLevel), 0) / vList.length) : 0;
           setSummary({
             totalVehicles: vList.length,
             movingCount: moving,

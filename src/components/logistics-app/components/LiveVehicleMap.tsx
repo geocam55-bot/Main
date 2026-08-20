@@ -769,7 +769,7 @@ export default function LiveVehicleMap({
                         <span>Speed</span>
                       </div>
                       <div className="text-base font-extrabold text-white font-mono">
-                        {Math.round(selSpeed * 1.60934)}
+                        {Math.round(selSpeed)}
                         <span className="text-[10px] font-normal text-slate-400 ml-0.5">km/h</span>
                       </div>
                     </div>
