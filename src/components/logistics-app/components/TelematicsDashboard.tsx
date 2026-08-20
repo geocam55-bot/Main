@@ -710,6 +710,7 @@ export default function TelematicsDashboard() {
                 onSelectVehicle={(id) => setSelectedVehicleId(id)}
                 isStreaming={isStreaming}
                 onToggleStreaming={() => setIsStreaming(!isStreaming)}
+                viewingTripsFor={viewingTripsFor}
               />
             </div>
 

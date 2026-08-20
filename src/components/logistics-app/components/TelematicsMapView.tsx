@@ -31,6 +31,7 @@ interface TelematicsMapViewProps {
   onSelectVehicle: (vehicleId: string | null) => void;
   isStreaming?: boolean;
   onToggleStreaming?: () => void;
+  viewingTripsFor?: string | null;
 }
 
 const API_KEY_STATIC =
@@ -121,6 +122,76 @@ function ActiveRoutePolyline({
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// SUB-COMPONENT: TRIP ROUTE POLYLINE
+// ════════════════════════════════════════════════════════════════════════════
+const mockTripPath = [
+  { lat: 44.668, lng: -63.585, type: 'stop', label: '5' },
+  { lat: 44.733, lng: -63.667, type: 'waypoint' }, // Bedford
+  { lat: 44.967, lng: -63.533, type: 'waypoint' }, // Elmsdale
+  { lat: 45.033, lng: -63.317, type: 'stop', label: '6' }, // Cook Brook
+  { lat: 44.967, lng: -63.183, type: 'waypoint' }, // Elderbank
+  { lat: 44.900, lng: -63.217, type: 'waypoint' }, // Meaghers Grant
+  { lat: 44.668, lng: -63.585, type: 'waypoint' }, // Dartmouth (End)
+];
+
+function TripRoutePolyline({
+  active,
+  color = '#2563eb'
+}: {
+  active: boolean;
+  color?: string;
+}) {
+  const map = useMap();
+  const polylineRef = useRef<google.maps.Polyline | null>(null);
+
+  useEffect(() => {
+    if (!map || !active || !window.google?.maps) {
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+        polylineRef.current = null;
+      }
+      return;
+    }
+
+    if (polylineRef.current) {
+      polylineRef.current.setMap(null);
+    }
+
+    const path = mockTripPath.map(p => ({ lat: p.lat, lng: p.lng }));
+
+    const polyline = new window.google.maps.Polyline({
+      path,
+      strokeColor: color,
+      strokeOpacity: 0.85,
+      strokeWeight: 5,
+      icons: [{
+        icon: {
+          path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 2.5,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+          fillColor: color,
+          fillOpacity: 1
+        },
+        repeat: '100px'
+      }],
+      map
+    });
+
+    polylineRef.current = polyline;
+
+    return () => {
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+        polylineRef.current = null;
+      }
+    };
+  }, [map, active, color]);
+
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // SUB-COMPONENT: TRAFFIC OVERLAY
 // ════════════════════════════════════════════════════════════════════════════
 function TrafficLayerToggle({ enabled }: { enabled: boolean }) {
@@ -158,12 +229,14 @@ function MapCameraController({
   vehicles,
   selectedVehicle,
   followSelected,
-  fitKey
+  fitKey,
+  viewingTripsFor
 }: {
   vehicles: VehicleRecord[];
   selectedVehicle: VehicleRecord | null;
   followSelected: boolean;
   fitKey?: number;
+  viewingTripsFor?: string | null;
 }) {
   const map = useMap();
   const initialFitDone = useRef(false);
@@ -171,6 +244,13 @@ function MapCameraController({
   // Fit all vehicles into view on initial load or when manually triggered
   useEffect(() => {
     if (!map || !window.google?.maps) return;
+
+    if (viewingTripsFor) {
+      const bounds = new window.google.maps.LatLngBounds();
+      mockTripPath.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+      map.fitBounds(bounds, { padding: 80 });
+      return;
+    }
 
     if (selectedVehicle && followSelected) {
       const vLat = getVehicleLat(selectedVehicle);
@@ -351,7 +431,8 @@ export default function TelematicsMapView({
   selectedVehicleId,
   onSelectVehicle,
   isStreaming = true,
-  onToggleStreaming
+  onToggleStreaming,
+  viewingTripsFor
 }: TelematicsMapViewProps) {
   const [apiKey, setApiKey] = useState<string>(() => {
     if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') return API_KEY_STATIC;
@@ -483,6 +564,41 @@ export default function TelematicsMapView({
             mapTypeId={mapTypeId}
             style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}
           >
+            {/* Trip Route Polyline when viewing trips */}
+            <TripRoutePolyline active={!!viewingTripsFor} color="#2563eb" />
+
+            {/* Trip Waypoint Markers */}
+            {!!viewingTripsFor && mockTripPath.map((stop, idx) => {
+              if (stop.type === 'stop') {
+                return (
+                  <AdvancedMarker
+                    key={`trip-stop-${idx}`}
+                    position={{ lat: stop.lat, lng: stop.lng }}
+                    title={`Stop ${stop.label}`}
+                  >
+                    <div className="flex flex-col items-center">
+                      <div className="h-6 w-6 rounded-full bg-rose-600 border-2 border-white flex items-center justify-center font-bold text-white text-[11px] shadow-md z-10">
+                        {stop.label}
+                      </div>
+                    </div>
+                  </AdvancedMarker>
+                );
+              }
+              if (idx === 0 || idx === mockTripPath.length - 1) {
+                return (
+                  <AdvancedMarker
+                    key={`trip-end-${idx}`}
+                    position={{ lat: stop.lat, lng: stop.lng }}
+                  >
+                    <div className="h-6 w-6 bg-slate-800 rounded-md border-2 border-white flex items-center justify-center shadow-md">
+                      <MapPin className="h-3 w-3 text-white" />
+                    </div>
+                  </AdvancedMarker>
+                );
+              }
+              return null;
+            })}
+
             {/* Active Route Polyline for Selected Vehicle */}
             <ActiveRoutePolyline vehicle={selectedVehicle} color="#2563eb" />
 
@@ -495,6 +611,7 @@ export default function TelematicsMapView({
               selectedVehicle={selectedVehicle} 
               followSelected={followSelected} 
               fitKey={fitKey}
+              viewingTripsFor={viewingTripsFor}
             />
 
             {/* ── Active Route Stops Pins ── */}
