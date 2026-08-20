@@ -1,4 +1,4 @@
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   
   res.status(200).json({
@@ -12,6 +12,6 @@ module.exports = async (req, res) => {
       hasSupabaseAnonKey: !!process.env.SUPABASE_ANON_KEY,
       nodeEnv: process.env.NODE_ENV
     },
-    test: "If you see this, the serverless function is working!"
+    message: "ProSpaces Logistics API is fully online"
   });
-};
+}

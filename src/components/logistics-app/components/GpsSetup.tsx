@@ -88,7 +88,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
     lastSuccessfulConnection: new Date().toISOString(),
     lastSuccessfulApiRequest: new Date().toISOString(),
     lastTokenRefresh: new Date().toISOString(),
-    clientId: 'george.campbell@ronaatlantic.ca',
+    clientId: '',
     hasSecret: true,
     accessToken: 'test_token_abb3c44d...',
     refreshToken: 'test_refresh_token...'

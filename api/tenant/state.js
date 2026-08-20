@@ -1,3 +1,5 @@
+import { getSupabase } from '../_lib/telematicsHelper.js';
+
 const DEFAULT_BRANCHES = [
   { id: "rona_halifax", name: "RONA+ Halifax (Store 7010)", address: "5500 Chain Lake Dr, Halifax, NS B3S 1H6", type: "STORE" },
   { id: "rona_dartmouth", name: "RONA+ Dartmouth (Store 7020)", address: "100 Gale Terrace, Dartmouth, NS B3B 0B7", type: "STORE" },
@@ -44,11 +46,30 @@ const DEFAULT_USERS = [
   { id: "USR-ADMIN", name: "George Cameron", email: "geocam55@gmail.com", role: "Admin", associatedStoreId: "rona_halifax", status: "Active" }
 ];
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
   const tenantId = req.query.tenantId || "rona_atlantic";
+
+  try {
+    const supabase = getSupabase();
+    const { data } = await supabase
+      .from('kv_store_8405be07')
+      .select('value')
+      .eq('key', `tenant_state_${tenantId}`)
+      .maybeSingle();
+
+    if (data?.value) {
+      return res.status(200).json({
+        supabaseActive: true,
+        tenantId: tenantId,
+        ...data.value
+      });
+    }
+  } catch (e) {
+    console.warn('[Serverless Tenant State] Supabase read notice:', e?.message || e);
+  }
 
   res.status(200).json({
     supabaseActive: true,
@@ -58,4 +79,4 @@ module.exports = async (req, res) => {
     users: DEFAULT_USERS,
     deliveries: []
   });
-};
+}

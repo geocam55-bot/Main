@@ -484,7 +484,7 @@ export async function getValidToken(
 ): Promise<{ accessToken: string | null; fleetId: string | null; userId: string | null }> {
   const now = Date.now();
   const creds = credentialsSupplier ? await credentialsSupplier() : {};
-  const username = creds.username || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || 'george.campbell@ronaatlantic.ca';
+  const username = creds.username || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || '';
   const rawPassword = creds.password && creds.password !== 'test_secret' ? creds.password : undefined;
   const password = rawPassword || process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || creds.password;
   const tokenUrl = creds.apiUrl || process.env.FLEET_COMPLETE_API_URL || 'https://api.fleetcomplete.com/login/token';
