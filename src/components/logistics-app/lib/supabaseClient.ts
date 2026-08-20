@@ -806,12 +806,13 @@ export async function saveTenantStateDirect(
       };
       addressVal = `${rawAddr}||META:${JSON.stringify(meta)}`;
     }
+    const bType = String(b.type || b.branchType || b.branch_type || (String(b.name || b.id || '').toUpperCase().includes('DC') ? 'DC' : 'STORE'));
     return {
-      id: b.id,
-      tenantId,
-      name: b.name,
-      type: b.type,
-      address: addressVal
+      id: String(b.id || b.code || b.branchCode || b.branch_code || `BR-${Date.now()}`),
+      tenantId: String(tenantId),
+      name: String(b.name || b.branchName || b.branch_name || b.id || "Branch"),
+      type: bType,
+      address: addressVal || "N/A"
     };
   });
 

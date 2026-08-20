@@ -2838,12 +2838,13 @@ app.use((req, res, next) => {
           };
           addressVal = `${rawAddr}||META:${JSON.stringify(meta)}`;
         }
+        const bType = String(b.type || b.branchType || b.branch_type || (String(b.name || b.id || '').toUpperCase().includes('DC') ? 'DC' : 'STORE'));
         return {
-          id: b.id,
+          id: String(b.id || b.code || b.branchCode || b.branch_code || `BR-${Date.now()}`),
           tenantId: String(tenantId),
-          name: b.name,
-          type: b.type,
-          address: addressVal
+          name: String(b.name || b.branchName || b.branch_name || b.id || "Branch"),
+          type: bType,
+          address: addressVal || "N/A"
         };
       });
       const sanitizedTrucks = uniqueTrucks.map((t: any) => ({ ...t, tenantId: String(tenantId) }));
@@ -2925,8 +2926,51 @@ app.use((req, res, next) => {
 
       // 1. Branches
       if (branches !== undefined && sanitizedBranches.length > 0) {
-        const { error } = await supabase.from("branches").upsert(sanitizedBranches);
-        if (error) throw new Error(`Branches Sync Error: ${error.message}`);
+        try {
+          let currentBranchPayload = sanitizedBranches;
+          let branchAttempts = 0;
+          while (branchAttempts < 10) {
+            branchAttempts++;
+            const { error: branchErr } = await supabase.from("branches").upsert(currentBranchPayload);
+            if (!branchErr) break;
+
+            const errMsg = branchErr.message || String(branchErr);
+            console.log(`[Branches Sync] Adjusting branches payload (Attempt ${branchAttempts}):`, errMsg);
+
+            const isMissingColumnError = (
+              branchErr.code === "42703" ||
+              branchErr.code === "PGRST204" ||
+              (errMsg.includes("column") && (errMsg.includes("does not exist") || errMsg.includes("Could not find")))
+            ) && !errMsg.includes("violates not-null constraint") && branchErr.code !== "23502";
+
+            if (isMissingColumnError) {
+              const match = errMsg.match(/column '([^']+)'|column "([^"]+)"|Could not find the '([^']+)' column/i);
+              let colToStrip = match ? (match[1] || match[2] || match[3]) : null;
+
+              if (colToStrip) {
+                console.log(`[Branches Sync] Stripping missing column '${colToStrip}' and retrying...`);
+                currentBranchPayload = currentBranchPayload.map((b: any) => {
+                  const copy = { ...b };
+                  delete copy[colToStrip];
+                  return copy;
+                });
+              } else {
+                console.log(`[Branches Sync] Fallback: stripping extended branch columns...`);
+                currentBranchPayload = currentBranchPayload.map((b: any) => ({
+                  id: b.id,
+                  tenantId: b.tenantId,
+                  name: b.name,
+                  type: b.type,
+                  address: b.address
+                }));
+              }
+            } else {
+              throw branchErr;
+            }
+          }
+        } catch (branchErr: any) {
+          throw new Error(`Branches Sync Error: ${branchErr.message || String(branchErr)}`);
+        }
       }
 
       // 2. Trucks
