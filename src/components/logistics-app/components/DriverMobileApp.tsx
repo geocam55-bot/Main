@@ -162,7 +162,7 @@ export default function DriverMobileApp({
       // 2. Query Supabase trucks table
       const supabase = createClient();
       const { data, error } = await supabase.from('trucks').select('*');
-      const sourceList = (data && data.length > 0) ? data : (trucks.length > 0 ? trucks : FLEET_COMPLETE_TRUCKS);
+      const sourceList = (data && data.length > 0) ? data : trucks;
 
       if (sourceList && sourceList.length > 0) {
         const mapped: Truck[] = sourceList.map((d: any) => {
@@ -442,17 +442,28 @@ export default function DriverMobileApp({
     }
   }, [activeStopIndex]);
 
-  // Setup HTML5 Signature Pad
+  // Setup responsive HTML5 Signature Pad
   useEffect(() => {
+    if (activeScreen !== 'stop') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    const parent = canvas.parentElement;
+    if (parent) {
+      const rect = parent.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const displayWidth = Math.floor(rect.width) || 340;
+      const displayHeight = 130;
+      canvas.width = displayWidth * dpr;
+      canvas.height = displayHeight * dpr;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.scale(dpr, dpr);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+      }
+    }
   }, [activeScreen]);
 
   // Signature Drawing Handlers
@@ -466,8 +477,8 @@ export default function DriverMobileApp({
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-    const x = (clientX - rect.left) * (canvas.width / rect.width);
-    const y = (clientY - rect.top) * (canvas.height / rect.height);
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -486,8 +497,8 @@ export default function DriverMobileApp({
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-    const x = (clientX - rect.left) * (canvas.width / rect.width);
-    const y = (clientY - rect.top) * (canvas.height / rect.height);
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -502,7 +513,10 @@ export default function DriverMobileApp({
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
     setHasDrawnSignature(false);
   };
 
@@ -782,84 +796,15 @@ export default function DriverMobileApp({
   };
 
   // ════════════════════════════════════════════════════════════════════════════
-  // 1. SCREEN: SIGN IN / DRIVER AUTH
+  // MAIN DRIVER APPLICATION SHELL (UNIFIED MOBILE-FIRST CONTAINER)
   // ════════════════════════════════════════════════════════════════════════════
-  if (activeScreen === 'login' || !driverUser) {
-    return (
-      <div className="w-full min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-8 border border-slate-200">
-          
-          {/* Standalone Brand Header */}
-          <div className="flex flex-col items-center text-center mb-7">
-            <div className="h-16 w-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-600 mb-3 shadow-xs">
-              <TruckIcon className="h-8 w-8" />
-            </div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-tight">ProSpaces Driver</h1>
-            <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mt-1">Mobile Terminal & Telematics</p>
-          </div>
+  const isUserAuthenticated = Boolean(driverUser) && activeScreen !== 'login';
 
-          {/* Form */}
-          <form onSubmit={handleDriverSignIn} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Driver ID or Email</label>
-              <input 
-                type="text"
-                value={driverIdInput}
-                onChange={(e) => setDriverIdInput(e.target.value)}
-                placeholder="e.g. GEORGE-101 or driver email"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">PIN / Password</label>
-              <input 
-                type="password"
-                value={driverPasswordInput}
-                onChange={(e) => setDriverPasswordInput(e.target.value)}
-                placeholder="Enter PIN"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                required
-              />
-            </div>
-
-            {loginError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium flex items-center space-x-2">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{loginError}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-sm uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center space-x-2 mt-2"
-            >
-              {isLoggingIn ? (
-                <span className="flex items-center space-x-2">
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Connecting to Fleet Database...</span>
-                </span>
-              ) : (
-                <span>SIGN IN TO ROUTE</span>
-              )}
-            </button>
-          </form>
-
-        </div>
-      </div>
-    );
-  }
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // MAIN DRIVER APPLICATION SHELL (MOBILE-FIRST STANDALONE CONTAINER)
-  // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="w-full min-h-screen bg-slate-950 flex flex-col items-center justify-start antialiased selection:bg-blue-600 selection:text-white">
+    <div className="w-full min-h-[100dvh] bg-slate-950 flex flex-col items-center justify-start antialiased selection:bg-blue-600 selection:text-white overflow-x-hidden">
       
-      {/* Centered Mobile Application Body */}
-      <div className="w-full max-w-md min-h-screen bg-slate-50 flex flex-col relative shadow-2xl sm:border-x border-slate-800">
+      {/* Centered Mobile Application Body - Consistent 100% viewport on mobile, max-w-md on desktop */}
+      <div className="w-full max-w-md min-h-[100dvh] bg-slate-50 flex flex-col relative shadow-2xl sm:border-x border-slate-800 text-slate-800">
         
         {/* Global Toast for Action Feedback */}
         {vehicleSavedToast && (
@@ -876,8 +821,154 @@ export default function DriverMobileApp({
           </div>
         )}
 
+        {/* ── 0. SCREEN: DRIVER SIGN IN (MOBILE-NATIVE EMBEDDED) ── */}
+        {(!isUserAuthenticated || activeScreen === 'login') && (
+          <div className="flex-1 flex flex-col justify-between p-4 sm:p-5 select-none overflow-y-auto">
+            
+            {/* Top Bar with return option */}
+            <div>
+              <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-200/80">
+                <div className="flex items-center space-x-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+                    Fleet Terminal v2.6
+                  </span>
+                </div>
+                {onBackToPortal && (
+                  <button
+                    type="button"
+                    onClick={onBackToPortal}
+                    className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                    <span>Exit to Hub</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Hero & Logo Card */}
+              <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-slate-900 rounded-2xl p-5 text-white shadow-md text-center my-3 relative overflow-hidden">
+                <div className="absolute top-2 right-2 opacity-10 pointer-events-none">
+                  <TruckIcon className="h-24 w-24" />
+                </div>
+                <div className="h-14 w-14 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center text-white mx-auto mb-3 shadow-inner">
+                  <TruckIcon className="h-7 w-7" />
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
+                  RONA Driver Terminal
+                </h1>
+                <p className="text-xs text-blue-200 font-medium mt-1">
+                  Atlantic Delivery & Live ePOD Dispatch
+                </p>
+                <div className="inline-flex items-center space-x-1.5 bg-black/30 backdrop-blur-xs px-2.5 py-1 rounded-full text-[10px] font-mono text-emerald-300 border border-white/10 mt-3">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                  <span>Supabase Fleet Connected</span>
+                </div>
+              </div>
+
+              {/* Fast 1-Tap Demo Driver Quick-Select Chips */}
+              <div className="mb-4">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-0.5">
+                  Fast Driver Quick-Select:
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { name: 'Bob R.', email: 'bob.rafters@ronadartmouth.ca', hub: 'Dartmouth' },
+                    { name: 'Travis V.', email: 'travis.vickers@ronaelsmdale.ca', hub: 'Elmsdale' },
+                    { name: 'George C.', email: 'george.campbell@ronadartmouth.ca', hub: 'Halifax' }
+                  ].map(d => (
+                    <button
+                      key={d.email}
+                      type="button"
+                      onClick={() => {
+                        setDriverIdInput(d.email);
+                        setDriverPasswordInput('Password123!');
+                      }}
+                      className="p-2 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl text-left transition-all cursor-pointer shadow-2xs group"
+                    >
+                      <span className="text-xs font-black text-slate-800 group-hover:text-blue-700 block truncate leading-tight">
+                        {d.name}
+                      </span>
+                      <span className="text-[9px] font-mono text-slate-400 block truncate mt-0.5">
+                        {d.hub}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Login Form */}
+              <form onSubmit={handleDriverSignIn} className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Driver ID or Email
+                  </label>
+                  <input 
+                    type="text"
+                    value={driverIdInput}
+                    onChange={(e) => setDriverIdInput(e.target.value)}
+                    placeholder="e.g. bob.rafters@ronadartmouth.ca"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                      PIN / Password
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-mono">Default: Password123!</span>
+                  </div>
+                  <input 
+                    type="password"
+                    value={driverPasswordInput}
+                    onChange={(e) => setDriverPasswordInput(e.target.value)}
+                    placeholder="Enter driver PIN or password"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                    required
+                  />
+                </div>
+
+                {loginError && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium flex items-center space-x-2">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2 min-h-[44px]"
+                >
+                  {isLoggingIn ? (
+                    <span className="flex items-center space-x-2">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Connecting to Fleet Database...</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center space-x-1.5">
+                      <span>SIGN IN TO ROUTE</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </span>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            {/* Bottom Support Footer */}
+            <div className="pt-4 text-center">
+              <p className="text-[11px] text-slate-400 font-medium">
+                Dispatch Desk: <span className="font-bold text-slate-600 font-mono">(902) 468-3330</span> &bull; Burnside Hub
+              </p>
+            </div>
+
+          </div>
+        )}
+
         {/* ── 1. SCREEN: HOME / OVERVIEW ── */}
-        {activeScreen === 'home' && (
+        {isUserAuthenticated && activeScreen === 'home' && (
           <div className="flex-1 flex flex-col pb-24 select-none overflow-y-auto">
             
             {/* Native Mobile Status Bar & Greeting */}
@@ -1071,16 +1162,16 @@ export default function DriverMobileApp({
           </div>
         )}
 
-        {/* ── 2. SCREEN: ROUTE MAP & GPS NAVIGATION ── */}
-        {activeScreen === 'route' && (
-          <div className="flex-1 flex flex-col pb-20 select-none overflow-hidden">
+        {/* ── 2. SCREEN: ROUTE MAP & GPS NAVIGATION (FLEXIBLE HEIGHT) ── */}
+        {isUserAuthenticated && activeScreen === 'route' && (
+          <div className="flex-1 flex flex-col pb-20 select-none overflow-hidden h-[calc(100dvh-56px)] min-h-0">
             
             {/* Top Navigation Bar */}
-            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
+            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs shrink-0">
               <div className="flex items-center space-x-2">
                 <button 
                   onClick={() => setActiveScreen('home')}
-                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-600"
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 cursor-pointer"
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </button>
@@ -1110,8 +1201,8 @@ export default function DriverMobileApp({
               </div>
             </div>
 
-            {/* Real Interactive Google Maps Route Canvas */}
-            <div className="relative flex-1 bg-slate-950 overflow-hidden flex flex-col min-h-[360px] h-[380px] sm:h-[460px]">
+            {/* Real Interactive Google Maps Route Canvas - Flexes cleanly to fill space */}
+            <div className="relative flex-1 bg-slate-950 overflow-hidden flex flex-col min-h-[220px] w-full">
               {liveStops.length > 0 ? (
                 <DriverRouteMap
                   stops={liveStops}
@@ -1133,19 +1224,19 @@ export default function DriverMobileApp({
               )}
             </div>
 
-            {/* Bottom Stop Navigation Details Card */}
-            <div className="bg-white border-t border-slate-200 p-4 shadow-xl z-20">
+            {/* Bottom Stop Navigation Details Card - Docked above bottom bar */}
+            <div className="bg-white border-t border-slate-200 p-3 sm:p-4 shadow-xl z-20 shrink-0">
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2">
-                  <span className="h-6 w-6 rounded-lg bg-blue-600 text-white font-mono font-black text-xs flex items-center justify-center">
+                <div className="flex items-center space-x-2 min-w-0">
+                  <span className="h-6 w-6 rounded-lg bg-blue-600 text-white font-mono font-black text-xs flex items-center justify-center shrink-0">
                     {currentStop?.stopNumber || 1}
                   </span>
-                  <span className="text-xs font-black text-slate-900 truncate max-w-[200px]">
+                  <span className="text-xs font-black text-slate-900 truncate">
                     {currentStop?.customerName || 'No Stop Selected'}
                   </span>
                 </div>
                 {liveStops.length > 0 && (
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-1 shrink-0 ml-2">
                     <button
                       onClick={() => setActiveStopIndex(prev => Math.max(0, prev - 1))}
                       disabled={activeStopIndex === 0}
@@ -1169,7 +1260,7 @@ export default function DriverMobileApp({
 
               {/* Address & Actions */}
               {currentStop && (
-                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 mb-3">
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 mb-2.5">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-2 min-w-0">
                       <MapPin className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
@@ -1216,7 +1307,7 @@ export default function DriverMobileApp({
                   type="button"
                   onClick={() => setActiveScreen('stop')}
                   disabled={!currentStop}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md disabled:opacity-50"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md disabled:opacity-50 min-h-[44px]"
                 >
                   <CheckCircle2 className="h-4 w-4" />
                   <span>ARRIVED AT STOP &bull; OPEN ePOD</span>
@@ -1737,53 +1828,55 @@ export default function DriverMobileApp({
         )}
 
         {/* ── PERSISTENT STANDALONE MOBILE BOTTOM NAVIGATION BAR ── */}
-        <div className="fixed sm:absolute bottom-0 inset-x-0 bg-white border-t border-slate-200 py-2 px-3 flex items-center justify-around text-xs font-bold text-slate-500 z-30 shadow-lg max-w-md mx-auto">
-          
-          <button 
-            type="button"
-            onClick={() => setActiveScreen('home')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
-              activeScreen === 'home' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
-            }`}
-          >
-            <Building2 className="h-5 w-5" />
-            <span className="text-[10px]">Home</span>
-          </button>
+        {isUserAuthenticated && (
+          <div className="sticky bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-2 px-3 flex items-center justify-around text-xs font-bold text-slate-500 z-30 shadow-lg w-full max-w-md mx-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            
+            <button 
+              type="button"
+              onClick={() => setActiveScreen('home')}
+              className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
+                activeScreen === 'home' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+              }`}
+            >
+              <Building2 className="h-5 w-5" />
+              <span className="text-[10px]">Home</span>
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setActiveScreen('route')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
-              activeScreen === 'route' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
-            }`}
-          >
-            <Navigation className="h-5 w-5" />
-            <span className="text-[10px]">Route Map</span>
-          </button>
+            <button 
+              type="button"
+              onClick={() => setActiveScreen('route')}
+              className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
+                activeScreen === 'route' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+              }`}
+            >
+              <Navigation className="h-5 w-5" />
+              <span className="text-[10px]">Route Map</span>
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setActiveScreen('stop')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
-              activeScreen === 'stop' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
-            }`}
-          >
-            <FileText className="h-5 w-5" />
-            <span className="text-[10px]">ePOD Proof</span>
-          </button>
+            <button 
+              type="button"
+              onClick={() => setActiveScreen('stop')}
+              className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
+                activeScreen === 'stop' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+              }`}
+            >
+              <FileText className="h-5 w-5" />
+              <span className="text-[10px]">ePOD Proof</span>
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setActiveScreen('earnings')}
-            className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl ${
-              activeScreen === 'earnings' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
-            }`}
-          >
-            <UserIcon className="h-5 w-5" />
-            <span className="text-[10px]">Profile</span>
-          </button>
+            <button 
+              type="button"
+              onClick={() => setActiveScreen('earnings')}
+              className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
+                activeScreen === 'earnings' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+              }`}
+            >
+              <UserIcon className="h-5 w-5" />
+              <span className="text-[10px]">Profile</span>
+            </button>
 
-        </div>
+          </div>
+        )}
 
       </div>
 

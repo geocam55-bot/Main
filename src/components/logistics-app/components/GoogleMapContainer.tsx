@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { Branch, DeliveryRecord, Truck, DeliveryStatus } from '../types';
 import { Activity, Settings, MapPin, Truck as TruckIcon, User, Clock, Users, MoreVertical, X, Car, Store as StoreIcon, Warehouse as WarehouseIcon, Building } from 'lucide-react';
+import { TeardropTruckMarker } from './TeardropTruckMarker';
 import { 
   getBranchCoordinates, 
   getDeliveryCoordinates, 
@@ -829,42 +830,15 @@ function MapInner({
                 });
               }}
             >
-              <div className="relative flex flex-col items-center group cursor-pointer pb-2">
-                {/* Pointer (Direction arrow) */}
-                <div className="absolute top-0 right-0 bg-white rounded-full p-[2px] shadow-sm z-20 transform translate-x-1 -translate-y-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" className={`w-2.5 h-2.5 ${isMoving ? 'text-emerald-600' : isIdling ? 'text-amber-500' : 'text-slate-500'}`}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m-7 7l7-7 7 7" />
-                  </svg>
-                </div>
-                
-                {/* Pin Head - Store Color */}
-                <div 
-                  className={`relative z-10 w-9 h-9 rounded-full shadow-lg border-2 flex items-center justify-center transition-all ${storeInfo.bgColor} ${storeInfo.textColor} ${
-                    isSelected 
-                      ? 'scale-115 ring-[4px] ring-white border-white shadow-2xl' 
-                      : 'border-white hover:scale-105'
-                  }`}
-                  style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16', color: '#ffffff', borderColor: '#ffffff' } : {}}
-                >
-                  <Car className="w-4 h-4" />
-
-                  {/* Status Indicator Dot */}
-                  {isMoving && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse z-20" title="In Transit" />
-                  )}
-                  {isIdling && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-amber-500 border-2 border-white rounded-full z-20" title="Idling" />
-                  )}
-                </div>
-                
-                {/* Pin Tail - Store Color */}
-                <div 
-                  className={`w-3 h-3 rotate-45 -mt-2 border-r-[2.5px] border-b-[2.5px] shadow-sm z-0 transition-all ${storeInfo.bgColor} border-white`}
-                  style={storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16', borderColor: '#ffffff' } : {}}
-                ></div>
-
-
-              </div>
+              <TeardropTruckMarker
+                color={storeInfo.hexColor || '#2563eb'}
+                isMoving={isMoving}
+                isIdling={isIdling}
+                isSelected={isSelected}
+                label={truck.name?.split('-')[0]?.trim() || truck.name}
+                speedText={isMoving ? `${speedKmh}k` : undefined}
+                size="md"
+              />
             </AdvancedMarker>
           );
         })}

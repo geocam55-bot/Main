@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { VehicleRecord, RouteStop } from '../types/telematics';
+import { TeardropTruckMarker } from './TeardropTruckMarker';
 import { 
   Truck as TruckIcon, 
   MapPin, 
@@ -354,17 +355,11 @@ function AnimatedVehicleMarker({
   const isMoving = vehicle.status === 'MOVING';
   const isIdle = vehicle.status === 'IDLE';
 
-  const markerBg = isMoving
-    ? 'bg-emerald-600 border-emerald-400 text-white shadow-emerald-600/50'
+  const markerColor = isMoving
+    ? '#059669' // Emerald
     : isIdle
-    ? 'bg-amber-500 border-amber-300 text-white shadow-amber-500/50'
-    : 'bg-slate-700 border-slate-500 text-slate-100 shadow-slate-900/50';
-
-  const glowRing = isMoving
-    ? 'ring-4 ring-emerald-400/40'
-    : isIdle
-    ? 'ring-4 ring-amber-400/30'
-    : '';
+    ? '#d97706' // Amber
+    : '#475569'; // Slate
 
   return (
     <AdvancedMarker
@@ -373,52 +368,16 @@ function AnimatedVehicleMarker({
       onClick={onSelect}
       zIndex={isSelected ? 100 : isMoving ? 50 : 20}
     >
-      <div 
-        className={`relative flex flex-col items-center cursor-pointer transition-all duration-300 ${
-          isSelected ? 'scale-125 z-40' : 'hover:scale-110 z-20'
-        }`}
-      >
-        {/* Live Status Pulse / Beacon Halo */}
-        {isMoving && (
-          <span className="animate-ping absolute -top-1 inline-flex h-10 w-10 rounded-full bg-emerald-400 opacity-40 pointer-events-none" />
-        )}
-
-        {/* Rotatable Marker Body */}
-        <div 
-          className={`relative h-10 w-10 rounded-2xl ${markerBg} border-2 border-white shadow-xl flex items-center justify-center text-white transition-transform duration-700 ease-out ${
-            isSelected ? 'ring-4 ring-blue-500 shadow-blue-500/50 scale-110' : glowRing
-          }`}
-          style={{
-            transform: `rotate(${heading}deg)`,
-            transformOrigin: 'center center'
-          }}
-        >
-          {/* Compass Direction Heading Needle */}
-          <div
-            className="absolute -top-1.5 w-2 h-2 bg-white rounded-full shadow-sm border border-slate-400"
-            title={`Heading: ${heading}°`}
-          />
-
-          {/* Upright Navigation / Truck Icon */}
-          <div 
-            style={{ 
-              transform: `rotate(-${heading}deg)`,
-              transition: 'transform 0.7s ease-out'
-            }}
-            className="flex items-center justify-center"
-          >
-            <TruckIcon className="h-5 w-5 drop-shadow-sm" />
-          </div>
-        </div>
-
-        {/* Unit Number & Speed Badge */}
-        <div className="mt-1 px-2 py-0.5 bg-slate-900/95 backdrop-blur-xs border border-slate-800 text-white rounded-md text-[10px] font-mono font-bold shadow-md flex items-center space-x-1 whitespace-nowrap">
-          <span>{vehicle.truckName.split('-')[0]?.trim() || `#${vehicle.vehicleId.slice(-3)}`}</span>
-          {speed > 0 && (
-            <span className="text-emerald-400 font-extrabold">&bull; {Math.round(speed)} km/h</span>
-          )}
-        </div>
-      </div>
+      <TeardropTruckMarker
+        color={markerColor}
+        isMoving={isMoving}
+        isIdling={isIdle}
+        isSelected={isSelected}
+        heading={heading}
+        label={vehicle.truckName.split('-')[0]?.trim() || `#${vehicle.vehicleId.slice(-3)}`}
+        speedText={speed > 0 ? `${Math.round(speed)}k` : undefined}
+        size="md"
+      />
     </AdvancedMarker>
   );
 }

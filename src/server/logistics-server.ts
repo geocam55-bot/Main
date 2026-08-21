@@ -3601,7 +3601,175 @@ app.use((req, res, next) => {
     }
   });
 
-  // API Route for performing camera snapshot scanning using Gemini Vision
+  // Helper: Extract real fields from OCR text using comprehensive regex & pattern parsing
+  function extractRealDocumentFieldsFromOcrText(
+    rawText: string,
+    fieldsToExtract: Record<string, any>,
+    docType: string
+  ): Record<string, string> {
+    const result: Record<string, string> = {};
+    const lines = (rawText || "").split("\n").map(l => l.trim()).filter(Boolean);
+
+    Object.entries(fieldsToExtract).forEach(([fieldKey, fObj]: [string, any]) => {
+      const key = (fieldKey || "").toLowerCase();
+      const label = (fObj?.label || "").toLowerCase();
+      let extractedValue = "";
+
+      // 1. Order / PO / Invoice / Reference Number
+      if (key.includes("order") || key.includes("invoice") || key.includes("po") || key.includes("so") || key.includes("rma") || key.includes("reference") || key.includes("code") || key.includes("#") || label.includes("order") || label.includes("invoice")) {
+        const docNumRegex = /\b((?:ORD|INV|PO|SO|CR|RMA|REC|VND|WO)[-#\s]?[A-Z0-9]{3,12})\b/i;
+        const match = rawText.match(docNumRegex);
+        if (match) extractedValue = match[1].trim();
+        else {
+          const numberRegex = /(?:order|invoice|po|so|rma|credit|no|num|#)\s*[:#\.-]?\s*([a-zA-Z0-9-]+)/i;
+          const match2 = rawText.match(numberRegex);
+          if (match2 && match2[1] && match2[1].length >= 3) extractedValue = match2[1].trim();
+        }
+      }
+
+      // 2. Dates
+      if (!extractedValue && (key.includes("date") || key.includes("issued") || key.includes("delivery") || key.includes("pickup") || label.includes("date"))) {
+        const datePattern1 = /\b(\d{1,2}[-\/\.\s](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\/\.\s]\d{2,4})\b/i;
+        const datePattern2 = /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?\s*,\s*\d{4})\b/i;
+        const datePattern3 = /\b(\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2})\b/;
+        const datePattern4 = /\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4})\b/;
+        const matchDate = rawText.match(datePattern1) || rawText.match(datePattern2) || rawText.match(datePattern3) || rawText.match(datePattern4);
+        if (matchDate) extractedValue = matchDate[1] || matchDate[0];
+      }
+
+      // 3. Customer / Vendor / Recipient Name
+      if (!extractedValue && (key.includes("customer") || key.includes("name") || key.includes("recipient") || key.includes("vendor") || key.includes("supplier") || label.includes("customer") || label.includes("recipient"))) {
+        const companyRegex = /([A-Z\d][a-zA-Z0-9\s-.&]+?(?:Ltd|Co|Corp|Inc|LLC|Builders|Association|Group|Shop|Store|Supply|Logistics|Construction|Warehouse|Enterprises|Commercial))\b/i;
+        for (const line of lines) {
+          if (companyRegex.test(line) && !line.toLowerCase().includes("prospaces") && !line.toLowerCase().includes("invoice") && !line.toLowerCase().includes("total")) {
+            const matchName = line.match(companyRegex);
+            if (matchName) {
+              extractedValue = matchName[1].trim();
+              break;
+            }
+          }
+        }
+        if (!extractedValue) {
+          const custLabelRegex = /(?:Customer|Bill To|Sold To|Client|Recipient)\s*[:\-]?\s*([A-Za-z0-9\s.,&'-]+)/i;
+          const matchCust = rawText.match(custLabelRegex);
+          if (matchCust && matchCust[1]) {
+            const candidate = matchCust[1].split("\n")[0].trim();
+            if (candidate.length > 2 && candidate.length < 50) extractedValue = candidate;
+          }
+        }
+      }
+
+      // 4. Destination / Ship To / Delivery Address
+      if (!extractedValue && (key.includes("ship") || key.includes("to") || key.includes("address") || key.includes("destination") || key.includes("delivery") || label.includes("address") || label.includes("destination"))) {
+        const postalRegex = /(?:\d+\s+[A-Za-z0-9\s.,#-]+(?:Hwy|Rd|St|Ave|Dr|Blvd|Lane|Way|Court|Boulevard)[A-Za-z0-9\s.,#-]+[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d)/i;
+        for (const line of lines) {
+          if (postalRegex.test(line)) {
+            const matchAddr = line.match(postalRegex);
+            if (matchAddr) {
+              extractedValue = matchAddr[0].trim();
+              break;
+            }
+          }
+        }
+        if (!extractedValue) {
+          const streetRegex = /(\d+\s+[A-Z][a-zA-Z0-9\s.,#-]+(?:Hwy|Rd|St|Ave|Dr|Blvd|Court|Highway|Street|Road|Avenue|Drive|Way))/i;
+          for (const line of lines) {
+            if (streetRegex.test(line)) {
+              const matchAddr2 = line.match(streetRegex);
+              if (matchAddr2) {
+                extractedValue = matchAddr2[1].trim();
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // 5. Subtotal / Total / Price / Amount
+      if (!extractedValue && (key.includes("subtotal") || key.includes("total") || key.includes("price") || key.includes("amount") || key.includes("cost") || label.includes("total") || label.includes("price"))) {
+        const priceRegex = /(?:\$|usd)?\s*(\b\d{1,4}(?:,\d{3})*(?:\.\d{2})\b)/i;
+        const matchPrice = rawText.match(priceRegex);
+        if (matchPrice) extractedValue = '$' + matchPrice[1];
+      }
+
+      // 6. Weight / Freight / Units
+      if (!extractedValue && (key.includes("weight") || key.includes("gross") || key.includes("lbs") || key.includes("kg") || key.includes("freight") || label.includes("weight"))) {
+        const weightRegex = /(\b\d{1,4}(?:,\d{3})*\s*(?:lbs|kg|lbs\.|kg\.|pounds|ton|tons))\b/i;
+        const matchWeight = rawText.match(weightRegex);
+        if (matchWeight) extractedValue = matchWeight[1];
+      }
+
+      // 7. If not found in text, fallback to template coordinate baseline value, NEVER a mock string
+      if (!extractedValue) {
+        if (fObj?.value && fObj.value !== "MOCK_VALUE" && fObj.value !== "undefined") {
+          extractedValue = fObj.value;
+        } else {
+          extractedValue = "";
+        }
+      }
+
+      result[fieldKey] = extractedValue;
+    });
+
+    return result;
+  }
+
+  // Helper: Perform Real Fast OCR & text extraction with timeout protection
+  async function performRealTesseractOcrAndParse(
+    fileData: string,
+    docType: string,
+    fieldsToExtract: Record<string, any>
+  ): Promise<{ data: Record<string, string>; rawOcrText: string }> {
+    const parts = fileData.match(/^data:(.*);base64,(.*)$/);
+    if (!parts) {
+      throw new Error("Invalid base64 payload provided for OCR.");
+    }
+    const mimeType = (parts[1] || "").toLowerCase();
+    const base64Data = parts[2];
+    const buffer = Buffer.from(base64Data, "base64");
+
+    let rawText = "";
+
+    // If PDF, extract vector text stream directly in milliseconds
+    if (mimeType.includes("pdf") || buffer.toString("utf8", 0, 5) === "%PDF-") {
+      try {
+        const uint8 = new Uint8Array(buffer);
+        const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const loadingTask = pdfjsLib.getDocument({ data: uint8, isEvalSupported: false, useSystemFonts: true });
+        const pdf = await loadingTask.promise;
+        const pageTexts: string[] = [];
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p);
+          const textContent = await page.getTextContent();
+          const pText = textContent.items.map((it: any) => it.str).join(" ");
+          pageTexts.push(pText);
+        }
+        rawText = pageTexts.join("\n");
+      } catch (pdfErr) {
+        console.warn("Fast PDF extraction exception:", pdfErr);
+      }
+    }
+
+    // If not PDF or rawText empty, run Tesseract with a 2.5s maximum execution limit
+    if (!rawText) {
+      try {
+        const TesseractModule = await import("tesseract.js");
+        const Tesseract = TesseractModule.default || TesseractModule;
+        
+        const tesseractPromise = Tesseract.recognize(buffer, "eng").then(res => (res.data as any).text || "");
+        const timeoutPromise = new Promise<string>((resolve) => setTimeout(() => resolve(""), 2500));
+        
+        rawText = await Promise.race([tesseractPromise, timeoutPromise]);
+      } catch (tessErr) {
+        console.warn("Tesseract OCR exception:", tessErr);
+      }
+    }
+
+    const extractedData = extractRealDocumentFieldsFromOcrText(rawText, fieldsToExtract, docType);
+    return { data: extractedData, rawOcrText: rawText };
+  }
+
+  // API Route for performing camera snapshot scanning using Gemini Vision with Real Tesseract Fallback
   app.post("/api/scan-photo", async (req, res) => {
     try {
       const { fileData } = req.body;
@@ -3633,59 +3801,103 @@ Output schema keys:
 - barcodeText: the decoded string value (or null if not found/legible).
 - barcodeFormat: the format e.g. "CODE_128", "QR_CODE", "CODE_39", "UPC", etc. (or null).`;
 
-      const aiClient = getGeminiClient();
-
-      const response = await aiClient.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: base64Data
-              }
-            },
-            {
-              text: prompt
-            }
-          ]
-        },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              success: { type: Type.BOOLEAN },
-              barcodeText: { type: Type.STRING },
-              barcodeFormat: { type: Type.STRING }
-            },
-            required: ["success", "barcodeText", "barcodeFormat"]
-          },
-          temperature: 0.1
-        }
-      });
-
-      const rawText = response.text;
-      if (!rawText) {
-        throw new Error("Unable to extract response stream text from Gemini.");
+      let aiClient;
+      let usedGemini = false;
+      try {
+        aiClient = getGeminiClient();
+        usedGemini = true;
+      } catch (err: any) {
+        console.info("Gemini API key not configured, performing real Tesseract OCR on photo scan buffer...");
       }
 
-      const parsedJson = JSON.parse(rawText.trim());
-      
-      // Persist actual scan image to server folder
+      if (usedGemini && aiClient) {
+        try {
+          const response = await aiClient.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64Data
+                  }
+                },
+                {
+                  text: prompt
+                }
+              ]
+            },
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  success: { type: Type.BOOLEAN },
+                  barcodeText: { type: Type.STRING },
+                  barcodeFormat: { type: Type.STRING }
+                },
+                required: ["success", "barcodeText", "barcodeFormat"]
+              },
+              temperature: 0.1
+            }
+          });
+
+          const rawText = response.text;
+          if (rawText) {
+            const parsedJson = JSON.parse(rawText.trim());
+            const savedImage = saveBase64ScanImage(fileData, "scan_photo", {
+              barcodeText: parsedJson?.barcodeText || null,
+              source: 'ai_vision_scan'
+            });
+
+            return res.json({
+              ...parsedJson,
+              savedImage,
+              fileUrl: savedImage?.fileUrl
+            });
+          }
+        } catch (geminiRunErr) {
+          console.warn("Gemini generation failed, falling back to local Tesseract OCR:", geminiRunErr);
+        }
+      }
+
+      // Real local Tesseract OCR on the photo buffer
+      const buffer = Buffer.from(base64Data, "base64");
+      const TesseractModule = await import("tesseract.js");
+      const Tesseract = TesseractModule.default || TesseractModule;
+      const result = await Tesseract.recognize(buffer, "eng");
+      const rawText = (result.data as any).text || "";
+
+      // Extract real barcode or order/invoice number from recognized text
+      const barcodeMatch = rawText.match(/\b((?:7155|7159|PO|SO|INV|ORD|DEL|TRK|RMA|CR)[-#\s]?[A-Z0-9]{3,12})\b/i) ||
+                           rawText.match(/\b([A-Z]{2,3}[-_]\d{4,8})\b/i) ||
+                           rawText.match(/\b(\d{5,14})\b/);
+
+      const foundCode = barcodeMatch ? barcodeMatch[1].trim() : null;
       const savedImage = saveBase64ScanImage(fileData, "scan_photo", {
-        barcodeText: parsedJson?.barcodeText || null,
-        source: 'ai_vision_scan'
+        barcodeText: foundCode,
+        source: 'tesseract_real_scan'
       });
 
-      res.json({
-        ...parsedJson,
-        savedImage,
-        fileUrl: savedImage?.fileUrl
-      });
+      if (foundCode) {
+        return res.json({
+          success: true,
+          barcodeText: foundCode,
+          barcodeFormat: "CODE_128",
+          savedImage,
+          fileUrl: savedImage?.fileUrl
+        });
+      } else {
+        return res.json({
+          success: false,
+          error: "No barcode or reference number detected in photo. Please ensure camera is centered on the barcode or label.",
+          savedImage,
+          fileUrl: savedImage?.fileUrl
+        });
+      }
     } catch (err: any) {
-      console.error("Gemini Scan Photo Error:", err);
-      res.status(500).json({ error: err.message || "An exception occurred during server-side Gemini scanner execution." });
+      console.error("Scan Photo Error:", err);
+      res.status(500).json({ error: err.message || "An exception occurred during server-side scanner execution." });
     }
   });
 
@@ -3912,51 +4124,80 @@ Return the structured results in the required JSON format.`;
         requiredFields.push(fieldKey);
       });
 
-      const aiClient = getGeminiClient();
-
-      const response = await aiClient.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: base64Data
-              }
-            },
-            {
-              text: prompt
-            }
-          ]
-        },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties,
-            required: requiredFields
-          },
-          temperature: 0.1
-        }
-      });
-
-      const rawText = response.text;
-      if (!rawText) {
-        throw new Error("Unable to extract response stream text from Gemini.");
+      let aiClient;
+      let usedGemini = false;
+      try {
+        aiClient = getGeminiClient();
+        usedGemini = true;
+      } catch (err: any) {
+        console.info("Gemini API key not configured, executing server-side Tesseract OCR extraction...");
       }
 
-      const parsedJson = JSON.parse(rawText.trim());
+      if (usedGemini && aiClient) {
+        try {
+          const response = await aiClient.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64Data
+                  }
+                },
+                {
+                  text: prompt
+                }
+              ]
+            },
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties,
+                required: requiredFields
+              },
+              temperature: 0.1
+            }
+          });
 
-      // Save document OCR scan image to server folder
+          const rawText = response.text;
+          if (rawText) {
+            const parsedJson = JSON.parse(rawText.trim());
+
+            // Save document OCR scan image to server folder
+            const savedImage = saveBase64ScanImage(fileData, "ocr_doc", {
+              docType: docType || 'document'
+            });
+
+            return res.json({
+              success: true,
+              data: parsedJson,
+              savedImage,
+              fileUrl: savedImage?.fileUrl,
+              source: 'gemini_vision'
+            });
+          }
+        } catch (geminiErr: any) {
+          console.warn("Gemini OCR generation failed, falling back to local Tesseract OCR:", geminiErr);
+        }
+      }
+
+      // Real Tesseract OCR Extraction
+      console.log("Server OCR: Running Tesseract OCR on document payload...");
+      const { data: extractedData, rawOcrText } = await performRealTesseractOcrAndParse(fileData, docType, fieldsToExtract);
+
       const savedImage = saveBase64ScanImage(fileData, "ocr_doc", {
         docType: docType || 'document'
       });
 
-      res.json({
+      return res.json({
         success: true,
-        data: parsedJson,
+        data: extractedData,
+        rawText: rawOcrText,
         savedImage,
-        fileUrl: savedImage?.fileUrl
+        fileUrl: savedImage?.fileUrl,
+        source: 'tesseract_real_ocr'
       });
     } catch (err: any) {
       console.error("OCR Extraction Error:", err);
@@ -4540,7 +4781,7 @@ async function getFleetId(token: string): Promise<string | null> {
       const trucks = primaryTenant?.trucks || [];
       const deliveries = primaryTenant?.deliveries || [];
 
-      const totalVehicles = trucks.length || LAST_KNOWN_FLEET_COMPLETE_LOCATIONS.length;
+      const totalVehicles = trucks.length;
       let movingCount = 0;
       let idleCount = 0;
       let stoppedCount = 0;
@@ -4561,10 +4802,6 @@ async function getFleetId(token: string): Promise<string | null> {
           stoppedCount++;
         }
       });
-
-      if (trucks.length === 0) {
-        stoppedCount = LAST_KNOWN_FLEET_COMPLETE_LOCATIONS.length;
-      }
 
       const avgSpeed = trucks.length > 0 ? Math.round(totalSpeed / trucks.length) : 0;
       const avgFuel = trucks.length > 0 ? Math.round(totalFuel / trucks.length) : 75;
@@ -4804,25 +5041,11 @@ async function getFleetId(token: string): Promise<string | null> {
       let activeDeliveries: any[] = [];
 
       const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
-      if (primaryTenant && primaryTenant.trucks && primaryTenant.trucks.length > 0) {
+      if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
         activeTrucks = primaryTenant.trucks;
         activeDeliveries = primaryTenant.deliveries || [];
-      } else {
-        activeTrucks = LAST_KNOWN_FLEET_COMPLETE_LOCATIONS.map((fc, idx) => ({
-          id: fc.id,
-          name: fc.name,
-          lat: fc.lat,
-          lng: fc.lng,
-          speed: fc.speed,
-          heading: fc.heading,
-          ignitionStatus: fc.ignitionStatus,
-          vin: fc.vin,
-          licensePlate: fc.licensePlate,
-          model: `${fc.make || 'Ford'} ${fc.model || 'F-150'}`,
-          driver: fc.driver || `Driver ${idx + 1}`
-        }));
       }
-
+      
       // Merge any newly fetched Fleet Complete vehicles that may not be in in-memory state
       let liveFcMap = new Map<string, any>();
       try {
@@ -4997,10 +5220,11 @@ async function getFleetId(token: string): Promise<string | null> {
 
       if (search) {
         filteredVehicles = filteredVehicles.filter(v => 
-          v.truckName.toLowerCase().includes(search) ||
-          v.licensePlate.toLowerCase().includes(search) ||
-          v.vin.toLowerCase().includes(search) ||
-          v.activeRoute.driverName.toLowerCase().includes(search)
+          (v.truckName && v.truckName.toLowerCase().includes(search)) ||
+          (v.licensePlate && v.licensePlate.toLowerCase().includes(search)) ||
+          (v.vin && v.vin.toLowerCase().includes(search)) ||
+          (v.driver?.name && v.driver.name.toLowerCase().includes(search)) ||
+          (v.activeRoute?.driverName && v.activeRoute.driverName.toLowerCase().includes(search))
         );
       }
 
@@ -5038,25 +5262,11 @@ async function getFleetId(token: string): Promise<string | null> {
       let activeDeliveries: any[] = [];
 
       const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
-      if (primaryTenant && primaryTenant.trucks) {
+      if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
         activeTrucks = primaryTenant.trucks;
         activeDeliveries = primaryTenant.deliveries || [];
-      } else {
-        activeTrucks = LAST_KNOWN_FLEET_COMPLETE_LOCATIONS.map((fc, idx) => ({
-          id: fc.id,
-          name: fc.name,
-          lat: fc.lat,
-          lng: fc.lng,
-          speed: fc.speed,
-          heading: fc.heading,
-          ignitionStatus: fc.ignitionStatus,
-          vin: fc.vin,
-          licensePlate: fc.licensePlate,
-          model: `${fc.make || 'Ford'} ${fc.model || 'F-150'}`,
-          driver: fc.driver || `Driver ${idx + 1}`
-        }));
       }
-
+      
       // Check for live matching telemetry from Fleet Complete
       let liveMatch: any = null;
       try {

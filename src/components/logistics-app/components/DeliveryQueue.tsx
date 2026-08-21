@@ -8,6 +8,7 @@ import {
   List, LayoutGrid
 } from 'lucide-react';
 import DragDropFreightBoard from './DragDropFreightBoard';
+import { PhysicalDocumentModal } from './PhysicalDocumentModal';
 
 interface DeliveryQueueProps {
   deliveries: DeliveryRecord[];
@@ -2071,101 +2072,10 @@ export default function DeliveryQueue({
 
       {/* Digitized Document Preview Modal */}
       {previewDocDelivery && (
-        <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-4 z-55 backdrop-blur-sm animate-in fade-in duration-150">
-          <div 
-            className="fixed inset-0" 
-            onClick={() => setPreviewDocDelivery(null)}
-          />
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-3xl w-full relative z-10 overflow-hidden flex flex-col max-h-[92vh]">
-            {/* Modal Header */}
-            <div className="px-5 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-mono font-bold text-slate-100 text-sm flex items-center space-x-2">
-                    <span>Digitized Physical Document Archive</span>
-                    <span className="text-xs px-2 py-0.5 bg-indigo-950 text-indigo-300 border border-indigo-800/50 rounded font-semibold font-mono">
-                      {previewDocDelivery.epicorSalesOrder || previewDocDelivery.invoiceNumber || previewDocDelivery.id}
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400 font-sans mt-0.5">
-                    Ticket ID: <strong className="text-slate-200 font-mono">{previewDocDelivery.id}</strong> &bull; {previewDocDelivery.customerName}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => openScannedDocumentInNewTab(previewDocDelivery)}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer"
-                  title="Open document in a dedicated browser tab"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Open in New Tab</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewDocDelivery(null)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Document Render Canvas */}
-            <div className="p-6 overflow-y-auto bg-slate-950/90 flex justify-center items-center">
-              <div className="bg-white rounded-xl p-4 shadow-2xl max-w-full overflow-auto">
-                {(() => {
-                  const pdfUrl = getEffectivePdfUrl(previewDocDelivery);
-                  if (pdfUrl.startsWith('data:image/svg+xml;base64,')) {
-                    try {
-                      const base64Str = pdfUrl.replace('data:image/svg+xml;base64,', '');
-                      const svgStr = decodeURIComponent(escape(atob(base64Str)));
-                      return <div dangerouslySetInnerHTML={{ __html: svgStr }} className="w-full flex justify-center" />;
-                    } catch (e) {
-                      return <img src={pdfUrl} alt="Digitized Document" className="max-w-full h-auto rounded" />;
-                    }
-                  } else if (pdfUrl.startsWith('<svg')) {
-                    return <div dangerouslySetInnerHTML={{ __html: pdfUrl }} className="w-full flex justify-center" />;
-                  } else {
-                    return <img src={pdfUrl} alt="Digitized Document" className="max-w-full h-auto rounded" />;
-                  }
-                })()}
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-5 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between shrink-0 text-xs text-slate-400">
-              <div className="flex items-center space-x-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-mono text-[11px] text-slate-300">
-                  Azure OCR High-Fidelity Gate Archive Verified
-                </span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => openScannedDocumentInNewTab(previewDocDelivery)}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg transition-colors cursor-pointer flex items-center space-x-1"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  <span>Full Screen</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewDocDelivery(null)}
-                  className="px-4 py-1.5 bg-indigo-900/60 hover:bg-indigo-900/80 text-indigo-200 font-bold rounded-lg transition-colors cursor-pointer border border-indigo-800/40"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PhysicalDocumentModal 
+          delivery={previewDocDelivery} 
+          onClose={() => setPreviewDocDelivery(null)} 
+        />
       )}
 
     </div>

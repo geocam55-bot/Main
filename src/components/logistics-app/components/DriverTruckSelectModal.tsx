@@ -74,40 +74,6 @@ export default function DriverTruckSelectModal({
       }
     });
 
-    // Supplement with defaults from FLEET_COMPLETE_TRUCKS if missing
-    FLEET_COMPLETE_TRUCKS.forEach(spec => {
-      const specUNum = extractUnitNumber(spec.id) || extractUnitNumber(spec.name);
-      const existingMatch = Array.from(map.values()).find(existing => {
-        const exUNum = extractUnitNumber(existing.id) || extractUnitNumber(existing.name);
-        return (
-          existing.id === spec.id ||
-          (existing.name && existing.name.toLowerCase().trim() === spec.name.toLowerCase().trim()) ||
-          (specUNum && exUNum && specUNum === exUNum)
-        );
-      });
-
-      if (!existingMatch) {
-        map.set(spec.id, {
-          id: spec.id,
-          tenantId: currentTenant?.id || 'prospaces',
-          name: spec.name,
-          type: spec.model.includes('Boom') ? '6X Boom Truck' : (spec.model.includes('Box') ? 'Box Truck' : 'Pickup / Flatbed'),
-          status: 'Available',
-          driver: 'No Driver',
-          branchId: spec.branchId,
-          homeDepot: spec.homeDepot,
-          licensePlate: spec.licensePlate,
-          lat: 44.68550,
-          lng: -63.58250,
-          gpsLat: 44.68550,
-          gpsLng: -63.58250,
-          gpsSpeed: 0,
-          gpsIdlingMins: 0,
-          gpsLastHandshake: new Date().toISOString()
-        });
-      }
-    });
-
     return Array.from(map.values());
   }, [trucks, currentTenant]);
 

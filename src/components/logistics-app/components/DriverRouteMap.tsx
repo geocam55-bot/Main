@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { APIProvider, Map, AdvancedMarker, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { Truck as TruckIcon, MapPin, Check, Navigation2, Layers, AlertTriangle, Key, ZoomIn, ZoomOut, LocateFixed, RefreshCw, X, ShieldAlert, Sparkles } from 'lucide-react';
+import { TeardropTruckMarker } from './TeardropTruckMarker';
 import { DeliveryStatus } from '../types';
 
 export interface DriverStop {
@@ -434,21 +435,16 @@ function StandaloneRouteMap({
           style={{
             left: `${truckPos.x}%`,
             top: `${truckPos.y}%`,
-            transform: 'translate(-50%, -50%)'
+            transform: 'translate(-50%, -100%)'
           }}
           className="absolute pointer-events-none z-40 transition-all duration-500"
         >
-          <div className="flex flex-col items-center">
-            <div className="relative flex items-center justify-center">
-              <span className="animate-ping absolute inline-flex h-12 w-12 rounded-full bg-amber-400 opacity-40"></span>
-              <div className="h-10 w-10 rounded-2xl bg-amber-500 border-2 border-white shadow-2xl flex items-center justify-center text-slate-950 ring-4 ring-amber-500/30">
-                <TruckIcon className="h-5 w-5" />
-              </div>
-            </div>
-            <div className="mt-1.5 px-2 py-0.5 bg-amber-500 text-slate-950 rounded-md text-[9px] font-mono font-black shadow-md uppercase tracking-wider">
-              You &bull; Unit #{truckUnitNumber}
-            </div>
-          </div>
+          <TeardropTruckMarker
+            color="#f59e0b"
+            isMoving={true}
+            label={`You • Unit #${truckUnitNumber}`}
+            size="md"
+          />
         </div>
       </div>
 
@@ -774,17 +770,12 @@ export default function DriverRouteMap({
                   position={truckLocation}
                   title={`Driver Truck: ${truckName}`}
                 >
-                  <div className="flex flex-col items-center pointer-events-none z-40">
-                    <div className="relative flex items-center justify-center">
-                      <span className="animate-ping absolute inline-flex h-10 w-10 rounded-full bg-amber-400 opacity-50"></span>
-                      <div className="h-9 w-9 rounded-2xl bg-amber-500 border-2 border-white shadow-2xl flex items-center justify-center text-slate-950 ring-4 ring-amber-500/30">
-                        <TruckIcon className="h-4 w-4" />
-                      </div>
-                    </div>
-                    <div className="mt-1 px-2 py-0.5 bg-amber-500 text-slate-950 rounded-md text-[9px] font-mono font-black shadow-md uppercase tracking-wider">
-                      You &bull; Unit #{truckUnitNumber}
-                    </div>
-                  </div>
+                  <TeardropTruckMarker
+                    color="#f59e0b"
+                    isMoving={true}
+                    label={`You • Unit #${truckUnitNumber}`}
+                    size="md"
+                  />
                 </AdvancedMarker>
               )}
             </Map>

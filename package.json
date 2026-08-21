@@ -54,6 +54,7 @@
     "html5-qrcode": "^2.3.8",
     "input-otp": "*",
     "jimp": "^1.6.1",
+    "jspdf": "^4.2.1",
     "jszip": "*",
     "leaflet": "^1.9.4",
     "lucide-react": "*",

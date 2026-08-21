@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { VehicleRecord, TelematicsApiResponse, RouteStop } from '../types/telematics';
+import { TeardropTruckMarker } from './TeardropTruckMarker';
 import {
   Truck as TruckIcon,
   Navigation2,
@@ -148,17 +149,11 @@ function AnimatedTruckMarker({ vehicle, isSelected, onClick }: AnimatedTruckMark
   const isMoving = status === 'MOVING';
   const isIdle = status === 'IDLE';
 
-  const markerBg = isMoving
-    ? 'bg-emerald-600 border-emerald-400 text-white shadow-emerald-600/50'
+  const markerColor = isMoving
+    ? '#059669' // Emerald
     : isIdle
-    ? 'bg-amber-500 border-amber-300 text-white shadow-amber-500/50'
-    : 'bg-slate-700 border-slate-500 text-slate-100 shadow-slate-900/50';
-
-  const pulseRing = isMoving
-    ? 'ring-4 ring-emerald-400/40 animate-pulse'
-    : isIdle
-    ? 'ring-4 ring-amber-400/30'
-    : '';
+    ? '#d97706' // Amber
+    : '#475569'; // Slate
 
   return (
     <AdvancedMarker
@@ -167,57 +162,16 @@ function AnimatedTruckMarker({ vehicle, isSelected, onClick }: AnimatedTruckMark
       zIndex={isSelected ? 100 : isMoving ? 50 : 20}
       title={`${vehicle.truckName} - ${speed} km/h (${status})`}
     >
-      <div className="relative flex flex-col items-center cursor-pointer group select-none">
-        {/* Live Status Pulse Halo for Moving Trucks */}
-        {isMoving && (
-          <div className="absolute -inset-2.5 rounded-full bg-emerald-400/25 animate-ping pointer-events-none" />
-        )}
-
-        {/* Rotatable Marker Body */}
-        <div
-          className={`relative flex items-center justify-center w-11 h-11 rounded-2xl border-2 shadow-lg transition-transform duration-700 ease-out ${markerBg} ${pulseRing} ${
-            isSelected ? 'ring-4 ring-blue-500 scale-110 shadow-blue-500/50' : 'group-hover:scale-105'
-          }`}
-          style={{
-            transform: `rotate(${heading}deg)`,
-            transformOrigin: 'center center'
-          }}
-        >
-          {/* Direction Heading Pointer Needle */}
-          <div
-            className="absolute -top-1.5 w-2 h-2 bg-white rounded-full shadow-sm border border-slate-400"
-            title={`Heading: ${heading}° (${getCompassDirection(heading)})`}
-          />
-
-          {/* Truck Icon (Reverse rotation so icon remains upright while arrow points heading) */}
-          <div
-            style={{
-              transform: `rotate(-${heading}deg)`,
-              transition: 'transform 0.7s ease-out'
-            }}
-          >
-            <TruckIcon className="w-5 h-5 drop-shadow" />
-          </div>
-        </div>
-
-        {/* Unit Label Pill Below Marker */}
-        <div
-          className={`mt-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-tight shadow-md border whitespace-nowrap backdrop-blur-md transition-all ${
-            isSelected
-              ? 'bg-blue-600 text-white border-blue-400 scale-105'
-              : 'bg-slate-900/90 text-slate-100 border-slate-700 group-hover:bg-slate-800'
-          }`}
-        >
-          <div className="flex items-center gap-1">
-            <span>{vehicle.truckName.split('-')[0]?.trim() || vehicle.truckName}</span>
-            {isMoving && (
-              <span className="text-[9px] text-emerald-300 font-mono font-semibold">
-                {speed}k
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
+      <TeardropTruckMarker
+        color={markerColor}
+        isMoving={isMoving}
+        isIdling={isIdle}
+        isSelected={isSelected}
+        heading={heading}
+        label={vehicle.truckName.split('-')[0]?.trim() || vehicle.truckName}
+        speedText={isMoving ? `${Math.round(speed)}k` : undefined}
+        size="md"
+      />
     </AdvancedMarker>
   );
 }

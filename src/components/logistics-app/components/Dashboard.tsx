@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GoogleMapContainer from './GoogleMapContainer';
+import { TeardropTruckMarker } from './TeardropTruckMarker';
 import { DeliveryRecord, DeliveryStatus, Branch, Truck as TruckType, User as UserType } from '../types';
 import { renderUserAvatarHelper } from './UserProfileModal';
 import { getTruckSpecs } from '../truckSpecs';
@@ -1314,29 +1315,26 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 const isSelected = selectedTrackTruckId === truck.id;
 
                 return (
-                  <button
+                  <div
                     key={`gps-truck-${truck.id}`}
-                    type="button"
-                    style={{ left: `${xPosition}%`, top: `${yPosition}%`, ...(storeInfo.storeKey === 'elmsdale' ? { backgroundColor: '#090d16', color: '#ffffff' } : {}) }}
+                    style={{ left: `${xPosition}%`, top: `${yPosition}%`, transform: 'translate(-50%, -100%)' }}
                     onClick={(e) => {
                       e.stopPropagation(); // Stop click from propagating and moving the HQ anchor!
                       setSelectedTrackTruckId(isSelected ? null : truck.id);
                     }}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-lg border-2 z-30 cursor-pointer group transition-all duration-300 hover:scale-125 ${storeInfo.bgColor} ${storeInfo.textColor} ${
-                      isSelected 
-                        ? 'scale-125 ring-4 ring-amber-400 border-white shadow-2xl' 
-                        : 'border-white'
-                    }`}
+                    className="absolute z-30 cursor-pointer group"
                   >
-                    <div className="relative flex items-center justify-center">
-                      {isMoving && (
-                        <span className="absolute -inset-1 rounded-full animate-ping bg-emerald-400/40" />
-                      )}
-                      <TruckIcon className="h-4 w-4 transform-gpu shrink-0" />
-                    </div>
+                    <TeardropTruckMarker
+                      color={storeInfo.hexColor || '#2563eb'}
+                      isMoving={isMoving}
+                      isSelected={isSelected}
+                      label={truck.name?.split('-')[0]?.trim() || truck.name}
+                      speedText={isMoving ? `${Math.round(truck.activeSpeed || truck.gpsSpeed || 54)}k` : undefined}
+                      size="sm"
+                    />
 
                     {/* Popover display info */}
-                    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-slate-700 text-[10px] text-white px-3 py-2 rounded-xl shadow-2xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-40 font-sans space-y-1">
+                    <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-slate-700 text-[10px] text-white px-3 py-2 rounded-xl shadow-2xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50 font-sans space-y-1">
                       <p className="font-extrabold text-white flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-full ${isMoving ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
                         🚚 {truck.name} ({truck.type || 'Flatbed'})
@@ -1356,7 +1354,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                         <p className="text-[8px] text-slate-400 italic">Idle at home depot base</p>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
 
