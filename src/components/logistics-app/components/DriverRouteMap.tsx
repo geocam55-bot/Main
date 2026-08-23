@@ -3,6 +3,7 @@ import { APIProvider, Map, AdvancedMarker, useMap, useMapsLibrary } from '@vis.g
 import { Truck as TruckIcon, MapPin, Check, Navigation2, Layers, AlertTriangle, Key, ZoomIn, ZoomOut, LocateFixed, RefreshCw, X, ShieldAlert, Sparkles } from 'lucide-react';
 import { TeardropTruckMarker } from './TeardropTruckMarker';
 import { DeliveryStatus } from '../types';
+import { sanitizeGpsCoordinates } from '../lib/mapHelpers';
 
 export interface DriverStop {
   id: string;
@@ -17,6 +18,9 @@ export interface DriverStop {
   lat: number;
   lng: number;
   delivery?: any;
+  stopType?: 'additional_stop' | 'delivery';
+  reason?: string;
+  additionalStopId?: string;
 }
 
 interface DriverRouteMapProps {
@@ -27,6 +31,7 @@ interface DriverRouteMapProps {
   truckUnitNumber?: string;
   isLiveGpsActive?: boolean;
   onToggleLiveGps?: () => void;
+  truckLocation?: { lat: number; lng: number };
 }
 
 export interface RouteStats {
@@ -77,30 +82,36 @@ function DriverRouteOverlay({
   const map = useMap();
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
   const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const onwardDirectionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
 
-  // Calculate and draw route polylines between truck, active stop, and consecutive stops
+  // Calculate and draw route polylines strictly sticking to roads from current truck position to active stop & onward stops
   useEffect(() => {
     if (!map || stops.length === 0 || typeof window === 'undefined' || !window.google?.maps) return;
 
-    // Clean up previous polylines & directions
+    // Clean up previous polylines & directions renderers
     polylinesRef.current.forEach(p => p.setMap(null));
     polylinesRef.current = [];
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setMap(null);
       directionsRendererRef.current = null;
     }
+    if (onwardDirectionsRendererRef.current) {
+      onwardDirectionsRendererRef.current.setMap(null);
+      onwardDirectionsRendererRef.current = null;
+    }
+
+    const activeStop = stops[activeStopIndex] || stops[0];
+    if (!activeStop || !activeStop.lat || !activeStop.lng) return;
 
     const bounds = new google.maps.LatLngBounds();
     bounds.extend(truckLocation);
+    bounds.extend({ lat: activeStop.lat, lng: activeStop.lng });
     stops.forEach(s => {
       if (s.lat && s.lng) bounds.extend({ lat: s.lat, lng: s.lng });
     });
 
-    const activeStop = stops[activeStopIndex] || stops[0];
-
-    // Helper fallback distance estimator
+    // Helper fallback distance estimator from truck location to destination delivery
     const calcApproxStats = () => {
-      if (!activeStop || !activeStop.lat || !activeStop.lng) return;
       const dLat = (activeStop.lat - truckLocation.lat) * 111;
       const dLng = (activeStop.lng - truckLocation.lng) * 85;
       const distKm = Math.max(0.4, Math.round(Math.sqrt(dLat * dLat + dLng * dLng) * 10) / 10);
@@ -108,7 +119,7 @@ function DriverRouteOverlay({
       onRouteStatsCalculated?.({
         distanceText: `${distKm} km`,
         durationText: `${mins} min`,
-        nextInstruction: `Follow designated delivery corridor to ${activeStop.customerName}`,
+        nextInstruction: `Follow designated road route to ${activeStop.address || activeStop.customerName}`,
         summary: activeStop.customerName,
         distanceKm: distKm,
         durationMinutes: mins,
@@ -116,58 +127,69 @@ function DriverRouteOverlay({
     };
 
     function drawFallbackPolyline() {
-      const pathCoords = [truckLocation, ...stops.map(s => ({ lat: s.lat, lng: s.lng }))];
-      const polyline = new window.google.maps.Polyline({
-        path: pathCoords,
+      // Primary driving line from truck location to active delivery
+      const primaryPath = [truckLocation, { lat: activeStop.lat, lng: activeStop.lng }];
+      const primaryPolyline = new window.google.maps.Polyline({
+        path: primaryPath,
         strokeColor: '#2563eb',
-        strokeOpacity: 0.9,
+        strokeOpacity: 0.95,
         strokeWeight: 6,
         map
       });
-      polylinesRef.current = [polyline];
+
+      // Onward route line for remaining sequence of stops
+      const subsequentStops = stops.slice(activeStopIndex);
+      if (subsequentStops.length > 1) {
+        const onwardPath = subsequentStops.map(s => ({ lat: s.lat, lng: s.lng }));
+        const onwardPolyline = new window.google.maps.Polyline({
+          path: onwardPath,
+          strokeColor: '#64748b',
+          strokeOpacity: 0.6,
+          strokeWeight: 4,
+          map
+        });
+        polylinesRef.current = [primaryPolyline, onwardPolyline];
+      } else {
+        polylinesRef.current = [primaryPolyline];
+      }
       calcApproxStats();
     }
 
-    // Try Google Maps DirectionsService
+    // Use Google Maps DirectionsService with DRIVING travel mode to stick strictly to roads
     if (window.google.maps.DirectionsService) {
       const directionsService = new window.google.maps.DirectionsService();
       
       const origin = truckLocation;
-      const destination = stops.length > 0 
-        ? { lat: stops[stops.length - 1].lat, lng: stops[stops.length - 1].lng }
-        : truckLocation;
+      const destination = { lat: activeStop.lat, lng: activeStop.lng };
 
-      const intermediateWaypoints = stops.slice(0, stops.length - 1).map(s => ({
-        location: { lat: s.lat, lng: s.lng },
-        stopover: true
-      }));
-
+      // 1. Primary Active Leg: Truck -> Active Stop (DRIVING strictly along road network)
       directionsService.route(
         {
           origin,
           destination,
-          waypoints: intermediateWaypoints.length > 0 ? intermediateWaypoints : undefined,
           travelMode: window.google.maps.TravelMode.DRIVING,
           optimizeWaypoints: false,
+          provideRouteAlternatives: false,
         },
         (result, status) => {
           if (status === window.google.maps.DirectionsStatus.OK && result) {
             const renderer = new window.google.maps.DirectionsRenderer({
               map,
               directions: result,
-              suppressMarkers: true, // We render our own rich custom markers
+              suppressMarkers: true, // Render our own rich custom markers
               polylineOptions: {
                 strokeColor: '#2563eb',
                 strokeWeight: 6,
-                strokeOpacity: 0.9,
+                strokeOpacity: 0.95,
+                zIndex: 20
               },
             });
             directionsRendererRef.current = renderer;
 
-            // Extract leg details for turn-by-turn HUD
-            const firstLeg = result.routes[0]?.legs[activeStopIndex] || result.routes[0]?.legs[0];
+            // Extract leg details for turn-by-turn HUD (from truck location to active stop)
+            const firstLeg = result.routes[0]?.legs[0];
             if (firstLeg) {
-              const rawStep = firstLeg.steps?.[0]?.instructions?.replace(/<[^>]*>?/gm, '') || `Proceed along route towards ${activeStop?.customerName}`;
+              const rawStep = firstLeg.steps?.[0]?.instructions?.replace(/<[^>]*>?/gm, '') || `Proceed towards ${activeStop?.address || activeStop?.customerName}`;
               onRouteStatsCalculated?.({
                 distanceText: firstLeg.distance?.text || '3.2 km',
                 durationText: firstLeg.duration?.text || '6 min',
@@ -177,8 +199,45 @@ function DriverRouteOverlay({
                 durationMinutes: Math.round((firstLeg.duration?.value || 360) / 60),
               });
             }
+
+            // 2. Onward Legs: Route all subsequent stops strictly on roads via DirectionsService
+            const subsequentStops = stops.slice(activeStopIndex);
+            if (subsequentStops.length > 1) {
+              const onwardOrigin = { lat: activeStop.lat, lng: activeStop.lng };
+              const onwardDest = { lat: subsequentStops[subsequentStops.length - 1].lat, lng: subsequentStops[subsequentStops.length - 1].lng };
+              const waypoints = subsequentStops.slice(1, -1).map(st => ({
+                location: new window.google.maps.LatLng(st.lat, st.lng),
+                stopover: true,
+              }));
+
+              directionsService.route(
+                {
+                  origin: onwardOrigin,
+                  destination: onwardDest,
+                  waypoints,
+                  travelMode: window.google.maps.TravelMode.DRIVING,
+                  optimizeWaypoints: false,
+                },
+                (onwardResult, onwardStatus) => {
+                  if (onwardStatus === window.google.maps.DirectionsStatus.OK && onwardResult) {
+                    const onwardRenderer = new window.google.maps.DirectionsRenderer({
+                      map,
+                      directions: onwardResult,
+                      suppressMarkers: true,
+                      polylineOptions: {
+                        strokeColor: '#64748b',
+                        strokeWeight: 4,
+                        strokeOpacity: 0.75,
+                        zIndex: 10
+                      },
+                    });
+                    onwardDirectionsRendererRef.current = onwardRenderer;
+                  }
+                }
+              );
+            }
           } else {
-            // Fallback: draw high-contrast polyline connecting points
+            // Fallback: draw polyline connecting points
             drawFallbackPolyline();
           }
         }
@@ -206,6 +265,10 @@ function DriverRouteOverlay({
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setMap(null);
         directionsRendererRef.current = null;
+      }
+      if (onwardDirectionsRendererRef.current) {
+        onwardDirectionsRendererRef.current.setMap(null);
+        onwardDirectionsRendererRef.current = null;
       }
     };
   }, [map, stops, truckLocation, activeStopIndex, isLiveGpsActive, viewMode]);
@@ -310,6 +373,17 @@ function StandaloneRouteMap({
   };
 
   const activeStop = stops[activeStopIndex] || stops[0];
+  const activeStopPoint = stopPoints[activeStopIndex] || stopPoints[0];
+  const subsequentStopPoints = stopPoints.slice(activeStopIndex);
+
+  // Compute calculated approximate distance between truck location and current delivery
+  const approxDistanceKm = useMemo(() => {
+    if (!activeStop || !activeStop.lat || !activeStop.lng) return 4.2;
+    const dLat = (activeStop.lat - truckLocation.lat) * 111;
+    const dLng = (activeStop.lng - truckLocation.lng) * 85;
+    return Math.max(0.3, Math.round(Math.sqrt(dLat * dLat + dLng * dLng) * 10) / 10);
+  }, [activeStop, truckLocation]);
+  const approxDurationMins = Math.max(2, Math.round(approxDistanceKm * 1.8));
 
   return (
     <div 
@@ -352,36 +426,54 @@ function StandaloneRouteMap({
             className="opacity-50"
           />
 
-          {/* Live Driving Route Path Line */}
-          {stopPoints.length > 0 && (
+          {/* Live Driving Route Path Line from Truck Location to Delivery */}
+          {activeStopPoint && (
             <>
-              {/* Glowing Outer Route Halo */}
-              <polyline
-                points={`${truckPos.x}%,${truckPos.y}% ${stopPoints.map(p => `${p.pos.x}%,${p.pos.y}%`).join(' ')}`}
-                fill="none"
+              {/* Onward route path for subsequent stops */}
+              {subsequentStopPoints.length > 1 && (
+                <polyline
+                  points={subsequentStopPoints.map(p => `${p.pos.x}%,${p.pos.y}%`).join(' ')}
+                  fill="none"
+                  stroke="#475569"
+                  strokeWidth="3"
+                  strokeDasharray="4 6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeOpacity="0.7"
+                />
+              )}
+
+              {/* Glowing Outer Route Halo from Truck to Active Delivery */}
+              <line
+                x1={`${truckPos.x}%`}
+                y1={`${truckPos.y}%`}
+                x2={`${activeStopPoint.pos.x}%`}
+                y2={`${activeStopPoint.pos.y}%`}
                 stroke="#2563eb"
                 strokeWidth="8"
                 strokeLinecap="round"
-                strokeLinejoin="round"
                 strokeOpacity="0.4"
                 filter="url(#glow)"
               />
-              {/* Primary Active Route Line */}
-              <polyline
-                points={`${truckPos.x}%,${truckPos.y}% ${stopPoints.map(p => `${p.pos.x}%,${p.pos.y}%`).join(' ')}`}
-                fill="none"
+              {/* Primary Active Route Line from Truck to Active Delivery */}
+              <line
+                x1={`${truckPos.x}%`}
+                y1={`${truckPos.y}%`}
+                x2={`${activeStopPoint.pos.x}%`}
+                y2={`${activeStopPoint.pos.y}%`}
                 stroke="url(#routeGradient)"
-                strokeWidth="4"
+                strokeWidth="5"
                 strokeLinecap="round"
-                strokeLinejoin="round"
               />
-              {/* Directional Dash Animation */}
-              <polyline
-                points={`${truckPos.x}%,${truckPos.y}% ${stopPoints.map(p => `${p.pos.x}%,${p.pos.y}%`).join(' ')}`}
-                fill="none"
+              {/* Directional Dash Animation from Truck to Active Delivery */}
+              <line
+                x1={`${truckPos.x}%`}
+                y1={`${truckPos.y}%`}
+                x2={`${activeStopPoint.pos.x}%`}
+                y2={`${activeStopPoint.pos.y}%`}
                 stroke="#93c5fd"
-                strokeWidth="2"
-                strokeDasharray="6 12"
+                strokeWidth="2.5"
+                strokeDasharray="6 10"
                 strokeLinecap="round"
                 className="animate-pulse"
               />
@@ -392,7 +484,8 @@ function StandaloneRouteMap({
         {/* Delivery Stop Markers */}
         {stopPoints.map((stop, idx) => {
           const isSelected = idx === activeStopIndex;
-          const isCompleted = stop.status === 'completed' || stop.delivery?.status === DeliveryStatus.DELIVERED;
+          const isCompleted = stop.status === 'completed' || (stop.stopType === 'delivery' && stop.delivery?.status === DeliveryStatus.DELIVERED);
+          const isAdditionalStop = stop.stopType === 'additional_stop';
 
           return (
             <div
@@ -416,14 +509,22 @@ function StandaloneRouteMap({
                     isCompleted
                       ? 'bg-emerald-600 border-white text-white shadow-emerald-900/50'
                       : isSelected
-                        ? 'bg-blue-600 border-white text-white ring-4 ring-blue-500/40 shadow-blue-500/50 scale-110'
-                        : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
+                        ? isAdditionalStop
+                          ? 'bg-amber-500 border-white text-slate-950 ring-4 ring-amber-400/50 shadow-amber-500/50 scale-110 font-black'
+                          : 'bg-blue-600 border-white text-white ring-4 ring-blue-500/40 shadow-blue-500/50 scale-110'
+                        : isAdditionalStop
+                          ? 'bg-amber-600/90 border-amber-400 text-white hover:bg-amber-500'
+                          : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
                   }`}
                 >
                   {isCompleted ? <Check className="h-4 w-4" /> : stop.stopNumber}
                 </div>
-                <div className="mt-1 px-2 py-0.5 bg-slate-900/95 backdrop-blur-xs border border-slate-700/80 rounded-md text-[10px] font-bold text-white shadow-lg max-w-[130px] truncate text-center pointer-events-none">
-                  {stop.customerName.split(' ')[0]}
+                <div className={`mt-1 px-2 py-0.5 backdrop-blur-xs border rounded-md text-[10px] font-bold shadow-lg max-w-[130px] truncate text-center pointer-events-none ${
+                  isAdditionalStop
+                    ? 'bg-amber-950/95 border-amber-700/80 text-amber-200'
+                    : 'bg-slate-900/95 border-slate-700/80 text-white'
+                }`}>
+                  {isAdditionalStop ? `Stop ${stop.stopNumber}: ${stop.reason || 'Pickup'}` : stop.customerName.split(' ')[0]}
                 </div>
               </div>
             </div>
@@ -514,6 +615,7 @@ export default function DriverRouteMap({
   truckUnitNumber = '101',
   isLiveGpsActive = false,
   onToggleLiveGps,
+  truckLocation: truckLocationProp,
 }: DriverRouteMapProps) {
   const [apiKey, setApiKey] = useState<string>(() => {
     if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
@@ -612,26 +714,24 @@ export default function DriverRouteMap({
     setShowKeyInputModal(false);
   };
 
-  // Compute default center
+  // Actual Truck Location (from props, telematics, GPS, or home depot)
+  const truckLocation = useMemo(() => {
+    if (truckLocationProp && typeof truckLocationProp.lat === 'number' && typeof truckLocationProp.lng === 'number' && !isNaN(truckLocationProp.lat) && !isNaN(truckLocationProp.lng) && (truckLocationProp.lat !== 0 || truckLocationProp.lng !== 0)) {
+      return sanitizeGpsCoordinates(truckLocationProp.lat, truckLocationProp.lng);
+    }
+    return DEPOT_COORDS;
+  }, [truckLocationProp]);
+
+  // Compute default center (focused around the truck and current delivery destination)
   const defaultCenter = useMemo(() => {
+    if (truckLocation && truckLocation.lat && truckLocation.lng) {
+      return truckLocation;
+    }
     if (stops.length > 0 && stops[0].lat && stops[0].lng) {
       return { lat: stops[0].lat, lng: stops[0].lng };
     }
     return DEPOT_COORDS;
-  }, [stops]);
-
-  // Truck live approximate location (originating near current active stop or depot)
-  const truckLocation = useMemo(() => {
-    const active = stops[activeStopIndex] || stops[0];
-    if (active && active.lat && active.lng) {
-      // Offset slightly to simulate approaching the active stop from depot
-      return {
-        lat: active.lat - 0.0032,
-        lng: active.lng - 0.0028
-      };
-    }
-    return DEPOT_COORDS;
-  }, [stops, activeStopIndex]);
+  }, [truckLocation, stops]);
 
   const activeStop = stops[activeStopIndex] || stops[0];
 
@@ -731,13 +831,14 @@ export default function DriverRouteMap({
               {/* Delivery Stop Advanced Markers */}
               {stops.map((stop, idx) => {
                 const isSelected = idx === activeStopIndex;
-                const isCompleted = stop.status === 'completed' || stop.delivery?.status === DeliveryStatus.DELIVERED;
+                const isCompleted = stop.status === 'completed' || (stop.stopType === 'delivery' && stop.delivery?.status === DeliveryStatus.DELIVERED);
+                const isAdditionalStop = stop.stopType === 'additional_stop';
 
                 return (
                   <AdvancedMarker
                     key={stop.id}
                     position={{ lat: stop.lat, lng: stop.lng }}
-                    title={`${stop.stopNumber}. ${stop.customerName}`}
+                    title={`${stop.stopNumber}. ${stop.customerName} (${stop.address})`}
                     onClick={() => onSelectStop(idx)}
                   >
                     <div 
@@ -750,14 +851,22 @@ export default function DriverRouteMap({
                           isCompleted
                             ? 'bg-emerald-600 border-white text-white'
                             : isSelected
-                              ? 'bg-blue-600 border-white text-white ring-4 ring-blue-500/40 shadow-blue-500/50'
-                              : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
+                              ? isAdditionalStop
+                                ? 'bg-amber-500 border-white text-slate-950 ring-4 ring-amber-400/50 shadow-amber-500/50 font-black'
+                                : 'bg-blue-600 border-white text-white ring-4 ring-blue-500/40 shadow-blue-500/50'
+                              : isAdditionalStop
+                                ? 'bg-amber-600 border-amber-400 text-white hover:bg-amber-500'
+                                : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
                         }`}
                       >
                         {isCompleted ? <Check className="h-4 w-4" /> : stop.stopNumber}
                       </div>
-                      <div className="mt-1 px-2 py-0.5 bg-slate-900/90 backdrop-blur-xs border border-slate-800 rounded-md text-[10px] font-bold text-white shadow-md max-w-[120px] truncate text-center">
-                        {stop.customerName.split(' ')[0]}
+                      <div className={`mt-1 px-2 py-0.5 backdrop-blur-xs border rounded-md text-[10px] font-bold shadow-md max-w-[130px] truncate text-center ${
+                        isAdditionalStop 
+                          ? 'bg-amber-950/90 border-amber-700/80 text-amber-200' 
+                          : 'bg-slate-900/90 border-slate-800 text-white'
+                      }`}>
+                        {isAdditionalStop ? `Stop ${stop.stopNumber}: ${stop.reason || 'Pickup'}` : stop.customerName.split(' ')[0]}
                       </div>
                     </div>
                   </AdvancedMarker>

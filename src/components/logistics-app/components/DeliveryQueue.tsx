@@ -1,6 +1,6 @@
 import { formatPhoneNumber } from '../lib/formatters';
 import { useState, FormEvent } from 'react';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, getDeliveryPhotos } from '../types';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, getDeliveryPhotos, AdditionalDeliveryStop } from '../types';
 import { 
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
@@ -502,6 +502,115 @@ export default function DeliveryQueue({
   const [pickerModalDeliveryId, setPickerModalDeliveryId] = useState<string | null>(null);
   const [quickSelectedPicker, setQuickSelectedPicker] = useState('');
 
+  // Additional Stops UI State & Operations
+  const [addingStopDeliveryId, setAddingStopDeliveryId] = useState<string | null>(null);
+  const [newStopAddress, setNewStopAddress] = useState('');
+  const [newStopReason, setNewStopReason] = useState('');
+  const [newStopNotes, setNewStopNotes] = useState('');
+  const [editingStop, setEditingStop] = useState<{
+    deliveryId: string;
+    stopId: string;
+    address: string;
+    reason: string;
+    notes?: string;
+  } | null>(null);
+
+  // Handler to add a new stop to a delivery
+  const handleAddStop = (deliveryId: string) => {
+    if (!newStopAddress.trim() || !newStopReason.trim()) return;
+    const targetDelivery = deliveries.find(d => d.id === deliveryId);
+    if (!targetDelivery) return;
+
+    const newStop: AdditionalDeliveryStop = {
+      id: `stop-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      address: newStopAddress.trim(),
+      reason: newStopReason.trim(),
+      notes: newStopNotes.trim() || undefined,
+      sequenceOrder: (targetDelivery.additionalStops?.length || 0) + 1,
+      isCompleted: false,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedDelivery: DeliveryRecord = {
+      ...targetDelivery,
+      additionalStops: [...(targetDelivery.additionalStops || []), newStop]
+    };
+
+    onAddOrUpdateDelivery(updatedDelivery);
+    setAddingStopDeliveryId(null);
+    setNewStopAddress('');
+    setNewStopReason('');
+    setNewStopNotes('');
+  };
+
+  // Handler to delete a stop from a delivery
+  const handleDeleteStop = (deliveryId: string, stopId: string) => {
+    const targetDelivery = deliveries.find(d => d.id === deliveryId);
+    if (!targetDelivery) return;
+
+    const updatedDelivery: DeliveryRecord = {
+      ...targetDelivery,
+      additionalStops: (targetDelivery.additionalStops || []).filter(s => s.id !== stopId)
+    };
+
+    onAddOrUpdateDelivery(updatedDelivery);
+    if (editingStop?.stopId === stopId) {
+      setEditingStop(null);
+    }
+  };
+
+  // Handler to toggle stop completion status
+  const handleToggleStopCompleted = (deliveryId: string, stopId: string) => {
+    const targetDelivery = deliveries.find(d => d.id === deliveryId);
+    if (!targetDelivery) return;
+
+    const updatedStops = (targetDelivery.additionalStops || []).map(s => {
+      if (s.id === stopId) {
+        const nextState = !s.isCompleted;
+        return {
+          ...s,
+          isCompleted: nextState,
+          completedAt: nextState ? new Date().toISOString() : undefined
+        };
+      }
+      return s;
+    });
+
+    const updatedDelivery: DeliveryRecord = {
+      ...targetDelivery,
+      additionalStops: updatedStops
+    };
+
+    onAddOrUpdateDelivery(updatedDelivery);
+  };
+
+  // Handler to save an edited stop
+  const handleSaveEditedStop = () => {
+    if (!editingStop || !editingStop.address.trim() || !editingStop.reason.trim()) return;
+    const targetDelivery = deliveries.find(d => d.id === editingStop.deliveryId);
+    if (!targetDelivery) return;
+
+    const updatedStops = (targetDelivery.additionalStops || []).map(s => {
+      if (s.id === editingStop.stopId) {
+        return {
+          ...s,
+          address: editingStop.address.trim(),
+          reason: editingStop.reason.trim(),
+          notes: editingStop.notes?.trim() || undefined
+        };
+      }
+      return s;
+    });
+
+    const updatedDelivery: DeliveryRecord = {
+      ...targetDelivery,
+      additionalStops: updatedStops
+    };
+
+    onAddOrUpdateDelivery(updatedDelivery);
+    setEditingStop(null);
+  };
+
   const handleOpenAddModal = () => {
     const randomTicketNum = Math.floor(10000 + Math.random() * 90000);
     const randomSalesOrder = Math.floor(1000000 + Math.random() * 9000000);
@@ -702,6 +811,7 @@ export default function DeliveryQueue({
         scheduledDate: formScheduledDate || undefined,
         scheduledSlot: (formScheduledSlot as 'AM' | 'PM') || undefined,
         deliveryCategory: formDeliveryCategory || 'Retail',
+        additionalStops: [],
         history: newHistory
       };
 
@@ -1431,6 +1541,277 @@ export default function DeliveryQueue({
                             </div>
                           </div>
                         )}
+
+                        {/* Additional Stops Container */}
+                        <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 space-y-3 shadow-xs" id={`additional-stops-section-${delivery.id}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <div className="p-1.5 bg-amber-50 text-amber-700 rounded-lg border border-amber-200/60">
+                                <MapPin className="h-3.5 w-3.5" />
+                              </div>
+                              <div>
+                                <h5 className="font-bold text-gray-900 uppercase tracking-wider font-mono text-[10px] flex items-center gap-1.5">
+                                  Additional Stops
+                                  {delivery.additionalStops && delivery.additionalStops.length > 0 && (
+                                    <span className="text-[9px] bg-amber-100 text-amber-800 font-mono font-bold px-1.5 py-0.2 rounded-full border border-amber-200">
+                                      {delivery.additionalStops.length} {delivery.additionalStops.length === 1 ? 'stop' : 'stops'}
+                                    </span>
+                                  )}
+                                </h5>
+                                <p className="text-[10px] text-slate-500 font-sans">
+                                  Intermediate stops, pickups, or secondary drop-off points for this delivery route.
+                                </p>
+                              </div>
+                            </div>
+
+                            {addingStopDeliveryId !== delivery.id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddingStopDeliveryId(delivery.id);
+                                  setNewStopAddress('');
+                                  setNewStopReason('');
+                                  setNewStopNotes('');
+                                  setEditingStop(null);
+                                }}
+                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-lg text-[11px] font-bold shadow-2xs hover:shadow-xs transition-all flex items-center space-x-1 cursor-pointer shrink-0"
+                                id={`add-stop-btn-${delivery.id}`}
+                              >
+                                <Plus className="h-3.5 w-3.5 text-amber-700" />
+                                <span>Add Stop</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Form to Add New Stop */}
+                          {addingStopDeliveryId === delivery.id && (
+                            <div className="bg-amber-50/40 border border-amber-200/80 rounded-xl p-3 space-y-2.5">
+                              <div className="flex items-center justify-between pb-1.5 border-b border-amber-200/50">
+                                <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-amber-900 flex items-center gap-1">
+                                  <Plus className="h-3 w-3" /> New Additional Stop
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddingStopDeliveryId(null);
+                                    setNewStopAddress('');
+                                    setNewStopReason('');
+                                    setNewStopNotes('');
+                                  }}
+                                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-700 uppercase font-mono mb-1">
+                                    Stop Address <span className="text-rose-500">*</span>
+                                  </label>
+                                  <div className="relative">
+                                    <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                                    <input
+                                      type="text"
+                                      required
+                                      value={newStopAddress}
+                                      onChange={(e) => setNewStopAddress(e.target.value)}
+                                      placeholder="e.g. 140 Chain Lake Dr, Halifax, NS or Supplier Warehouse"
+                                      className="w-full bg-white border border-slate-300 pl-8 pr-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-700 uppercase font-mono mb-1">
+                                    Reason <span className="text-rose-500">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={newStopReason}
+                                    onChange={(e) => setNewStopReason(e.target.value)}
+                                    placeholder="e.g. Pick up additional lumber at supplier / Drop off return pallets / Secondary jobsite gate"
+                                    className="w-full bg-white border border-slate-300 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                <div className="flex items-center justify-end space-x-2 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAddingStopDeliveryId(null);
+                                      setNewStopAddress('');
+                                      setNewStopReason('');
+                                      setNewStopNotes('');
+                                    }}
+                                    className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg font-semibold transition-colors cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddStop(delivery.id)}
+                                    disabled={!newStopAddress.trim() || !newStopReason.trim()}
+                                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-xs hover:shadow-sm transition-all flex items-center space-x-1 cursor-pointer"
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    <span>Save Stop</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* List of stops */}
+                          {delivery.additionalStops && delivery.additionalStops.length > 0 ? (
+                            <div className="space-y-2">
+                              {delivery.additionalStops.map((stop, idx) => {
+                                const isEditingThisStop = editingStop?.deliveryId === delivery.id && editingStop?.stopId === stop.id;
+
+                                if (isEditingThisStop) {
+                                  return (
+                                    <div key={stop.id} className="bg-amber-50/50 border border-amber-300 rounded-xl p-3 space-y-2">
+                                      <div className="text-[10px] font-bold uppercase font-mono text-amber-900">Edit Stop #{idx + 1}</div>
+                                      <div className="space-y-2">
+                                        <div>
+                                          <label className="block text-[9px] font-bold text-slate-600 uppercase font-mono mb-0.5">Stop Address</label>
+                                          <input
+                                            type="text"
+                                            value={editingStop.address}
+                                            onChange={(e) => setEditingStop({ ...editingStop, address: e.target.value })}
+                                            className="w-full bg-white border border-slate-300 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[9px] font-bold text-slate-600 uppercase font-mono mb-0.5">Reason</label>
+                                          <input
+                                            type="text"
+                                            value={editingStop.reason}
+                                            onChange={(e) => setEditingStop({ ...editingStop, reason: e.target.value })}
+                                            className="w-full bg-white border border-slate-300 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                          />
+                                        </div>
+                                        <div className="flex items-center justify-end space-x-2 pt-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingStop(null)}
+                                            className="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg font-semibold cursor-pointer"
+                                          >
+                                            Cancel
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={handleSaveEditedStop}
+                                            disabled={!editingStop.address.trim() || !editingStop.reason.trim()}
+                                            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold cursor-pointer"
+                                          >
+                                            Update Stop
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div
+                                    key={stop.id}
+                                    className={`border rounded-xl p-2.5 transition-all flex items-start justify-between gap-3 ${
+                                      stop.isCompleted
+                                        ? 'bg-slate-50/80 border-slate-200 text-slate-500'
+                                        : 'bg-white border-slate-200 shadow-2xs hover:border-amber-200'
+                                    }`}
+                                  >
+                                    <div className="flex items-start space-x-2.5 min-w-0 flex-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleStopCompleted(delivery.id, stop.id)}
+                                        title={stop.isCompleted ? "Mark stop pending" : "Mark stop completed"}
+                                        className={`mt-0.5 p-1 rounded-md transition-colors cursor-pointer shrink-0 ${
+                                          stop.isCompleted
+                                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                            : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-700'
+                                        }`}
+                                      >
+                                        <CheckCircle2 className={`h-3.5 w-3.5 ${stop.isCompleted ? 'text-emerald-600' : 'text-slate-400'}`} />
+                                      </button>
+
+                                      <div className="min-w-0 flex-1 space-y-1">
+                                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-100/70 text-amber-900 border border-amber-200/50">
+                                            Stop #{idx + 1}
+                                          </span>
+                                          <span className="text-xs font-bold text-slate-800 truncate">
+                                            {stop.address}
+                                          </span>
+                                          {stop.isCompleted && (
+                                            <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.2 rounded-full border border-emerald-200">
+                                              ✓ Completed
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center space-x-1.5 text-[11px] text-slate-600">
+                                          <span className="font-semibold text-slate-500 font-mono text-[10px] uppercase">Reason:</span>
+                                          <span className="text-slate-800 font-medium">{stop.reason}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center space-x-1 shrink-0 pt-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingStop({
+                                            deliveryId: delivery.id,
+                                            stopId: stop.id,
+                                            address: stop.address,
+                                            reason: stop.reason,
+                                            notes: stop.notes
+                                          });
+                                          setAddingStopDeliveryId(null);
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Edit stop"
+                                      >
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteStop(delivery.id, stop.id)}
+                                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Delete stop"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            addingStopDeliveryId !== delivery.id && (
+                              <div className="border border-dashed border-slate-200 rounded-xl p-3 text-center bg-slate-50/50">
+                                <p className="text-[11px] text-slate-500">
+                                  No additional stops registered for this delivery ticket yet.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddingStopDeliveryId(delivery.id);
+                                    setNewStopAddress('');
+                                    setNewStopReason('');
+                                    setNewStopNotes('');
+                                  }}
+                                  className="mt-1 text-[11px] font-bold text-amber-700 hover:text-amber-800 hover:underline cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <Plus className="h-3 w-3" /> Add intermediate stop (pickup, secondary drop, etc.)
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
 
                         {/* Interactive Truck Selection & Confirmation Desk */}
                         {delivery.status !== DeliveryStatus.DELIVERED && (

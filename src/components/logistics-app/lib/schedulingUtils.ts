@@ -185,3 +185,73 @@ export function rolloverUncompletedDeliveries(
 
   return { updatedDeliveries, movedCount };
 }
+
+/**
+ * Returns today's local date in YYYY-MM-DD format
+ */
+export function getTodayLocalDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Helper to check if a delivery should be visible in the Driver's Portal.
+ * Rules:
+ * 1. Only active deliveries (non-completed) should show.
+ * 2. Completed deliveries are removed after the day is completed (past dates).
+ * 3. Deliveries completed on the current day remain visible during the active shift.
+ */
+export function isDeliveryValidForDriverPortal(delivery: DeliveryRecord, customToday?: string): boolean {
+  if (!delivery) return false;
+
+  const isCompleted = 
+    delivery.status === DeliveryStatus.DELIVERED || 
+    delivery.status === DeliveryStatus.RETURNED || 
+    (delivery.status as string) === 'DELIVERED' || 
+    (delivery.status as string) === 'RETURNED';
+
+  // Active deliveries (REGISTERED, PICKED_AND_LOADED, in-transit, etc.) ALWAYS show
+  if (!isCompleted) {
+    return true;
+  }
+
+  // Completed deliveries: Only show if completed today; remove after the day is completed
+  const todayLocal = customToday || getTodayLocalDateString();
+  const todayIso = new Date().toISOString().split('T')[0];
+
+  let completionDate: string | null = null;
+  if (delivery.deliveredAt) {
+    completionDate = delivery.deliveredAt.split('T')[0];
+  } else if (delivery.returnedAt) {
+    completionDate = delivery.returnedAt.split('T')[0];
+  } else if (Array.isArray(delivery.history) && delivery.history.length > 0) {
+    const completedEvent = delivery.history.slice().reverse().find(h => 
+      h.status === DeliveryStatus.DELIVERED || 
+      h.status === DeliveryStatus.RETURNED || 
+      (h.status as string) === 'DELIVERED' || 
+      (h.status as string) === 'RETURNED'
+    );
+    if (completedEvent?.timestamp) {
+      completionDate = completedEvent.timestamp.split('T')[0];
+    }
+  }
+
+  if (completionDate) {
+    return completionDate === todayLocal || completionDate === todayIso;
+  }
+
+  // Fallback to scheduledDate or registeredAt if completion timestamp not explicitly recorded
+  const scheduledDate = delivery.scheduledDate 
+    ? delivery.scheduledDate.split('T')[0] 
+    : (delivery.registeredAt ? delivery.registeredAt.split('T')[0] : null);
+
+  if (scheduledDate) {
+    return scheduledDate === todayLocal || scheduledDate === todayIso;
+  }
+
+  // Completed delivery with no date info -> exclude from portal
+  return false;
+}

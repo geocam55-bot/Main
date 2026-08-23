@@ -11,44 +11,44 @@ export function extractVehicleNumber(str: string | undefined | null): string | n
 
 // Regional Coordinate Dictionary for high-accuracy live geolocating
 export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
-  // Direct Store & Distribution Center ID / Name Matches
-  '01075': { lat: 44.70417, lng: -63.85807 },
-  '01065': { lat: 44.65360, lng: -63.60110 },
-  '01070': { lat: 44.979223, lng: -63.504250 },
-  'DC-WINAMILL': { lat: 44.68550, lng: -63.58250 },
-  'WINAMILL': { lat: 44.68550, lng: -63.58250 },
-
-  // Specific Street & Hubley Matches
+  // Specific Street & Jobsite Matches (Highest priority)
+  '17 SPARROW LANE': { lat: 44.6642, lng: -63.8560 },
   'SPARROW LANE': { lat: 44.6642, lng: -63.8560 },
-  'HUBLEY': { lat: 44.6601, lng: -63.8580 },
-
-  // Nova Scotia Communities & Regional Locations
-  'WINDMILL': { lat: 44.68550, lng: -63.58250 },
-  'TANTALLON': { lat: 44.70417, lng: -63.85807 },
-  'TIMBERLEA': { lat: 44.6465, lng: -63.7431 },
-  'DARTMOUTH': { lat: 44.6636, lng: -63.5683 },
-  'BRIDGEWATER': { lat: 44.3789, lng: -64.5126 },
-  'HALIFAX': { lat: 44.6488, lng: -63.5880 },
-  'CHAIN LAKE': { lat: 44.6295, lng: -63.6651 },
+  '17 SPARROW': { lat: 44.6642, lng: -63.8560 },
+  'HUBLEY': { lat: 44.6642, lng: -63.8560 },
+  '104 BEDFORD HWY': { lat: 44.6812, lng: -63.6421 },
+  '104 BEDFORD': { lat: 44.6812, lng: -63.6421 },
+  '6055 ALMON': { lat: 44.65360, lng: -63.60110 },
   '137 CHAIN LAKE': { lat: 44.6295, lng: -63.6651 },
-  'ELMSDALE': { lat: 44.979223, lng: -63.504250 },
-  'ALMON': { lat: 44.65360, lng: -63.60110 },
-  'HUBBARDS': { lat: 44.6314, lng: -64.0531 },
+  'CHAIN LAKE': { lat: 44.6295, lng: -63.6651 },
+  '700 WINDMILL': { lat: 44.68550, lng: -63.58250 },
+  'WINDMILL RD': { lat: 44.68550, lng: -63.58250 },
+  'WINDMILL': { lat: 44.68550, lng: -63.58250 },
+  'BURNSIDE': { lat: 44.6983, lng: -63.5855 },
+  '547 KING ST': { lat: 44.3789, lng: -64.5126 },
+
+  // Nova Scotia Communities & Municipalities
+  'TIMBERLEA': { lat: 44.6465, lng: -63.7431 },
+  'LAKESIDE': { lat: 44.6489, lng: -63.7176 },
+  'BAYERS LAKE': { lat: 44.6295, lng: -63.6651 },
+  'HALIFAX': { lat: 44.6488, lng: -63.5880 },
+  'DARTMOUTH': { lat: 44.6636, lng: -63.5683 },
+  'TANTALLON': { lat: 44.6890, lng: -63.8780 },
+  'UPPER TANTALLON': { lat: 44.6890, lng: -63.8780 },
+  'HAMMONDS PLAINS': { lat: 44.7364, lng: -63.7854 },
+  'BEDFORD': { lat: 44.7303, lng: -63.6617 },
   'LOWER SACKVILLE': { lat: 44.7642, lng: -63.6823 },
   'MIDDLE SACKVILLE': { lat: 44.7892, lng: -63.7258 },
   'SACKVILLE': { lat: 44.7642, lng: -63.6823 },
-  'BEDFORD': { lat: 44.7303, lng: -63.6617 },
+  'FALL RIVER': { lat: 44.8143, lng: -63.6152 },
+  'ENFIELD': { lat: 44.9406, lng: -63.5358 },
+  'ELMSDALE': { lat: 44.979223, lng: -63.504250 },
+  'BRIDGEWATER': { lat: 44.3789, lng: -64.5126 },
+  'HUBBARDS': { lat: 44.6314, lng: -64.0531 },
   'TRURO': { lat: 45.3647, lng: -63.2687 },
   'WINDSOR': { lat: 44.9904, lng: -64.1311 },
   'CHESTER': { lat: 44.5424, lng: -64.2405 },
-  'ENFIELD': { lat: 44.9406, lng: -63.5358 },
-  'LAKESIDE': { lat: 44.6489, lng: -63.7176 },
-  'BAYERS LAKE': { lat: 44.6295, lng: -63.6651 },
-  'BURNSIDE': { lat: 44.6983, lng: -63.5855 },
-  'KENTVILLE': { lat: 45.0775, lng: -64.4965 },
-  'HAMMONDS PLAINS': { lat: 44.7364, lng: -63.7854 },
   'COLE HARBOUR': { lat: 44.6644, lng: -63.4842 },
-  'FALL RIVER': { lat: 44.8143, lng: -63.6152 },
   'PORTERS LAKE': { lat: 44.7355, lng: -63.3082 },
   'EASTERN PASSAGE': { lat: 44.6133, lng: -63.4866 },
   'SPRYFIELD': { lat: 44.6190, lng: -63.6062 },
@@ -67,6 +67,13 @@ export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'CHARLOTTETOWN': { lat: 46.2382, lng: -63.1311 },
   'SUMMERSIDE': { lat: 46.3959, lng: -63.7887 },
   
+  // Direct Store & Distribution Center ID / Name Matches
+  '01075': { lat: 44.6890, lng: -63.8780 },
+  '01065': { lat: 44.65360, lng: -63.60110 },
+  '01070': { lat: 44.979223, lng: -63.504250 },
+  'DC-WINAMILL': { lat: 44.68550, lng: -63.58250 },
+  'WINAMILL': { lat: 44.68550, lng: -63.58250 },
+
   // Silicon Valley, California
   'CAMPBELL, CA': { lat: 37.2872, lng: -121.9500 },
   'SUNNYVALE': { lat: 37.3688, lng: -122.0363 },
@@ -81,8 +88,9 @@ export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
 };
 
 export const getGpsForLocation = (id: string, nameOrAddress: string): { lat: number; lng: number } | null => {
+  const addressOnly = (nameOrAddress || '').trim();
   const combined = (id + ' ' + (nameOrAddress || '')).trim();
-  if (!combined) return null;
+  if (!combined && !addressOnly) return null;
   
   // Try matching ||lat:XX ||lng:YY or lat:XX lng:YY
   const latMatch = combined.match(/\|\|lat:\s*(-?\d+(?:\.\d+)?)/i) || combined.match(/lat:\s*(-?\d+(?:\.\d+)?)/i);
@@ -105,11 +113,26 @@ export const getGpsForLocation = (id: string, nameOrAddress: string): { lat: num
     }
   }
 
-  const norm = combined.toUpperCase();
-  
-  // Try to find a match in our KNOWN_COORDS dictionary
-  for (const [key, value] of Object.entries(KNOWN_COORDS)) {
-    if (norm.includes(key)) {
+  // 1. First priority: Check address text alone against KNOWN_COORDS (sorted longest key first)
+  const normAddr = addressOnly.toUpperCase();
+  if (normAddr) {
+    const sortedEntries = Object.entries(KNOWN_COORDS).sort((a, b) => b[0].length - a[0].length);
+    for (const [key, value] of sortedEntries) {
+      if (normAddr.includes(key)) {
+        return value;
+      }
+    }
+  }
+
+  // 2. Second priority: Check combined text
+  const normCombined = combined.toUpperCase();
+  const sortedEntries = Object.entries(KNOWN_COORDS).sort((a, b) => b[0].length - a[0].length);
+  for (const [key, value] of sortedEntries) {
+    // Avoid matching 5-digit store IDs if text has a regular street address
+    if (/^\d{4,5}$/.test(key) && /(?:LANE|ST|STREET|RD|ROAD|AVE|AVENUE|DR|DRIVE|HWY|HIGHWAY|WAY|BLVD|COURT|CT)\b/i.test(normCombined)) {
+      continue;
+    }
+    if (normCombined.includes(key)) {
       return value;
     }
   }
@@ -125,6 +148,75 @@ export const cleanAddressText = (address: string | undefined): string => {
     .replace(/\s+/g, ' ')
     .trim();
 };
+
+/**
+ * Accurately parses and separates Customer Name and Delivery Destination Address.
+ * Handles Epicor / POS / Lumber formats, store routing headers (e.g. "PRO DARTMOUTH TO TANTALLON..."),
+ * and addresses where the customer recipient name was prepended (e.g. "GEORGE CAMPBELL 17 SPARROW LANE...").
+ */
+export function extractCleanDeliveryInfo(
+  rawCustomerName?: string,
+  rawDeliveryAddress?: string,
+  rawSoldToAddress?: string
+): {
+  customerName: string;
+  deliveryAddress: string;
+  originOrAccount?: string;
+  isStoreHeader: boolean;
+} {
+  let custName = (rawCustomerName || '').trim();
+  let delAddr = (rawDeliveryAddress || '').trim();
+  let originOrAccount = '';
+
+  // Clean coordinate metadata like ||lat:... ||lng:...
+  delAddr = cleanAddressText(delAddr);
+
+  // Check if custName is an internal store/branch routing header (e.g. "PRO DARTMOUTH TO TANTALLON DARTMOUTH 902-880-6441 NS")
+  const storeHeaderPattern = /\b(?:PRO\s+DARTMOUTH|RONA|PROSPACES|DEPOT|DISTRIBUTION|STORE|TO\s+TANTALLON|\d{3}-\d{3}-\d{4})\b/i;
+  const isStoreHeader = storeHeaderPattern.test(custName);
+
+  if (isStoreHeader) {
+    originOrAccount = custName;
+  }
+
+  // Check if delAddr starts with a recipient name before the street number
+  // e.g. "GEORGE CAMPBELL 17 SPARROW LANE HUBLEY NS B3Z 1A3" or "JOHN DOE, 104 BEDFORD HWY"
+  const streetNumberMatch = delAddr.match(/^([A-Za-z\s.'&-]+?)(?:,\s*|\s+)(\d+\s+[A-Za-z0-9\s.,#-]+(?:LANE|LN|ST|STREET|RD|ROAD|AVE|AVENUE|DR|DRIVE|HWY|HIGHWAY|WAY|BLVD|BOULEVARD|COURT|CT|PLACE|PL)\b.*)$/i);
+
+  if (streetNumberMatch) {
+    const potentialName = streetNumberMatch[1].trim();
+    const cleanStreet = streetNumberMatch[2].trim();
+
+    // Verify potentialName looks like a person or company name and not a street prefix
+    if (potentialName.length >= 2 && !/^(?:SUITE|APT|UNIT|BUILDING|LOT|SITE|PHASE|BOX|RR|PO)\b/i.test(potentialName)) {
+      if (isStoreHeader || !custName || custName.length < 3) {
+        custName = potentialName;
+      }
+      delAddr = cleanStreet;
+    }
+  }
+
+  // If customer name still looks like a store header and no name extracted, clean it up
+  if (isStoreHeader && (!custName || storeHeaderPattern.test(custName))) {
+    if (streetNumberMatch && streetNumberMatch[1]) {
+      custName = streetNumberMatch[1].trim();
+    } else {
+      custName = 'Delivery Recipient';
+    }
+  }
+
+  // Format delivery address nicely
+  if (!delAddr && rawSoldToAddress) {
+    delAddr = cleanAddressText(rawSoldToAddress);
+  }
+
+  return {
+    customerName: custName || 'Customer',
+    deliveryAddress: delAddr || 'Delivery Destination',
+    originOrAccount: originOrAccount || undefined,
+    isStoreHeader
+  };
+}
 
 export const sanitizeGpsCoordinates = (lat: number, lng: number): { lat: number; lng: number } => {
   if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return { lat: 44.68550, lng: -63.58250 };

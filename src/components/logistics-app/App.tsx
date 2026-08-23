@@ -334,27 +334,8 @@ export default function App() {
   useEffect(() => {
     const syncUserAndTenant = () => {
       try {
-        const isSessionActive = sessionStorage.getItem('prospaces_session_active');
-        const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
-
-        if (!isSessionActive && keepLoggedIn === 'false') {
-          localStorage.removeItem('prospaces_active_user');
-          localStorage.removeItem('prospaces_active_tenant');
-          localStorage.removeItem('prospaces_cached_user');
-          localStorage.removeItem('prospaces_keep_logged_in');
-          setCurrentUser(null);
-          setCurrentTenant(null);
-          return;
-        }
-
         const activeUserStr = localStorage.getItem('prospaces_active_user');
         const activeTenantStr = localStorage.getItem('prospaces_active_tenant');
-
-        if (!activeUserStr) {
-          if (currentUser) setCurrentUser(null);
-          if (currentTenant) setCurrentTenant(null);
-          return;
-        }
 
         if (activeUserStr && activeTenantStr) {
           const u = JSON.parse(activeUserStr);
@@ -374,7 +355,6 @@ export default function App() {
       } catch (e) {}
     };
 
-    syncUserAndTenant();
     window.addEventListener('storage', syncUserAndTenant);
     return () => window.removeEventListener('storage', syncUserAndTenant);
   }, [currentUser, currentTenant]);

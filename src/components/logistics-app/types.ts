@@ -5,6 +5,19 @@ export enum DeliveryStatus {
   RETURNED = 'RETURNED'
 }
 
+export interface AdditionalDeliveryStop {
+  id: string; // Unique Stop ID
+  address: string; // Stop destination/address
+  reason: string; // Reason for the additional stop (e.g. pickup, dropoff, return)
+  sequenceOrder?: number;
+  contactName?: string;
+  contactPhone?: string;
+  notes?: string;
+  isCompleted?: boolean;
+  completedAt?: string;
+  createdAt?: string;
+}
+
 export interface DeliveryRecord {
   id: string; // Barcode ID (e.g., SO-10293-A)
   invoiceNumber: string;
@@ -33,6 +46,7 @@ export interface DeliveryRecord {
   scheduledDate?: string; // YYYY-MM-DD
   scheduledSlot?: 'AM' | 'PM';
   deliveryCategory?: 'Retail' | 'Pro' | 'Transfer';
+  additionalStops?: AdditionalDeliveryStop[]; // List of additional stops along the route
   history: HistoryEvent[];
   tenantId?: string;
 }

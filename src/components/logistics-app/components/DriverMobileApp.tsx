@@ -45,9 +45,10 @@ import {
 } from 'lucide-react';
 import { createClient } from '../../../utils/supabase/client';
 import DriverRouteMap from './DriverRouteMap';
-import { getGpsForLocation, sanitizeGpsCoordinates } from '../lib/mapHelpers';
-import { getTruckSpecs, FLEET_COMPLETE_TRUCKS } from '../truckSpecs';
+import { getGpsForLocation, sanitizeGpsCoordinates, getTruckCoords, getBranchCoordinates, extractCleanDeliveryInfo, cleanAddressText } from '../lib/mapHelpers';
+import { getTruckSpecs } from '../truckSpecs';
 import { saveDeliveryDirect } from '../lib/supabaseClient';
+import { isDeliveryValidForDriverPortal } from '../lib/schedulingUtils';
 
 interface DriverMobileAppProps {
   deliveries: DeliveryRecord[];
@@ -74,6 +75,9 @@ interface DriverStop {
   lat: number;
   lng: number;
   delivery?: DeliveryRecord;
+  stopType?: 'additional_stop' | 'delivery';
+  reason?: string;
+  additionalStopId?: string;
 }
 
 export default function DriverMobileApp({ 
@@ -339,6 +343,77 @@ export default function DriverMobileApp({
   // Active Stop Management
   const [activeStopIndex, setActiveStopIndex] = useState<number>(0);
   const [isLiveGpsActive, setIsLiveGpsActive] = useState<boolean>(false);
+  const [deviceGpsCoords, setDeviceGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Live device GPS location tracking
+  useEffect(() => {
+    if (!isLiveGpsActive) return;
+    if (typeof window === 'undefined' || !navigator.geolocation) return;
+
+    // Grab current position immediately
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setDeviceGpsCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        });
+      },
+      (err) => {
+        console.warn('Geolocation position notice:', err);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+    );
+
+    // Watch position as driver travels
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setDeviceGpsCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        });
+      },
+      (err) => {
+        console.warn('Geolocation watch notice:', err);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isLiveGpsActive]);
+
+  // Derive authentic Truck Location (where the Truck currently is located)
+  const currentTruckLocation = useMemo(() => {
+    // 1. If device GPS coordinates exist and GPS is active, prioritize live device position
+    if (deviceGpsCoords && isLiveGpsActive) {
+      return sanitizeGpsCoordinates(deviceGpsCoords.lat, deviceGpsCoords.lng);
+    }
+    
+    // 2. If assigned truck has live telemetry coordinates or lat/lng
+    if (assignedTruck) {
+      const coords = getTruckCoords(assignedTruck, undefined, branches);
+      if (coords && coords.lat && coords.lng && (coords.lat !== 0 || coords.lng !== 0)) {
+        return { lat: coords.lat, lng: coords.lng };
+      }
+    }
+
+    // 3. Fallback to branch depot coordinates
+    const userBranchId = driverUser?.associatedStoreId || driverUser?.branchId || (driverUser as any)?.branch_id || assignedTruck?.branchId;
+    if (userBranchId && branches && branches.length > 0) {
+      const found = branches.find(b => 
+        b.id.toLowerCase() === userBranchId.toLowerCase() || 
+        b.name.toLowerCase().includes(userBranchId.toLowerCase())
+      );
+      if (found) {
+        const branchCoords = getBranchCoordinates(found.id, found.name, found.address);
+        return { lat: branchCoords.lat, lng: branchCoords.lng };
+      }
+    }
+
+    // 4. Default central Burnside / Windmill Fleet Depot
+    return { lat: 44.68550, lng: -63.58250 };
+  }, [deviceGpsCoords, isLiveGpsActive, assignedTruck, branches, driverUser]);
   
   // ePOD Capture State
   const [receiverName, setReceiverName] = useState<string>('');
@@ -368,16 +443,21 @@ export default function DriverMobileApp({
     return () => clearInterval(interval);
   }, []);
 
-  // Filter deliveries assigned to this driver or general route
+  // Filter deliveries assigned to this driver: ONLY active deliveries and today's completed deliveries
+  // Completed deliveries are removed after the day is completed
   const driverDeliveries = useMemo(() => {
-    if (!driverUser) return deliveries;
+    // 1. Strict filter: keep only active deliveries and deliveries completed today
+    const validPortalDeliveries = (deliveries || []).filter(isDeliveryValidForDriverPortal);
+
+    if (!driverUser) return validPortalDeliveries;
     const dNameNorm = (driverUser.name || '').trim().toLowerCase();
     const dIdNorm = (driverUser.id || '').trim().toLowerCase();
 
     const truckIdNorm = assignedTruck ? String(assignedTruck.id).trim().toLowerCase() : '';
     const truckNameNorm = assignedTruck ? String(assignedTruck.name).trim().toLowerCase() : '';
+    const truckPlateNorm = assignedTruck?.licensePlate ? String(assignedTruck.licensePlate).trim().toLowerCase() : '';
 
-    const matched = deliveries.filter(d => {
+    const matched = validPortalDeliveries.filter(d => {
       const delDriverId = (d.assignedDriverId || d.assignedDriver || '').trim().toLowerCase();
       const delDriverName = (d.assignedDriverName || d.assignedDriver || '').trim().toLowerCase();
       
@@ -386,50 +466,129 @@ export default function DriverMobileApp({
       const delTruckId = (d.assignedTruckId || d.assignedTruck || '').trim().toLowerCase();
       const delTruckName = (d.assignedTruck || '').trim().toLowerCase();
       
-      const isTruckMatch = truckIdNorm && truckNameNorm && 
-        ((delTruckId && (delTruckId === truckIdNorm || delTruckId.includes(truckIdNorm))) || 
-         (delTruckName && (delTruckName === truckNameNorm || delTruckName.includes(truckNameNorm))));
+      const isTruckMatch = (truckIdNorm || truckNameNorm || truckPlateNorm) && 
+        ((truckIdNorm && (delTruckId === truckIdNorm || delTruckId.includes(truckIdNorm))) || 
+         (truckNameNorm && (delTruckName === truckNameNorm || delTruckName.includes(truckNameNorm))) ||
+         (truckPlateNorm && (delTruckId.includes(truckPlateNorm) || delTruckName.includes(truckPlateNorm))));
 
       return isDriverMatch || isTruckMatch;
     });
 
     if (matched.length > 0) return matched;
-    // Fallback: Return all active deliveries if no specific assignment
-    return deliveries;
+
+    // Fallback: If no driver/truck assignment matched yet, filter by driver's branch
+    const driverBranchId = (driverUser.branchId || driverUser.branch_id || driverUser.branch || '').trim().toLowerCase();
+    if (driverBranchId) {
+      const branchMatched = validPortalDeliveries.filter(d => {
+        const dBranch = (d.originBranch || (d as any).branchId || (d as any).branch_id || '').trim().toLowerCase();
+        return dBranch && (dBranch === driverBranchId || dBranch.includes(driverBranchId) || driverBranchId.includes(dBranch));
+      });
+      if (branchMatched.length > 0) return branchMatched;
+    }
+
+    // Return valid portal deliveries (only active + today's completed)
+    return validPortalDeliveries;
   }, [deliveries, driverUser, assignedTruck]);
 
-  // Map deliveries into rich Driver Stop objects
+  // Map deliveries and their additional stops into ordered Driver Stop objects
+  // Sequence strictly: 1) Additional Stops in the order entered, 2) Delivery (Delivery Project Site Address as destination)
   const liveStops: DriverStop[] = useMemo(() => {
     if (driverDeliveries && driverDeliveries.length > 0) {
-      return driverDeliveries.map((del, idx) => {
-        const rawCoords = del.destinationCoords || getGpsForLocation(del.id, `${del.deliveryAddress || ''} ${del.customerName || ''}`.trim());
-        const safeCoords = sanitizeGpsCoordinates(rawCoords?.lat ?? (44.6642 - (idx * 0.015)), rawCoords?.lng ?? (-63.8560 + (idx * 0.012)));
-        return {
+      const stopsAcc: DriverStop[] = [];
+      let seqNum = 1;
+
+      driverDeliveries.forEach((del) => {
+        const isDelivered = del.status === DeliveryStatus.DELIVERED || (del.status as string) === 'DELIVERED';
+        
+        // Clean and extract proper customer name and delivery address (distinguishing from Sold To / store routing headers)
+        const cleanInfo = extractCleanDeliveryInfo(del.customerName, del.deliveryAddress, (del as any).soldToAddress || (del as any).sold_to_address);
+        
+        const rawDestCoords = del.destinationCoords || getGpsForLocation(del.id, `${cleanInfo.deliveryAddress} ${cleanInfo.customerName}`.trim());
+        const safeDestCoords = sanitizeGpsCoordinates(rawDestCoords?.lat ?? (44.6642 - (seqNum * 0.015)), rawDestCoords?.lng ?? (-63.8560 + (seqNum * 0.012)));
+
+        // Safely extract all additional stops (handling camelCase, snake_case, metadata objects, or JSON strings)
+        const rawAdditionalStops = del.additionalStops || (del as any).additional_stops || (del as any).meta?.additionalStops || (del as any).metadata?.additionalStops || [];
+        const normalizedAdditionalStops: any[] = Array.isArray(rawAdditionalStops)
+          ? rawAdditionalStops
+          : typeof rawAdditionalStops === 'string'
+            ? (() => { try { return JSON.parse(rawAdditionalStops); } catch { return []; } })()
+            : [];
+
+        // 1) Additional Stops in the order they were entered
+        if (normalizedAdditionalStops && normalizedAdditionalStops.length > 0) {
+          normalizedAdditionalStops.forEach((st, sIdx) => {
+            const stopAddress = cleanAddressText(st.address || st.location || 'Address on file');
+            const rawStopCoords = getGpsForLocation(`${del.id}-${st.id || sIdx}`, `${stopAddress} ${st.reason || ''}`.trim());
+            const safeStopCoords = sanitizeGpsCoordinates(
+              rawStopCoords?.lat ?? (safeDestCoords.lat + 0.007 * (sIdx + 1)),
+              rawStopCoords?.lng ?? (safeDestCoords.lng - 0.007 * (sIdx + 1))
+            );
+
+            stopsAcc.push({
+              id: st.id || `${del.id}-additional-${sIdx}`,
+              deliveryRecordId: del.id,
+              stopNumber: seqNum++,
+              stopType: 'additional_stop',
+              customerName: `Stop #${sIdx + 1}: ${st.reason || 'Additional Stop'}`,
+              address: stopAddress,
+              reason: st.reason || 'Intermediate Pickup / Delivery',
+              additionalStopId: st.id,
+              items: [],
+              status: st.isCompleted ? 'completed' : 'pending',
+              phone: del.customerPhone || '',
+              notes: del.notes || '',
+              lat: safeStopCoords.lat,
+              lng: safeStopCoords.lng,
+              delivery: del
+            });
+          });
+        }
+
+        // 2) Delivery (Using the real Delivery Project Site Address as the Destination)
+        stopsAcc.push({
           id: del.id,
           deliveryRecordId: del.id,
-          stopNumber: idx + 1,
-          customerName: del.customerName || `Client #${del.id}`,
-          address: del.deliveryAddress || 'Address on file',
+          stopNumber: seqNum++,
+          stopType: 'delivery',
+          customerName: cleanInfo.customerName || `Client #${del.id}`,
+          address: cleanInfo.deliveryAddress || 'Delivery Project Site Address',
           items: (del.items || []).map((it: any) => ({
             name: it.description || it.name || 'Delivery Item',
             quantity: it.quantity || 1,
-            checked: del.status === DeliveryStatus.DELIVERED
+            checked: isDelivered
           })),
-          status: del.status === DeliveryStatus.DELIVERED ? 'completed' : idx === 0 ? 'active' : 'pending',
+          status: isDelivered ? 'completed' : 'pending',
           phone: del.customerPhone || '',
           notes: del.notes || '',
-          lat: safeCoords.lat,
-          lng: safeCoords.lng,
-          delivery: del
-        };
+          lat: safeDestCoords.lat,
+          lng: safeDestCoords.lng,
+          delivery: {
+            ...del,
+            customerName: cleanInfo.customerName,
+            deliveryAddress: cleanInfo.deliveryAddress,
+            originOrAccount: cleanInfo.originOrAccount
+          }
+        });
       });
+
+      return stopsAcc;
     }
 
     return [];
   }, [driverDeliveries]);
 
   // Current active stop
-  const currentStop = liveStops[activeStopIndex] || liveStops[0];
+  const currentStop = liveStops[activeStopIndex] || liveStops[0] || null;
+
+  // Auto-focus on first uncompleted stop when stops change
+  useEffect(() => {
+    if (liveStops.length > 0) {
+      const firstPendingIdx = liveStops.findIndex(s => s.status !== 'completed' && s.delivery?.status !== DeliveryStatus.DELIVERED);
+      if (firstPendingIdx >= 0 && (activeStopIndex >= liveStops.length || liveStops[activeStopIndex]?.status === 'completed')) {
+        setActiveStopIndex(firstPendingIdx);
+      }
+    }
+  }, [liveStops]);
 
   // Auto-fill receiver name with customer name when stop changes
   useEffect(() => {
@@ -440,7 +599,7 @@ export default function DriverMobileApp({
       setSignedFormPhoto(null);
       setAdditionalPhotos([]);
     }
-  }, [activeStopIndex]);
+  }, [activeStopIndex, currentStop]);
 
   // Setup responsive HTML5 Signature Pad
   useEffect(() => {
@@ -795,6 +954,39 @@ export default function DriverMobileApp({
     }
   };
 
+  // Toggle completion of an additional stop along the delivery route
+  const handleToggleAdditionalStopFromDriver = async (deliveryId: string, stopId: string) => {
+    const targetDel = deliveries.find(d => d.id === deliveryId);
+    if (!targetDel) return;
+
+    const currentStops = targetDel.additionalStops || [];
+    const updatedStops = currentStops.map(st => {
+      if (st.id === stopId) {
+        const nextCompleted = !st.isCompleted;
+        return {
+          ...st,
+          isCompleted: nextCompleted,
+          completedAt: nextCompleted ? new Date().toISOString() : undefined
+        };
+      }
+      return st;
+    });
+
+    const updatedDelivery: DeliveryRecord = {
+      ...targetDel,
+      additionalStops: updatedStops
+    };
+
+    if (onAddOrUpdateDelivery) {
+      onAddOrUpdateDelivery(updatedDelivery);
+    }
+    try {
+      await saveDeliveryDirect(updatedDelivery);
+    } catch (err) {
+      console.warn('Error saving additional stop update from driver:', err);
+    }
+  };
+
   // ════════════════════════════════════════════════════════════════════════════
   // MAIN DRIVER APPLICATION SHELL (UNIFIED MOBILE-FIRST CONTAINER)
   // ════════════════════════════════════════════════════════════════════════════
@@ -1105,57 +1297,87 @@ export default function DriverMobileApp({
               </div>
 
               <div className="space-y-2.5">
-                {liveStops.map((stop, idx) => {
-                  const isCompleted = stop.status === 'completed' || stop.delivery?.status === DeliveryStatus.DELIVERED;
-                  const isCurrent = idx === activeStopIndex;
-
-                  return (
-                    <div 
-                      key={stop.id}
-                      onClick={() => {
-                        setActiveStopIndex(idx);
-                        setActiveScreen('route');
-                      }}
-                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                        isCurrent 
-                          ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-500/20 shadow-xs' 
-                          : isCompleted
-                            ? 'bg-emerald-50/40 border-emerald-200 opacity-80'
-                            : 'bg-white border-slate-200/80 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3 min-w-0">
-                        <div className={`h-8 w-8 rounded-xl font-mono font-black text-xs flex items-center justify-center shrink-0 ${
-                          isCompleted 
-                            ? 'bg-emerald-500 text-white' 
-                            : isCurrent
-                              ? 'bg-blue-600 text-white shadow-sm'
-                              : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {isCompleted ? <Check className="h-4 w-4" /> : stop.stopNumber}
-                        </div>
-                        <div className="min-w-0">
-                          <h5 className="text-xs font-black text-slate-900 truncate">{stop.customerName}</h5>
-                          <p className="text-[11px] text-slate-500 truncate mt-0.5">{stop.address}</p>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 ml-2">
-                        {isCompleted ? (
-                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-md">
-                            Delivered
-                          </span>
-                        ) : isCurrent ? (
-                          <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md animate-pulse">
-                            Next Stop
-                          </span>
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-slate-300" />
-                        )}
-                      </div>
+                {liveStops.length === 0 ? (
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-6 text-center shadow-xs">
+                    <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2.5">
+                      <CheckCircle2 className="h-5 w-5" />
                     </div>
-                  );
-                })}
+                    <h5 className="text-xs font-bold text-slate-800">No Active Deliveries</h5>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-xs mx-auto">
+                      All deliveries for previous days have been completed and cleared. New active dispatches will appear here when scheduled.
+                    </p>
+                  </div>
+                ) : (
+                  liveStops.map((stop, idx) => {
+                    const isAdditionalStop = stop.stopType === 'additional_stop';
+                    const isCompleted = stop.status === 'completed' || (!isAdditionalStop && stop.delivery?.status === DeliveryStatus.DELIVERED);
+                    const isCurrent = idx === activeStopIndex;
+
+                    return (
+                      <div 
+                        key={stop.id}
+                        onClick={() => {
+                          setActiveStopIndex(idx);
+                          setActiveScreen('route');
+                        }}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                          isCurrent 
+                            ? isAdditionalStop
+                              ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-500/20 shadow-xs'
+                              : 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-500/20 shadow-xs' 
+                            : isCompleted
+                              ? 'bg-emerald-50/40 border-emerald-200 opacity-80'
+                              : 'bg-white border-slate-200/80 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <div className={`h-8 w-8 rounded-xl font-mono font-black text-xs flex items-center justify-center shrink-0 ${
+                            isCompleted 
+                              ? 'bg-emerald-500 text-white' 
+                              : isCurrent
+                                ? isAdditionalStop
+                                  ? 'bg-amber-600 text-white shadow-sm'
+                                  : 'bg-blue-600 text-white shadow-sm'
+                                : isAdditionalStop
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {isCompleted ? <Check className="h-4 w-4" /> : stop.stopNumber}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center space-x-1.5 mb-0.5">
+                              <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase ${
+                                isAdditionalStop 
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
+                              }`}>
+                                {isAdditionalStop ? `Additional Stop #${idx + 1}` : 'Delivery Destination'}
+                              </span>
+                            </div>
+                            <h5 className="text-xs font-black text-slate-900 truncate">{stop.customerName}</h5>
+                            <p className="text-[11px] text-slate-500 truncate mt-0.5">{stop.address}</p>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 ml-2">
+                          {isCompleted ? (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-md">
+                              ✓ Done
+                            </span>
+                          ) : isCurrent ? (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md animate-pulse ${
+                              isAdditionalStop ? 'text-amber-700 bg-amber-100' : 'text-blue-600 bg-blue-100'
+                            }`}>
+                              Next Stop
+                            </span>
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-slate-300" />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -1209,9 +1431,10 @@ export default function DriverMobileApp({
                   activeStopIndex={activeStopIndex}
                   onSelectStop={(idx) => setActiveStopIndex(idx)}
                   truckName={assignedTruck?.name || 'Unit 101'}
-                  truckUnitNumber={assignedTruck?.id?.replace(/[^0-9]/g, '') || '101'}
+                  truckUnitNumber={assignedTruck?.id?.replace(/[^0-9]/g, '') || (assignedTruck as any)?.truckNumber || '101'}
                   isLiveGpsActive={isLiveGpsActive}
                   onToggleLiveGps={() => setIsLiveGpsActive(prev => !prev)}
+                  truckLocation={currentTruckLocation}
                 />
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
@@ -1228,12 +1451,21 @@ export default function DriverMobileApp({
             <div className="bg-white border-t border-slate-200 p-3 sm:p-4 shadow-xl z-20 shrink-0">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-2 min-w-0">
-                  <span className="h-6 w-6 rounded-lg bg-blue-600 text-white font-mono font-black text-xs flex items-center justify-center shrink-0">
+                  <span className={`h-6 w-6 rounded-lg text-white font-mono font-black text-xs flex items-center justify-center shrink-0 ${
+                    currentStop?.stopType === 'additional_stop' ? 'bg-amber-600' : 'bg-blue-600'
+                  }`}>
                     {currentStop?.stopNumber || 1}
                   </span>
-                  <span className="text-xs font-black text-slate-900 truncate">
-                    {currentStop?.customerName || 'No Stop Selected'}
-                  </span>
+                  <div className="min-w-0">
+                    <span className="text-xs font-black text-slate-900 truncate block">
+                      {currentStop?.customerName || 'No Stop Selected'}
+                    </span>
+                    <span className={`text-[9px] font-bold uppercase tracking-wider ${
+                      currentStop?.stopType === 'additional_stop' ? 'text-amber-700 font-mono' : 'text-blue-600'
+                    }`}>
+                      {currentStop?.stopType === 'additional_stop' ? 'Intermediate Stop' : 'Delivery Destination'}
+                    </span>
+                  </div>
                 </div>
                 {liveStops.length > 0 && (
                   <div className="flex items-center space-x-1 shrink-0 ml-2">
@@ -1260,11 +1492,29 @@ export default function DriverMobileApp({
 
               {/* Address & Actions */}
               {currentStop && (
-                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 mb-2.5">
+                <div className={`border rounded-xl p-2.5 mb-2.5 ${
+                  currentStop.stopType === 'additional_stop' 
+                    ? 'bg-amber-50/70 border-amber-200' 
+                    : 'bg-slate-50 border-slate-200/80'
+                }`}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-2 min-w-0">
-                      <MapPin className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                      <p className="text-xs font-medium text-slate-700 leading-snug">{currentStop.address}</p>
+                      <MapPin className={`h-4 w-4 shrink-0 mt-0.5 ${
+                        currentStop.stopType === 'additional_stop' ? 'text-amber-600' : 'text-blue-600'
+                      }`} />
+                      <div>
+                        <p className="text-xs font-medium text-slate-700 leading-snug">{currentStop.address}</p>
+                        {currentStop.stopType === 'additional_stop' && currentStop.reason && (
+                          <p className="text-[11px] font-bold text-amber-900 mt-1">
+                            Task: {currentStop.reason}
+                          </p>
+                        )}
+                        {currentStop.stopType === 'additional_stop' && currentStop.delivery?.deliveryAddress && (
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            Destination: {currentStop.delivery.deliveryAddress}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center space-x-1 shrink-0 ml-2">
                       <button 
@@ -1303,15 +1553,50 @@ export default function DriverMobileApp({
 
               {/* Main Action Button */}
               <div>
-                <button
-                  type="button"
-                  onClick={() => setActiveScreen('stop')}
-                  disabled={!currentStop}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md disabled:opacity-50 min-h-[44px]"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>ARRIVED AT STOP &bull; OPEN ePOD</span>
-                </button>
+                {currentStop?.stopType === 'additional_stop' ? (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentStop.deliveryRecordId && currentStop.additionalStopId) {
+                          handleToggleAdditionalStopFromDriver(currentStop.deliveryRecordId, currentStop.additionalStopId);
+                        }
+                      }}
+                      className={`w-full py-3 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md min-h-[44px] ${
+                        currentStop.status === 'completed'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-amber-600 hover:bg-amber-700 text-white'
+                      }`}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>
+                        {currentStop.status === 'completed' 
+                          ? '✓ STOP COMPLETED • CLICK TO UNDO' 
+                          : 'ARRIVED • MARK ADDITIONAL STOP COMPLETE'}
+                      </span>
+                    </button>
+                    {activeStopIndex < liveStops.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveStopIndex(prev => prev + 1)}
+                        className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer flex items-center justify-center space-x-1"
+                      >
+                        <span>PROCEED TO NEXT STOP ({activeStopIndex + 2})</span>
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveScreen('stop')}
+                    disabled={!currentStop}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md disabled:opacity-50 min-h-[44px]"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>ARRIVED AT PROJECT SITE &bull; OPEN ePOD</span>
+                  </button>
+                )}
               </div>
 
             </div>
@@ -1355,21 +1640,185 @@ export default function DriverMobileApp({
             </div>
 
             {/* ePOD Form Container */}
-            <div className="p-4 space-y-4">
+            {!currentStop || liveStops.length === 0 ? (
+              <div className="p-6 text-center">
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-8 shadow-xs max-w-sm mx-auto">
+                  <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                  <h4 className="text-sm font-black text-slate-900 mb-1">No Active Stops Pending</h4>
+                  <p className="text-xs text-slate-500 mb-4">
+                    There are no uncompleted delivery stops requiring ePOD capture. Completed deliveries from previous days have been cleared.
+                  </p>
+                  <button
+                    onClick={() => setActiveScreen('home')}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
+                  >
+                    Return to Route Home
+                  </button>
+                </div>
+              </div>
+            ) : currentStop?.stopType === 'additional_stop' ? (
+              /* ── In-Route Additional Stop Execution Desk ── */
+              <div className="p-4 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded font-mono uppercase">
+                      Stop #{currentStop.stopNumber} &bull; Additional Intermediate Stop
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      currentStop.status === 'completed' 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : 'bg-amber-200 text-amber-900'
+                    }`}>
+                      {currentStop.status === 'completed' ? '✓ Completed' : 'Pending'}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-black text-slate-900">{currentStop.reason || 'Intermediate Stop'}</h3>
+                  <p className="text-xs text-slate-700 mt-1 flex items-start space-x-1.5 font-medium">
+                    <MapPin className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                    <span>{currentStop.address}</span>
+                  </p>
+                  <div className="mt-3 pt-3 border-t border-amber-200/60 flex items-center space-x-2">
+                    <button 
+                      type="button"
+                      onClick={() => openExternalMaps(currentStop.address)}
+                      className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 cursor-pointer shadow-xs"
+                    >
+                      <Navigation2 className="h-3.5 w-3.5" />
+                      <span>GPS Directions</span>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => copyAddress(currentStop.address)}
+                      className="px-3 py-2 bg-white hover:bg-amber-100/50 text-slate-700 rounded-xl text-xs font-bold border border-amber-300 flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Delivery Project Site Destination Context */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    ROUTE DESTINATION CONTEXT
+                  </h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Sales Order:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {currentStop.delivery?.epicorSalesOrder || currentStop.delivery?.invoiceNumber || currentStop.delivery?.id}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Recipient / Client:</span>
+                      <span className="font-bold text-slate-900">{currentStop.delivery?.customerName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-medium block mb-0.5">Delivery Project Site Address (Final Destination):</span>
+                      <span className="font-semibold text-slate-800 flex items-center gap-1 bg-slate-50 p-2 rounded-lg border border-slate-200/60">
+                        <MapPin className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                        {currentStop.delivery?.deliveryAddress}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mark Stop Status Action */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Stop Completion Status
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (currentStop.deliveryRecordId && currentStop.additionalStopId) {
+                        handleToggleAdditionalStopFromDriver(currentStop.deliveryRecordId, currentStop.additionalStopId);
+                      }
+                    }}
+                    className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-sm ${
+                      currentStop.status === 'completed'
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>
+                      {currentStop.status === 'completed' 
+                        ? '✓ STOP COMPLETED (CLICK TO UNMARK)' 
+                        : '✓ MARK ADDITIONAL STOP COMPLETED'}
+                    </span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveScreen('route')}
+                      className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer flex items-center justify-center space-x-1"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      <span>Back to Map</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentStop.status !== 'completed' && currentStop.deliveryRecordId && currentStop.additionalStopId) {
+                          handleToggleAdditionalStopFromDriver(currentStop.deliveryRecordId, currentStop.additionalStopId);
+                        }
+                        if (activeStopIndex < liveStops.length - 1) {
+                          setActiveStopIndex(activeStopIndex + 1);
+                        } else {
+                          setActiveScreen('route');
+                        }
+                      }}
+                      className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center justify-center space-x-1 shadow-xs"
+                    >
+                      <span>Next Stop</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
               
               {/* Customer & Address Overview */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">RECIPIENT & SITE</h4>
+                  <h4 className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                    Delivery Project Site Destination
+                  </h4>
                   <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
                     {currentStop?.id}
                   </span>
                 </div>
                 <h3 className="text-base font-black text-slate-900">{currentStop?.customerName}</h3>
-                <p className="text-xs text-slate-600 mt-1 flex items-start space-x-1.5">
+                <p className="text-xs text-slate-600 mt-1 flex items-start space-x-1.5 font-medium">
                   <MapPin className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
                   <span>{currentStop?.address}</span>
                 </p>
+                {currentStop?.delivery?.additionalStops && currentStop.delivery.additionalStops.length > 0 && (
+                  <div className="mt-3 pt-2.5 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 font-mono">
+                      In-Route Additional Stops ({currentStop.delivery.additionalStops.length}):
+                    </span>
+                    <div className="space-y-1">
+                      {currentStop.delivery.additionalStops.map((st, sIdx) => (
+                        <div key={st.id || sIdx} className="flex items-center justify-between bg-slate-50 p-1.5 rounded-lg text-[11px] border border-slate-200/60">
+                          <span className="truncate max-w-[220px]">
+                            <strong>#{sIdx + 1}:</strong> {st.address} ({st.reason})
+                          </span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
+                            st.isCompleted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {st.isCompleted ? '✓ Completed' : 'Pending'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {currentStop?.phone && (
                   <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500 font-medium">Contact Phone:</span>
@@ -1643,6 +2092,7 @@ export default function DriverMobileApp({
               </button>
 
             </div>
+          )}
 
             {/* Success Toast */}
             {podSubmittedToast && (

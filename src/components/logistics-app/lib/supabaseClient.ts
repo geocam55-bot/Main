@@ -572,6 +572,7 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     const scheduledDate = d.scheduledDate || meta.scheduledDate || d.scheduled_date;
     const scheduledSlot = d.scheduledSlot || meta.scheduledSlot || d.scheduled_slot;
     const deliveryCategory = d.deliveryCategory || d.delivery_category || meta.deliveryCategory;
+    const additionalStops = d.additionalStops || d.additional_stops || meta.additionalStops || meta.additional_stops || [];
     const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
 
     return {
@@ -604,6 +605,7 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
       scheduledDate,
       scheduledSlot,
       deliveryCategory,
+      additionalStops,
       history
     };
   });
@@ -846,6 +848,7 @@ export async function saveTenantStateDirect(
       scheduledDate: d.scheduledDate,
       scheduledSlot: d.scheduledSlot,
       deliveryCategory: d.deliveryCategory,
+      additionalStops: d.additionalStops || [],
       history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
     };
 
@@ -861,6 +864,8 @@ export async function saveTenantStateDirect(
       status: String(d.status || "REGISTERED"),
       eta: String(d.eta || "N/A"),
       pickup_location: String(d.originBranch || "prospaces-dc"),
+      additional_stops: d.additionalStops || [],
+      additionalStops: d.additionalStops || [],
       items: [JSON.stringify({ _meta: fullMeta })]
     };
     
@@ -1088,6 +1093,7 @@ export async function saveDeliveryDirect(d: any, tenantId: string) {
     id: String(d.id),
     tenantId: tid,
     invoiceNumber: String(d.invoiceNumber || d.orderNumber || d.id || ""),
+    additionalStops: d.additionalStops || [],
   };
 
   const payload: any = {
@@ -1127,6 +1133,8 @@ export async function saveDeliveryDirect(d: any, tenantId: string) {
     pickup_location: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
     dropoff_location: String(d.deliveryAddress || d.destination || "N/A"),
     documentType: d.documentType || null,
+    additional_stops: d.additionalStops || [],
+    additionalStops: d.additionalStops || [],
     items: [JSON.stringify({ _meta: fullMeta })]
   };
 

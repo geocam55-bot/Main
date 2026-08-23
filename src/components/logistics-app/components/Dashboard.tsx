@@ -71,6 +71,7 @@ import {
   getTruckStoreInfo,
   STORE_COLOR_MAP
 } from '../lib/mapHelpers';
+import { isDeliveryValidForDriverPortal } from '../lib/schedulingUtils';
 
 export {
   cleanAddressText,
@@ -227,10 +228,12 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
   const driverTruckIds = driverTrucks.map(t => t.id);
 
   const displayDeliveries = isDriver && driverName
-    ? deliveries.filter(d => 
-        (d.assignedDriver && d.assignedDriver.toLowerCase() === driverName.toLowerCase()) ||
-        (d.assignedTruck && driverTruckIds.includes(d.assignedTruck))
-      )
+    ? deliveries
+        .filter(isDeliveryValidForDriverPortal)
+        .filter(d => 
+          (d.assignedDriver && d.assignedDriver.toLowerCase() === driverName.toLowerCase()) ||
+          (d.assignedTruck && driverTruckIds.includes(d.assignedTruck))
+        )
     : deliveries;
 
   const displayTrucks = trucks.filter(t => t.isActive !== false);
