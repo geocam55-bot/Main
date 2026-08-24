@@ -12,20 +12,37 @@ export function extractVehicleNumber(str: string | undefined | null): string | n
 // Regional Coordinate Dictionary for high-accuracy live geolocating
 export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   // Specific Street & Jobsite Matches (Highest priority)
-  '17 SPARROW LANE': { lat: 44.6642, lng: -63.8560 },
-  'SPARROW LANE': { lat: 44.6642, lng: -63.8560 },
-  '17 SPARROW': { lat: 44.6642, lng: -63.8560 },
-  'HUBLEY': { lat: 44.6642, lng: -63.8560 },
+  '17 SPARROW LANE': { lat: 44.6885, lng: -63.8575 },
+  'SPARROW LANE': { lat: 44.6885, lng: -63.8575 },
+  '17 SPARROW': { lat: 44.6885, lng: -63.8575 },
+  'HUBLEY': { lat: 44.6885, lng: -63.8575 },
+  '6055 ALMON STREET': { lat: 44.65360, lng: -63.60110 },
+  '6055 ALMON ST': { lat: 44.65360, lng: -63.60110 },
+  '6055 ALMON': { lat: 44.65360, lng: -63.60110 },
+  'ALMON STREET': { lat: 44.65360, lng: -63.60110 },
+  'ALMON ST': { lat: 44.65360, lng: -63.60110 },
   '104 BEDFORD HWY': { lat: 44.6812, lng: -63.6421 },
   '104 BEDFORD': { lat: 44.6812, lng: -63.6421 },
-  '6055 ALMON': { lat: 44.65360, lng: -63.60110 },
   '137 CHAIN LAKE': { lat: 44.6295, lng: -63.6651 },
   'CHAIN LAKE': { lat: 44.6295, lng: -63.6651 },
+  '700 WINDMILL RD': { lat: 44.68550, lng: -63.58250 },
   '700 WINDMILL': { lat: 44.68550, lng: -63.58250 },
   'WINDMILL RD': { lat: 44.68550, lng: -63.58250 },
   'WINDMILL': { lat: 44.68550, lng: -63.58250 },
   'BURNSIDE': { lat: 44.6983, lng: -63.5855 },
   '547 KING ST': { lat: 44.3789, lng: -64.5126 },
+
+  // Direct Store & Distribution Center ID / Name Matches
+  'RONA HALIFAX': { lat: 44.65360, lng: -63.60110 },
+  'RONA TANTALLON': { lat: 44.7030, lng: -63.8571 },
+  'RONA ELMSDALE': { lat: 44.979223, lng: -63.504250 },
+  'RONA DARTMOUTH': { lat: 44.68550, lng: -63.58250 },
+  'RONA WINDMILL': { lat: 44.68550, lng: -63.58250 },
+  '01075': { lat: 44.7030, lng: -63.8571 },
+  '01065': { lat: 44.65360, lng: -63.60110 },
+  '01070': { lat: 44.979223, lng: -63.504250 },
+  'DC-WINAMILL': { lat: 44.68550, lng: -63.58250 },
+  'WINAMILL': { lat: 44.68550, lng: -63.58250 },
 
   // Nova Scotia Communities & Municipalities
   'TIMBERLEA': { lat: 44.6465, lng: -63.7431 },
@@ -33,8 +50,8 @@ export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'BAYERS LAKE': { lat: 44.6295, lng: -63.6651 },
   'HALIFAX': { lat: 44.6488, lng: -63.5880 },
   'DARTMOUTH': { lat: 44.6636, lng: -63.5683 },
-  'TANTALLON': { lat: 44.6890, lng: -63.8780 },
-  'UPPER TANTALLON': { lat: 44.6890, lng: -63.8780 },
+  'UPPER TANTALLON': { lat: 44.7030, lng: -63.8571 },
+  'TANTALLON': { lat: 44.7030, lng: -63.8571 },
   'HAMMONDS PLAINS': { lat: 44.7364, lng: -63.7854 },
   'BEDFORD': { lat: 44.7303, lng: -63.6617 },
   'LOWER SACKVILLE': { lat: 44.7642, lng: -63.6823 },
@@ -66,13 +83,6 @@ export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   'FREDERICTON': { lat: 45.9636, lng: -66.6431 },
   'CHARLOTTETOWN': { lat: 46.2382, lng: -63.1311 },
   'SUMMERSIDE': { lat: 46.3959, lng: -63.7887 },
-  
-  // Direct Store & Distribution Center ID / Name Matches
-  '01075': { lat: 44.6890, lng: -63.8780 },
-  '01065': { lat: 44.65360, lng: -63.60110 },
-  '01070': { lat: 44.979223, lng: -63.504250 },
-  'DC-WINAMILL': { lat: 44.68550, lng: -63.58250 },
-  'WINAMILL': { lat: 44.68550, lng: -63.58250 },
 
   // Silicon Valley, California
   'CAMPBELL, CA': { lat: 37.2872, lng: -121.9500 },
@@ -88,7 +98,7 @@ export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
 };
 
 export const getGpsForLocation = (id: string, nameOrAddress: string): { lat: number; lng: number } | null => {
-  const addressOnly = (nameOrAddress || '').trim();
+  const addressOnly = cleanAddressText(nameOrAddress || '').trim();
   const combined = (id + ' ' + (nameOrAddress || '')).trim();
   if (!combined && !addressOnly) return null;
   
@@ -113,11 +123,23 @@ export const getGpsForLocation = (id: string, nameOrAddress: string): { lat: num
     }
   }
 
-  // 1. First priority: Check address text alone against KNOWN_COORDS (sorted longest key first)
+  // Street address priority matches
+  const streetKeywords = [
+    'SPARROW', 'ALMON', 'BEDFORD HWY', 'BEDFORD', 'CHAIN LAKE', 'WINDMILL', 'BURNSIDE', 'KING ST',
+    'LANE', 'STREET', 'ROAD', 'AVENUE', 'DRIVE', 'HIGHWAY', 'WAY', 'BLVD', 'COURT'
+  ];
+
   const normAddr = addressOnly.toUpperCase();
+  const hasStreetAddress = streetKeywords.some(kw => normAddr.includes(kw));
+
+  // 1. First priority: Check address text alone against KNOWN_COORDS (sorted longest key first)
   if (normAddr) {
     const sortedEntries = Object.entries(KNOWN_COORDS).sort((a, b) => b[0].length - a[0].length);
     for (const [key, value] of sortedEntries) {
+      // If address contains a street address like 17 Sparrow Lane, don't match general store names like Tantallon
+      if (hasStreetAddress && (key === 'TANTALLON' || key === 'UPPER TANTALLON' || key === 'DARTMOUTH' || key === 'HALIFAX') && !normAddr.startsWith(key)) {
+        continue;
+      }
       if (normAddr.includes(key)) {
         return value;
       }
@@ -128,8 +150,8 @@ export const getGpsForLocation = (id: string, nameOrAddress: string): { lat: num
   const normCombined = combined.toUpperCase();
   const sortedEntries = Object.entries(KNOWN_COORDS).sort((a, b) => b[0].length - a[0].length);
   for (const [key, value] of sortedEntries) {
-    // Avoid matching 5-digit store IDs if text has a regular street address
-    if (/^\d{4,5}$/.test(key) && /(?:LANE|ST|STREET|RD|ROAD|AVE|AVENUE|DR|DRIVE|HWY|HIGHWAY|WAY|BLVD|COURT|CT)\b/i.test(normCombined)) {
+    // Avoid matching 5-digit store IDs or city names if text has a regular street address
+    if ((/^\d{4,5}$/.test(key) || key === 'TANTALLON' || key === 'DARTMOUTH' || key === 'HALIFAX') && /(?:SPARROW|ALMON|LANE|ST|STREET|RD|ROAD|AVE|AVENUE|DR|DRIVE|HWY|HIGHWAY|WAY|BLVD|COURT|CT)\b/i.test(normCombined)) {
       continue;
     }
     if (normCombined.includes(key)) {

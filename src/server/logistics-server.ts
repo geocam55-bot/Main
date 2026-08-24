@@ -2424,6 +2424,7 @@ app.use((req, res, next) => {
           const scheduledDate = d.scheduledDate || meta.scheduledDate || d.scheduled_date;
           const scheduledSlot = d.scheduledSlot || meta.scheduledSlot || d.scheduled_slot;
           const deliveryCategory = d.deliveryCategory || d.delivery_category || meta.deliveryCategory;
+          const additionalStops = d.additionalStops || d.additional_stops || meta.additionalStops || meta.additional_stops || [];
           const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
 
           const resObj = {
@@ -2456,6 +2457,8 @@ app.use((req, res, next) => {
             scheduledDate,
             scheduledSlot,
             deliveryCategory,
+            additionalStops,
+            additional_stops: additionalStops,
             history
           };
 
@@ -2729,6 +2732,8 @@ app.use((req, res, next) => {
           scheduledDate: d.scheduledDate,
           scheduledSlot: d.scheduledSlot,
           deliveryCategory: d.deliveryCategory,
+          additionalStops: d.additionalStops || d.additional_stops || [],
+          additional_stops: d.additionalStops || d.additional_stops || [],
           history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
         };
 
@@ -2750,6 +2755,8 @@ app.use((req, res, next) => {
           dropoff_location: String(d.deliveryAddress || d.destination || "N/A"),
           scheduled_slot: d.scheduledSlot || d.scheduled_slot || null,
           delivery_category: d.deliveryCategory || d.delivery_category || null,
+          additional_stops: d.additionalStops || d.additional_stops || [],
+          additionalStops: d.additionalStops || d.additional_stops || [],
           items: [JSON.stringify({ _meta: fullMeta })]
         };
       });

@@ -503,8 +503,9 @@ export default function DriverMobileApp({
         // Clean and extract proper customer name and delivery address (distinguishing from Sold To / store routing headers)
         const cleanInfo = extractCleanDeliveryInfo(del.customerName, del.deliveryAddress, (del as any).soldToAddress || (del as any).sold_to_address);
         
-        const rawDestCoords = del.destinationCoords || getGpsForLocation(del.id, `${cleanInfo.deliveryAddress} ${cleanInfo.customerName}`.trim());
-        const safeDestCoords = sanitizeGpsCoordinates(rawDestCoords?.lat ?? (44.6642 - (seqNum * 0.015)), rawDestCoords?.lng ?? (-63.8560 + (seqNum * 0.012)));
+        // Accurate coordinate for final delivery destination (17 Sparrow Lane, Hubley, etc.)
+        const rawDestCoords = del.destinationCoords || getGpsForLocation(del.id, cleanInfo.deliveryAddress || del.deliveryAddress);
+        const safeDestCoords = sanitizeGpsCoordinates(rawDestCoords?.lat ?? (44.6885 - (seqNum * 0.015)), rawDestCoords?.lng ?? (-63.8575 + (seqNum * 0.012)));
 
         // Safely extract all additional stops (handling camelCase, snake_case, metadata objects, or JSON strings)
         const rawAdditionalStops = del.additionalStops || (del as any).additional_stops || (del as any).meta?.additionalStops || (del as any).metadata?.additionalStops || [];
@@ -514,14 +515,14 @@ export default function DriverMobileApp({
             ? (() => { try { return JSON.parse(rawAdditionalStops); } catch { return []; } })()
             : [];
 
-        // 1) Additional Stops in the order they were entered
+        // 1) Additional Stops in the order they were entered (e.g. 6055 Almon St, Halifax)
         if (normalizedAdditionalStops && normalizedAdditionalStops.length > 0) {
           normalizedAdditionalStops.forEach((st, sIdx) => {
             const stopAddress = cleanAddressText(st.address || st.location || 'Address on file');
-            const rawStopCoords = getGpsForLocation(`${del.id}-${st.id || sIdx}`, `${stopAddress} ${st.reason || ''}`.trim());
+            const rawStopCoords = getGpsForLocation(`${del.id}-${st.id || sIdx}`, stopAddress);
             const safeStopCoords = sanitizeGpsCoordinates(
-              rawStopCoords?.lat ?? (safeDestCoords.lat + 0.007 * (sIdx + 1)),
-              rawStopCoords?.lng ?? (safeDestCoords.lng - 0.007 * (sIdx + 1))
+              rawStopCoords?.lat ?? (44.6536 + 0.007 * (sIdx + 1)),
+              rawStopCoords?.lng ?? (-63.6011 - 0.007 * (sIdx + 1))
             );
 
             stopsAcc.push({
