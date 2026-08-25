@@ -4797,16 +4797,62 @@ async function getFleetId(token: string): Promise<string | null> {
       // Query live vehicle positions using Fleet Complete module
       const fcResult = await getVehiclePositions(credentialsSupplier);
 
+      // Query configured trucks from Supabase database
+      let dbTrucks: any[] = [];
+      const supabase = getSupabase(req, true);
+      if (supabase) {
+        try {
+          const tenantId = req.query.tenantId ? normalizeTenantId(req.query.tenantId) : null;
+          let truckQuery = supabase.from("trucks").select("*");
+          if (tenantId) {
+            truckQuery = truckQuery.eq("tenantId", tenantId);
+          }
+          const { data } = await truckQuery;
+          if (data && Array.isArray(data)) {
+            dbTrucks = data;
+          }
+        } catch (dbErr) {
+          console.warn("[Vehicles DB query notice]", dbErr);
+        }
+      } else {
+        const tenantId = normalizeTenantId(req.query.tenantId);
+        const inMem = inMemoryTenantStates[tenantId] || inMemoryTenantStates["t-prospaces-main"];
+        if (inMem && Array.isArray(inMem.trucks)) {
+          dbTrucks = inMem.trucks;
+        }
+      }
+
       if (fcResult.success && fcResult.vehicles && fcResult.vehicles.length > 0) {
         // Trigger background in-memory telemetry update
         syncFleetCompleteTelemetry().catch((e) => console.warn("[Fleet Sync Notice]", e));
+
+        // Filter out any Fleet Complete vehicles not configured in the Supabase trucks table
+        const filteredFcVehicles = fcResult.vehicles.filter((fv: any) => {
+          const fvId = String(fv.id || '').toLowerCase();
+          const fvName = String(fv.name || '').toLowerCase();
+          const fvUNum = extractTruckUnitNumber(fv.name) || extractTruckUnitNumber(fv.id);
+
+          return dbTrucks.some((t: any) => {
+            const tId = String(t.id || '').toLowerCase();
+            const tName = String(t.name || '').toLowerCase();
+            const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
+            const deserialized = t.type && t.type.includes("||") ? deserializeType(t) : t;
+            return (
+              tId === fvId ||
+              tName === fvName ||
+              (fvUNum && tUNum && fvUNum === tUNum) ||
+              (deserialized.gpsDeviceId && deserialized.gpsDeviceId === fv.hardwareId) ||
+              (deserialized.vin && fv.vin && deserialized.vin.toLowerCase() === fv.vin.toLowerCase())
+            );
+          });
+        });
 
         return res.json({
           success: true,
           source: 'fleet_complete',
           isStale: false,
           fleetId: fcResult.fleetId || cachedFleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
-          vehicles: fcResult.vehicles,
+          vehicles: filteredFcVehicles,
           timestamp: new Date().toISOString()
         });
       }
@@ -4923,31 +4969,37 @@ async function getFleetId(token: string): Promise<string | null> {
         console.warn("[Telematics Sync Notice]", e);
       }
 
-      // Retrieve state trucks & deliveries from active Supabase database or in-memory state
+      // Retrieve state trucks & deliveries from active Supabase database
       let activeTrucks: any[] = [];
       let activeDeliveries: any[] = [];
 
-      const supabase = getActiveSupabaseClient();
+      const supabase = getSupabase(req, true);
       if (supabase) {
         try {
-          const { data: dbTrucks } = await supabase.from("trucks").select("*");
+          const tenantId = req.query.tenantId ? normalizeTenantId(req.query.tenantId) : null;
+          let truckQuery = supabase.from("trucks").select("*");
+          let deliveryQuery = supabase.from("deliveries").select("*");
+          if (tenantId) {
+            truckQuery = truckQuery.eq("tenantId", tenantId);
+            deliveryQuery = deliveryQuery.eq("tenantId", tenantId);
+          }
+          const { data: dbTrucks } = await truckQuery;
           if (dbTrucks && Array.isArray(dbTrucks)) {
             activeTrucks = dbTrucks;
           }
-          const { data: dbDeliveries } = await supabase.from("deliveries").select("*");
+          const { data: dbDeliveries } = await deliveryQuery;
           if (dbDeliveries && Array.isArray(dbDeliveries)) {
             activeDeliveries = dbDeliveries;
           }
         } catch (dbErr) {
           console.warn("[Telematics DB query notice]", dbErr);
         }
-      }
-
-      if (activeTrucks.length === 0) {
-        const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
-        if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
-          activeTrucks = primaryTenant.trucks;
-          activeDeliveries = primaryTenant.deliveries || [];
+      } else {
+        const tenantId = normalizeTenantId(req.query.tenantId);
+        const inMem = inMemoryTenantStates[tenantId] || inMemoryTenantStates["t-prospaces-main"];
+        if (inMem && Array.isArray(inMem.trucks)) {
+          activeTrucks = inMem.trucks;
+          activeDeliveries = inMem.deliveries || [];
         }
       }
       
@@ -5166,27 +5218,33 @@ async function getFleetId(token: string): Promise<string | null> {
       let activeTrucks: any[] = [];
       let activeDeliveries: any[] = [];
 
-      const supabase = getActiveSupabaseClient();
+      const supabase = getSupabase(req, true);
       if (supabase) {
         try {
-          const { data: dbTrucks } = await supabase.from("trucks").select("*");
+          const tenantId = req.query.tenantId ? normalizeTenantId(req.query.tenantId) : null;
+          let truckQuery = supabase.from("trucks").select("*");
+          let deliveryQuery = supabase.from("deliveries").select("*");
+          if (tenantId) {
+            truckQuery = truckQuery.eq("tenantId", tenantId);
+            deliveryQuery = deliveryQuery.eq("tenantId", tenantId);
+          }
+          const { data: dbTrucks } = await truckQuery;
           if (dbTrucks && Array.isArray(dbTrucks)) {
             activeTrucks = dbTrucks;
           }
-          const { data: dbDeliveries } = await supabase.from("deliveries").select("*");
+          const { data: dbDeliveries } = await deliveryQuery;
           if (dbDeliveries && Array.isArray(dbDeliveries)) {
             activeDeliveries = dbDeliveries;
           }
         } catch (dbErr) {
           console.warn("[Telematics DB query notice]", dbErr);
         }
-      }
-
-      if (activeTrucks.length === 0) {
-        const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
-        if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
-          activeTrucks = primaryTenant.trucks;
-          activeDeliveries = primaryTenant.deliveries || [];
+      } else {
+        const tenantId = normalizeTenantId(req.query.tenantId);
+        const inMem = inMemoryTenantStates[tenantId] || inMemoryTenantStates["t-prospaces-main"];
+        if (inMem && Array.isArray(inMem.trucks)) {
+          activeTrucks = inMem.trucks;
+          activeDeliveries = inMem.deliveries || [];
         }
       }
       

@@ -3293,7 +3293,7 @@ export default function App() {
         {/* Dynamic content area depending on tabs */}
         <div className="flex-1 transition-all duration-300" id="current-tab-view">
           {(activeTab === 'telematics' || activeTab === 'dashboard') && (
-            <TelematicsDashboard />
+            <TelematicsDashboard trucks={trucks} />
           )}
           {activeTab === 'live-dashboard' && (
             <LiveDashboard 

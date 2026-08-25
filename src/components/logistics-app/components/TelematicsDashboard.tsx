@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useTelematics } from '../lib/telematicsService';
 import TelematicsMapView from './TelematicsMapView';
 import { VehicleRecord } from '../types/telematics';
+import { Truck } from '../types';
 import { 
   Truck as TruckIcon, 
   MapPin, 
@@ -42,7 +43,11 @@ import {
   Eye
 } from 'lucide-react';
 
-export default function TelematicsDashboard() {
+export interface TelematicsDashboardProps {
+  trucks?: Truck[];
+}
+
+export default function TelematicsDashboard({ trucks }: TelematicsDashboardProps = {}) {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MOVING' | 'IDLE' | 'STOPPED'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
@@ -59,10 +64,9 @@ export default function TelematicsDashboard() {
   });
   
   const {
-    vehicles,
-    selectedVehicle,
+    vehicles: rawVehicles,
     selectedVehicleId,
-    summary,
+    summary: rawSummary,
     isLoading,
     isStreaming,
     lastUpdated,
@@ -77,6 +81,61 @@ export default function TelematicsDashboard() {
     statusFilter,
     searchQuery
   });
+
+  // Filter vehicles to strictly match Supabase trucks if trucks prop is provided
+  const vehicles = useMemo(() => {
+    if (!trucks) return rawVehicles;
+    if (trucks.length === 0) return [];
+    
+    return rawVehicles.filter(v => {
+      const vId = (v.vehicleId || '').toLowerCase();
+      const vName = (v.truckName || '').toLowerCase();
+      const vVin = (v.vin || '').toLowerCase();
+      
+      const vUnitMatch = vName.match(/\d+/) || vId.match(/\d+/);
+      const vUnitNum = vUnitMatch ? vUnitMatch[0] : null;
+
+      return trucks.some(t => {
+        const tId = (t.id || '').toLowerCase();
+        const tName = (t.name || '').toLowerCase();
+        const tVin = (t.vin || '').toLowerCase();
+        const tGpsId = (t.gpsDeviceId || '').toLowerCase();
+        const tGpsName = (t.gpsDeviceName || '').toLowerCase();
+        
+        const tUnitMatch = tName.match(/\d+/) || tId.match(/\d+/);
+        const tUnitNum = tUnitMatch ? tUnitMatch[0] : null;
+
+        return (
+          tId === vId ||
+          tName === vName ||
+          (tVin && vVin && tVin === vVin) ||
+          (tGpsId && tGpsId === vId) ||
+          (tGpsName && tGpsName === vName) ||
+          (vUnitNum && tUnitNum && vUnitNum === tUnitNum)
+        );
+      });
+    });
+  }, [rawVehicles, trucks]);
+
+  const summary = useMemo(() => {
+    if (!trucks) return rawSummary;
+    const movingCount = vehicles.filter(v => v.status === 'MOVING').length;
+    const idleCount = vehicles.filter(v => v.status === 'IDLE').length;
+    const stoppedCount = vehicles.filter(v => v.status === 'STOPPED').length;
+    const avgSpeed = vehicles.length > 0 ? Math.round(vehicles.reduce((acc, v) => acc + (v.telematics?.speedMph || v.telematics?.speed || 0), 0) / vehicles.length) : 0;
+    const avgFuel = vehicles.length > 0 ? Math.round(vehicles.reduce((acc, v) => acc + (v.telematics?.fuelPercent || v.telematics?.fuelLevel || 75), 0) / vehicles.length) : 0;
+    const totalActiveDeliveries = vehicles.reduce((acc, v) => acc + (v.activeRoute?.stops?.length || v.activeRoute?.totalStops || 0), 0);
+
+    return {
+      totalVehicles: vehicles.length,
+      movingCount,
+      idleCount,
+      stoppedCount,
+      averageSpeed: avgSpeed,
+      averageFuelLevel: avgFuel,
+      totalActiveDeliveries
+    };
+  }, [trucks, vehicles, rawSummary]);
 
   const detailsVehicle = viewingDetailsFor ? vehicles.find(v => v.vehicleId === viewingDetailsFor) : null;
 
