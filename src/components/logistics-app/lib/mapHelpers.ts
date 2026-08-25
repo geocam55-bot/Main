@@ -440,7 +440,9 @@ export const getBranchCoordinates = (id: string, name: string, address?: string)
 };
 
 export const getDeliveryCoordinates = (id: string, address: string, originX?: number, originY?: number): { x: number; y: number; lat: number; lng: number } | null => {
-  const gps = getGpsForLocation(id, address);
+  const cleanInfo = extractCleanDeliveryInfo(undefined, address);
+  const targetAddress = cleanInfo.deliveryAddress || address;
+  const gps = getGpsForLocation(id, targetAddress);
   if (!gps) return null;
   const coords = getPercentCoordsFromGps(gps.lat, gps.lng);
   return { x: coords.x, y: coords.y, lat: gps.lat, lng: gps.lng };

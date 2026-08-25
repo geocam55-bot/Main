@@ -1306,7 +1306,7 @@ export default function App() {
         if (data.supabaseActive) {
           // Populate React state directly from live Supabase Tables and filter out recently deleted IDs
           const rawDeliveries = (data.deliveries || []).filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id));
-          const filteredTrucks = (data.trucks && data.trucks.length > 0 ? data.trucks : DEFAULT_TRUCKS).filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
+          const filteredTrucks = (Array.isArray(data.trucks) ? data.trucks : []).filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
           const filteredBranches = (data.branches && data.branches.length > 0 ? data.branches : DEFAULT_BRANCHES).filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id));
           const filteredUsers = (data.users && data.users.length > 0 ? data.users : DEFAULT_USERS).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
 
@@ -1355,14 +1355,14 @@ export default function App() {
             // First load on boot: prioritize local storage so we restore state correctly
             if (cachedBranches) {
               rawDeliveries = cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES;
-              rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : DEFAULT_TRUCKS;
+              rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : (Array.isArray(data.trucks) ? data.trucks : []);
               rawBranches = JSON.parse(cachedBranches);
               rawUsers = cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS;
               loadedFromCache = true;
             } else {
               // No cache found, use backend's default seed data or defaults
               rawDeliveries = (data.deliveries && data.deliveries.length > 0) ? data.deliveries : DEFAULT_DELIVERIES;
-              rawTrucks = (data.trucks && data.trucks.length > 0) ? data.trucks : DEFAULT_TRUCKS;
+              rawTrucks = Array.isArray(data.trucks) ? data.trucks : [];
               rawBranches = (data.branches && data.branches.length > 0) ? data.branches : DEFAULT_BRANCHES;
               rawUsers = (data.users && data.users.length > 0) ? data.users : DEFAULT_USERS;
             }
@@ -1370,14 +1370,14 @@ export default function App() {
           } else {
             // Subsequent polls: prefer server's latest data (with updated GPS coordinates)
             rawDeliveries = (data.deliveries && data.deliveries.length > 0) ? data.deliveries : (cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES);
-            rawTrucks = (data.trucks && data.trucks.length > 0) ? data.trucks : (cachedTrucks ? JSON.parse(cachedTrucks) : DEFAULT_TRUCKS);
+            rawTrucks = Array.isArray(data.trucks) ? data.trucks : (cachedTrucks ? JSON.parse(cachedTrucks) : []);
             rawBranches = (data.branches && data.branches.length > 0) ? data.branches : (cachedBranches ? JSON.parse(cachedBranches) : DEFAULT_BRANCHES);
             rawUsers = (data.users && data.users.length > 0) ? data.users : (cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS);
           }
 
-          // Ensure not empty
+          // Ensure not empty for branches/users if unconfigured, but keep trucks strictly to configured trucks
           if (!rawBranches || rawBranches.length === 0) rawBranches = DEFAULT_BRANCHES;
-          if (!rawTrucks || rawTrucks.length === 0) rawTrucks = DEFAULT_TRUCKS;
+          if (!rawTrucks) rawTrucks = [];
           if (!rawUsers || rawUsers.length === 0) rawUsers = DEFAULT_USERS;
 
           // Keep localStorage warm with current state
@@ -1414,12 +1414,12 @@ export default function App() {
           const cachedUsers = localStorage.getItem(`prospaces_users_tenant_${tenantId}`);
 
           let rawDeliveries = cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES;
-          let rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : DEFAULT_TRUCKS;
+          let rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : [];
           let rawBranches = cachedBranches ? JSON.parse(cachedBranches) : DEFAULT_BRANCHES;
           let rawUsers = cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS;
 
           if (!rawBranches || rawBranches.length === 0) rawBranches = DEFAULT_BRANCHES;
-          if (!rawTrucks || rawTrucks.length === 0) rawTrucks = DEFAULT_TRUCKS;
+          if (!rawTrucks) rawTrucks = [];
 
           setDeliveries(rawDeliveries.filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id)));
           setTrucks(deduplicateTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id))));

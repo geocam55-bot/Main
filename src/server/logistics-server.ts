@@ -4923,14 +4923,32 @@ async function getFleetId(token: string): Promise<string | null> {
         console.warn("[Telematics Sync Notice]", e);
       }
 
-      // Retrieve state trucks & deliveries from active in-memory or database state
+      // Retrieve state trucks & deliveries from active Supabase database or in-memory state
       let activeTrucks: any[] = [];
       let activeDeliveries: any[] = [];
 
-      const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
-      if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
-        activeTrucks = primaryTenant.trucks;
-        activeDeliveries = primaryTenant.deliveries || [];
+      const supabase = getActiveSupabaseClient();
+      if (supabase) {
+        try {
+          const { data: dbTrucks } = await supabase.from("trucks").select("*");
+          if (dbTrucks && Array.isArray(dbTrucks)) {
+            activeTrucks = dbTrucks;
+          }
+          const { data: dbDeliveries } = await supabase.from("deliveries").select("*");
+          if (dbDeliveries && Array.isArray(dbDeliveries)) {
+            activeDeliveries = dbDeliveries;
+          }
+        } catch (dbErr) {
+          console.warn("[Telematics DB query notice]", dbErr);
+        }
+      }
+
+      if (activeTrucks.length === 0) {
+        const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
+        if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
+          activeTrucks = primaryTenant.trucks;
+          activeDeliveries = primaryTenant.deliveries || [];
+        }
       }
       
       // Merge any newly fetched Fleet Complete vehicles that may not be in in-memory state
@@ -5148,10 +5166,28 @@ async function getFleetId(token: string): Promise<string | null> {
       let activeTrucks: any[] = [];
       let activeDeliveries: any[] = [];
 
-      const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
-      if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
-        activeTrucks = primaryTenant.trucks;
-        activeDeliveries = primaryTenant.deliveries || [];
+      const supabase = getActiveSupabaseClient();
+      if (supabase) {
+        try {
+          const { data: dbTrucks } = await supabase.from("trucks").select("*");
+          if (dbTrucks && Array.isArray(dbTrucks)) {
+            activeTrucks = dbTrucks;
+          }
+          const { data: dbDeliveries } = await supabase.from("deliveries").select("*");
+          if (dbDeliveries && Array.isArray(dbDeliveries)) {
+            activeDeliveries = dbDeliveries;
+          }
+        } catch (dbErr) {
+          console.warn("[Telematics DB query notice]", dbErr);
+        }
+      }
+
+      if (activeTrucks.length === 0) {
+        const primaryTenant = inMemoryTenantStates["t-prospaces-main"] || Object.values(inMemoryTenantStates)[0];
+        if (primaryTenant && Array.isArray(primaryTenant.trucks)) {
+          activeTrucks = primaryTenant.trucks;
+          activeDeliveries = primaryTenant.deliveries || [];
+        }
       }
       
       // Check for live matching telemetry from Fleet Complete

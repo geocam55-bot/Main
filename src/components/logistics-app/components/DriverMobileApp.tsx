@@ -166,7 +166,7 @@ export default function DriverMobileApp({
       // 2. Query Supabase trucks table
       const supabase = createClient();
       const { data, error } = await supabase.from('trucks').select('*');
-      const sourceList = (data && data.length > 0) ? data : trucks;
+      const sourceList = Array.isArray(data) ? data : (trucks || []);
 
       if (sourceList && sourceList.length > 0) {
         const mapped: Truck[] = sourceList.map((d: any) => {
