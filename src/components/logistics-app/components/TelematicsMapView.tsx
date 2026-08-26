@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { VehicleRecord, RouteStop } from '../types/telematics';
+import { Branch } from '../types';
+import { DEFAULT_BRANCHES } from '../data';
+import { getBranchCoordinates } from '../lib/mapHelpers';
 import { TeardropTruckMarker } from './TeardropTruckMarker';
 import { 
   Truck as TruckIcon, 
@@ -23,11 +26,17 @@ import {
   Key,
   X,
   Play,
-  Pause
+  Pause,
+  Store as StoreIcon,
+  Warehouse as WarehouseIcon,
+  Building2,
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react';
 
 interface TelematicsMapViewProps {
   vehicles: VehicleRecord[];
+  branches?: Branch[];
   selectedVehicleId: string | null;
   onSelectVehicle: (vehicleId: string | null) => void;
   isStreaming?: boolean;
@@ -228,12 +237,14 @@ function TrafficLayerToggle({ enabled }: { enabled: boolean }) {
 // ════════════════════════════════════════════════════════════════════════════
 function MapCameraController({
   vehicles,
+  branches = [],
   selectedVehicle,
   followSelected,
   fitKey,
   viewingTripsFor
 }: {
   vehicles: VehicleRecord[];
+  branches?: Branch[];
   selectedVehicle: VehicleRecord | null;
   followSelected: boolean;
   fitKey?: number;
@@ -242,7 +253,7 @@ function MapCameraController({
   const map = useMap();
   const initialFitDone = useRef(false);
 
-  // Fit all vehicles into view on initial load or when manually triggered
+  // Fit all vehicles & stores into view on initial load or when manually triggered
   useEffect(() => {
     if (!map || !window.google?.maps) return;
 
@@ -261,7 +272,7 @@ function MapCameraController({
         lng: vLng
       });
       map.setZoom(15);
-    } else if ((!initialFitDone.current || fitKey) && vehicles.length > 0) {
+    } else if (!initialFitDone.current || fitKey) {
       const bounds = new window.google.maps.LatLngBounds();
       let count = 0;
       vehicles.forEach(v => {
@@ -273,12 +284,21 @@ function MapCameraController({
         }
       });
 
+      // Also include stores in bounds
+      branches.forEach(b => {
+        const coords = getBranchCoordinates(b, b.name, b.address, b.latitude, b.longitude);
+        if (coords.lat && coords.lng && !isNaN(coords.lat) && !isNaN(coords.lng)) {
+          bounds.extend({ lat: coords.lat, lng: coords.lng });
+          count++;
+        }
+      });
+
       if (count > 0) {
         map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
         initialFitDone.current = true;
       }
     }
-  }, [map, selectedVehicle, followSelected, vehicles, fitKey]);
+  }, [map, selectedVehicle, followSelected, vehicles, branches, fitKey]);
 
   return null;
 }
@@ -387,6 +407,7 @@ function AnimatedVehicleMarker({
 // ════════════════════════════════════════════════════════════════════════════
 export default function TelematicsMapView({
   vehicles,
+  branches,
   selectedVehicleId,
   onSelectVehicle,
   isStreaming = true,
@@ -408,6 +429,12 @@ export default function TelematicsMapView({
   const [fitKey, setFitKey] = useState<number>(0);
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [manualKeyInput, setManualKeyInput] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+
+  const activeBranches = useMemo(() => {
+    if (branches && branches.length > 0) return branches;
+    return DEFAULT_BRANCHES;
+  }, [branches]);
 
   const selectedVehicle = useMemo(() => {
     return vehicles.find(v => v.vehicleId === selectedVehicleId) || null;
@@ -567,11 +594,107 @@ export default function TelematicsMapView({
             {/* Camera Focus & Pan Controller */}
             <MapCameraController 
               vehicles={vehicles} 
+              branches={activeBranches}
               selectedVehicle={selectedVehicle} 
               followSelected={followSelected} 
               fitKey={fitKey}
               viewingTripsFor={viewingTripsFor}
             />
+
+            {/* ── Active Branch & Store Markers (GPS coordinates from Supabase) ── */}
+            {activeBranches.map((branch) => {
+              const coords = getBranchCoordinates(branch, branch.name, branch.address, branch.latitude, branch.longitude);
+              const isDC = branch.type === 'DC' || (branch as any).branchType === 'DC' || (branch.name || '').toLowerCase().includes('dc');
+              const isSelected = selectedBranch?.id === branch.id;
+
+              return (
+                <AdvancedMarker
+                  key={`branch-${branch.id}`}
+                  position={{ lat: coords.lat, lng: coords.lng }}
+                  title={`${branch.name} (${branch.id})`}
+                  onClick={() => setSelectedBranch(branch)}
+                >
+                  <div className="relative group cursor-pointer flex flex-col items-center">
+                    {/* Hover Tooltip */}
+                    <div className="absolute -top-9 z-30 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none scale-95 group-hover:scale-100 bg-slate-900/95 text-white font-sans text-xs font-semibold px-2.5 py-1 rounded-md shadow-xl border border-slate-700/80 whitespace-nowrap flex items-center gap-1.5">
+                      <span>{branch.name}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-mono font-bold ${
+                        isDC ? 'bg-rose-500 text-white' : 'bg-blue-600 text-white'
+                      }`}>
+                        {isDC ? 'DC' : 'STORE'}
+                      </span>
+                    </div>
+
+                    {/* Store Circle Pin */}
+                    <div
+                      className={`h-9 w-9 rounded-full shadow-xl border-2 flex items-center justify-center transition-all duration-200 group-hover:scale-115 ${
+                        isSelected
+                          ? 'ring-4 ring-blue-400 bg-blue-600 border-white text-white scale-110'
+                          : isDC
+                          ? 'bg-slate-900 border-rose-500 text-rose-400 ring-2 ring-rose-500/30'
+                          : 'bg-slate-900 border-blue-400 text-blue-400 ring-2 ring-blue-400/30'
+                      }`}
+                    >
+                      {isDC ? (
+                        <WarehouseIcon className="h-4.5 w-4.5 shrink-0" />
+                      ) : (
+                        <StoreIcon className="h-4.5 w-4.5 shrink-0" />
+                      )}
+                    </div>
+
+                    {/* Store Name Badge Below */}
+                    <div className="mt-1 px-1.5 py-0.5 bg-slate-900/90 text-white rounded text-[10px] font-bold shadow-md max-w-[110px] truncate border border-slate-700/50">
+                      {branch.name.replace(/^RONA\s*/i, '')}
+                    </div>
+                  </div>
+                </AdvancedMarker>
+              );
+            })}
+
+            {/* Branch Info Window on click */}
+            {selectedBranch && (() => {
+              const coords = getBranchCoordinates(selectedBranch, selectedBranch.name, selectedBranch.address, selectedBranch.latitude, selectedBranch.longitude);
+              const isDC = selectedBranch.type === 'DC' || (selectedBranch as any).branchType === 'DC' || (selectedBranch.name || '').toLowerCase().includes('dc');
+
+              return (
+                <InfoWindow
+                  position={{ lat: coords.lat, lng: coords.lng }}
+                  onCloseClick={() => setSelectedBranch(null)}
+                  pixelOffset={[0, -38]}
+                >
+                  <div className="p-1 max-w-xs text-slate-900 font-sans select-text">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className={`p-1.5 rounded-lg ${isDC ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {isDC ? <WarehouseIcon className="h-4 w-4" /> : <StoreIcon className="h-4 w-4" />}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900 leading-tight">{selectedBranch.name}</h4>
+                        <span className="text-[10px] text-slate-500 font-mono">ID: {selectedBranch.id}</span>
+                      </div>
+                    </div>
+                    
+                    <p className="text-[11px] text-slate-600 mb-2 leading-tight">
+                      {selectedBranch.address || 'Address registered in Supabase'}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-slate-200 text-[10px]">
+                      <div className="bg-slate-50 p-1.5 rounded-md">
+                        <span className="text-slate-400 block text-[9px]">GPS Coordinates</span>
+                        <span className="font-mono font-semibold text-slate-700">
+                          {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}
+                        </span>
+                      </div>
+                      <div className="bg-slate-50 p-1.5 rounded-md">
+                        <span className="text-slate-400 block text-[9px]">Facility Type</span>
+                        <span className="font-semibold text-slate-700">
+                          {isDC ? 'Distribution Center' : 'Retail Store'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </InfoWindow>
+              );
+            })()}
 
             {/* ── Active Route Stops Pins ── */}
             {selectedVehicle?.activeRoute?.stops?.map((stop, sIdx) => {

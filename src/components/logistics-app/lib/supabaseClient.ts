@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { extractVehicleNumber, sanitizeGpsCoordinates } from "./mapHelpers";
+import { extractVehicleNumber, sanitizeGpsCoordinates, getBranchCoordinates } from "./mapHelpers";
+import { DEFAULT_BRANCHES } from "../data";
 
 // Serialization and Deserialization helpers matching the backend implementation
 export function serializeToPhone(phone: string | undefined, password: string | undefined, status: string | undefined, driverLicenseExpire?: string | undefined, lastActive?: string | undefined, resetRequest?: string | undefined, avatarUrl?: string | undefined): string {
@@ -610,9 +611,27 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     };
   });
 
-  const rawBranches = rBranches.data || [];
+  // Support branches table and Store/stores table fallback
+  let rawBranches = rBranches.data || [];
+  if (!rawBranches || rawBranches.length === 0) {
+    try {
+      const rStore = await supabase.from("Store").select("*").eq("tenantId", tenantId);
+      if (rStore.data && rStore.data.length > 0) {
+        rawBranches = rStore.data;
+      }
+    } catch (_) {}
+  }
+  if (!rawBranches || rawBranches.length === 0) {
+    try {
+      const rStores = await supabase.from("stores").select("*").eq("tenantId", tenantId);
+      if (rStores.data && rStores.data.length > 0) {
+        rawBranches = rStores.data;
+      }
+    } catch (_) {}
+  }
+
   const deserializedBranches = rawBranches.map((b: any) => {
-    let address = b.address || "";
+    let address = b.address || b.address1 || "";
     let closureRules = b.closureRules;
     let deliveryBoardConfig = b.deliveryBoardConfig;
     let deliveryDays = b.deliveryDays;
@@ -630,9 +649,36 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
       }
     }
 
+    // Extract GPS latitude and longitude
+    let latitude = (typeof b.latitude === 'number' && !isNaN(b.latitude) && b.latitude !== 0) ? b.latitude : 
+                   (typeof b.lat === 'number' && !isNaN(b.lat) && b.lat !== 0 ? b.lat : undefined);
+    let longitude = (typeof b.longitude === 'number' && !isNaN(b.longitude) && b.longitude !== 0) ? b.longitude : 
+                    (typeof b.lng === 'number' && !isNaN(b.lng) && b.lng !== 0 ? b.lng : undefined);
+
+    if (latitude === undefined || longitude === undefined) {
+      const matchedDefault = DEFAULT_BRANCHES.find(db => db.id === b.id || (db.code && db.code === b.id) || (b.name && db.name.toLowerCase() === b.name.toLowerCase()));
+      if (matchedDefault && typeof matchedDefault.latitude === 'number' && typeof matchedDefault.longitude === 'number') {
+        latitude = matchedDefault.latitude;
+        longitude = matchedDefault.longitude;
+      } else {
+        const gps = getBranchCoordinates(b.id, b.name, address);
+        latitude = gps.lat;
+        longitude = gps.lng;
+      }
+    }
+
     return {
       ...b,
+      id: b.id || b.branch_code || b.code || `BR-${Date.now()}`,
+      name: b.name || b.branch_name || b.branchName || b.id || "Store",
+      type: b.type || b.branch_type || b.branchType || 'STORE',
+      branchCode: b.branch_code || b.branchCode || b.code || b.id,
+      branchName: b.branch_name || b.branchName || b.name,
       address,
+      latitude,
+      longitude,
+      lat: latitude,
+      lng: longitude,
       closureRules,
       deliveryBoardConfig,
       deliveryDays
@@ -809,12 +855,20 @@ export async function saveTenantStateDirect(
       addressVal = `${rawAddr}||META:${JSON.stringify(meta)}`;
     }
     const bType = String(b.type || b.branchType || b.branch_type || (String(b.name || b.id || '').toUpperCase().includes('DC') ? 'DC' : 'STORE'));
+    const coords = getBranchCoordinates(b, b.name, rawAddr, b.latitude, b.longitude);
     return {
       id: String(b.id || b.code || b.branchCode || b.branch_code || `BR-${Date.now()}`),
       tenantId: String(tenantId),
-      name: String(b.name || b.branchName || b.branch_name || b.id || "Branch"),
+      name: String(b.name || b.branchName || b.branch_name || b.id || "Store"),
       type: bType,
-      address: addressVal || "N/A"
+      address: addressVal || "N/A",
+      latitude: coords.lat,
+      longitude: coords.lng,
+      branch_code: b.branchCode || b.branch_code || b.code || b.id,
+      city: b.city || null,
+      province_state: b.provinceState || b.province_state || 'NS',
+      geofence_radius_meters: b.geofenceRadiusMeters || 100,
+      is_active: b.isActive !== false
     };
   });
 

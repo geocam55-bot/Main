@@ -347,7 +347,7 @@ export function AppContent() {
   const [currentView, setCurrentView] = useState(() => {
     // Restore persisted view on refresh (only if there's a session hint)
     const saved = sessionStorage.getItem('prospaces_current_view');
-    return saved || 'landing';
+    return (saved && saved !== 'landing' && saved !== 'login' && saved !== 'member-login') ? saved : 'landing';
   });
 
   // Listen for hash changes to support navigation fallback (e.g., from ImportExport)
@@ -503,39 +503,34 @@ export function AppContent() {
       clearTimeout(loadSafetyTimer);
     });
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-        clearStaleAuthTokens();
-        // Clear state immediately
-        setSession(null);
-        setUser(null);
-        setOrganization(null);
-        setCurrentView('landing');
-        setLoading(false);
-        sessionStorage.removeItem('prospaces_current_view');
-        return;
-      }
+      // Listen for auth changes
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          clearStaleAuthTokens();
+          // Clear state immediately
+          setSession(null);
+          setUser(null);
+          setOrganization(null);
+          setCurrentView('landing');
+          setLoading(false);
+          sessionStorage.removeItem('prospaces_current_view');
+          return;
+        }
 
-      // For token refreshes (e.g. tab regains focus), just update the session
-      // reference — do NOT reload user data or reset the current view.
-      if (event === 'TOKEN_REFRESHED') {
-        setSession(session);
-        return;
-      }
+        // For token refreshes (e.g. tab regains focus), just update the session
+        // reference — do NOT reload user data or reset the current view.
+        if (event === 'TOKEN_REFRESHED') {
+          setSession(session);
+          return;
+        }
 
-      setSession(session);
-      if (session?.user) {
-        loadUserData(session.user);
-      } else {
-        setUser(null);
-        setOrganization(null);
-        setCurrentView('landing');
-        setLoading(false);
-      }
-    });
+        if (session?.user) {
+          setSession(session);
+          loadUserData(session.user);
+        }
+      });
 
     return () => subscription.unsubscribe();
   }, []);
@@ -742,7 +737,7 @@ export function AppContent() {
           // If there's a persisted view from sessionStorage (page refresh), keep it.
           // Only set the default view on a fresh login (no saved view).
           const savedView = sessionStorage.getItem('prospaces_current_view');
-          if (savedView) {
+          if (savedView && savedView !== 'landing' && savedView !== 'login' && savedView !== 'member-login') {
             setCurrentView(savedView);
           } else {
             setCurrentView('space-chooser');
@@ -832,33 +827,6 @@ export function AppContent() {
   }
 
   const handleMemberLogin = async (user: User, token: string, passedSession?: Session | null) => {
-    // 1. Establish session state immediately so UI transitions synchronously
-    if (passedSession) {
-      setSession(passedSession);
-    } else {
-      const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
-      if (sessionData?.session) {
-        setSession(sessionData.session);
-      } else {
-        // Construct standard fallback session so !session checks succeed immediately
-        setSession({
-          access_token: token || 'authenticated-token',
-          token_type: 'bearer',
-          expires_in: 3600,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-          refresh_token: 'refresh-token',
-          user: {
-            id: user.id,
-            app_metadata: {},
-            user_metadata: { name: user.full_name, role: user.role, organization_id: user.organization_id },
-            aud: 'authenticated',
-            created_at: new Date().toISOString(),
-            email: user.email,
-          } as any
-        } as Session);
-      }
-    }
-
     const orgId = user.organizationId || user.organization_id;
     if (orgId) {
       localStorage.setItem('currentOrgId', orgId);
@@ -869,27 +837,49 @@ export function AppContent() {
     sessionStorage.setItem('prospaces_session_active', 'true');
     sessionStorage.setItem('prospaces_current_view', 'space-chooser');
 
-    try {
-      await initializePermissions(user.role);
-    } catch (permErr) {
-      console.warn('Permissions init fallback:', permErr);
+    // 1. Establish session state immediately so UI transitions synchronously
+    if (passedSession) {
+      setSession(passedSession);
+    } else {
+      setSession({
+        access_token: token || 'authenticated-token',
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        refresh_token: 'refresh-token',
+        user: {
+          id: user.id,
+          app_metadata: {},
+          user_metadata: { name: user.full_name, role: user.role, organization_id: user.organization_id },
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+          email: user.email,
+        } as any
+      } as Session);
     }
 
-    if (orgId) {
-      try {
-        const { data: org } = await supabase
-          .from('organizations')
-          .select('*')
-          .eq('id', orgId)
-          .maybeSingle();
-        if (org) setOrganization(org);
-      } catch (orgErr) {
-        console.warn('Organization lookup fallback:', orgErr);
-      }
-    }
-    
+    // Set user and view synchronously
     setUser(user);
     setCurrentView('space-chooser');
+
+    // Background asynchronous initialization
+    initializePermissions(user.role).catch((permErr) => {
+      console.warn('Permissions init fallback:', permErr);
+    });
+
+    if (orgId) {
+      supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .maybeSingle()
+        .then(({ data: org }) => {
+          if (org) setOrganization(org);
+        })
+        .catch((orgErr) => {
+          console.warn('Organization lookup fallback:', orgErr);
+        });
+    }
   };
 
   if (!user) {

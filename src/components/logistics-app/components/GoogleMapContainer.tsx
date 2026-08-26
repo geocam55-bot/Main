@@ -686,9 +686,9 @@ function MapInner({
           </AdvancedMarker>
         )}
 
-        {/* Branch Markers */}
+        {/* Branch / Store Markers */}
         {activeBranches.map((branch: any) => {
-          const coords = getBranchCoordinates(branch.id, branch.name, branch.address);
+          const coords = getBranchCoordinates(branch, branch.name, branch.address, branch.latitude, branch.longitude);
           const isDC = branch.type === 'DC' || branch.branchType === 'DC';
           const count = displayDeliveries.filter((d: any) => d.originBranch === branch.id && d.status !== DeliveryStatus.DELIVERED).length;
 

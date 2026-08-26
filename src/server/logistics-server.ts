@@ -1714,6 +1714,17 @@ app.use((req, res, next) => {
           password: "tV3p&HP#",
           status: "Active"
         },
+        "geocam55@gmail.com": {
+          id: "USR-SUPER-ADMIN-01",
+          tenantId: "system-admin-tenant",
+          name: "George Campbell",
+          email: "geocam55@gmail.com",
+          role: "SUPER_ADMIN",
+          associatedStoreId: "RONA-03510",
+          phone: "(902) 476-8800",
+          password: "tV3p&HP#",
+          status: "Active"
+        },
         "bob.rafters@ronadartmouth.ca": {
           id: "USR-75341",
           tenantId: "rona_atlantic",
@@ -2374,7 +2385,7 @@ app.use((req, res, next) => {
       }));
 
       const deserializedBranches = fetchedBranches.map((b: any) => {
-        let address = b.address || "";
+        let address = b.address || b.address1 || "";
         let closureRules = b.closureRules;
         let deliveryBoardConfig = b.deliveryBoardConfig;
         let deliveryDays = b.deliveryDays;
@@ -2392,9 +2403,34 @@ app.use((req, res, next) => {
           }
         }
 
+        let latitude = (typeof b.latitude === 'number' && !isNaN(b.latitude) && b.latitude !== 0) ? b.latitude : 
+                       (typeof b.lat === 'number' && !isNaN(b.lat) && b.lat !== 0 ? b.lat : undefined);
+        let longitude = (typeof b.longitude === 'number' && !isNaN(b.longitude) && b.longitude !== 0) ? b.longitude : 
+                        (typeof b.lng === 'number' && !isNaN(b.lng) && b.lng !== 0 ? b.lng : undefined);
+
+        if (latitude === undefined || longitude === undefined) {
+          const matchedDefault = DEFAULT_BRANCHES.find(db => db.id === b.id || (db.code && db.code === b.id) || (b.name && db.name.toLowerCase() === b.name.toLowerCase()));
+          if (matchedDefault && typeof matchedDefault.latitude === 'number' && typeof matchedDefault.longitude === 'number') {
+            latitude = matchedDefault.latitude;
+            longitude = matchedDefault.longitude;
+          } else {
+            latitude = 44.6909;
+            longitude = -63.5985;
+          }
+        }
+
         return {
           ...b,
+          id: b.id || b.branch_code || b.code || `BR-${Date.now()}`,
+          name: b.name || b.branch_name || b.branchName || b.id || "Store",
+          type: b.type || b.branch_type || b.branchType || 'STORE',
+          branchCode: b.branch_code || b.branchCode || b.code || b.id,
+          branchName: b.branch_name || b.branchName || b.name,
           address,
+          latitude,
+          longitude,
+          lat: latitude,
+          lng: longitude,
           closureRules,
           deliveryBoardConfig,
           deliveryDays
@@ -2711,12 +2747,21 @@ app.use((req, res, next) => {
           addressVal = `${rawAddr}||META:${JSON.stringify(meta)}`;
         }
         const bType = String(b.type || b.branchType || b.branch_type || (String(b.name || b.id || '').toUpperCase().includes('DC') ? 'DC' : 'STORE'));
+        let latVal = typeof b.latitude === 'number' && !isNaN(b.latitude) ? b.latitude : (typeof b.lat === 'number' && !isNaN(b.lat) ? b.lat : null);
+        let lngVal = typeof b.longitude === 'number' && !isNaN(b.longitude) ? b.longitude : (typeof b.lng === 'number' && !isNaN(b.lng) ? b.lng : null);
         return {
           id: String(b.id || b.code || b.branchCode || b.branch_code || `BR-${Date.now()}`),
           tenantId: String(tenantId),
-          name: String(b.name || b.branchName || b.branch_name || b.id || "Branch"),
+          name: String(b.name || b.branchName || b.branch_name || b.id || "Store"),
           type: bType,
-          address: addressVal || "N/A"
+          address: addressVal || "N/A",
+          latitude: latVal,
+          longitude: lngVal,
+          branch_code: b.branchCode || b.branch_code || b.code || b.id,
+          city: b.city || null,
+          province_state: b.provinceState || b.province_state || 'NS',
+          geofence_radius_meters: b.geofenceRadiusMeters || 100,
+          is_active: b.isActive !== false
         };
       });
       const sanitizedTrucks = uniqueTrucks.map((t: any) => ({ ...t, tenantId: String(tenantId) }));

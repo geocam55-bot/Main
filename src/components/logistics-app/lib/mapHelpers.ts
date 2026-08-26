@@ -33,16 +33,24 @@ export const KNOWN_COORDS: Record<string, { lat: number; lng: number }> = {
   '547 KING ST': { lat: 44.3789, lng: -64.5126 },
 
   // Direct Store & Distribution Center ID / Name Matches
-  'RONA HALIFAX': { lat: 44.65360, lng: -63.60110 },
-  'RONA TANTALLON': { lat: 44.7030, lng: -63.8571 },
-  'RONA ELMSDALE': { lat: 44.979223, lng: -63.504250 },
-  'RONA DARTMOUTH': { lat: 44.68550, lng: -63.58250 },
-  'RONA WINDMILL': { lat: 44.68550, lng: -63.58250 },
-  '01075': { lat: 44.7030, lng: -63.8571 },
-  '01065': { lat: 44.65360, lng: -63.60110 },
-  '01070': { lat: 44.979223, lng: -63.504250 },
-  'DC-WINAMILL': { lat: 44.68550, lng: -63.58250 },
-  'WINAMILL': { lat: 44.68550, lng: -63.58250 },
+  'RONA HALIFAX': { lat: 44.6896, lng: -63.5976 },
+  'RONA TANTALLON': { lat: 44.6854, lng: -63.8824 },
+  'RONA ELMSDALE': { lat: 44.9796, lng: -63.5044 },
+  'RONA DARTMOUTH': { lat: 44.6909, lng: -63.5985 },
+  'RONA WINDMILL': { lat: 44.6909, lng: -63.5985 },
+  'RONA-03490': { lat: 44.6854, lng: -63.8824 },
+  'RONA-03480': { lat: 44.6896, lng: -63.5976 },
+  'RONA-03485': { lat: 44.9796, lng: -63.5044 },
+  'RONA-03510': { lat: 44.6909, lng: -63.5985 },
+  '03490': { lat: 44.6854, lng: -63.8824 },
+  '03480': { lat: 44.6896, lng: -63.5976 },
+  '03485': { lat: 44.9796, lng: -63.5044 },
+  '03510': { lat: 44.6909, lng: -63.5985 },
+  '01075': { lat: 44.6854, lng: -63.8824 },
+  '01065': { lat: 44.6896, lng: -63.5976 },
+  '01070': { lat: 44.9796, lng: -63.5044 },
+  'DC-WINAMILL': { lat: 44.6909, lng: -63.5985 },
+  'WINAMILL': { lat: 44.6909, lng: -63.5985 },
 
   // Nova Scotia Communities & Municipalities
   'TIMBERLEA': { lat: 44.6465, lng: -63.7431 },
@@ -399,7 +407,9 @@ export const getTruckStoreInfo = (truck: any, branches: any[] = []): StoreColorI
   // 4. Tantallon Store matching
   if (
     strToTest.includes('tantallon') ||
-    strToTest.includes('01075')
+    strToTest.includes('01075') ||
+    strToTest.includes('03490') ||
+    strToTest.includes('st. margaret')
   ) {
     return STORE_COLOR_MAP.tantallon;
   }
@@ -408,6 +418,7 @@ export const getTruckStoreInfo = (truck: any, branches: any[] = []): StoreColorI
   if (
     strToTest.includes('windmill') ||
     strToTest.includes('dartmouth') ||
+    strToTest.includes('03510') ||
     strToTest.includes('dc-winamill') ||
     strToTest.includes('500') ||
     strToTest.includes('2101') ||
@@ -429,11 +440,56 @@ export const getTruckStoreInfo = (truck: any, branches: any[] = []): StoreColorI
   return STORE_COLOR_MAP.windmill;
 };
 
-export const getBranchCoordinates = (id: string, name: string, address?: string): { x: number; y: number; lat: number; lng: number } => {
-  const combinedStr = `${name || ''} ${address || ''}`.trim();
+export const getBranchCoordinates = (
+  idOrBranch: string | any, 
+  name?: string, 
+  address?: string,
+  latitudeParam?: number,
+  longitudeParam?: number
+): { x: number; y: number; lat: number; lng: number } => {
+  let id = '';
+  let branchName = name || '';
+  let branchAddress = address || '';
+  let directLat: number | undefined = latitudeParam;
+  let directLng: number | undefined = longitudeParam;
+
+  if (typeof idOrBranch === 'object' && idOrBranch !== null) {
+    const b = idOrBranch;
+    id = String(b.id || b.branchCode || b.code || '');
+    branchName = String(b.name || b.branchName || name || '');
+    branchAddress = String(b.address || b.address1 || address || '');
+    
+    if (typeof b.latitude === 'number' && !isNaN(b.latitude) && b.latitude !== 0) directLat = b.latitude;
+    else if (typeof b.lat === 'number' && !isNaN(b.lat) && b.lat !== 0) directLat = b.lat;
+    else if (typeof b.gpsLat === 'number' && !isNaN(b.gpsLat) && b.gpsLat !== 0) directLat = b.gpsLat;
+
+    if (typeof b.longitude === 'number' && !isNaN(b.longitude) && b.longitude !== 0) directLng = b.longitude;
+    else if (typeof b.lng === 'number' && !isNaN(b.lng) && b.lng !== 0) directLng = b.lng;
+    else if (typeof b.gpsLng === 'number' && !isNaN(b.gpsLng) && b.gpsLng !== 0) directLng = b.gpsLng;
+  } else {
+    id = String(idOrBranch || '');
+  }
+
+  // If direct numerical coordinates were provided from DB
+  if (typeof directLat === 'number' && !isNaN(directLat) && typeof directLng === 'number' && !isNaN(directLng) && directLat !== 0 && directLng !== 0) {
+    const sanitized = sanitizeGpsCoordinates(directLat, directLng);
+    const coords = getPercentCoordsFromGps(sanitized.lat, sanitized.lng);
+    return { x: coords.x, y: coords.y, lat: sanitized.lat, lng: sanitized.lng };
+  }
+
+  // Check KNOWN_COORDS by branch ID or combined name
+  const upperId = id.toUpperCase().trim();
+  if (KNOWN_COORDS[upperId]) {
+    const kGps = KNOWN_COORDS[upperId];
+    const sanitized = sanitizeGpsCoordinates(kGps.lat, kGps.lng);
+    const coords = getPercentCoordsFromGps(sanitized.lat, sanitized.lng);
+    return { x: coords.x, y: coords.y, lat: sanitized.lat, lng: sanitized.lng };
+  }
+
+  const combinedStr = `${branchName} ${branchAddress}`.trim();
   const gps = getGpsForLocation(id, combinedStr);
-  const rawLat = gps ? gps.lat : 44.68550; // Fallback to central Windmill HQ for branch depot nodes
-  const rawLng = gps ? gps.lng : -63.58250;
+  const rawLat = gps ? gps.lat : 44.69090; // Fallback to Dartmouth Windmill HQ
+  const rawLng = gps ? gps.lng : -63.59850;
   const sanitized = sanitizeGpsCoordinates(rawLat, rawLng);
   const coords = getPercentCoordsFromGps(sanitized.lat, sanitized.lng);
   return { x: coords.x, y: coords.y, lat: sanitized.lat, lng: sanitized.lng };

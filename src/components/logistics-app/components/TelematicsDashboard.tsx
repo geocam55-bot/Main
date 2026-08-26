@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useTelematics } from '../lib/telematicsService';
 import TelematicsMapView from './TelematicsMapView';
 import { VehicleRecord } from '../types/telematics';
-import { Truck } from '../types';
+import { Truck, Branch } from '../types';
 import { 
   Truck as TruckIcon, 
   MapPin, 
@@ -45,9 +45,10 @@ import {
 
 export interface TelematicsDashboardProps {
   trucks?: Truck[];
+  branches?: Branch[];
 }
 
-export default function TelematicsDashboard({ trucks }: TelematicsDashboardProps = {}) {
+export default function TelematicsDashboard({ trucks, branches }: TelematicsDashboardProps = {}) {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MOVING' | 'IDLE' | 'STOPPED'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
@@ -765,6 +766,7 @@ export default function TelematicsDashboard({ trucks }: TelematicsDashboardProps
             <div className="flex-1 h-full relative">
               <TelematicsMapView
                 vehicles={vehicles}
+                branches={branches}
                 selectedVehicleId={selectedVehicleId}
                 onSelectVehicle={(id) => setSelectedVehicleId(id)}
                 isStreaming={isStreaming}

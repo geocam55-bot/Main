@@ -3330,7 +3330,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         {/* Dynamic content area depending on tabs */}
         <div className="flex-1 transition-all duration-300" id="current-tab-view">
           {(activeTab === 'telematics' || activeTab === 'dashboard') && (
-            <TelematicsDashboard trucks={trucks} />
+            <TelematicsDashboard trucks={trucks} branches={branches} />
           )}
           {activeTab === 'live-dashboard' && (
             <LiveDashboard 

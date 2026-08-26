@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { VehicleRecord, TelematicsApiResponse, RouteStop } from '../types/telematics';
+import { Branch } from '../types';
+import { DEFAULT_BRANCHES } from '../data';
+import { getBranchCoordinates } from '../lib/mapHelpers';
 import { TeardropTruckMarker } from './TeardropTruckMarker';
 import {
   Truck as TruckIcon,
@@ -27,7 +30,9 @@ import {
   CheckCircle2,
   ArrowUpRight,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  Store as StoreIcon,
+  Warehouse as WarehouseIcon
 } from 'lucide-react';
 
 // Google Maps API Key resolution from environment variables & localStorage
@@ -337,6 +342,7 @@ function MapLayerController({
 // ════════════════════════════════════════════════════════════════════════════
 export interface LiveVehicleMapProps {
   initialSelectedId?: string | null;
+  branches?: Branch[];
   onVehicleClick?: (vehicle: VehicleRecord) => void;
   className?: string;
   pollIntervalMs?: number; // default 10000 (10s)
@@ -344,10 +350,15 @@ export interface LiveVehicleMapProps {
 
 export default function LiveVehicleMap({
   initialSelectedId = null,
+  branches,
   onVehicleClick,
   className = '',
   pollIntervalMs = 10000
 }: LiveVehicleMapProps) {
+  const activeBranches = useMemo(() => {
+    if (branches && branches.length > 0) return branches;
+    return DEFAULT_BRANCHES;
+  }, [branches]);
   // Telematics State
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(initialSelectedId);
@@ -606,6 +617,49 @@ export default function LiveVehicleMap({
 
               {/* Render Active Waypoints & Route Polylines for Selected Vehicle */}
               <ActiveRouteOverlay vehicle={selectedVehicle} />
+
+              {/* ── Active Branch & Store Markers (GPS coordinates from Supabase) ── */}
+              {activeBranches.map((branch) => {
+                const coords = getBranchCoordinates(branch, branch.name, branch.address, branch.latitude, branch.longitude);
+                const isDC = branch.type === 'DC' || (branch as any).branchType === 'DC' || (branch.name || '').toLowerCase().includes('dc');
+
+                return (
+                  <AdvancedMarker
+                    key={`branch-marker-${branch.id}`}
+                    position={{ lat: coords.lat, lng: coords.lng }}
+                    title={`${branch.name} (${branch.id})`}
+                  >
+                    <div className="relative group cursor-pointer flex flex-col items-center">
+                      <div className="absolute -top-9 z-30 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none scale-95 group-hover:scale-100 bg-slate-900/95 text-white font-sans text-xs font-semibold px-2.5 py-1 rounded-md shadow-xl border border-slate-700/80 whitespace-nowrap flex items-center gap-1.5">
+                        <span>{branch.name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-mono font-bold ${
+                          isDC ? 'bg-rose-500 text-white' : 'bg-blue-600 text-white'
+                        }`}>
+                          {isDC ? 'DC' : 'STORE'}
+                        </span>
+                      </div>
+
+                      <div
+                        className={`h-9 w-9 rounded-full shadow-xl border-2 flex items-center justify-center transition-all duration-200 group-hover:scale-115 ${
+                          isDC
+                            ? 'bg-slate-900 border-rose-500 text-rose-400 ring-2 ring-rose-500/30'
+                            : 'bg-slate-900 border-blue-400 text-blue-400 ring-2 ring-blue-400/30'
+                        }`}
+                      >
+                        {isDC ? (
+                          <WarehouseIcon className="h-4.5 w-4.5 shrink-0" />
+                        ) : (
+                          <StoreIcon className="h-4.5 w-4.5 shrink-0" />
+                        )}
+                      </div>
+
+                      <div className="mt-1 px-1.5 py-0.5 bg-slate-900/90 text-white rounded text-[10px] font-bold shadow-md max-w-[110px] truncate border border-slate-700/50">
+                        {branch.name.replace(/^RONA\s*/i, '')}
+                      </div>
+                    </div>
+                  </AdvancedMarker>
+                );
+              })}
 
               {/* Render Animated Smooth Rotating Truck Markers */}
               {filteredVehicles.map(v => (
