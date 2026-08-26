@@ -2303,7 +2303,9 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                   className="h-16 sm:h-20 w-auto object-contain rounded-lg p-1 bg-white"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                    const target = e.currentTarget as HTMLImageElement;
+                    if (target.src.endsWith('/logistics-logo.jpg')) return;
+                    target.src = '/logistics-logo.jpg';
                   }}
                 />
               </div>
@@ -2614,7 +2616,9 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 className="h-14 sm:h-20 md:h-24 w-auto object-contain animate-fade-in mix-blend-multiply border-none ring-0 outline-none shadow-none transition-all"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (target.src.endsWith('/logistics-logo.jpg')) return;
+                  target.src = '/logistics-logo.jpg';
                 }}
               />
             </div>

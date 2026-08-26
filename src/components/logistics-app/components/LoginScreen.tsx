@@ -507,7 +507,9 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
               className="h-36 sm:h-44 w-auto object-contain mx-auto mix-blend-multiply transition-all"
               referrerPolicy="no-referrer"
               onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                const target = e.currentTarget as HTMLImageElement;
+                if (target.src.endsWith('/logistics-logo.jpg')) return;
+                target.src = '/logistics-logo.jpg';
               }}
             />
           </div>

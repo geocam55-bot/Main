@@ -165,7 +165,9 @@ export default function LandingPage({
                 className="h-20 sm:h-24 md:h-28 w-auto object-contain mix-blend-multiply transition-all"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (target.src.endsWith('/logistics-logo.jpg')) return;
+                  target.src = '/logistics-logo.jpg';
                 }}
               />
               <div className="flex flex-col">
@@ -347,7 +349,10 @@ export default function LandingPage({
                       className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-700"
                       referrerPolicy="no-referrer"
                       onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = getSafeHeroSceneSrc(prospacesHeroScene);
+                        const target = e.currentTarget as HTMLImageElement;
+                        const fallbackSrc = getSafeHeroSceneSrc(prospacesHeroScene);
+                        if (target.src.endsWith(fallbackSrc.replace(/^\//, ''))) return;
+                        target.src = fallbackSrc;
                       }}
                     />
                     
@@ -828,7 +833,9 @@ export default function LandingPage({
                   className="h-20 sm:h-24 w-auto object-contain brightness-110 rounded-lg bg-white/5 p-1"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = '/logistics-logo.jpg';
+                    const target = e.currentTarget as HTMLImageElement;
+                    if (target.src.endsWith('/logistics-logo.jpg')) return;
+                    target.src = '/logistics-logo.jpg';
                   }}
                 />
                 <div className="flex flex-col">
