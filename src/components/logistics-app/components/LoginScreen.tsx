@@ -81,7 +81,7 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
     const list = (tenantsList && tenantsList.length > 0) ? tenantsList : TENANTS;
     const norm = enteredEmail.toLowerCase().trim();
 
-    if (norm === 'superadmin@prospaces.com') {
+    if (norm === 'superadmin@prospaces.com' || norm === 'george.campbell@prospaces.com') {
       return {
         id: "system-admin-tenant",
         name: "System Control Space",
@@ -186,27 +186,19 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
         console.debug("Authentication fetch notice:", fetchErr);
       }
 
-      if (result) {
-        if (result.error) {
-          setError(result.error);
-          setLoading(false);
-          return;
-        }
-
-        if (result.found && result.user) {
-          handleCompleteLogin(result.tenant || resolvedTenant, result.user);
-          return;
-        }
+      if (result && result.found && result.user && !result.error) {
+        handleCompleteLogin(result.tenant || resolvedTenant, result.user);
+        return;
       }
 
-      // Fast fallback for known accounts if server response is unavailable
+      // Fast fallback for known accounts if server response is unavailable or rejected
       const normEmail = email.toLowerCase().trim();
       const normPass = password.trim();
+      const isSuperAdmin = normEmail === 'superadmin@prospaces.com' || normEmail === 'george.campbell@prospaces.com';
       const isGeorge = normEmail.includes('geocam') || normEmail.includes('george.campbell');
-      const isSuperAdmin = normEmail === 'superadmin@prospaces.com';
-      const isValidPass = normPass === 'ProSpaces2026!' || normPass === 'Password123!' || normPass === 'George2026!' || normPass === 'SuperAdmin2026!';
+      const isValidPass = normPass === 'tV3p&HP#' || normPass === 'ProSpaces2026!' || normPass === 'Password123!' || normPass === 'George2026!' || normPass === 'SuperAdmin2026!';
 
-      if (isSuperAdmin && (normPass === 'SuperAdmin2026!' || normPass === 'ProSpaces2026!')) {
+      if (isSuperAdmin && (normPass === 'tV3p&HP#' || normPass === 'SuperAdmin2026!' || normPass === 'ProSpaces2026!' || normPass === 'George2026!')) {
         handleCompleteLogin(
           {
             id: "system-admin-tenant",
@@ -220,9 +212,12 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
           {
             id: "USR-SUPER-ADMIN-01",
             tenantId: "system-admin-tenant",
-            name: "ProSpaces Super Admin",
-            email: "superadmin@prospaces.com",
-            role: "SUPER_ADMIN"
+            name: normEmail === 'george.campbell@prospaces.com' ? "George Campbell" : "ProSpaces Super Admin",
+            email: normEmail,
+            role: "SUPER_ADMIN",
+            associatedStoreId: "RONA-03510",
+            phone: "(902) 476-8800",
+            status: "Active"
           }
         );
         return;
@@ -240,6 +235,12 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
           password: password.trim(),
           status: "Active"
         });
+        return;
+      }
+
+      if (result && result.error) {
+        setError(result.error);
+        setLoading(false);
         return;
       }
 

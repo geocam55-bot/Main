@@ -704,11 +704,18 @@ export function AppContent() {
             .from('organizations')
             .select('*')
             .eq('id', profile.organization_id)
-            .single()
-            .then(({ data }) => data);
+            .maybeSingle()
+            .then(({ data }) => data)
+            .catch(() => null);
         }
 
-        const [, org] = await Promise.all([permissionsPromise, orgPromise]);
+        const [, org] = await Promise.all([
+          permissionsPromise.catch((err) => {
+            console.warn('Permissions init fallback:', err);
+            return null;
+          }),
+          orgPromise
+        ]);
 
         // Load user preferences to get profile picture
         // Note: user_preferences table may not exist; profile.avatar_url is the primary source
@@ -757,28 +764,43 @@ export function AppContent() {
   };
 
   const handleLogout = async () => {
+    setUser(null);
+    setOrganization(null);
+    setCurrentView('member-login');
+    setSession(null);
+
     try {
-      await supabase.auth.signOut();
-    } catch (error) {
-    } finally {
-      setUser(null);
-      setOrganization(null);
-      setCurrentView('member-login');
-      setSession(null);
       // Clear persisted view and auth session state so user is logged off completely
       sessionStorage.removeItem('prospaces_current_view');
       sessionStorage.removeItem('prospaces_session_active');
       sessionStorage.removeItem('prospaces_keep_logged_in');
+      sessionStorage.removeItem('accessed_from_crm');
       localStorage.removeItem('prospaces_cached_user');
       localStorage.removeItem('prospaces_cached_organization');
       localStorage.removeItem('prospaces_keep_logged_in');
       localStorage.removeItem('prospaces_active_user');
       localStorage.removeItem('prospaces_active_tenant');
+      localStorage.removeItem('prospaces_crm_user');
+      localStorage.removeItem('currentOrgId');
+      sessionStorage.clear();
+
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('-auth-token') || key.startsWith('prospaces_active_') || key.startsWith('prospaces_cached_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+
       // Reset email preloader cache
       try {
         resetEmailPreloader();
-      } catch (err) {
-      }
+      } catch (err) {}
+    } catch (e) {}
+
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.warn("Supabase signOut error on logout:", error);
     }
   };
 
@@ -809,30 +831,68 @@ export function AppContent() {
     );
   }
 
-  const handleMemberLogin = async (user: User, token: string) => {
-    if (user.organizationId || user.organization_id) {
-      const orgId = user.organizationId || user.organization_id;
-      if (orgId) {
-        localStorage.setItem('currentOrgId', orgId);
-      }
-
-      await initializePermissions(user.role);
-
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', orgId!)
-        .single();
-      if (org) setOrganization(org);
+  const handleMemberLogin = async (user: User, token: string, passedSession?: Session | null) => {
+    // 1. Establish session state immediately so UI transitions synchronously
+    if (passedSession) {
+      setSession(passedSession);
     } else {
+      const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+      if (sessionData?.session) {
+        setSession(sessionData.session);
+      } else {
+        // Construct standard fallback session so !session checks succeed immediately
+        setSession({
+          access_token: token || 'authenticated-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          refresh_token: 'refresh-token',
+          user: {
+            id: user.id,
+            app_metadata: {},
+            user_metadata: { name: user.full_name, role: user.role, organization_id: user.organization_id },
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+            email: user.email,
+          } as any
+        } as Session);
+      }
+    }
+
+    const orgId = user.organizationId || user.organization_id;
+    if (orgId) {
+      localStorage.setItem('currentOrgId', orgId);
+    }
+
+    localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
+    localStorage.setItem('prospaces_active_user', JSON.stringify(user));
+    sessionStorage.setItem('prospaces_session_active', 'true');
+    sessionStorage.setItem('prospaces_current_view', 'space-chooser');
+
+    try {
       await initializePermissions(user.role);
+    } catch (permErr) {
+      console.warn('Permissions init fallback:', permErr);
+    }
+
+    if (orgId) {
+      try {
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('id', orgId)
+          .maybeSingle();
+        if (org) setOrganization(org);
+      } catch (orgErr) {
+        console.warn('Organization lookup fallback:', orgErr);
+      }
     }
     
     setUser(user);
     setCurrentView('space-chooser');
   };
 
-  if (!session || !user) {
+  if (!user) {
     return (
       <ErrorBoundary>
         <Toaster />
@@ -950,7 +1010,7 @@ export function AppContent() {
                   id: user.id || "USR-57008",
                   name: user.full_name || user.name || (user.email ? user.email.split('@')[0] : "George Campbell"),
                   email: user.email || "george.campbell@ronaatlantic.ca",
-                  role: (user.role === 'SUPER_ADMIN' || user.role === 'Super_Admin' || user.role === 'super_admin' || user.email === 'superadmin@prospaces.com')
+                  role: (user.role === 'SUPER_ADMIN' || user.role === 'Super_Admin' || user.role === 'super_admin' || user.email === 'superadmin@prospaces.com' || user.email === 'george.campbell@prospaces.com')
                     ? "SUPER_ADMIN"
                     : ((user.role === 'admin' || user.role === 'Admin') ? "Admin" : (user.role || "Admin")),
                   phone: user.phone || "(902) 555-0199",

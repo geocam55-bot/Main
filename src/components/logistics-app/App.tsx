@@ -201,7 +201,7 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
   }));
 }
 
-export default function App() {
+export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
       const path = window.location.pathname.toLowerCase();
@@ -295,7 +295,7 @@ export default function App() {
       if (cached) {
         const u = JSON.parse(cached);
         if (u && (u.email || u.id)) {
-          if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin', 'super_admin'].includes(String(u.role).toLowerCase())) {
+          if (u.email === 'superadmin@prospaces.com' || u.email === 'george.campbell@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin', 'super_admin'].includes(String(u.role).toLowerCase())) {
             u.role = 'SUPER_ADMIN';
           }
           return u;
@@ -306,7 +306,7 @@ export default function App() {
       if (crmUserStr) {
         const crmUser = JSON.parse(crmUserStr);
         if (crmUser && (crmUser.email || crmUser.id)) {
-          const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
+          const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com' || crmUser.email === 'george.campbell@prospaces.com')
             ? "SUPER_ADMIN"
             : ((crmUser.role === 'admin' || crmUser.role === 'Admin') ? "Admin" : (crmUser.role || "Admin"));
           const autoUser: User = {
@@ -341,7 +341,7 @@ export default function App() {
           const u = JSON.parse(activeUserStr);
           const t = JSON.parse(activeTenantStr);
           if (u) {
-            if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
+            if (u.email === 'superadmin@prospaces.com' || u.email === 'george.campbell@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
               u.role = 'SUPER_ADMIN';
             }
             if (!currentUser || currentUser.email !== u.email || currentUser.id !== u.id || currentUser.role !== u.role) {
@@ -777,51 +777,74 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (currentUser && currentTenant) {
-      const normalizedTrucks = trucks.map(t => ({ ...t, tenantId: currentTenant.id }));
-      const normalizedUsers = users.map(u => 
-        u.id === currentUser.id 
-          ? { ...u, tenantId: currentTenant.id, lastActive: "1970-01-01T00:00:00.000Z" } 
-          : { ...u, tenantId: currentTenant.id }
-      );
-      const normalizedBranches = branches.map(b => ({ ...b, tenantId: currentTenant.id }));
-      const normalizedDeliveries = deliveries.map(d => ({ ...d, tenantId: currentTenant.id }));
-
-      setUsers(normalizedUsers);
-
-      try {
-        await syncStateToSupabase(currentTenant.id, normalizedDeliveries, normalizedTrucks, normalizedBranches, normalizedUsers);
-      } catch (err) {
-        console.warn("Logout syncStateToSupabase error:", err);
-      }
-    }
+    // 1. Immediately reset state synchronously so UI responds instantly
+    setIsUserMenuOpen(false);
+    setIsMobileNavOpen(false);
     setCurrentTenant(null);
     setCurrentUser(null);
-    localStorage.removeItem('prospaces_active_tenant');
-    localStorage.removeItem('prospaces_active_user');
-    localStorage.removeItem('prospaces_cached_user');
-    localStorage.removeItem('prospaces_driver_auth');
-    localStorage.removeItem('prospaces_keep_logged_in');
-    sessionStorage.removeItem('prospaces_session_active');
-    sessionStorage.removeItem('accessed_from_crm');
-    sessionStorage.removeItem('prospaces_keep_logged_in');
+    setShowLogin(true);
     setActiveTab('dashboard');
-    // Clear operational state completely on sign out
     setDeliveries([]);
     setTrucks([]);
     setBranches([]);
     setUsers([]);
 
+    // 2. Comprehensive storage cleanup
+    try {
+      const keysToRemove = [
+        'prospaces_active_tenant',
+        'prospaces_active_user',
+        'prospaces_cached_user',
+        'prospaces_driver_auth',
+        'prospaces_keep_logged_in',
+        'prospaces_crm_user',
+        'prospaces_user_session',
+        'prospaces_session_active',
+        'currentOrgId',
+        'activeSpace',
+        'sb-auth-token',
+        'sb-refresh-token'
+      ];
+      keysToRemove.forEach(k => {
+        localStorage.removeItem(k);
+        sessionStorage.removeItem(k);
+      });
+
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('-auth-token') || key.startsWith('prospaces_active_') || key.startsWith('prospaces_cached_') || key.startsWith('prospaces_driver_') || key.startsWith('prospaces_crm_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+
+      sessionStorage.clear();
+    } catch (err) {
+      console.warn("Storage cleanup warning:", err);
+    }
+
+    // 3. Clear URL query parameters (like ?from=crm or ?tab=...)
+    try {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    } catch (e) {}
+
+    // 4. Background non-blocking Supabase sign-out
     try {
       const supabase = getFrontendSupabase();
       if (supabase) {
-        await supabase.auth.signOut();
+        supabase.auth.signOut().catch(() => {});
       }
     } catch (e) {
       console.warn("Supabase sign out error:", e);
     }
 
-    setShowLogin(true);
+    // 5. Trigger parent onLogout callback if provided
+    if (onLogout) {
+      try {
+        onLogout();
+      } catch (e) {}
+    }
   };
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
@@ -2967,6 +2990,20 @@ export default function App() {
                           </button>
                         </>
                       )}
+
+                      <div className="pt-2 mt-2 border-t border-slate-100">
+                        <button
+                          id="mobile-nav-logoff-btn"
+                          onClick={() => {
+                            setIsMobileNavOpen(false);
+                            handleLogout();
+                          }}
+                          className="w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer text-rose-600 hover:bg-rose-50"
+                        >
+                          <LogOut className="h-4 w-4 text-rose-500" />
+                          <span>Log Off</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </>

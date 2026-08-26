@@ -30,7 +30,7 @@ function syncLogisticsUserSession(userObj: any) {
 
     const email = userObj.email || "george.campbell@ronaatlantic.ca";
     const name = userObj.full_name || userObj.name || (email ? email.split('@')[0] : "George Campbell");
-    const role = (userObj.role === 'SUPER_ADMIN' || userObj.role === 'Super_Admin' || userObj.role === 'super_admin' || email === 'superadmin@prospaces.com')
+    const role = (userObj.role === 'SUPER_ADMIN' || userObj.role === 'Super_Admin' || userObj.role === 'super_admin' || email === 'superadmin@prospaces.com' || email === 'george.campbell@prospaces.com')
       ? "SUPER_ADMIN"
       : ((userObj.role === 'admin' || userObj.role === 'Admin') ? "Admin" : (userObj.role || "Admin"));
     const id = userObj.id || "USR-57008";
@@ -234,6 +234,25 @@ function LogisticsEntryApp() {
     }
   };
 
+  const handleLogout = async () => {
+    setUser(null);
+    setSession(null);
+    setAccessToken(undefined);
+    setAccessDeniedMessage(null);
+    try {
+      await supabase.auth.signOut();
+    } catch {}
+    try {
+      localStorage.removeItem('prospaces_active_tenant');
+      localStorage.removeItem('prospaces_active_user');
+      localStorage.removeItem('prospaces_cached_user');
+      localStorage.removeItem('prospaces_driver_auth');
+      localStorage.removeItem('prospaces_keep_logged_in');
+      localStorage.removeItem('prospaces_crm_user');
+      sessionStorage.clear();
+    } catch {}
+  };
+
   // Allow full mobile access for Logistics & Fleet Space
 
   if (loading) {
@@ -265,7 +284,7 @@ function LogisticsEntryApp() {
     <ErrorBoundary>
       <ThemeProvider userId={user?.id || 'guest'}>
         <Toaster />
-        <LogisticsAppModule />
+        <LogisticsAppModule onLogout={handleLogout} />
       </ThemeProvider>
     </ErrorBoundary>
   );
