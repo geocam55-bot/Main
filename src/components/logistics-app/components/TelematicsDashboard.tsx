@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useTelematics } from '../lib/telematicsService';
 import TelematicsMapView from './TelematicsMapView';
 import { VehicleRecord } from '../types/telematics';
