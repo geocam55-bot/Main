@@ -1,41 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
-// Extract Base64 from src/components/LogoBase64.ts if available
-const logoBase64Path = path.join(process.cwd(), 'src/components/LogoBase64.ts');
-let crmLogoBuffer = null;
-let logisticsLogoBuffer = null;
-let faviconPngBuffer = null;
+// Load images directly from disk
+const crmLogoPath = path.join(process.cwd(), 'src/assets/images/prospaces_crm_logo_official_1787828035951.jpg');
+const logisticsLogoPath = path.join(process.cwd(), 'src/assets/images/prospaces_logistics_logo_official_1787828611440.jpg');
+const faviconPath = path.join(process.cwd(), 'src/assets/images/prospaces_favicon_raw_1782083332396.jpg');
 
-if (fs.existsSync(logoBase64Path)) {
-  try {
-    const fileContent = fs.readFileSync(logoBase64Path, 'utf8');
-    
-    // Extract CRM Logo Base64
-    const crmMatch = fileContent.match(/PROSPACES_CRM_LOGO\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/) ||
-                     fileContent.match(/APPLE_ICON_BASE64\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
-    if (crmMatch && crmMatch[1]) {
-      crmLogoBuffer = Buffer.from(crmMatch[1], 'base64');
-      console.log(`[Prebuild] Extracted CRM logo buffer from LogoBase64.ts: ${crmLogoBuffer.length} bytes`);
-    }
-
-    // Extract Logistics Logo Base64
-    const logMatch = fileContent.match(/PROSPACES_LOGISTICS_LOGO\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
-    if (logMatch && logMatch[1]) {
-      logisticsLogoBuffer = Buffer.from(logMatch[1], 'base64');
-      console.log(`[Prebuild] Extracted Logistics logo buffer from LogoBase64.ts: ${logisticsLogoBuffer.length} bytes`);
-    }
-
-    // Extract FAVICON_BASE64
-    const faviconMatch = fileContent.match(/FAVICON_BASE64\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
-    if (faviconMatch && faviconMatch[1]) {
-      faviconPngBuffer = Buffer.from(faviconMatch[1], 'base64');
-      console.log(`[Prebuild] Extracted favicon buffer from LogoBase64.ts: ${faviconPngBuffer.length} bytes`);
-    }
-  } catch (err) {
-    console.warn('[Prebuild] Failed to parse LogoBase64.ts:', err);
-  }
-}
+let crmLogoBuffer = fs.existsSync(crmLogoPath) ? fs.readFileSync(crmLogoPath) : null;
+let logisticsLogoBuffer = fs.existsSync(logisticsLogoPath) ? fs.readFileSync(logisticsLogoPath) : null;
+let faviconPngBuffer = fs.existsSync(faviconPath) ? fs.readFileSync(faviconPath) : null;
 
 // Target destinations for logo and favicon
 const allDestDirs = [

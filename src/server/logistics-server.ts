@@ -1719,17 +1719,6 @@ app.use((req, res, next) => {
           password: "tV3p&HP#",
           status: "Active"
         },
-        "geocam55@gmail.com": {
-          id: "USR-SUPER-ADMIN-01",
-          tenantId: "system-admin-tenant",
-          name: "George Campbell",
-          email: "geocam55@gmail.com",
-          role: "SUPER_ADMIN",
-          associatedStoreId: "RONA-03510",
-          phone: "(902) 476-8800",
-          password: "tV3p&HP#",
-          status: "Active"
-        },
         "bob.rafters@ronadartmouth.ca": {
           id: "USR-75341",
           tenantId: "rona_atlantic",
