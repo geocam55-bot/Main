@@ -26,18 +26,18 @@ import {
   Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { APPLE_ICON_BASE64, LOGO_BASE64 } from '../../LogoBase64';
+import { PROSPACES_LOGISTICS_LOGO, LOGO_BASE64 } from '../../LogoBase64';
 
 // Import local images with fallbacks
 import prospacesHeroScene from '../assets/images/prospaces_hero_scene_1783169931786.jpg';
 import samanthaTestimonial from '../assets/images/samantha_testimonial_1783169949359.jpg';
 
-const prospacesLogo = APPLE_ICON_BASE64 || LOGO_BASE64 || '/logistics-logo.jpg';
+const prospacesLogo = PROSPACES_LOGISTICS_LOGO || '/logistics-logo.jpg';
 
 const getSafeLogoSrc = (img: any) => {
   if (typeof img === 'string' && img) return img;
   if (img && typeof img === 'object' && img.default) return img.default;
-  return APPLE_ICON_BASE64 || LOGO_BASE64 || '/logistics-logo.jpg';
+  return PROSPACES_LOGISTICS_LOGO || '/logistics-logo.jpg';
 };
 
 const getSafeHeroSceneSrc = (img: any) => {

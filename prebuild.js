@@ -3,22 +3,31 @@ import path from 'path';
 
 // Extract Base64 from src/components/LogoBase64.ts if available
 const logoBase64Path = path.join(process.cwd(), 'src/components/LogoBase64.ts');
-let logoPngBuffer = null;
+let crmLogoBuffer = null;
+let logisticsLogoBuffer = null;
 let faviconPngBuffer = null;
 
 if (fs.existsSync(logoBase64Path)) {
   try {
     const fileContent = fs.readFileSync(logoBase64Path, 'utf8');
     
-    // Extract APPLE_ICON_BASE64 or LOGO_BASE64
-    const logoMatch = fileContent.match(/APPLE_ICON_BASE64\s*=\s*['"]data:image\/png;base64,([^'"]+)['"]/);
-    if (logoMatch && logoMatch[1]) {
-      logoPngBuffer = Buffer.from(logoMatch[1], 'base64');
-      console.log(`[Prebuild] Extracted logo buffer from LogoBase64.ts: ${logoPngBuffer.length} bytes`);
+    // Extract CRM Logo Base64
+    const crmMatch = fileContent.match(/PROSPACES_CRM_LOGO\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/) ||
+                     fileContent.match(/APPLE_ICON_BASE64\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
+    if (crmMatch && crmMatch[1]) {
+      crmLogoBuffer = Buffer.from(crmMatch[1], 'base64');
+      console.log(`[Prebuild] Extracted CRM logo buffer from LogoBase64.ts: ${crmLogoBuffer.length} bytes`);
+    }
+
+    // Extract Logistics Logo Base64
+    const logMatch = fileContent.match(/PROSPACES_LOGISTICS_LOGO\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
+    if (logMatch && logMatch[1]) {
+      logisticsLogoBuffer = Buffer.from(logMatch[1], 'base64');
+      console.log(`[Prebuild] Extracted Logistics logo buffer from LogoBase64.ts: ${logisticsLogoBuffer.length} bytes`);
     }
 
     // Extract FAVICON_BASE64
-    const faviconMatch = fileContent.match(/FAVICON_BASE64\s*=\s*['"]data:image\/png;base64,([^'"]+)['"]/);
+    const faviconMatch = fileContent.match(/FAVICON_BASE64\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
     if (faviconMatch && faviconMatch[1]) {
       faviconPngBuffer = Buffer.from(faviconMatch[1], 'base64');
       console.log(`[Prebuild] Extracted favicon buffer from LogoBase64.ts: ${faviconPngBuffer.length} bytes`);
@@ -47,30 +56,48 @@ for (const dir of allDestDirs) {
   }
 }
 
-// Write Base64 buffers if available
-if (logoPngBuffer) {
-  const logoTargets = [
-    'public/logistics-logo.jpg',
+// Write CRM Logo buffers
+if (crmLogoBuffer) {
+  const crmTargets = [
     'public/logo.jpg',
     'public/logo.png',
-    'public/images/logo_no_border_tight_1783077241511.jpg',
-    'src/public/logistics-logo.jpg',
+    'public/prospaces-crm-logo.jpg',
     'src/public/logo.jpg',
     'src/public/logo.png',
-    'src/public/images/logo_no_border_tight_1783077241511.jpg',
-    'dist/logistics-logo.jpg',
     'dist/logo.jpg',
     'dist/logo.png',
     'src/assets/logo.png',
-    'src/assets/images/prospaces_logo_clean_1785321128582.jpg',
-    'src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg'
+    'src/assets/prospaces_crm_logo.jpg'
   ];
-  for (const t of logoTargets) {
+  for (const t of crmTargets) {
     const fullPath = path.join(process.cwd(), t);
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(fullPath, logoPngBuffer);
-    console.log(`[Prebuild] Wrote brand logo to ${t}`);
+    fs.writeFileSync(fullPath, crmLogoBuffer);
+    console.log(`[Prebuild] Wrote CRM logo to ${t}`);
+  }
+}
+
+// Write Logistics Logo buffers
+const effectiveLogisticsBuffer = logisticsLogoBuffer || crmLogoBuffer;
+if (effectiveLogisticsBuffer) {
+  const logisticsTargets = [
+    'public/logistics-logo.jpg',
+    'public/prospaces-logistics-logo.jpg',
+    'public/images/logo_no_border_tight_1783077241511.jpg',
+    'src/public/logistics-logo.jpg',
+    'src/public/images/logo_no_border_tight_1783077241511.jpg',
+    'dist/logistics-logo.jpg',
+    'dist/images/logo_no_border_tight_1783077241511.jpg',
+    'src/assets/prospaces_logistics_logo.jpg',
+    'src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg'
+  ];
+  for (const t of logisticsTargets) {
+    const fullPath = path.join(process.cwd(), t);
+    const dir = path.dirname(fullPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(fullPath, effectiveLogisticsBuffer);
+    console.log(`[Prebuild] Wrote Logistics logo to ${t}`);
   }
 }
 

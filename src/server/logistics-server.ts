@@ -1337,21 +1337,26 @@ async function runSelfHealingOnce() {
         return;
       }
       
-      console.log("Validating default tenant in background...");
+      console.log("Validating corporate tenants in background...");
       
-      const ronaTenant = {
-        id: "rona_atlantic",
-        name: "RONA Atlantic Logistics",
-        code: "RONA",
-        description: "Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.",
-        logoBadge: "🏢",
-        regionalFocus: "Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)",
-        primaryColor: "blue"
-      };
-      await supabase.from("tenants").upsert([ronaTenant]);
+      // Only seed default tenant if tenants table is completely empty, never overwrite modified tenant names
+      const { data: existingTenants, error: checkErr } = await supabase.from("tenants").select("id").limit(1);
+      if (!checkErr && (!existingTenants || existingTenants.length === 0)) {
+        const ronaTenant = {
+          id: "rona_atlantic",
+          name: "RONA Atlantic Logistics",
+          code: "RONA",
+          description: "Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.",
+          logoBadge: "🏢",
+          regionalFocus: "Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)",
+          primaryColor: "blue"
+        };
+        await supabase.from("tenants").insert([ronaTenant]);
+        console.log("Seeded initial default tenant rona_atlantic.");
+      }
       hasRunSelfHealing = true;
     } catch (healErr) {
-      console.error("Database self-healing notice:", healErr);
+      console.error("Database tenant validation notice:", healErr);
       hasRunSelfHealing = true;
     }
   })();
@@ -5494,30 +5499,110 @@ async function getFleetId(token: string): Promise<string | null> {
   });
 
   app.get("/api/tenants", async (req, res) => {
-    const fallbackTenants: any[] = [];
     try {
       const supabase = getSupabase(req, true);
-      if (!supabase) return res.json({ supabaseActive: false, tenants: fallbackTenants });
+      if (!supabase) return res.json({ supabaseActive: false, tenants: [] });
       const { data, error } = await supabase.from("tenants").select("*");
       if (error) throw error;
-      res.json({ supabaseActive: true, tenants: data && data.length > 0 ? data : fallbackTenants });
+      const formatted = (data || []).map((t: any) => ({
+        id: String(t.id || '').trim(),
+        name: String(t.name || t.tenant_name || '').trim(),
+        code: String(t.code || t.tenant_code || '').trim(),
+        description: String(t.description || '').trim(),
+        logoBadge: t.logoBadge || t.logo_badge || t.logo || '🏢',
+        regionalFocus: t.regionalFocus || t.regional_focus || t.region || '',
+        primaryColor: t.primaryColor || t.primary_color || t.color || 'blue'
+      }));
+      res.json({ supabaseActive: true, tenants: formatted });
     } catch (err: any) {
-      res.json({ supabaseActive: false, error: err.message, tenants: fallbackTenants });
+      res.json({ supabaseActive: false, error: err.message, tenants: [] });
     }
   });
 
   app.post("/api/tenants", async (req, res) => {
     try {
       const supabase = getSupabase(req, true);
-      if (!supabase) return res.json({ supabaseActive: false, success: true, message: "Saved in memory" });
       const tenantData = req.body?.tenant || req.body;
       if (!tenantData || !tenantData.id) {
         return res.status(400).json({ success: false, error: "Missing required tenant id field" });
       }
-      const { data, error } = await supabase.from("tenants").upsert([tenantData]).select();
-      if (error) throw error;
-      res.json({ success: true, tenant: data[0] });
+
+      const cleanId = String(tenantData.id).trim();
+      const cleanName = String(tenantData.name || '').trim();
+      const cleanCode = String(tenantData.code || '').trim();
+      const cleanDesc = String(tenantData.description || '').trim();
+      const badge = tenantData.logoBadge || tenantData.logo_badge || '🏢';
+      const region = tenantData.regionalFocus || tenantData.regional_focus || '';
+      const color = tenantData.primaryColor || tenantData.primary_color || 'blue';
+
+      if (!supabase) {
+        return res.json({ 
+          supabaseActive: false, 
+          success: true, 
+          message: "Saved in memory",
+          tenant: { id: cleanId, name: cleanName, code: cleanCode, description: cleanDesc, logoBadge: badge, regionalFocus: region, primaryColor: color }
+        });
+      }
+
+      let payload: any = {
+        id: cleanId,
+        name: cleanName,
+        code: cleanCode,
+        description: cleanDesc,
+        logoBadge: badge,
+        regionalFocus: region,
+        primaryColor: color
+      };
+
+      let savedData: any = null;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const { data, error } = await supabase.from("tenants").upsert([payload]).select();
+        if (!error) {
+          savedData = data?.[0] || payload;
+          break;
+        }
+
+        const errMsg = error.message || String(error);
+        const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
+        const badCol = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
+
+        if (badCol && payload[badCol] !== undefined) {
+          delete payload[badCol];
+        } else if (payload.logoBadge !== undefined || payload.regionalFocus !== undefined || payload.primaryColor !== undefined) {
+          payload = {
+            id: cleanId,
+            name: cleanName,
+            code: cleanCode,
+            description: cleanDesc,
+            logo_badge: badge,
+            regional_focus: region,
+            primary_color: color
+          };
+        } else if (payload.logo_badge !== undefined || payload.regional_focus !== undefined || payload.primary_color !== undefined) {
+          payload = {
+            id: cleanId,
+            name: cleanName,
+            code: cleanCode,
+            description: cleanDesc
+          };
+        } else {
+          throw error;
+        }
+      }
+
+      const formatted = {
+        id: cleanId,
+        name: cleanName,
+        code: cleanCode,
+        description: cleanDesc,
+        logoBadge: savedData?.logoBadge || savedData?.logo_badge || badge,
+        regionalFocus: savedData?.regionalFocus || savedData?.regional_focus || region,
+        primaryColor: savedData?.primaryColor || savedData?.primary_color || color
+      };
+
+      res.json({ success: true, supabaseActive: true, tenant: formatted });
     } catch (err: any) {
+      console.error("[POST /api/tenants error]:", err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -5525,14 +5610,24 @@ async function getFleetId(token: string): Promise<string | null> {
   app.delete("/api/tenants/:id", async (req, res) => {
     try {
       const supabase = getSupabase(req, true);
-      if (!supabase) return res.json({ supabaseActive: false, success: true, message: "Deleted in memory" });
       const tenantId = req.params.id;
       if (!tenantId) {
         return res.status(400).json({ success: false, error: "Missing tenant ID parameter" });
       }
+
+      if (!supabase) return res.json({ supabaseActive: false, success: true, message: "Deleted in memory", deletedId: tenantId });
+
+      // Clean related table records
+      await Promise.all([
+        supabase.from("deliveries").delete().eq("tenantId", tenantId),
+        supabase.from("users").delete().eq("tenantId", tenantId),
+        supabase.from("trucks").delete().eq("tenantId", tenantId),
+        supabase.from("branches").delete().eq("tenantId", tenantId),
+      ]).catch(() => {});
+
       const { error } = await supabase.from("tenants").delete().eq("id", tenantId);
       if (error) throw error;
-      res.json({ success: true, deletedId: tenantId });
+      res.json({ success: true, supabaseActive: true, deletedId: tenantId });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

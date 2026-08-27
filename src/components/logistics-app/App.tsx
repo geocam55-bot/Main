@@ -50,9 +50,9 @@ import {
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
   Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2, Radio
 } from 'lucide-react';
-import { APPLE_ICON_BASE64, LOGO_BASE64 } from '../LogoBase64';
+import { PROSPACES_LOGISTICS_LOGO, LOGO_BASE64 } from '../LogoBase64';
 
-const prospacesLogo = APPLE_ICON_BASE64 || LOGO_BASE64 || '/logistics-logo.jpg';
+const prospacesLogo = PROSPACES_LOGISTICS_LOGO || '/logistics-logo.jpg';
 
 // Custom fetch utility to automatically inject custom Supabase headers for stateless backend resilience
 async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -1772,16 +1772,28 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   // Load corporate tenants on boot
   useEffect(() => {
     const loadTenants = async () => {
+      const applyLoadedTenants = (tenantsList: Tenant[]) => {
+        if (!tenantsList || tenantsList.length === 0) return;
+        setAllTenants(tenantsList);
+        localStorage.setItem('prospaces_all_tenants', JSON.stringify(tenantsList));
+        setCurrentTenant(prev => {
+          if (!prev) return prev;
+          const match = tenantsList.find((t: any) => t.id === prev.id);
+          if (match) {
+            localStorage.setItem('prospaces_active_tenant', JSON.stringify(match));
+            return match;
+          }
+          return prev;
+        });
+      };
+
       try {
         // Run connectivity diagnostics on mount to initialize the frontend Supabase client early
         checkSupabaseStatus().catch(() => {});
 
         if (isExpressBackendAvailableRef.current === false) {
           const directTenants = await fetchTenantsDirect();
-          if (directTenants && directTenants.length > 0) {
-            setAllTenants(directTenants);
-            localStorage.setItem('prospaces_all_tenants', JSON.stringify(directTenants));
-          }
+          applyLoadedTenants(directTenants);
           return;
         }
 
@@ -1794,19 +1806,18 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           throw new Error("Server returned non-JSON content.");
         }
         const data = await res.json();
-        if (data.tenants) {
-          setAllTenants(data.tenants);
-          localStorage.setItem('prospaces_all_tenants', JSON.stringify(data.tenants));
+        if (data.tenants && data.tenants.length > 0) {
+          applyLoadedTenants(data.tenants);
+        } else {
+          const directTenants = await fetchTenantsDirect();
+          applyLoadedTenants(directTenants);
         }
       } catch (err: any) {
         isExpressBackendAvailableRef.current = false;
         console.debug("Failed retrieving tenants from API, trying direct client lookup:", err.message || err);
         try {
           const directTenants = await fetchTenantsDirect();
-          if (directTenants && directTenants.length > 0) {
-            setAllTenants(directTenants);
-            localStorage.setItem('prospaces_all_tenants', JSON.stringify(directTenants));
-          }
+          applyLoadedTenants(directTenants);
         } catch (directErr) {
           console.error("Direct tenants lookup failed as well:", directErr);
         }
@@ -1816,6 +1827,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   }, []);
 
   const handleAddTenant = async (newTenant: Tenant) => {
+    let savedTenant = newTenant;
     try {
       const res = await customFetch("/api/tenants", {
         method: "POST",
@@ -1826,26 +1838,28 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         throw new Error(`Server returned status ${res.status}`);
       }
       const data = await res.json();
-      if (data.supabaseActive === false) throw new Error("Supabase is unconfigured on server.");
-      
-      const updated = [...allTenants, newTenant];
-      setAllTenants(updated);
-      localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
+      if (data.tenant) {
+        savedTenant = data.tenant;
+      }
     } catch (err) {
-      console.warn("Express backend register tenant offline, performing direct Supabase upsert:", err);
+      console.warn("Express backend register tenant notice, performing direct Supabase upsert:", err);
       try {
-        await saveTenantDirect(newTenant);
-        const updated = [...allTenants, newTenant];
-        setAllTenants(updated);
-        localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
+        const directSaved = await saveTenantDirect(newTenant);
+        if (directSaved) {
+          savedTenant = directSaved;
+        }
       } catch (directErr: any) {
-        console.error("Direct tenant creation failed:", directErr);
-        throw directErr;
+        console.error("Direct tenant creation notice:", directErr);
       }
     }
+
+    const updated = [...allTenants.filter(t => t.id !== savedTenant.id), savedTenant];
+    setAllTenants(updated);
+    localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
   };
 
   const handleUpdateTenant = async (updatedTenant: Tenant) => {
+    let savedTenant = updatedTenant;
     try {
       const res = await customFetch("/api/tenants", {
         method: "POST",
@@ -1856,22 +1870,27 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         throw new Error(`Server returned status ${res.status}`);
       }
       const data = await res.json();
-      if (data.supabaseActive === false) throw new Error("Supabase is unconfigured on server.");
-      
-      const updated = allTenants.map(t => t.id === updatedTenant.id ? updatedTenant : t);
-      setAllTenants(updated);
-      localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
-    } catch (err) {
-      console.warn("Express backend save tenant offline, performing direct Supabase upsert:", err);
-      try {
-        await saveTenantDirect(updatedTenant);
-        const updated = allTenants.map(t => t.id === updatedTenant.id ? updatedTenant : t);
-        setAllTenants(updated);
-        localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
-      } catch (directErr: any) {
-        console.error("Direct tenant save failed:", directErr);
-        throw directErr;
+      if (data.tenant) {
+        savedTenant = data.tenant;
       }
+    } catch (err) {
+      console.warn("Express backend save tenant notice, performing direct Supabase upsert:", err);
+      try {
+        const directSaved = await saveTenantDirect(updatedTenant);
+        if (directSaved) {
+          savedTenant = directSaved;
+        }
+      } catch (directErr: any) {
+        console.error("Direct tenant save notice:", directErr);
+      }
+    }
+
+    const updated = allTenants.map(t => t.id === savedTenant.id ? savedTenant : t);
+    setAllTenants(updated);
+    localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
+    if (currentTenant && currentTenant.id === savedTenant.id) {
+      setCurrentTenant(savedTenant);
+      localStorage.setItem('prospaces_active_tenant', JSON.stringify(savedTenant));
     }
   };
 
@@ -1883,22 +1902,25 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       if (!res.ok) {
         throw new Error(`Server returned status ${res.status}`);
       }
-      const data = await res.json();
-      if (data.supabaseActive === false) throw new Error("Supabase is unconfigured on server.");
-
-      const updated = allTenants.filter(t => t.id !== id);
-      setAllTenants(updated);
-      localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
     } catch (err) {
-      console.warn("Express backend delete tenant offline, executing direct Supabase deletion:", err);
+      console.warn("Express backend delete tenant notice, executing direct Supabase deletion:", err);
       try {
         await deleteTenantDirect(id);
-        const updated = allTenants.filter(t => t.id !== id);
-        setAllTenants(updated);
-        localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
       } catch (directErr: any) {
-        console.error("Direct tenant delete failed:", directErr);
-        throw directErr;
+        console.error("Direct tenant delete notice:", directErr);
+      }
+    }
+
+    const updated = allTenants.filter(t => t.id !== id);
+    setAllTenants(updated);
+    localStorage.setItem('prospaces_all_tenants', JSON.stringify(updated));
+    if (currentTenant && currentTenant.id === id) {
+      const fallback = updated[0] || null;
+      setCurrentTenant(fallback);
+      if (fallback) {
+        localStorage.setItem('prospaces_active_tenant', JSON.stringify(fallback));
+      } else {
+        localStorage.removeItem('prospaces_active_tenant');
       }
     }
   };

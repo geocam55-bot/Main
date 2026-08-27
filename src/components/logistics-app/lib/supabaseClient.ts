@@ -436,22 +436,93 @@ export async function checkSupabaseStatusDirect(): Promise<any> {
   }
 }
 
+export function deserializeTenant(raw: any): any {
+  if (!raw) return raw;
+  return {
+    id: String(raw.id || '').trim(),
+    name: String(raw.name || raw.tenant_name || '').trim(),
+    code: String(raw.code || raw.tenant_code || '').trim(),
+    description: String(raw.description || '').trim(),
+    logoBadge: raw.logoBadge || raw.logo_badge || raw.logo || '🏢',
+    regionalFocus: raw.regionalFocus || raw.regional_focus || raw.region || '',
+    primaryColor: raw.primaryColor || raw.primary_color || raw.color || 'blue'
+  };
+}
+
 // Fetch all tenants directly
 export async function fetchTenantsDirect(): Promise<any[]> {
   const supabase = getFrontendSupabase();
   if (!supabase) return [];
   const { data, error } = await supabase.from("tenants").select("*");
   if (error) throw error;
-  return data || [];
+  return (data || []).map(deserializeTenant);
 }
 
 // Add/Save tenant directly
-export async function saveTenantDirect(tenant: any): Promise<void> {
+export async function saveTenantDirect(tenant: any): Promise<any> {
   const supabase = getFrontendSupabase();
   if (!supabase) return;
-  const payload = tenant?.tenant || tenant;
-  const { error } = await supabase.from("tenants").upsert(payload);
-  if (error) throw error;
+  const raw = tenant?.tenant || tenant;
+  if (!raw || !raw.id) throw new Error("Missing tenant id");
+
+  const cleanId = String(raw.id).trim();
+  const cleanName = String(raw.name || '').trim();
+  const cleanCode = String(raw.code || '').trim();
+  const cleanDesc = String(raw.description || '').trim();
+  const badge = raw.logoBadge || raw.logo_badge || '🏢';
+  const region = raw.regionalFocus || raw.regional_focus || '';
+  const color = raw.primaryColor || raw.primary_color || 'blue';
+
+  let payload: any = {
+    id: cleanId,
+    name: cleanName,
+    code: cleanCode,
+    description: cleanDesc,
+    logoBadge: badge,
+    regionalFocus: region,
+    primaryColor: color
+  };
+
+  let savedData: any = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { data, error } = await supabase.from("tenants").upsert([payload]).select();
+    if (!error) {
+      savedData = data?.[0] || payload;
+      console.log(`[saveTenantDirect] Successfully persisted tenant ${cleanId} (${cleanName})`);
+      break;
+    }
+
+    const errMsg = error.message || String(error);
+    console.warn(`[saveTenantDirect] Upsert attempt ${attempt + 1} notice:`, errMsg);
+
+    const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
+    const badCol = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
+
+    if (badCol && payload[badCol] !== undefined) {
+      delete payload[badCol];
+    } else if (payload.logoBadge !== undefined || payload.regionalFocus !== undefined || payload.primaryColor !== undefined) {
+      payload = {
+        id: cleanId,
+        name: cleanName,
+        code: cleanCode,
+        description: cleanDesc,
+        logo_badge: badge,
+        regional_focus: region,
+        primary_color: color
+      };
+    } else if (payload.logo_badge !== undefined || payload.regional_focus !== undefined || payload.primary_color !== undefined) {
+      payload = {
+        id: cleanId,
+        name: cleanName,
+        code: cleanCode,
+        description: cleanDesc
+      };
+    } else {
+      throw error;
+    }
+  }
+
+  return deserializeTenant(savedData || payload);
 }
 
 // Delete tenant directly
@@ -465,7 +536,7 @@ export async function deleteTenantDirect(tenantId: string): Promise<void> {
     supabase.from("users").delete().eq("tenantId", tenantId),
     supabase.from("trucks").delete().eq("tenantId", tenantId),
     supabase.from("branches").delete().eq("tenantId", tenantId),
-  ]);
+  ]).catch(() => {});
 
   const { error } = await supabase.from("tenants").delete().eq("id", tenantId);
   if (error) throw error;

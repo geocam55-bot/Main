@@ -2956,15 +2956,46 @@ self.addEventListener('activate', (event) => {
   if (fs.existsSync(srcPublicDir)) app.use(express.static(srcPublicDir));
 
   // Explicit handlers for Brand Logos & Favicons across DEV and LIVE builds
-  app.get(['/logistics-logo.jpg', '/logo.jpg', '/logo.png', '/images/logo_no_border_tight_1783077241511.jpg'], (req, res) => {
+  app.get(['/logistics-logo.jpg', '/images/logo_no_border_tight_1783077241511.jpg'], (req, res) => {
     const possiblePaths = [
       path.join(process.cwd(), 'public/logistics-logo.jpg'),
-      path.join(process.cwd(), 'public/logo.jpg'),
-      path.join(process.cwd(), 'public/logo.png'),
+      path.join(process.cwd(), 'public/prospaces-logistics-logo.jpg'),
       path.join(process.cwd(), 'src/public/logistics-logo.jpg'),
       path.join(process.cwd(), 'dist/logistics-logo.jpg'),
-      path.join(process.cwd(), 'src/assets/images/prospaces_logo_clean_1785321128582.jpg'),
+      path.join(process.cwd(), 'src/assets/prospaces_logistics_logo.jpg'),
       path.join(process.cwd(), 'src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg')
+    ];
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Content-Type', 'image/jpeg');
+        return res.sendFile(p);
+      }
+    }
+    try {
+      const logoBase64File = path.join(process.cwd(), 'src/components/LogoBase64.ts');
+      if (fs.existsSync(logoBase64File)) {
+        const content = fs.readFileSync(logoBase64File, 'utf8');
+        const match = content.match(/PROSPACES_LOGISTICS_LOGO\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
+        if (match && match[1]) {
+          const buf = Buffer.from(match[1], 'base64');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.setHeader('Content-Type', 'image/jpeg');
+          return res.send(buf);
+        }
+      }
+    } catch (_) {}
+    res.status(404).send('Logistics logo not found');
+  });
+
+  app.get(['/logo.jpg', '/logo.png', '/prospaces-crm-logo.jpg'], (req, res) => {
+    const possiblePaths = [
+      path.join(process.cwd(), 'public/logo.jpg'),
+      path.join(process.cwd(), 'public/logo.png'),
+      path.join(process.cwd(), 'public/prospaces-crm-logo.jpg'),
+      path.join(process.cwd(), 'src/public/logo.png'),
+      path.join(process.cwd(), 'dist/logo.png'),
+      path.join(process.cwd(), 'src/assets/prospaces_crm_logo.jpg')
     ];
     for (const p of possiblePaths) {
       if (fs.existsSync(p)) {
@@ -2977,16 +3008,17 @@ self.addEventListener('activate', (event) => {
       const logoBase64File = path.join(process.cwd(), 'src/components/LogoBase64.ts');
       if (fs.existsSync(logoBase64File)) {
         const content = fs.readFileSync(logoBase64File, 'utf8');
-        const match = content.match(/APPLE_ICON_BASE64\s*=\s*['"]data:image\/png;base64,([^'"]+)['"]/);
+        const match = content.match(/PROSPACES_CRM_LOGO\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/) ||
+                      content.match(/APPLE_ICON_BASE64\s*=\s*['"]data:image\/[^;]+;base64,([^'"]+)['"]/);
         if (match && match[1]) {
           const buf = Buffer.from(match[1], 'base64');
           res.setHeader('Cache-Control', 'public, max-age=86400');
-          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Content-Type', 'image/jpeg');
           return res.send(buf);
         }
       }
     } catch (_) {}
-    res.status(404).send('Logo not found');
+    res.status(404).send('CRM logo not found');
   });
 
   app.get(['/favicon.ico', '/favicon.png', '/favicon.jpg', '/logistics-favicon.jpg'], (req, res) => {
