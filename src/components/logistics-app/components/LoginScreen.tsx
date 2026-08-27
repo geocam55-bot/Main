@@ -4,7 +4,9 @@ import { TENANTS } from '../data';
 import { getFrontendSupabase, deserializeFromPhone, serializeToPhone } from '../lib/supabaseClient';
 import { Shield, Key, CheckCircle2, ArrowRight, Mail, Lock, Building2, UserCheck, HelpCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import prospacesLogo from '../assets/images/logo_no_border_tight_1783077241511.jpg';
+import { APPLE_ICON_BASE64, LOGO_BASE64 } from '../../LogoBase64';
+
+const prospacesLogo = APPLE_ICON_BASE64 || LOGO_BASE64 || '/logistics-logo.jpg';
 
 // Custom fetch utility to automatically inject custom Supabase headers for stateless backend resilience
 async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

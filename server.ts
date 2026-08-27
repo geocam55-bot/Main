@@ -4,7 +4,6 @@ import path from 'path';
 import cors from 'cors';
 import multer from 'multer';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import * as XLSXModule from 'xlsx';
 // @ts-ignore
 const XLSX: any = XLSXModule.default || XLSXModule;
@@ -2950,9 +2949,82 @@ self.addEventListener('activate', (event) => {
   app.use("/upload", express.static(rootUploadsDir));
   app.use("/upload", express.static(rootUploadDir));
 
+  // Serve static assets from public folders with high priority
+  const publicDir = path.join(process.cwd(), "public");
+  const srcPublicDir = path.join(process.cwd(), "src/public");
+  if (fs.existsSync(publicDir)) app.use(express.static(publicDir));
+  if (fs.existsSync(srcPublicDir)) app.use(express.static(srcPublicDir));
+
+  // Explicit handlers for Brand Logos & Favicons across DEV and LIVE builds
+  app.get(['/logistics-logo.jpg', '/logo.jpg', '/logo.png', '/images/logo_no_border_tight_1783077241511.jpg'], (req, res) => {
+    const possiblePaths = [
+      path.join(process.cwd(), 'public/logistics-logo.jpg'),
+      path.join(process.cwd(), 'public/logo.jpg'),
+      path.join(process.cwd(), 'public/logo.png'),
+      path.join(process.cwd(), 'src/public/logistics-logo.jpg'),
+      path.join(process.cwd(), 'dist/logistics-logo.jpg'),
+      path.join(process.cwd(), 'src/assets/images/prospaces_logo_clean_1785321128582.jpg'),
+      path.join(process.cwd(), 'src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg')
+    ];
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Content-Type', p.endsWith('.png') ? 'image/png' : 'image/jpeg');
+        return res.sendFile(p);
+      }
+    }
+    try {
+      const logoBase64File = path.join(process.cwd(), 'src/components/LogoBase64.ts');
+      if (fs.existsSync(logoBase64File)) {
+        const content = fs.readFileSync(logoBase64File, 'utf8');
+        const match = content.match(/APPLE_ICON_BASE64\s*=\s*['"]data:image\/png;base64,([^'"]+)['"]/);
+        if (match && match[1]) {
+          const buf = Buffer.from(match[1], 'base64');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.setHeader('Content-Type', 'image/png');
+          return res.send(buf);
+        }
+      }
+    } catch (_) {}
+    res.status(404).send('Logo not found');
+  });
+
+  app.get(['/favicon.ico', '/favicon.png', '/favicon.jpg', '/logistics-favicon.jpg'], (req, res) => {
+    const possiblePaths = [
+      path.join(process.cwd(), 'public/logistics-favicon.jpg'),
+      path.join(process.cwd(), 'public/favicon.ico'),
+      path.join(process.cwd(), 'public/favicon.png'),
+      path.join(process.cwd(), 'src/public/logistics-favicon.jpg'),
+      path.join(process.cwd(), 'dist/logistics-favicon.jpg'),
+      path.join(process.cwd(), 'src/components/logistics-app/assets/images/favicon_no_border_tight_1783077277593.jpg')
+    ];
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Content-Type', p.endsWith('.ico') ? 'image/x-icon' : (p.endsWith('.png') ? 'image/png' : 'image/jpeg'));
+        return res.sendFile(p);
+      }
+    }
+    try {
+      const logoBase64File = path.join(process.cwd(), 'src/components/LogoBase64.ts');
+      if (fs.existsSync(logoBase64File)) {
+        const content = fs.readFileSync(logoBase64File, 'utf8');
+        const match = content.match(/FAVICON_BASE64\s*=\s*['"]data:image\/png;base64,([^'"]+)['"]/);
+        if (match && match[1]) {
+          const buf = Buffer.from(match[1], 'base64');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.setHeader('Content-Type', 'image/png');
+          return res.send(buf);
+        }
+      }
+    } catch (_) {}
+    res.status(404).send('Favicon not found');
+  });
+
   const isProduction = process.env.NODE_ENV === "production" && process.env.USE_STATIC_BUILD === "true";
 
   if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true,  },
       appType: "custom",

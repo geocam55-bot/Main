@@ -50,7 +50,9 @@ import {
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
   Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2, Radio
 } from 'lucide-react';
-import prospacesLogo from './assets/images/logo_no_border_tight_1783077241511.jpg';
+import { APPLE_ICON_BASE64, LOGO_BASE64 } from '../LogoBase64';
+
+const prospacesLogo = APPLE_ICON_BASE64 || LOGO_BASE64 || '/logistics-logo.jpg';
 
 // Custom fetch utility to automatically inject custom Supabase headers for stateless backend resilience
 async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
