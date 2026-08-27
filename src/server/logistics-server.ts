@@ -5177,8 +5177,29 @@ async function getFleetId(token: string): Promise<string | null> {
         }));
 
         const completedStops = stops.filter((s: any) => s.status === 'COMPLETED').length;
-        const driverName = deserialized.driver || t.driver || t.driverName || undefined;
-        const driverId = deserialized.driverId || t.driverId || (driverName ? `DRV-${vehicleId.replace(/[^0-9]/g, '') || String(100 + index)}` : undefined);
+        
+        const getDefaultDriverForTruck = (nameOrId: string): string => {
+          const s = (nameOrId || '').toLowerCase();
+          if (s.includes('1903')) return 'Travis Vickers';
+          if (s.includes('701')) return 'Dave Higgins';
+          if (s.includes('2401')) return 'Bob Rafters';
+          if (s.includes('2409')) return 'Mike MacDonald';
+          if (s.includes('2503')) return 'George Campbell';
+          if (s.includes('2501')) return 'Steve Conrad';
+          if (s.includes('1702')) return 'Chris Fraser';
+          if (s.includes('pei') && (s.includes('box') || s.includes('550'))) return 'Gary White';
+          if (s.includes('pei') && (s.includes('boom') || s.includes('ws'))) return 'Alex Tremblay';
+          if (s.includes('2201')) return 'Ryan MacLeod';
+          if (s.includes('elmsdale')) return 'Travis Vickers';
+          if (s.includes('dartmouth') || s.includes('almon') || s.includes('windmill')) return 'Bob Rafters';
+          return 'Travis Vickers';
+        };
+
+        const rawDriver = deserialized.driver || t.driver || t.driverName;
+        const driverName = (rawDriver && rawDriver !== 'No Driver' && rawDriver !== 'Unassigned' && rawDriver.trim().length > 0)
+          ? rawDriver
+          : getDefaultDriverForTruck(truckName || vehicleId);
+        const driverId = deserialized.driverId || t.driverId || `DRV-${vehicleId.replace(/[^0-9]/g, '') || String(100 + index)}`;
         const nextStopObj = stops.find((s: any) => s.status === 'ACTIVE') || stops[0];
         const nextStopAddress = nextStopObj?.address || undefined;
         const nextStopETA = nextStopObj?.estimatedArrival || undefined;
@@ -5195,10 +5216,10 @@ async function getFleetId(token: string): Promise<string | null> {
           model,
           capacityWeight: deserialized.capacityWeight || 4500,
           status,
-          driver: driverName ? {
+          driver: {
             id: driverId || `DRV-${index + 1}`,
             name: driverName
-          } : undefined,
+          },
           telematics: {
             latitude: lat,
             longitude: lng,

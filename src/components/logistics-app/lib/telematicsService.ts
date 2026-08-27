@@ -104,10 +104,11 @@ export function useTelematics({
 
           const fuelLevel = typeof tel.fuelPercent === 'number' ? tel.fuelPercent : (typeof tel.fuelLevel === 'number' ? tel.fuelLevel : 75);
 
-          const driverInfo = v.driver ? {
-            id: v.driver.id || `DRV-${index + 101}`,
-            name: v.driver.name || `Driver ${index + 1}`,
-            phone: v.driver.phone || undefined
+          const rawDriverName = typeof v.driver === 'string' ? v.driver : (v.driver?.name || v.driverName || v.activeRoute?.driverName);
+          const driverInfo = rawDriverName ? {
+            id: typeof v.driver === 'object' && v.driver?.id ? v.driver.id : `DRV-${index + 101}`,
+            name: rawDriverName,
+            phone: typeof v.driver === 'object' ? v.driver?.phone : undefined
           } : undefined;
 
           const stopsList = Array.isArray(v.activeRoute?.stops) ? v.activeRoute.stops : [];

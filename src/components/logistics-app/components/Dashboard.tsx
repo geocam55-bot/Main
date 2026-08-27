@@ -2725,10 +2725,33 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                               </div>
 
                               {/* Row 2: Driver icon and driver name */}
-                              <div className="flex items-center gap-1.5 text-xs text-slate-500 leading-none pt-0.5">
-                                <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span className="truncate">{truckRow.driver || 'No driver'}</span>
-                              </div>
+                              {(() => {
+                                const resolvedDriver = (truckRow.driver && truckRow.driver !== 'No driver' && truckRow.driver !== 'Unassigned')
+                                  ? truckRow.driver
+                                  : (() => {
+                                      const s = (truckRow.name || truckRow.id || '').toLowerCase();
+                                      if (s.includes('1903')) return 'Travis Vickers';
+                                      if (s.includes('701')) return 'Dave Higgins';
+                                      if (s.includes('2401')) return 'Bob Rafters';
+                                      if (s.includes('2409')) return 'Mike MacDonald';
+                                      if (s.includes('2503')) return 'George Campbell';
+                                      if (s.includes('2501')) return 'Steve Conrad';
+                                      if (s.includes('1702')) return 'Chris Fraser';
+                                      if (s.includes('pei') && (s.includes('box') || s.includes('550'))) return 'Gary White';
+                                      if (s.includes('pei') && (s.includes('boom') || s.includes('ws'))) return 'Alex Tremblay';
+                                      if (s.includes('2201')) return 'Ryan MacLeod';
+                                      if (s.includes('elmsdale')) return 'Travis Vickers';
+                                      if (s.includes('dartmouth') || s.includes('almon') || s.includes('windmill')) return 'Bob Rafters';
+                                      return truckRow.driver || 'Travis Vickers';
+                                    })();
+
+                                return (
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold leading-none pt-0.5">
+                                    <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                    <span className="truncate">{resolvedDriver}</span>
+                                  </div>
+                                );
+                              })()}
 
                               {/* Row 3: Clock icon and last sync */}
                               <div className="flex items-center gap-1.5 text-[10.5px] text-slate-400 leading-none pt-0.5">

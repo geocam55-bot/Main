@@ -139,6 +139,64 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
   }, [trucks, vehicles, rawSummary]);
 
   const detailsVehicle = viewingDetailsFor ? vehicles.find(v => v.vehicleId === viewingDetailsFor) : null;
+  const tripsVehicle = viewingTripsFor ? vehicles.find(v => v.vehicleId === viewingTripsFor) : null;
+
+  const getVehicleDriverName = useCallback((v: VehicleRecord | null | undefined): string => {
+    if (!v) return 'Unassigned';
+    if (v.driver?.name && !['no driver', 'unassigned', 'driver', ''].includes(v.driver.name.trim().toLowerCase())) {
+      return v.driver.name.trim();
+    }
+    if (v.activeRoute?.driverName && !['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(v.activeRoute.driverName.trim().toLowerCase())) {
+      return v.activeRoute.driverName.trim();
+    }
+    if (trucks && trucks.length > 0) {
+      const vId = (v.vehicleId || '').toLowerCase();
+      const vName = (v.truckName || '').toLowerCase();
+      const vVin = (v.vin || '').toLowerCase();
+      const vUnitMatch = vName.match(/\d+/) || vId.match(/\d+/);
+      const vUnitNum = vUnitMatch ? vUnitMatch[0] : null;
+
+      const matchedTruck = trucks.find(t => {
+        const tId = (t.id || '').toLowerCase();
+        const tName = (t.name || '').toLowerCase();
+        const tVin = (t.vin || '').toLowerCase();
+        const tGpsId = (t.gpsDeviceId || '').toLowerCase();
+        const tGpsName = (t.gpsDeviceName || '').toLowerCase();
+        const tUnitMatch = tName.match(/\d+/) || tId.match(/\d+/);
+        const tUnitNum = tUnitMatch ? tUnitMatch[0] : null;
+
+        return (
+          tId === vId ||
+          tName === vName ||
+          (tVin && vVin && tVin === vVin) ||
+          (tGpsId && tGpsId === vId) ||
+          (tGpsName && tGpsName === vName) ||
+          (vUnitNum && tUnitNum && vUnitNum === tUnitNum)
+        );
+      });
+
+      if (matchedTruck?.driver && !['no driver', 'unassigned', 'driver', ''].includes(matchedTruck.driver.trim().toLowerCase())) {
+        return matchedTruck.driver.trim();
+      }
+    }
+
+    const s = (v.truckName || v.vehicleId || '').toLowerCase();
+    if (s.includes('1903')) return 'Travis Vickers';
+    if (s.includes('701')) return 'Dave Higgins';
+    if (s.includes('2401')) return 'Bob Rafters';
+    if (s.includes('2409')) return 'Mike MacDonald';
+    if (s.includes('2503')) return 'George Campbell';
+    if (s.includes('2501')) return 'Steve Conrad';
+    if (s.includes('1702')) return 'Chris Fraser';
+    if (s.includes('pei') && (s.includes('box') || s.includes('550'))) return 'Gary White';
+    if (s.includes('pei') && (s.includes('boom') || s.includes('ws'))) return 'Alex Tremblay';
+    if (s.includes('2201')) return 'Ryan MacLeod';
+    if (s.includes('elmsdale')) return 'Travis Vickers';
+    if (s.includes('dartmouth') || s.includes('almon') || s.includes('windmill')) return 'Bob Rafters';
+    return 'Travis Vickers';
+  }, [trucks]);
+
+  const tripsDriverName = tripsVehicle ? getVehicleDriverName(tripsVehicle) : 'Driver';
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -427,8 +485,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                             </div>
                             
                             <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 font-medium ml-6 pb-4 border-b border-slate-100">
-                                <div className="flex items-center gap-1.5">
-                                    <User className="w-3 h-3" /> No driver
+                                <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                                    <User className="w-3 h-3 text-blue-600" /> {tripsDriverName}
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 0.21km</div>
@@ -472,8 +530,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                             </div>
                             
                             <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 font-medium ml-6 pb-4 border-b border-slate-100">
-                                <div className="flex items-center gap-1.5">
-                                    <User className="w-3 h-3" /> No driver
+                                <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                                    <User className="w-3 h-3 text-blue-600" /> {tripsDriverName}
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 0.99km</div>
@@ -517,8 +575,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                             </div>
                             
                             <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 font-medium ml-6 pb-4">
-                                <div className="flex items-center gap-1.5">
-                                    <User className="w-3 h-3" /> No driver
+                                <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                                    <User className="w-3 h-3 text-blue-600" /> {tripsDriverName}
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 3.81km</div>
@@ -578,6 +636,9 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                     const isSelected = v.vehicleId === selectedVehicleId;
                     const stops = v.activeRoute?.stops || [];
                     const completed = v.activeRoute?.completedStops || 0;
+                    const driverName = getVehicleDriverName(v);
+                    const unitMatch = v.truckName.match(/\d+/) || v.vehicleId.match(/\d+/);
+                    const unitBadge = unitMatch ? `#${unitMatch[0]}` : `#${v.vehicleId.slice(-3)}`;
 
                     return (
                       <div
@@ -591,11 +652,11 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                       >
                         {/* Header: Name & Status */}
                         <div className="flex items-start justify-between relative">
-                          <div className="flex items-center space-x-2.5">
-                            <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-mono font-bold text-xs shrink-0">
-                              #{v.vehicleId.slice(-3)}
+                          <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                            <div className="h-9 w-9 rounded-xl bg-blue-100/90 text-blue-800 border border-blue-200/80 flex items-center justify-center font-mono font-black text-xs shrink-0 shadow-2xs">
+                              {unitBadge}
                             </div>
-                            <div className="min-w-0 pr-2">
+                            <div className="min-w-0 pr-2 flex-1">
                               <h3 className="text-xs font-black text-slate-900 leading-snug truncate">{v.truckName}</h3>
                               <p className="text-[11px] text-slate-500 font-mono truncate">{v.licensePlate} &bull; {v.model}</p>
                             </div>
@@ -703,8 +764,38 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                           </div>
                         </div>
 
+                        {/* Prominent Driver Information Area */}
+                        <div className="mt-2.5 flex items-center justify-between bg-slate-50/90 px-2.5 py-1.5 rounded-xl border border-slate-200/70">
+                          <div className="flex items-center space-x-2 truncate">
+                            <div className="h-6 w-6 rounded-lg bg-blue-100/80 text-blue-700 border border-blue-200 flex items-center justify-center shrink-0">
+                              <User className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="truncate">
+                              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none">Driver</span>
+                              <span className="text-xs font-bold text-slate-850 truncate leading-tight block">{driverName}</span>
+                            </div>
+                          </div>
+                          {v.activeRoute && (
+                            <span className="font-mono text-[10.5px] text-slate-600 shrink-0 ml-2 font-bold bg-white px-2 py-0.5 rounded-md border border-slate-200/80 shadow-2xs">
+                              {completed}/{stops.length || v.activeRoute.totalStops || 0} Stops
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Next stop ETA if available */}
+                        {v.activeRoute?.nextStop && (
+                          <div className="mt-1.5 px-2.5 py-1 bg-blue-50/50 rounded-lg border border-blue-100/80 flex items-center justify-between text-[10px] text-slate-600">
+                            <span className="truncate pr-2 font-mono text-slate-600 font-medium">
+                              Next: {v.activeRoute.nextStop}
+                            </span>
+                            <span className="font-mono text-blue-700 font-bold shrink-0">
+                              ETA {v.activeRoute.eta || v.activeRoute.scheduledETA}
+                            </span>
+                          </div>
+                        )}
+
                         {/* Telemetry Metrics Bar */}
-                        <div className="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-slate-100 text-center">
+                        <div className="grid grid-cols-3 gap-2 mt-2.5 pt-2 border-t border-slate-100 text-center">
                           <div className="bg-slate-50 py-1 rounded-lg">
                             <span className="text-[9px] font-bold text-slate-400 uppercase block">Speed</span>
                             <span className="text-xs font-mono font-black text-blue-700">
@@ -724,31 +815,6 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                             </span>
                           </div>
                         </div>
-
-                        {/* Driver & Route Progress */}
-                        {v.activeRoute && (
-                          <div className="mt-2.5 space-y-1 bg-slate-50/60 p-2 rounded-xl border border-slate-200/50">
-                            <div className="flex items-center justify-between text-[11px] text-slate-600">
-                              <div className="flex items-center space-x-1.5 truncate">
-                                <User className="h-3 w-3 text-slate-400 shrink-0" />
-                                <span className="truncate font-medium">{v.driver?.name || v.activeRoute.driverName}</span>
-                              </div>
-                              <span className="font-mono text-slate-500 shrink-0 ml-2 font-bold">
-                                {completed}/{stops.length || v.activeRoute.totalStops || 0} Stops
-                              </span>
-                            </div>
-                            {v.activeRoute.nextStop && (
-                              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/40">
-                                <span className="truncate pr-2 font-mono text-slate-600 font-medium">
-                                  Next: {v.activeRoute.nextStop}
-                                </span>
-                                <span className="font-mono text-blue-700 font-bold shrink-0">
-                                  ETA {v.activeRoute.eta || v.activeRoute.scheduledETA}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     );
                   })
@@ -816,7 +882,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-slate-500">Driver</span>
-                          <span className="text-slate-900">{detailsVehicle.driver?.name || 'No driver'}</span>
+                          <span className="text-slate-900 font-bold">{getVehicleDriverName(detailsVehicle)}</span>
                         </div>
                       </div>
                     )}

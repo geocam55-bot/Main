@@ -381,10 +381,14 @@ function AnimatedVehicleMarker({
     ? '#d97706' // Amber
     : '#475569'; // Slate
 
+  const driverName = vehicle.driver?.name || vehicle.activeRoute?.driverName || 'Unassigned';
+  const unitMatch = vehicle.truckName.match(/\d+/) || vehicle.vehicleId.match(/\d+/);
+  const unitLabel = unitMatch ? `#${unitMatch[0]}` : (vehicle.truckName.split('-')[0]?.trim() || `#${vehicle.vehicleId.slice(-3)}`);
+
   return (
     <AdvancedMarker
       position={currentPos}
-      title={`${vehicle.truckName} (${vehicle.status})`}
+      title={`${vehicle.truckName} • Driver: ${driverName} (${vehicle.status})`}
       onClick={onSelect}
       zIndex={isSelected ? 100 : isMoving ? 50 : 20}
     >
@@ -394,7 +398,8 @@ function AnimatedVehicleMarker({
         isIdling={isIdle}
         isSelected={isSelected}
         heading={heading}
-        label={vehicle.truckName.split('-')[0]?.trim() || `#${vehicle.vehicleId.slice(-3)}`}
+        label={unitLabel}
+        driverName={driverName}
         speedText={speed > 0 ? `${Math.round(speed)}k` : undefined}
         size="md"
       />
@@ -759,12 +764,20 @@ export default function TelematicsMapView({
                 )}
               </div>
 
-              {selectedVehicle && (
-                <div className="bg-blue-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl text-white text-xs font-bold shadow-md flex items-center space-x-1.5">
-                  <TruckIcon className="h-3.5 w-3.5 text-blue-300" />
-                  <span>Tracking: {selectedVehicle.truckName}</span>
-                </div>
-              )}
+              {selectedVehicle && (() => {
+                const selectedDriver = selectedVehicle.driver?.name || selectedVehicle.activeRoute?.driverName || 'Unassigned Driver';
+                return (
+                  <div className="bg-blue-950/95 backdrop-blur-md px-3 py-1.5 rounded-xl text-white text-xs font-bold shadow-md flex items-center space-x-2 border border-blue-700/60">
+                    <TruckIcon className="h-3.5 w-3.5 text-blue-300 shrink-0" />
+                    <span className="truncate max-w-[150px] sm:max-w-[200px]">Tracking: {selectedVehicle.truckName}</span>
+                    <span className="text-blue-400 font-normal">&bull;</span>
+                    <div className="flex items-center gap-1 text-emerald-300 font-semibold truncate max-w-[140px]">
+                      <User className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{selectedDriver}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Right: Map Layers & Actions */}

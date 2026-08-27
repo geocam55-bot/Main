@@ -20,6 +20,8 @@ export interface TeardropTruckMarkerProps {
   label?: string;
   /** Optional speed string (e.g. "54 km/h") */
   speedText?: string;
+  /** Driver assigned to this asset */
+  driverName?: string;
   /** Size variant */
   size?: 'sm' | 'md' | 'lg';
   /** Extra class names */
@@ -36,6 +38,7 @@ export const TeardropTruckMarker: React.FC<TeardropTruckMarkerProps> = ({
   heading,
   label,
   speedText,
+  driverName,
   size = 'md',
   className = ''
 }) => {
@@ -51,6 +54,14 @@ export const TeardropTruckMarker: React.FC<TeardropTruckMarkerProps> = ({
   return (
     <div className={`relative flex flex-col items-center select-none group cursor-pointer transition-transform duration-300 ${isSelected ? 'scale-115 z-50' : 'hover:scale-105 z-20'} ${className}`}>
       
+      {/* Driver Name Tooltip Badge on Hover or Selection */}
+      {driverName && (
+        <div className={`absolute -top-7 z-40 opacity-0 group-hover:opacity-100 ${isSelected ? '!opacity-100' : ''} transition-all duration-200 pointer-events-none scale-95 group-hover:scale-100 bg-slate-950/95 text-white font-sans text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xl border border-slate-700/80 whitespace-nowrap flex items-center gap-1.5`}>
+          <span className="text-slate-400 font-normal text-[9px] uppercase tracking-wider">Driver</span>
+          <span className="text-emerald-300 font-bold">{driverName}</span>
+        </div>
+      )}
+
       {/* Live Beacon Pulse Halo for Moving Trucks */}
       {isMoving && (
         <span 
