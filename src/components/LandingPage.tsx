@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Logo } from './Logo';
 import { ModuleDetail } from './ModuleDetail';
 import { About } from './About';
@@ -9,6 +9,7 @@ import { InsightsSpaceInfo } from './InsightsSpaceInfo';
 import { MarketingSpaceInfo } from './MarketingSpaceInfo';
 import { ITSpaceInfo } from './ITSpaceInfo';
 import { LogisticsSpaceInfo } from './LogisticsSpaceInfo';
+import { DriverMobilePortalInfo } from './DriverMobilePortalInfo';
 import { HomeImprovementBenefits } from './HomeImprovementBenefits';
 import { LumberSuppliersBenefits } from './LumberSuppliersBenefits';
 import { ProDeskBenefits } from './ProDeskBenefits';
@@ -50,7 +51,8 @@ import {
   HelpCircle,
   X,
   Menu,
-  Truck
+  Truck,
+  Smartphone
 } from 'lucide-react';
 
 /* ── Image Asset Imports ── */
@@ -233,13 +235,25 @@ function SpaceTile({
 export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
-  const [selectedSpaceInfo, setSelectedSpaceInfo] = useState<SpaceKey | null>(null);
+  const [selectedSpaceInfo, setSelectedSpaceInfo] = useState<SpaceKey | 'driver-portal' | null>(null);
   const [selectedAudience, setSelectedAudience] = useState<string | null>(null);
   // Local state to keep track of the interactive mockup dashboard tab
   const [activeTab, setActiveTab] = useState<SpaceKey>('sales');
   // State for header sub-menus information modals
   const [activeNavTab, setActiveNavTab] = useState<'features' | 'why' | 'pricing' | 'knowledge' | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      if (view === 'logistics' || view === 'prospaces-logistics' || view === 'prospaces-logistics-info') {
+        setSelectedSpaceInfo('logistics');
+      } else if (view === 'driver-portal' || view === 'driver-mobile' || view === 'driver-mobile-portal' || view === 'driver-mobile-portal-info') {
+        setSelectedSpaceInfo('driver-portal');
+      }
+    } catch {}
+  }, []);
 
   if (selectedAudience === 'home-improvement') {
     return <HomeImprovementBenefits onBack={() => setSelectedAudience(null)} onGetStarted={onGetStarted} />;
@@ -299,10 +313,35 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
   if (selectedSpaceInfo === 'logistics') {
     return (
       <LogisticsSpaceInfo
-        onBack={() => setSelectedSpaceInfo(null)}
+        onBack={() => {
+          setSelectedSpaceInfo(null);
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('view');
+            window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+          } catch {}
+        }}
         onEnterSpace={() => {
           sessionStorage.setItem('accessed_from_crm', 'true');
           window.location.href = '/logistics.html?from=crm';
+        }}
+      />
+    );
+  }
+  if (selectedSpaceInfo === 'driver-portal') {
+    return (
+      <DriverMobilePortalInfo
+        onBack={() => {
+          setSelectedSpaceInfo(null);
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('view');
+            window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+          } catch {}
+        }}
+        onEnterApp={() => {
+          sessionStorage.setItem('accessed_from_crm', 'true');
+          window.location.href = '/logistics.html?from=crm&view=driver-mobile';
         }}
       />
     );
@@ -403,17 +442,32 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                   <span>Other Projects</span>
                   <ChevronDown className="h-4 w-4 text-[#1E6FD9] transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-60 p-2 bg-white rounded-xl shadow-lg border border-slate-150 z-50">
+                <DropdownMenuContent align="start" className="w-72 p-2 bg-white rounded-xl shadow-lg border border-slate-150 z-50">
                   <DropdownMenuItem
-                    onClick={() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics.html?from=crm'; }}
+                    onClick={() => setSelectedSpaceInfo('logistics')}
                     className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-blue-50 cursor-pointer text-slate-800 font-medium transition-colors"
+                    id="nav-item-logistics-info"
                   >
-                    <div className="h-8.5 w-8.5 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                    <div className="h-9 w-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
                       <Truck className="h-4.5 w-4.5" />
                     </div>
                     <div>
                       <div className="font-semibold text-sm text-slate-800">ProSpaces Logistics</div>
-                      <div className="text-xs text-slate-500 font-normal">Fleet, dispatch & yard portal</div>
+                      <div className="text-xs text-slate-500 font-normal">Fleet, dispatch & yard overview</div>
+                    </div>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => setSelectedSpaceInfo('driver-portal')}
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-emerald-50 cursor-pointer text-slate-800 font-medium transition-colors"
+                    id="nav-item-driver-portal-info"
+                  >
+                    <div className="h-9 w-9 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                      <Smartphone className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm text-slate-800">Driver Mobile Portal</div>
+                      <div className="text-xs text-slate-500 font-normal">Field routing, photo POD & DVIR</div>
                     </div>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -485,12 +539,35 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 <div className="pt-2 border-t border-slate-100 mt-1">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 mb-1 block">Other Projects</span>
                   <button
-                    onClick={() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics.html?from=crm'; setMobileMenuOpen(false); }}
+                    onClick={() => { setSelectedSpaceInfo('logistics'); setMobileMenuOpen(false); }}
                     className="w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all font-semibold text-slate-700"
+                    id="mobile-nav-item-logistics-info"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Truck className="h-4.5 w-4.5 text-blue-600" />
-                      <span className="text-sm">ProSpaces Logistics</span>
+                      <div className="h-7 w-7 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                        <Truck className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800">ProSpaces Logistics</div>
+                        <div className="text-[11px] text-slate-500 font-normal">Fleet, dispatch & yard overview</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                  </button>
+
+                  <button
+                    onClick={() => { setSelectedSpaceInfo('driver-portal'); setMobileMenuOpen(false); }}
+                    className="w-full flex items-center justify-between py-2.5 px-3 rounded-lg text-left cursor-pointer hover:bg-slate-50 transition-all font-semibold text-slate-700 mt-1"
+                    id="mobile-nav-item-driver-portal-info"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <Smartphone className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800">Driver Mobile Portal</div>
+                        <div className="text-[11px] text-slate-500 font-normal">Field routing, photo POD & DVIR</div>
+                      </div>
                     </div>
                     <ChevronRight className="h-4 w-4 text-slate-400" />
                   </button>

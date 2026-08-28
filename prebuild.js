@@ -99,28 +99,24 @@ if (faviconPngBuffer) {
   }
 }
 
-// Sync existing hero scenes or other logistics assets
-const assetSyncMap = [
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'src/components/logistics-app/assets/images/prospaces_hero_scene_1783169931786.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'src/public/images/prospaces_hero_scene_1783169931786.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'src/public/images/logistics_map_screen.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'public/images/prospaces_hero_scene_1783169931786.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'public/images/logistics_map_screen.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'public/logistics-map-view.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'dist/images/prospaces_hero_scene_1783169931786.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'dist/images/logistics_map_screen.jpg'],
-  ['src/assets/images/light_map_view_1785321141916.jpg', 'dist/logistics-map-view.jpg']
-];
-
-for (const [srcRel, destRel] of assetSyncMap) {
-  const srcPath = path.join(process.cwd(), srcRel);
-  const destPath = path.join(process.cwd(), destRel);
-  if (fs.existsSync(srcPath)) {
-    const destDir = path.dirname(destPath);
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
+// Sync all images from src/assets/images to public/images, src/public/images, and dist/images
+const imagesSrcDir = path.join(process.cwd(), 'src/assets/images');
+if (fs.existsSync(imagesSrcDir)) {
+  const files = fs.readdirSync(imagesSrcDir);
+  for (const file of files) {
+    const srcFile = path.join(imagesSrcDir, file);
+    if (fs.statSync(srcFile).isFile()) {
+      const destTargets = [
+        path.join(process.cwd(), 'public/images', file),
+        path.join(process.cwd(), 'src/public/images', file),
+        path.join(process.cwd(), 'dist/images', file)
+      ];
+      for (const dest of destTargets) {
+        const destDir = path.dirname(dest);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        fs.copyFileSync(srcFile, dest);
+      }
     }
-    fs.copyFileSync(srcPath, destPath);
-    console.log(`[Prebuild] Synced asset to: ${destRel}`);
   }
 }
+
