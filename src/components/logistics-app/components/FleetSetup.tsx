@@ -23,13 +23,13 @@ export default function FleetSetup({
   onDeleteTruck,
   readOnly
 }: FleetSetupProps) {
-  // Gracefully default to the first available branch
-  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  // Default to ALL so all 16 fleet units across all branches are displayed by default
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
 
   useEffect(() => {
     if (branches.length > 0) {
-      if (!selectedBranchId || !branches.some(b => b.id === selectedBranchId)) {
-        setSelectedBranchId(branches[0].id);
+      if (!selectedBranchId) {
+        setSelectedBranchId('ALL');
       }
     }
   }, [branches, selectedBranchId]);

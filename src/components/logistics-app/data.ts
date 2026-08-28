@@ -71,7 +71,24 @@ export const DEFAULT_BRANCHES: Branch[] = [
   }
 ];
 
-export const DEFAULT_TRUCKS: Truck[] = [];
+export const DEFAULT_TRUCKS: Truck[] = [
+  { id: '2501 - Elmsdale 6X Boom', name: '2501 - Elmsdale 6X Boom', type: '2025 Western Star 47X 6x4 Heavy Boom Crane', driver: 'Steve Conrad', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'In Transit', currentLatitude: 44.9796, currentLongitude: -63.5044 },
+  { id: '2502 - Elmsdale 4X Boom', name: '2502 - Elmsdale 4X Boom', type: '2025 Freightliner M2 106 4x2 Boom Truck', driver: 'No Driver', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.9810, currentLongitude: -63.5060 },
+  { id: '2503 - Elmsdale 6X Boom', name: '2503 - Elmsdale 6X Boom', type: '2025 Kenworth T880 6x4 Heavy Boom Crane', driver: 'Erik Nielsen', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'In Transit', currentLatitude: 44.9790, currentLongitude: -63.5030 },
+  { id: '2504 - Elmsdale 6X Boom', name: '2504 - Elmsdale 6X Boom', type: '2025 Western Star 47X 6x4 Heavy Boom Crane', driver: 'Erik Nielsen', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'Idling', currentLatitude: 44.9820, currentLongitude: -63.5080 },
+  { id: '1802 - Elmsdale 4X Boom', name: '1802 - Elmsdale 4X Boom', type: '2018 Freightliner M2 106 4x2 Boom Crane', driver: 'No Driver', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.9830, currentLongitude: -63.5020 },
+  { id: '1803 - Elmsdale S/A Curtain', name: '1803 - Elmsdale S/A Curtain', type: '2018 International MV607 Single Axle Curtain-side', driver: 'No Driver', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.9800, currentLongitude: -63.5050 },
+  { id: '1901 - Elmsdale HH', name: '1901 - Elmsdale HH', type: 'Heavy-Duty Flatbed', driver: 'No Driver', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.9780, currentLongitude: -63.5070 },
+  { id: '1702 - Elmsdale HH', name: '1702 - Elmsdale HH', type: 'Heavy-Duty Flatbed', driver: 'Chris Fraser', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'In Transit', currentLatitude: 44.9815, currentLongitude: -63.5035 },
+  { id: '701 - Elmsdale T/A Flatdeck', name: '701 - Elmsdale T/A Flatdeck', type: '2020 Peterbilt 337 Tandem-Axle Flatbed', driver: 'Dave Higgins', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'In Transit', currentLatitude: 44.9792, currentLongitude: -63.5048 },
+  { id: '1903 - Elmsdale Windows', name: '1903 - Elmsdale Windows', type: 'Curtain-side Flatbed', driver: 'Travis Vickers', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'In Transit', currentLatitude: 44.9805, currentLongitude: -63.5055 },
+  { id: '2409 - Elmsdale F150', name: '2409 - Elmsdale F150', type: '2024 Ford F-150 XLT 4x4', driver: 'Mike MacDonald', branchId: 'RONA-03485', tenantId: 'rona_atlantic', isActive: true, status: 'In Transit', currentLatitude: 44.9798, currentLongitude: -63.5042 },
+  { id: '2101 - Dartmouth F150', name: '2101 - Dartmouth F150', type: 'Fleet Pickup Truck 4x4', driver: 'Bob Rafters', branchId: 'RONA-03510', tenantId: 'rona_atlantic', isActive: true, status: 'In Transit', currentLatitude: 44.6909, currentLongitude: -63.5985 },
+  { id: '2401 - Halifax F150', name: '2401 - Halifax F150', type: '2024 Ford F-150 SuperCrew 4x4 (Almon OSR)', driver: 'No Driver', branchId: 'RONA-03480', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.6896, currentLongitude: -63.5976 },
+  { id: '2408 - Halifax F150 OSR', name: '2408 - Halifax F150 OSR', type: '2024 Ford F-150 XL 4x4 (Halifax OSR)', driver: 'No Driver', branchId: 'RONA-03480', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.6890, currentLongitude: -63.5970 },
+  { id: '2410 - Tantallon F150', name: '2410 - Tantallon F150', type: 'Fleet Pickup Truck 4x4', driver: 'No Driver', branchId: 'RONA-03490', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.6854, currentLongitude: -63.8824 },
+  { id: '2412 - Tantallon Ranger', name: '2412 - Tantallon Ranger', type: '2024 Ford Ranger XLT 4x4', driver: 'No Driver', branchId: 'RONA-03490', tenantId: 'rona_atlantic', isActive: true, status: 'Parked', currentLatitude: 44.6860, currentLongitude: -63.8830 }
+];
 
 export const DEFAULT_USERS: User[] = [
   {

@@ -4890,7 +4890,7 @@ async function getFleetId(token: string): Promise<string | null> {
           }
           const { data } = await truckQuery;
           if (data && Array.isArray(data)) {
-            dbTrucks = data;
+            dbTrucks = deduplicateServerTrucks(data);
           }
         } catch (dbErr) {
           console.warn("[Vehicles DB query notice]", dbErr);
@@ -5083,7 +5083,7 @@ async function getFleetId(token: string): Promise<string | null> {
           }
           const { data: dbTrucks } = await truckQuery;
           if (dbTrucks && Array.isArray(dbTrucks)) {
-            activeTrucks = dbTrucks;
+            activeTrucks = deduplicateServerTrucks(dbTrucks);
           }
           const { data: dbDeliveries } = await deliveryQuery;
           if (dbDeliveries && Array.isArray(dbDeliveries)) {
@@ -5332,7 +5332,7 @@ async function getFleetId(token: string): Promise<string | null> {
           }
           const { data: dbTrucks } = await truckQuery;
           if (dbTrucks && Array.isArray(dbTrucks)) {
-            activeTrucks = dbTrucks;
+            activeTrucks = deduplicateServerTrucks(dbTrucks);
           }
           const { data: dbDeliveries } = await deliveryQuery;
           if (dbDeliveries && Array.isArray(dbDeliveries)) {
