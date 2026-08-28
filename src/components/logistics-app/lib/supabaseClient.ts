@@ -1064,47 +1064,39 @@ export async function saveTenantStateDirect(
     };
   });
 
-  // Perform parallel upserts including GPS telemetry tables
-  const truckUpsertPromise = (async () => {
-    let payload = serializedTrucks;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const { error } = await supabase.from("trucks").upsert(payload);
+  const safeBulkUpsert = async (table: string, payloadArray: any[]) => {
+    if (!payloadArray || payloadArray.length === 0) return;
+    let payload = payloadArray;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const { error } = await supabase.from(table).upsert(payload);
       if (!error) break;
       const errMsg = error.message || String(error);
+      if (errMsg.includes('relation') && errMsg.includes('does not exist')) break; // Table itself doesn't exist, skip
       const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
       const missingCol = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
       if (missingCol) {
-        payload = payload.map((t: any) => {
-          const c = { ...t };
+        payload = payload.map((row: any) => {
+          const c = { ...row };
           delete c[missingCol];
           return c;
         });
       } else {
-        // Essential columns fallback
-        payload = payload.map((t: any) => ({
-          id: t.id,
-          tenantId: t.tenantId,
-          name: t.name,
-          type: t.type,
-          driver: t.driver,
-          branchId: t.branchId,
-          branch_id: t.branch_id
-        }));
+        break; // Other error, can't fix
       }
     }
-  })();
+  };
 
   await Promise.allSettled([
-    supabase.from("branches").upsert(mappedBranches),
-    truckUpsertPromise,
-    supabase.from("users").upsert(serializedUsers),
-    supabase.from("deliveries").upsert(mappedDeliveries),
-    supabase.from("gps_units_setup").upsert(gpsUnitsToUpsert),
-    supabase.from("gps_unit_setup").upsert(gpsUnitsToUpsert),
-    supabase.from("gps_tracking_history").insert(historyPointsToInsert),
-    supabase.from("geofences").upsert(geofencesToUpsert),
-    supabase.from("gpsfences").upsert(geofencesToUpsert),
-    supabase.from("gps_fences").upsert(geofencesToUpsert)
+    safeBulkUpsert("branches", mappedBranches),
+    safeBulkUpsert("trucks", serializedTrucks),
+    safeBulkUpsert("users", serializedUsers),
+    safeBulkUpsert("deliveries", mappedDeliveries),
+    safeBulkUpsert("gps_units_setup", gpsUnitsToUpsert),
+    safeBulkUpsert("gps_unit_setup", gpsUnitsToUpsert),
+    safeBulkUpsert("gps_tracking_history", historyPointsToInsert),
+    safeBulkUpsert("geofences", geofencesToUpsert),
+    safeBulkUpsert("gpsfences", geofencesToUpsert),
+    safeBulkUpsert("gps_fences", geofencesToUpsert)
   ]);
 
   return { supabaseActive: true };
