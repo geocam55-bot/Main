@@ -57,6 +57,7 @@ export function useTelematics({
   const fetchTelematics = useCallback(async () => {
     try {
       const params = new URLSearchParams();
+      params.set('tenantId', 'rona_atlantic');
       if (statusFilter && statusFilter !== 'ALL') {
         params.set('status', statusFilter.toLowerCase());
       }

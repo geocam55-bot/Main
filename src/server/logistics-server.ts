@@ -5074,13 +5074,9 @@ async function getFleetId(token: string): Promise<string | null> {
       const supabase = getSupabase(req, true);
       if (supabase) {
         try {
-          const tenantId = req.query.tenantId ? normalizeTenantId(req.query.tenantId) : null;
-          let truckQuery = supabase.from("trucks").select("*");
-          let deliveryQuery = supabase.from("deliveries").select("*");
-          if (tenantId) {
-            truckQuery = truckQuery.eq("tenantId", tenantId);
-            deliveryQuery = deliveryQuery.eq("tenantId", tenantId);
-          }
+          const tenantId = normalizeTenantId(req.query.tenantId || 'rona_atlantic');
+          const truckQuery = supabase.from("trucks").select("*").eq("tenantId", tenantId);
+          const deliveryQuery = supabase.from("deliveries").select("*").eq("tenantId", tenantId);
           const { data: dbTrucks } = await truckQuery;
           if (dbTrucks && Array.isArray(dbTrucks)) {
             activeTrucks = deduplicateServerTrucks(dbTrucks);
@@ -5093,10 +5089,10 @@ async function getFleetId(token: string): Promise<string | null> {
           console.warn("[Telematics DB query notice]", dbErr);
         }
       } else {
-        const tenantId = normalizeTenantId(req.query.tenantId);
+        const tenantId = normalizeTenantId(req.query.tenantId || 'rona_atlantic');
         const inMem = inMemoryTenantStates[tenantId] || inMemoryTenantStates["t-prospaces-main"];
         if (inMem && Array.isArray(inMem.trucks)) {
-          activeTrucks = inMem.trucks;
+          activeTrucks = deduplicateServerTrucks(inMem.trucks);
           activeDeliveries = inMem.deliveries || [];
         }
       }
@@ -5323,13 +5319,9 @@ async function getFleetId(token: string): Promise<string | null> {
       const supabase = getSupabase(req, true);
       if (supabase) {
         try {
-          const tenantId = req.query.tenantId ? normalizeTenantId(req.query.tenantId) : null;
-          let truckQuery = supabase.from("trucks").select("*");
-          let deliveryQuery = supabase.from("deliveries").select("*");
-          if (tenantId) {
-            truckQuery = truckQuery.eq("tenantId", tenantId);
-            deliveryQuery = deliveryQuery.eq("tenantId", tenantId);
-          }
+          const tenantId = normalizeTenantId(req.query.tenantId || 'rona_atlantic');
+          const truckQuery = supabase.from("trucks").select("*").eq("tenantId", tenantId);
+          const deliveryQuery = supabase.from("deliveries").select("*").eq("tenantId", tenantId);
           const { data: dbTrucks } = await truckQuery;
           if (dbTrucks && Array.isArray(dbTrucks)) {
             activeTrucks = deduplicateServerTrucks(dbTrucks);
@@ -5342,10 +5334,10 @@ async function getFleetId(token: string): Promise<string | null> {
           console.warn("[Telematics DB query notice]", dbErr);
         }
       } else {
-        const tenantId = normalizeTenantId(req.query.tenantId);
+        const tenantId = normalizeTenantId(req.query.tenantId || 'rona_atlantic');
         const inMem = inMemoryTenantStates[tenantId] || inMemoryTenantStates["t-prospaces-main"];
         if (inMem && Array.isArray(inMem.trucks)) {
-          activeTrucks = inMem.trucks;
+          activeTrucks = deduplicateServerTrucks(inMem.trucks);
           activeDeliveries = inMem.deliveries || [];
         }
       }
