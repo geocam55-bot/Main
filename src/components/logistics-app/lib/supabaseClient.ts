@@ -864,49 +864,29 @@ export async function saveTenantStateDirect(
       name: t.name || `Truck ${t.id}`,
       type: serializeToType(t.type, regDate || undefined, t.imageUrl),
       driver: driverVal,
-      driver_name: driverVal,
-      assigned_driver_id: assignedDriverIdVal,
-      assignedDriverId: assignedDriverIdVal,
-      branchId: branchIdVal,
-      branch_id: branchIdVal,
-      image_url: t.imageUrl || t.image_url || null,
-      imageUrl: t.imageUrl || t.image_url || null,
+            assigned_driver_id: assignedDriverIdVal,
+            branchId: branchIdVal,
+            image_url: t.imageUrl || t.image_url || null,
       registration_due_date: regDate,
-      registrationDueDate: regDate,
-      registration_expiry_date: regDate,
-      registrationExpiryDate: regDate,
-      truck_number: t.truckNumber || t.truck_number || null,
-      truckNumber: t.truckNumber || t.truck_number || null,
-      vin: t.vin || null,
+            registration_expiry_date: regDate,
+            truck_number: t.truckNumber || t.truck_number || null,
+            vin: t.vin || null,
       license_plate: t.licensePlate || t.license_plate || null,
-      licensePlate: t.licensePlate || t.license_plate || null,
-      make: t.make || null,
+            make: t.make || null,
       model: t.model || null,
       year: sanitizeNumberForDb(t.year),
       color: t.color || null,
       vehicle_type: t.vehicleType || t.vehicle_type || t.type || null,
       capacity_weight_kg: sanitizeNumberForDb(t.capacityWeightKg || t.capacity_weight_kg),
-      capacityWeightKg: sanitizeNumberForDb(t.capacityWeightKg || t.capacity_weight_kg),
-      capacity_volume_m3: sanitizeNumberForDb(t.capacityVolumeM3 || t.capacity_volume_m3),
-      capacityVolumeM3: sanitizeNumberForDb(t.capacityVolumeM3 || t.capacity_volume_m3),
-      fuel_type: t.fuelType || t.fuel_type || null,
-      fuelType: t.fuelType || t.fuel_type || null,
-      fuel_tank_capacity: sanitizeNumberForDb(t.fuelTankCapacity || t.fuel_tank_capacity),
+            capacity_volume_m3: sanitizeNumberForDb(t.capacityVolumeM3 || t.capacity_volume_m3),
+            fuel_type: t.fuelType || t.fuel_type || null,
+            fuel_tank_capacity: sanitizeNumberForDb(t.fuelTankCapacity || t.fuel_tank_capacity),
       current_mileage: sanitizeNumberForDb(t.currentMileage || t.current_mileage),
-      currentMileage: sanitizeNumberForDb(t.currentMileage || t.current_mileage),
-      last_service_date: lastSvcDate,
-      lastServiceDate: lastSvcDate,
-      next_service_due_date: nextSvcDate,
-      nextServiceDueDate: nextSvcDate,
-      insurance_policy_number: t.insurancePolicyNumber || t.insurance_policy_number || null,
-      insurancePolicyNumber: t.insurancePolicyNumber || t.insurance_policy_number || null,
-      insurance_expiry_date: insExpDate,
-      insuranceExpiryDate: insExpDate,
-      user_field_1: t.userField1 || t.user_field_1 || null,
-      userField1: t.userField1 || t.user_field_1 || null,
-      user_field_2: t.userField2 || t.user_field_2 || null,
-      userField2: t.userField2 || t.user_field_2 || null,
-      is_refrigerated: t.isRefrigerated ?? false,
+            last_service_date: lastSvcDate,
+            next_service_due_date: nextSvcDate,
+            insurance_policy_number: t.insurancePolicyNumber || t.insurance_policy_number || null,
+            insurance_expiry_date: insExpDate,
+                                    is_refrigerated: t.isRefrigerated ?? false,
       is_liftgate_equipped: t.isLiftgateEquipped ?? false
     };
   });
@@ -989,8 +969,6 @@ export async function saveTenantStateDirect(
       status: String(d.status || "REGISTERED"),
       eta: String(d.eta || "N/A"),
       pickup_location: String(d.originBranch || "prospaces-dc"),
-      additional_stops: d.additionalStops || [],
-      additionalStops: d.additionalStops || [],
       items: [JSON.stringify({ _meta: fullMeta })]
     };
     
@@ -1014,35 +992,13 @@ export async function saveTenantStateDirect(
       assignedTruckId: String(t.id),
       lastHandshake: t.gpsLastHandshake || new Date().toISOString(),
       lastLatitude: lat,
-      lastLongitude: lng
+      lastLongitude: lng,
+      installedAt: new Date().toISOString()
     };
   });
 
-  // Prepare GPS tracking history points
-  const historyPointsToInsert = uniqueTrucks.map(t => {
-    const devId = t.gpsDeviceId || `GPS-${t.id}`;
-    const lat = typeof t.gpsLat === 'number' ? t.gpsLat : (typeof t.lat === 'number' ? t.lat : 44.6855);
-    const lng = typeof t.gpsLng === 'number' ? t.gpsLng : (typeof t.lng === 'number' ? t.lng : -63.5825);
-    const speed = typeof t.gpsSpeed === 'number' ? t.gpsSpeed : 0;
-    const idlingMins = typeof t.gpsIdlingMins === 'number' ? t.gpsIdlingMins : 0;
-    return {
-      tenantId: String(tenantId),
-      deviceId: devId,
-      latitude: lat,
-      longitude: lng,
-      speed: speed,
-      heading: 180.0,
-      recordedAt: t.gpsLastHandshake || new Date().toISOString(),
-      ignitionStatus: speed > 0 || idlingMins > 0,
-      gps_device_id: devId,
-      truck_id: String(t.id),
-      speed_kph: speed,
-      engine_status: speed > 0 ? 'Driving' : (idlingMins > 0 ? 'Idling' : 'Stopped'),
-      created_date: new Date().toISOString()
-    };
-  });
+  const historyPointsToInsert = [];
 
-  // Prepare geofences / gpsfences records
   const geofencesToUpsert = uniqueBranches.map(b => {
     let cLat = 44.6855;
     let cLng = -63.5825;
@@ -1057,34 +1013,13 @@ export async function saveTenantStateDirect(
       id: `GF-${b.id}`,
       tenantId: String(tenantId),
       name: `${b.name} Yard Geofence`,
-      center_latitude: cLat,
-      center_longitude: cLng,
-      radius_meters: 250,
-      branch_id: String(b.id)
+      type: "yard",
+      centerLatitude: cLat,
+      centerLongitude: cLng,
+      radiusMeters: 250,
+      associatedBranchId: String(b.id)
     };
   });
-
-  const safeBulkUpsert = async (table: string, payloadArray: any[]) => {
-    if (!payloadArray || payloadArray.length === 0) return;
-    let payload = payloadArray;
-    for (let attempt = 0; attempt < 25; attempt++) {
-      const { error } = await supabase.from(table).upsert(payload);
-      if (!error) break;
-      const errMsg = error.message || String(error);
-      if (errMsg.includes('relation') && errMsg.includes('does not exist')) break; // Table itself doesn't exist, skip
-      const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
-      const missingCol = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
-      if (missingCol) {
-        payload = payload.map((row: any) => {
-          const c = { ...row };
-          delete c[missingCol];
-          return c;
-        });
-      } else {
-        break; // Other error, can't fix
-      }
-    }
-  };
 
   await Promise.allSettled([
     safeBulkUpsert("branches", mappedBranches),
@@ -1094,9 +1029,7 @@ export async function saveTenantStateDirect(
     safeBulkUpsert("gps_units_setup", gpsUnitsToUpsert),
     safeBulkUpsert("gps_unit_setup", gpsUnitsToUpsert),
     safeBulkUpsert("gps_tracking_history", historyPointsToInsert),
-    safeBulkUpsert("geofences", geofencesToUpsert),
-    safeBulkUpsert("gpsfences", geofencesToUpsert),
-    safeBulkUpsert("gps_fences", geofencesToUpsert)
+    safeBulkUpsert("geofences", geofencesToUpsert)
   ]);
 
   return { supabaseActive: true };
@@ -1116,85 +1049,50 @@ export async function saveTruckDirect(truck: any, tenantId: string) {
   const nextSvcDate = sanitizeDateForDb(truck.nextServiceDueDate || truck.next_service_due_date);
   const insExpDate = sanitizeDateForDb(truck.insuranceExpiryDate || truck.insurance_expiry_date);
 
-  const serialized: any = {
+  const payload: any = {
     id: String(truck.id),
     tenantId: tid,
-    tenant_id: tid,
     name: truck.name || `Truck ${truck.id}`,
     type: serializeToType(truck.type, regDate || undefined, truck.imageUrl),
     driver: driverVal,
-    driver_name: driverVal,
     assigned_driver_id: assignedDriverIdVal,
-    assignedDriverId: assignedDriverIdVal,
     branchId: branchIdVal,
-    branch_id: branchIdVal,
-    image_url: truck.imageUrl || truck.image_url || null,
-    imageUrl: truck.imageUrl || truck.image_url || null,
     registration_due_date: regDate,
-    registrationDueDate: regDate,
-    registration_expiry_date: regDate,
-    registrationExpiryDate: regDate,
-    truck_number: truck.truckNumber || truck.truck_number || null,
-    truckNumber: truck.truckNumber || truck.truck_number || null,
     vin: truck.vin || null,
-    license_plate: truck.licensePlate || truck.license_plate || null,
-    licensePlate: truck.licensePlate || truck.license_plate || null,
     make: truck.make || null,
     model: truck.model || null,
     year: sanitizeNumberForDb(truck.year),
     color: truck.color || null,
     vehicle_type: truck.vehicleType || truck.vehicle_type || truck.type || null,
-    capacity_weight_kg: sanitizeNumberForDb(truck.capacityWeightKg || truck.capacity_weight_kg),
-    capacityWeightKg: sanitizeNumberForDb(truck.capacityWeightKg || truck.capacity_weight_kg),
-    capacity_volume_m3: sanitizeNumberForDb(truck.capacityVolumeM3 || truck.capacity_volume_m3),
-    capacityVolumeM3: sanitizeNumberForDb(truck.capacityVolumeM3 || truck.capacity_volume_m3),
-    fuel_type: truck.fuelType || truck.fuel_type || null,
-    fuelType: truck.fuelType || truck.fuel_type || null,
-    fuel_tank_capacity: sanitizeNumberForDb(truck.fuelTankCapacity || truck.fuel_tank_capacity),
     current_mileage: sanitizeNumberForDb(truck.currentMileage || truck.current_mileage),
-    currentMileage: sanitizeNumberForDb(truck.currentMileage || truck.current_mileage),
     last_service_date: lastSvcDate,
-    lastServiceDate: lastSvcDate,
     next_service_due_date: nextSvcDate,
-    nextServiceDueDate: nextSvcDate,
-    insurance_policy_number: truck.insurancePolicyNumber || truck.insurance_policy_number || null,
-    insurancePolicyNumber: truck.insurancePolicyNumber || truck.insurance_policy_number || null,
     insurance_expiry_date: insExpDate,
-    insuranceExpiryDate: insExpDate,
-    user_field_1: truck.userField1 || truck.user_field_1 || null,
-    userField1: truck.userField1 || truck.user_field_1 || null,
-    user_field_2: truck.userField2 || truck.user_field_2 || null,
-    userField2: truck.userField2 || truck.user_field_2 || null,
-    is_refrigerated: truck.isRefrigerated ?? false,
-    is_liftgate_equipped: truck.isLiftgateEquipped ?? false
+    is_refrigerated: truck.isRefrigerated ?? truck.is_refrigerated ?? false,
+    is_liftgate_equipped: truck.isLiftgateEquipped ?? truck.is_liftgate_equipped ?? false,
+    gps_device_name: truck.gpsDeviceName || null,
+    gps_serial_number: truck.gpsSerialNumber || null,
+    gps_sim_iccid: truck.gpsSimIccid || null,
+    gps_device_id: truck.gpsDeviceId || null,
+    is_active: truck.isActive !== false
   };
 
-  let payload = { ...serialized };
-  for (let attempt = 0; attempt < 25; attempt++) {
-    const { error } = await supabase.from("trucks").upsert(payload);
+  let obj = { ...payload };
+  for (let attempt = 0; attempt < 35; attempt++) {
+    const { error } = await supabase.from("trucks").upsert(obj);
     if (!error) {
-      console.log(`[saveTruckDirect] Successfully persisted truck ${truck.id} (driver: ${driverVal})`);
+      console.log(`[saveTruckDirect] Successfully persisted truck ${truck.id}`);
       break;
     }
     const errMsg = error.message || String(error);
     console.warn(`[saveTruckDirect] Upsert notice (attempt ${attempt + 1}):`, errMsg);
     const colMatch = errMsg.match(/'([^']+)' column/i) || errMsg.match(/column "?([^"\s]+)"? does not exist/i) || errMsg.match(/Could not find the '([^']+)' column/i);
     const colToStrip = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3]) : null;
-    if (colToStrip && payload[colToStrip] !== undefined) {
-      delete payload[colToStrip];
+    
+    if (colToStrip && obj[colToStrip] !== undefined) {
+      delete obj[colToStrip];
     } else {
-      // Fallback to essential columns
-      const fallbackPayload: any = {
-        id: serialized.id,
-        tenantId: serialized.tenantId,
-        name: serialized.name,
-        type: serialized.type,
-        driver: serialized.driver,
-        branchId: serialized.branchId,
-        branch_id: serialized.branch_id
-      };
-      await supabase.from("trucks").upsert(fallbackPayload).catch(console.warn);
-      break;
+      break; // abort
     }
   }
 }
@@ -1210,51 +1108,22 @@ export async function saveDeliveryDirect(d: any, tenantId: string) {
     id: String(d.id),
     tenantId: tid,
     invoiceNumber: String(d.invoiceNumber || d.orderNumber || d.id || ""),
-    additionalStops: d.additionalStops || [],
   };
 
   const payload: any = {
     id: String(d.id),
     tenantId: tid,
-    tenant_id: tid,
     orderNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || "N/A"),
-    invoiceNumber: String(d.invoiceNumber || d.epicorSalesOrder || d.orderNumber || d.id || ""),
-    epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
     customer: String(d.customerName || d.customer || "N/A"),
-    customerName: String(d.customerName || d.customer || "N/A"),
     destination: String(d.deliveryAddress || d.destination || "N/A"),
-    deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
-    phone: String(d.phone || "000-000-0000"),
-    eta: String(d.eta || "N/A"),
-    originBranch: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
-    weight: d.weight ? String(d.weight) : null,
-    orderTotal: d.orderTotal ? String(d.orderTotal) : null,
-    pdfUrl: d.pdfUrl || null,
-    destinationNotes: d.destinationNotes || null,
-    status: String(d.status || "REGISTERED"),
-    registeredAt: String(d.registeredAt || d.date || new Date().toISOString()),
-    pickedAt: d.pickedAt || null,
-    deliveredAt: d.deliveredAt || null,
-    returnedAt: d.returnedAt || null,
-    returnReason: d.returnReason || null,
-    assignedTruck: d.assignedTruck || d.assignedTruckId || null,
-    assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
-    assignedDriver: d.assignedDriver || d.assignedDriverId || null,
-    assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
-    customerSignature: d.customerSignature || null,
-    deliveryPhoto: d.deliveryPhoto || (d.deliveryPhotos && d.deliveryPhotos.length > 0 ? d.deliveryPhotos[0] : null),
-    history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : [],
-    priority: d.priority || 'Medium',
     scheduled_date: String(d.scheduledDate || d.registeredAt || d.date || new Date().toISOString()),
-    tracking_number: d.trackingNumber || d.tracking_number || null,
+    assignedTruckId: String(d.assignedTruck || d.assignedTruckId || "unassigned"),
+    assignedDriverId: String(d.assignedDriver || d.assignedDriverId || "unassigned"),
+    status: String(d.status || "REGISTERED"),
+    eta: String(d.eta || "N/A"),
     pickup_location: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
-    dropoff_location: String(d.deliveryAddress || d.destination || "N/A"),
-    documentType: d.documentType || null,
-    additional_stops: d.additionalStops || [],
-    additionalStops: d.additionalStops || [],
     items: [JSON.stringify({ _meta: fullMeta })]
   };
-
   let obj = { ...payload };
   for (let attempt = 0; attempt < 35; attempt++) {
     const { error } = await supabase.from("deliveries").upsert(obj);

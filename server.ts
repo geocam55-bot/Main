@@ -3053,7 +3053,7 @@ self.addEventListener('activate', (event) => {
     res.status(404).send('Favicon not found');
   });
 
-  const isProduction = process.env.NODE_ENV === "production" && process.env.USE_STATIC_BUILD === "true";
+  const isProduction = process.env.NODE_ENV === "production" || process.env.USE_STATIC_BUILD === "true";
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
@@ -3162,7 +3162,11 @@ self.addEventListener('activate', (event) => {
         }
       }
 
-      res.sendFile(path.join(distPath, filename));
+      const targetHtml = path.join(distPath, filename);
+      if (fs.existsSync(targetHtml)) {
+        return res.sendFile(targetHtml);
+      }
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
