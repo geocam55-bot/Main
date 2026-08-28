@@ -139,8 +139,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       }
 
       // If not in raw telemetry, construct valid VehicleRecord from truck
-      const lat = typeof t.currentLatitude === 'number' && !isNaN(t.currentLatitude) ? t.currentLatitude : (44.69098 + (index * 0.012));
-      const lng = typeof t.currentLongitude === 'number' && !isNaN(t.currentLongitude) ? t.currentLongitude : (-63.59854 + (index * 0.008));
+      const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : ((typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (typeof t.currentLatitude === 'number' && !isNaN(t.currentLatitude) ? t.currentLatitude : (44.69098 + (index * 0.012))));
+      const lng = (typeof t.lng === 'number' && !isNaN(t.lng)) ? t.lng : ((typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (typeof t.currentLongitude === 'number' && !isNaN(t.currentLongitude) ? t.currentLongitude : (-63.59854 + (index * 0.008))));
       const isMoving = t.status === 'In Transit';
       const isIdle = t.status === 'Idling';
       const status: 'MOVING' | 'IDLE' | 'STOPPED' = isMoving ? 'MOVING' : (isIdle ? 'IDLE' : 'STOPPED');

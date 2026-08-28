@@ -5026,20 +5026,7 @@ async function getFleetId(token: string): Promise<string | null> {
   // ════════════════════════════════════════════════════════════════════════════
 
   const getDefaultDriverForTruck = (nameOrId: string): string => {
-    const s = (nameOrId || '').toLowerCase();
-    if (s.includes('1903')) return 'Travis Vickers';
-    if (s.includes('701')) return 'Dave Higgins';
-    if (s.includes('2401')) return 'Bob Rafters';
-    if (s.includes('2409')) return 'Mike MacDonald';
-    if (s.includes('2503')) return 'George Campbell';
-    if (s.includes('2501')) return 'Steve Conrad';
-    if (s.includes('1702')) return 'Chris Fraser';
-    if (s.includes('pei') && (s.includes('box') || s.includes('550'))) return 'Gary White';
-    if (s.includes('pei') && (s.includes('boom') || s.includes('ws'))) return 'Alex Tremblay';
-    if (s.includes('2201')) return 'Ryan MacLeod';
-    if (s.includes('elmsdale')) return 'Travis Vickers';
-    if (s.includes('dartmouth') || s.includes('almon') || s.includes('windmill')) return 'Bob Rafters';
-    return 'Travis Vickers';
+    return 'Unassigned';
   };
 
   app.get("/api/v1/telematics/vehicles", async (req, res) => {
@@ -5077,11 +5064,38 @@ async function getFleetId(token: string): Promise<string | null> {
           const tenantId = normalizeTenantId(req.query.tenantId || 'rona_atlantic');
           const truckQuery = supabase.from("trucks").select("*").eq("tenantId", tenantId);
           const deliveryQuery = supabase.from("deliveries").select("*").eq("tenantId", tenantId);
-          const { data: dbTrucks } = await truckQuery;
+          const gpsQuery = supabase.from("gps_units_setup").select("*").eq("tenantId", tenantId);
+          
+          const [ {data: dbTrucks}, {data: dbDeliveries}, gpsRes ] = await Promise.all([
+            truckQuery,
+            deliveryQuery,
+            Promise.resolve(gpsQuery).catch(() => ({ data: [] }))
+          ]);
+          
           if (dbTrucks && Array.isArray(dbTrucks)) {
-            activeTrucks = deduplicateServerTrucks(dbTrucks);
+            const gpsUnitsList = gpsRes?.data || [];
+            const gpsUnitMap = new Map<string, any>();
+            gpsUnitsList.forEach((g: any) => {
+              if (g.assignedTruckId) gpsUnitMap.set(String(g.assignedTruckId).toLowerCase(), g);
+              if (g.deviceId) gpsUnitMap.set(String(g.deviceId).toLowerCase(), g);
+            });
+            const mappedTrucks = dbTrucks.map(t => {
+              const dt = deserializeType(t);
+              const matchedGps = gpsUnitMap.get(String(t.id).toLowerCase()) || (t.gps_device_id ? gpsUnitMap.get(String(t.gps_device_id).toLowerCase()) : null);
+              if (matchedGps) {
+                if (typeof matchedGps.lastLatitude === 'number' && !isNaN(matchedGps.lastLatitude)) {
+                  dt.lat = matchedGps.lastLatitude;
+                  t.lat = matchedGps.lastLatitude;
+                }
+                if (typeof matchedGps.lastLongitude === 'number' && !isNaN(matchedGps.lastLongitude)) {
+                  dt.lng = matchedGps.lastLongitude;
+                  t.lng = matchedGps.lastLongitude;
+                }
+              }
+              return dt;
+            });
+            activeTrucks = deduplicateServerTrucks(mappedTrucks);
           }
-          const { data: dbDeliveries } = await deliveryQuery;
           if (dbDeliveries && Array.isArray(dbDeliveries)) {
             activeDeliveries = dbDeliveries;
           }
@@ -5322,11 +5336,38 @@ async function getFleetId(token: string): Promise<string | null> {
           const tenantId = normalizeTenantId(req.query.tenantId || 'rona_atlantic');
           const truckQuery = supabase.from("trucks").select("*").eq("tenantId", tenantId);
           const deliveryQuery = supabase.from("deliveries").select("*").eq("tenantId", tenantId);
-          const { data: dbTrucks } = await truckQuery;
+          const gpsQuery = supabase.from("gps_units_setup").select("*").eq("tenantId", tenantId);
+          
+          const [ {data: dbTrucks}, {data: dbDeliveries}, gpsRes ] = await Promise.all([
+            truckQuery,
+            deliveryQuery,
+            Promise.resolve(gpsQuery).catch(() => ({ data: [] }))
+          ]);
+          
           if (dbTrucks && Array.isArray(dbTrucks)) {
-            activeTrucks = deduplicateServerTrucks(dbTrucks);
+            const gpsUnitsList = gpsRes?.data || [];
+            const gpsUnitMap = new Map<string, any>();
+            gpsUnitsList.forEach((g: any) => {
+              if (g.assignedTruckId) gpsUnitMap.set(String(g.assignedTruckId).toLowerCase(), g);
+              if (g.deviceId) gpsUnitMap.set(String(g.deviceId).toLowerCase(), g);
+            });
+            const mappedTrucks = dbTrucks.map(t => {
+              const dt = deserializeType(t);
+              const matchedGps = gpsUnitMap.get(String(t.id).toLowerCase()) || (t.gps_device_id ? gpsUnitMap.get(String(t.gps_device_id).toLowerCase()) : null);
+              if (matchedGps) {
+                if (typeof matchedGps.lastLatitude === 'number' && !isNaN(matchedGps.lastLatitude)) {
+                  dt.lat = matchedGps.lastLatitude;
+                  t.lat = matchedGps.lastLatitude;
+                }
+                if (typeof matchedGps.lastLongitude === 'number' && !isNaN(matchedGps.lastLongitude)) {
+                  dt.lng = matchedGps.lastLongitude;
+                  t.lng = matchedGps.lastLongitude;
+                }
+              }
+              return dt;
+            });
+            activeTrucks = deduplicateServerTrucks(mappedTrucks);
           }
-          const { data: dbDeliveries } = await deliveryQuery;
           if (dbDeliveries && Array.isArray(dbDeliveries)) {
             activeDeliveries = dbDeliveries;
           }
