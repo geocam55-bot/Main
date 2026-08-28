@@ -116,7 +116,7 @@ export function useTelematics({
 
           const activeRoute = v.activeRoute && (stopsList.length > 0 || v.activeRoute.routeId) ? {
             routeId: v.activeRoute.routeId || `RT-${v.vehicleId || index + 101}`,
-            driverName: v.activeRoute.driverName || driverInfo?.name || 'Assigned Driver',
+            driverName: v.activeRoute.driverName || driverInfo?.name || 'Unassigned',
             driverId: v.activeRoute.driverId || driverInfo?.id,
             scheduledETA: v.activeRoute.scheduledETA || v.activeRoute.eta || undefined,
             eta: v.activeRoute.eta || v.activeRoute.scheduledETA || undefined,

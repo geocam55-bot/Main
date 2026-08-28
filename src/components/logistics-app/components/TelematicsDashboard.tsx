@@ -82,26 +82,25 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     statusFilter,
     searchQuery
   });
-
   // Filter vehicles to strictly match Supabase trucks if trucks prop is provided
   const vehicles = useMemo(() => {
     if (!trucks) return rawVehicles;
     if (trucks.length === 0) return [];
     
-    return rawVehicles.filter(v => {
-      const vId = (v.vehicleId || '').toLowerCase();
-      const vName = (v.truckName || '').toLowerCase();
-      const vVin = (v.vin || '').toLowerCase();
+    return rawVehicles.reduce((acc, v) => {
+      const vId = (v.vehicleId || "").toLowerCase();
+      const vName = (v.truckName || "").toLowerCase();
+      const vVin = (v.vin || "").toLowerCase();
       
       const vUnitMatch = vName.match(/\d+/) || vId.match(/\d+/);
       const vUnitNum = vUnitMatch ? vUnitMatch[0] : null;
 
-      return trucks.some(t => {
-        const tId = (t.id || '').toLowerCase();
-        const tName = (t.name || '').toLowerCase();
-        const tVin = (t.vin || '').toLowerCase();
-        const tGpsId = (t.gpsDeviceId || '').toLowerCase();
-        const tGpsName = (t.gpsDeviceName || '').toLowerCase();
+      const matchedTruck = trucks.find(t => {
+        const tId = (t.id || "").toLowerCase();
+        const tName = (t.name || "").toLowerCase();
+        const tVin = (t.vin || "").toLowerCase();
+        const tGpsId = (t.gpsDeviceId || "").toLowerCase();
+        const tGpsName = (t.gpsDeviceName || "").toLowerCase();
         
         const tUnitMatch = tName.match(/\d+/) || tId.match(/\d+/);
         const tUnitNum = tUnitMatch ? tUnitMatch[0] : null;
@@ -115,11 +114,26 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
           (vUnitNum && tUnitNum && vUnitNum === tUnitNum)
         );
       });
-    });
-  }, [rawVehicles, trucks]);
+
+      if (matchedTruck) {
+        acc.push({
+          ...v,
+          truckId: matchedTruck.id,
+          driver: {
+            ...(v.driver || {}),
+            name: (matchedTruck.driver && !['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(matchedTruck.driver.trim().toLowerCase())) ? matchedTruck.driver : (v.driver?.name || "Unassigned")
+          },
+          activeRoute: {
+            ...(v.activeRoute || {}),
+            driverName: (matchedTruck.driver && !['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(matchedTruck.driver.trim().toLowerCase())) ? matchedTruck.driver : (v.activeRoute?.driverName || "Unassigned")
+          }
+        });
+      }
+      return acc;
+    }, [] as typeof rawVehicles);
+  }, [trucks, rawVehicles]);
 
   const summary = useMemo(() => {
-    if (!trucks) return rawSummary;
     const movingCount = vehicles.filter(v => v.status === 'MOVING').length;
     const idleCount = vehicles.filter(v => v.status === 'IDLE').length;
     const stoppedCount = vehicles.filter(v => v.status === 'STOPPED').length;
@@ -143,60 +157,27 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
 
   const getVehicleDriverName = useCallback((v: VehicleRecord | null | undefined): string => {
     if (!v) return 'Unassigned';
-    if (v.driver?.name && !['no driver', 'unassigned', 'driver', ''].includes(v.driver.name.trim().toLowerCase())) {
-      return v.driver.name.trim();
+    
+    // Normalize and check the main driver field
+    if (v.driver?.name) {
+       const normName = v.driver.name.trim().toLowerCase();
+       if (!['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(normName)) {
+           return v.driver.name.trim();
+       }
     }
-    if (v.activeRoute?.driverName && !['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(v.activeRoute.driverName.trim().toLowerCase())) {
-      return v.activeRoute.driverName.trim();
+    
+    // Normalize and check the active route driver field
+    if (v.activeRoute?.driverName) {
+       const normRouteName = v.activeRoute.driverName.trim().toLowerCase();
+       if (!['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(normRouteName)) {
+           return v.activeRoute.driverName.trim();
+       }
     }
-    if (trucks && trucks.length > 0) {
-      const vId = (v.vehicleId || '').toLowerCase();
-      const vName = (v.truckName || '').toLowerCase();
-      const vVin = (v.vin || '').toLowerCase();
-      const vUnitMatch = vName.match(/\d+/) || vId.match(/\d+/);
-      const vUnitNum = vUnitMatch ? vUnitMatch[0] : null;
+    
+    return 'Unassigned';
+  }, []);
 
-      const matchedTruck = trucks.find(t => {
-        const tId = (t.id || '').toLowerCase();
-        const tName = (t.name || '').toLowerCase();
-        const tVin = (t.vin || '').toLowerCase();
-        const tGpsId = (t.gpsDeviceId || '').toLowerCase();
-        const tGpsName = (t.gpsDeviceName || '').toLowerCase();
-        const tUnitMatch = tName.match(/\d+/) || tId.match(/\d+/);
-        const tUnitNum = tUnitMatch ? tUnitMatch[0] : null;
-
-        return (
-          tId === vId ||
-          tName === vName ||
-          (tVin && vVin && tVin === vVin) ||
-          (tGpsId && tGpsId === vId) ||
-          (tGpsName && tGpsName === vName) ||
-          (vUnitNum && tUnitNum && vUnitNum === tUnitNum)
-        );
-      });
-
-      if (matchedTruck?.driver && !['no driver', 'unassigned', 'driver', ''].includes(matchedTruck.driver.trim().toLowerCase())) {
-        return matchedTruck.driver.trim();
-      }
-    }
-
-    const s = (v.truckName || v.vehicleId || '').toLowerCase();
-    if (s.includes('1903')) return 'Travis Vickers';
-    if (s.includes('701')) return 'Dave Higgins';
-    if (s.includes('2401')) return 'Bob Rafters';
-    if (s.includes('2409')) return 'Mike MacDonald';
-    if (s.includes('2503')) return 'George Campbell';
-    if (s.includes('2501')) return 'Steve Conrad';
-    if (s.includes('1702')) return 'Chris Fraser';
-    if (s.includes('pei') && (s.includes('box') || s.includes('550'))) return 'Gary White';
-    if (s.includes('pei') && (s.includes('boom') || s.includes('ws'))) return 'Alex Tremblay';
-    if (s.includes('2201')) return 'Ryan MacLeod';
-    if (s.includes('elmsdale')) return 'Travis Vickers';
-    if (s.includes('dartmouth') || s.includes('almon') || s.includes('windmill')) return 'Bob Rafters';
-    return 'Travis Vickers';
-  }, [trucks]);
-
-  const tripsDriverName = tripsVehicle ? getVehicleDriverName(tripsVehicle) : 'Driver';
+  const tripsDriverName = tripsVehicle ? getVehicleDriverName(tripsVehicle) : 'Unassigned';
 
   const getStatusBadge = (status: string) => {
     switch (status) {

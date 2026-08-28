@@ -1842,11 +1842,34 @@ app.use((req, res, next) => {
           });
         }
 
+        let finalTenant = defaultTenantObj;
+        if (supabase) {
+          try {
+            const { data: tenData } = await withTimeout(
+              supabase.from("tenants").select("*").eq("id", foundUser.tenantId || "rona_atlantic").single(),
+              1500
+            ).catch(() => ({ data: null }));
+            if (tenData) {
+              finalTenant = {
+                id: String(tenData.id || '').trim(),
+                name: String(tenData.name || tenData.tenant_name || '').trim(),
+                code: String(tenData.code || tenData.tenant_code || '').trim(),
+                description: String(tenData.description || '').trim(),
+                logoBadge: tenData.logoBadge || tenData.logo_badge || tenData.logo || '🏢',
+                regionalFocus: tenData.regionalFocus || tenData.regional_focus || tenData.region || '',
+                primaryColor: tenData.primaryColor || tenData.primary_color || tenData.color || 'blue'
+              };
+            }
+          } catch (e) {
+            console.warn("Could not fetch tenant on login, using default.");
+          }
+        }
+
         return res.json({
           supabaseActive: true,
           found: true,
           user: foundUser,
-          tenant: defaultTenantObj
+          tenant: finalTenant
         });
       }
 
@@ -5002,6 +5025,23 @@ async function getFleetId(token: string): Promise<string | null> {
   // STANDARDIZED TELEMATICS V1 REST ENDPOINTS
   // ════════════════════════════════════════════════════════════════════════════
 
+  const getDefaultDriverForTruck = (nameOrId: string): string => {
+    const s = (nameOrId || '').toLowerCase();
+    if (s.includes('1903')) return 'Travis Vickers';
+    if (s.includes('701')) return 'Dave Higgins';
+    if (s.includes('2401')) return 'Bob Rafters';
+    if (s.includes('2409')) return 'Mike MacDonald';
+    if (s.includes('2503')) return 'George Campbell';
+    if (s.includes('2501')) return 'Steve Conrad';
+    if (s.includes('1702')) return 'Chris Fraser';
+    if (s.includes('pei') && (s.includes('box') || s.includes('550'))) return 'Gary White';
+    if (s.includes('pei') && (s.includes('boom') || s.includes('ws'))) return 'Alex Tremblay';
+    if (s.includes('2201')) return 'Ryan MacLeod';
+    if (s.includes('elmsdale')) return 'Travis Vickers';
+    if (s.includes('dartmouth') || s.includes('almon') || s.includes('windmill')) return 'Bob Rafters';
+    return 'Travis Vickers';
+  };
+
   app.get("/api/v1/telematics/vehicles", async (req, res) => {
     try {
       const statusFilter = (req.query.status as string || 'all').toLowerCase().trim();
@@ -5167,23 +5207,6 @@ async function getFleetId(token: string): Promise<string | null> {
 
         const completedStops = stops.filter((s: any) => s.status === 'COMPLETED').length;
         
-        const getDefaultDriverForTruck = (nameOrId: string): string => {
-          const s = (nameOrId || '').toLowerCase();
-          if (s.includes('1903')) return 'Travis Vickers';
-          if (s.includes('701')) return 'Dave Higgins';
-          if (s.includes('2401')) return 'Bob Rafters';
-          if (s.includes('2409')) return 'Mike MacDonald';
-          if (s.includes('2503')) return 'George Campbell';
-          if (s.includes('2501')) return 'Steve Conrad';
-          if (s.includes('1702')) return 'Chris Fraser';
-          if (s.includes('pei') && (s.includes('box') || s.includes('550'))) return 'Gary White';
-          if (s.includes('pei') && (s.includes('boom') || s.includes('ws'))) return 'Alex Tremblay';
-          if (s.includes('2201')) return 'Ryan MacLeod';
-          if (s.includes('elmsdale')) return 'Travis Vickers';
-          if (s.includes('dartmouth') || s.includes('almon') || s.includes('windmill')) return 'Bob Rafters';
-          return 'Travis Vickers';
-        };
-
         const rawDriver = deserialized.driver || t.driver || t.driverName;
         const driverName = (rawDriver && rawDriver !== 'No Driver' && rawDriver !== 'Unassigned' && rawDriver.trim().length > 0)
           ? rawDriver
@@ -5412,7 +5435,12 @@ async function getFleetId(token: string): Promise<string | null> {
         (d.truckNumber && truckName.includes(d.truckNumber))
       );
 
-      const driverName = deserialized.driver || t.driver || t.driverName || undefined;
+      const rawDriver = deserialized.driver || t.driver || t.driverName;
+      const driverName = (rawDriver && rawDriver !== 'No Driver' && rawDriver !== 'Unassigned' && rawDriver.trim().length > 0)
+        ? rawDriver
+        : getDefaultDriverForTruck(truckName || vehicleId);
+      const driverId = deserialized.driverId || t.driverId || `DRV-${vehicleId.replace(/[^0-9]/g, '') || '01'}`;
+
       const stops = truckDeliveries.map((d: any, sIdx: number) => ({
         stopId: d.id || `ST-${sIdx + 1}`,
         sequence: sIdx + 1,
@@ -5440,6 +5468,10 @@ async function getFleetId(token: string): Promise<string | null> {
           model,
           capacityWeight: deserialized.capacityWeight || t.capacityWeight || 4500,
           status,
+          driver: {
+            id: driverId,
+            name: driverName
+          },
           telemetry: {
             lat,
             lng,

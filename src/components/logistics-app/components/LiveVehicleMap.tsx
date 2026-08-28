@@ -160,12 +160,16 @@ function AnimatedTruckMarker({ vehicle, isSelected, onClick }: AnimatedTruckMark
     ? '#d97706' // Amber
     : '#475569'; // Slate
 
+  const driverName = vehicle.driver?.name || vehicle.activeRoute?.driverName || 'Unassigned';
+  const unitMatch = vehicle.truckName.match(/\d+/) || vehicle.vehicleId.match(/\d+/);
+  const unitLabel = unitMatch ? `#${unitMatch[0]}` : (vehicle.truckName.split('-')[0]?.trim() || `#${vehicle.vehicleId.slice(-3)}`);
+
   return (
     <AdvancedMarker
       position={currentPos}
       onClick={onClick}
       zIndex={isSelected ? 100 : isMoving ? 50 : 20}
-      title={`${vehicle.truckName} - ${speed} km/h (${status})`}
+      title={`${vehicle.truckName} • Driver: ${driverName} (${status})`}
     >
       <TeardropTruckMarker
         color={markerColor}
@@ -173,7 +177,8 @@ function AnimatedTruckMarker({ vehicle, isSelected, onClick }: AnimatedTruckMark
         isIdling={isIdle}
         isSelected={isSelected}
         heading={heading}
-        label={vehicle.truckName.split('-')[0]?.trim() || vehicle.truckName}
+        label={unitLabel}
+        driverName={driverName}
         speedText={isMoving ? `${Math.round(speed)}k` : undefined}
         size="md"
       />
@@ -714,10 +719,15 @@ export default function LiveVehicleMap({
                   <TruckIcon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-base text-white tracking-tight leading-tight">
+                  <h4 className="font-bold text-base text-white tracking-tight leading-tight flex items-center gap-2">
                     {selectedVehicle.truckName}
+                    <span className="text-blue-400 font-normal text-xs">&bull;</span>
+                    <span className="text-emerald-300 font-bold text-sm flex items-center gap-1">
+                      <User className="h-3.5 w-3.5 shrink-0" />
+                      {selectedVehicle.driver?.name || selectedVehicle.activeRoute?.driverName || 'Unassigned'}
+                    </span>
                   </h4>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 mt-1">
                     {selectedVehicle.model} • Plate: {selectedVehicle.licensePlate}
                   </p>
                 </div>
@@ -867,7 +877,7 @@ export default function LiveVehicleMap({
                     </div>
                   ) : (
                     <div className="bg-slate-800/40 rounded-xl p-2.5 border border-slate-800 text-xs text-slate-400 flex items-center justify-between mb-3">
-                      <span>Driver: {selectedVehicle.driver?.name || (selectedVehicle.truckName.includes('Windmill') ? 'George Campbell' : 'Assigned Driver')}</span>
+                      <span>Driver: {selectedVehicle.driver?.name || selectedVehicle.activeRoute?.driverName || 'Unassigned'}</span>
                       <span className="text-slate-500 font-mono">VIN: {(selectedVehicle.vin || selectedVehicle.vehicleId).slice(-6)}</span>
                     </div>
                   )}
