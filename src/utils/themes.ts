@@ -124,109 +124,271 @@ export const themes: Record<string, Theme> = {
   
   light: {
     id: 'light',
-    name: 'Light',
-    description: 'Clean and minimal light theme',
+    name: 'ProSpaces Light',
+    description: 'ProSpaces Logistics official light theme (#F7F8FA background, #24262B primary text, #F52225 ProSpaces Red)',
     isDark: false,
     colors: {
-      background: '#ffffff',
-      backgroundSecondary: '#f9fafb',
-      backgroundTertiary: '#f3f4f6',
+      background: '#F7F8FA',
+      backgroundSecondary: '#FFFFFF',
+      backgroundTertiary: '#F0F2F5',
       
-      text: '#111827',
-      textSecondary: '#4b5563',
-      textMuted: '#6b7280',
+      text: '#24262B',
+      textSecondary: '#4F535B',
+      textMuted: '#7A7F87',
       
-      primary: '#3b82f6',
-      primaryHover: '#2563eb',
-      primaryText: '#ffffff',
+      primary: '#F52225',
+      primaryHover: '#D91E21',
+      primaryText: '#FFFFFF',
       
-      secondary: '#f1f5f9',
-      secondaryText: '#111827',
+      secondary: '#F0F2F5',
+      secondaryText: '#24262B',
       
-      accent: '#3b82f6',
-      accentHover: '#2563eb',
-      accentText: '#ffffff',
+      accent: '#E52B2F',
+      accentHover: '#D91E21',
+      accentText: '#FFFFFF',
       
-      border: '#e5e7eb',
-      borderLight: '#f3f4f6',
+      border: '#D7DADF',
+      borderLight: '#E6E8EB',
       
-      card: '#ffffff',
-      cardHover: '#f9fafb',
-      cardText: '#111827',
+      card: '#FFFFFF',
+      cardHover: '#F7F8FA',
+      cardText: '#24262B',
       
-      input: '#e5e7eb',
+      input: '#D7DADF',
       
-      success: '#10b981',
-      warning: '#f59e0b',
-      error: '#ef4444',
-      info: '#3b82f6',
+      success: '#10B981',
+      warning: '#F59E0B',
+      error: '#F52225',
+      info: '#2563EB',
       
-      destructive: '#ef4444',
-      destructiveText: '#ffffff',
+      destructive: '#F52225',
+      destructiveText: '#FFFFFF',
       
-      navBackground: '#ffffff',
-      navText: '#111827',
-      navHover: '#f3f4f6',
-      navActive: '#e5e7eb',
+      navBackground: '#FFFFFF',
+      navText: '#4F535B',
+      navHover: '#F7F8FA',
+      navActive: '#E52B2F',
       
-      topBarBackground: '#ffffff',
-      topBarText: '#111827',
+      topBarBackground: '#FFFFFF',
+      topBarText: '#24262B',
       
-      shadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+      shadow: '0 1px 3px 0 rgba(36, 38, 43, 0.06), 0 1px 2px 0 rgba(36, 38, 43, 0.04)',
     },
   },
   
   dark: {
     id: 'dark',
-    name: 'Dark',
-    description: 'Easy on the eyes dark theme',
+    name: 'ProSpaces Dark',
+    description: 'ProSpaces Logistics official dark theme (#202124 background, #F4F4F5 primary text, #F52225 ProSpaces Red)',
     isDark: true,
     colors: {
-      background: '#121212',
-      backgroundSecondary: '#1E1E1E',
-      backgroundTertiary: '#2A2A2A',
+      background: '#202124',
+      backgroundSecondary: '#18191B',
+      backgroundTertiary: '#282A2E',
       
-      text: '#FFFFFF',
-      textSecondary: '#B3B3B3',
-      textMuted: '#6E6E6E',
+      text: '#F4F4F5',
+      textSecondary: '#C9CBD0',
+      textMuted: '#8E939C',
       
-      primary: '#3B82F6',
-      primaryHover: '#2563EB',
+      primary: '#F52225',
+      primaryHover: '#D91E21',
       primaryText: '#FFFFFF',
       
-      secondary: '#2A2A2A',
-      secondaryText: '#FFFFFF',
+      secondary: '#282A2E',
+      secondaryText: '#F4F4F5',
       
-      accent: '#3B82F6',
-      accentHover: '#2563EB',
+      accent: '#FF393B',
+      accentHover: '#FF4547',
       accentText: '#FFFFFF',
       
-      border: '#2E2E2E',
-      borderLight: '#3A3A3A',
+      border: '#44474D',
+      borderLight: '#303237',
       
-      card: '#2A2A2A',
-      cardHover: '#333333',
-      cardText: '#FFFFFF',
+      card: '#18191B',
+      cardHover: '#202124',
+      cardText: '#F4F4F5',
       
-      input: '#1E1E1E',
+      input: '#44474D',
       
       success: '#34D399',
       warning: '#FBBF24',
-      error: '#EF4444',
+      error: '#FF4547',
       info: '#60A5FA',
       
-      destructive: '#EF4444',
+      destructive: '#FF4547',
       destructiveText: '#FFFFFF',
       
-      navBackground: '#0D0D0D',
-      navText: '#B3B3B3',
-      navHover: '#1E1E1E',
-      navActive: '#2A2A2A',
+      navBackground: '#1B1C1F',
+      navText: '#C9CBD0',
+      navHover: '#202124',
+      navActive: '#FF3A3C',
       
-      topBarBackground: '#0D0D0D',
-      topBarText: '#FFFFFF',
+      topBarBackground: '#18191B',
+      topBarText: '#F4F4F5',
       
-      shadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+      shadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+    },
+  },
+
+  prospaces: {
+    id: 'prospaces',
+    name: 'ProSpaces Standard',
+    description: 'ProSpaces Logistics official primary palette',
+    isDark: false,
+    colors: {
+      background: '#F7F8FA',
+      backgroundSecondary: '#FFFFFF',
+      backgroundTertiary: '#F0F2F5',
+      
+      text: '#24262B',
+      textSecondary: '#4F535B',
+      textMuted: '#7A7F87',
+      
+      primary: '#F52225',
+      primaryHover: '#D91E21',
+      primaryText: '#FFFFFF',
+      
+      secondary: '#F0F2F5',
+      secondaryText: '#24262B',
+      
+      accent: '#E52B2F',
+      accentHover: '#D91E21',
+      accentText: '#FFFFFF',
+      
+      border: '#D7DADF',
+      borderLight: '#E6E8EB',
+      
+      card: '#FFFFFF',
+      cardHover: '#F7F8FA',
+      cardText: '#24262B',
+      
+      input: '#D7DADF',
+      
+      success: '#10B981',
+      warning: '#F59E0B',
+      error: '#F52225',
+      info: '#2563EB',
+      
+      destructive: '#F52225',
+      destructiveText: '#FFFFFF',
+      
+      navBackground: '#FFFFFF',
+      navText: '#4F535B',
+      navHover: '#F7F8FA',
+      navActive: '#E52B2F',
+      
+      topBarBackground: '#FFFFFF',
+      topBarText: '#24262B',
+      
+      shadow: '0 1px 3px 0 rgba(36, 38, 43, 0.06), 0 1px 2px 0 rgba(36, 38, 43, 0.04)',
+    },
+  },
+
+  'prospaces-light': {
+    id: 'prospaces-light',
+    name: 'ProSpaces Light',
+    description: 'ProSpaces Logistics official light theme',
+    isDark: false,
+    colors: {
+      background: '#F7F8FA',
+      backgroundSecondary: '#FFFFFF',
+      backgroundTertiary: '#F0F2F5',
+      
+      text: '#24262B',
+      textSecondary: '#4F535B',
+      textMuted: '#7A7F87',
+      
+      primary: '#F52225',
+      primaryHover: '#D91E21',
+      primaryText: '#FFFFFF',
+      
+      secondary: '#F0F2F5',
+      secondaryText: '#24262B',
+      
+      accent: '#E52B2F',
+      accentHover: '#D91E21',
+      accentText: '#FFFFFF',
+      
+      border: '#D7DADF',
+      borderLight: '#E6E8EB',
+      
+      card: '#FFFFFF',
+      cardHover: '#F7F8FA',
+      cardText: '#24262B',
+      
+      input: '#D7DADF',
+      
+      success: '#10B981',
+      warning: '#F59E0B',
+      error: '#F52225',
+      info: '#2563EB',
+      
+      destructive: '#F52225',
+      destructiveText: '#FFFFFF',
+      
+      navBackground: '#FFFFFF',
+      navText: '#4F535B',
+      navHover: '#F7F8FA',
+      navActive: '#E52B2F',
+      
+      topBarBackground: '#FFFFFF',
+      topBarText: '#24262B',
+      
+      shadow: '0 1px 3px 0 rgba(36, 38, 43, 0.06), 0 1px 2px 0 rgba(36, 38, 43, 0.04)',
+    },
+  },
+
+  'prospaces-dark': {
+    id: 'prospaces-dark',
+    name: 'ProSpaces Dark',
+    description: 'ProSpaces Logistics official dark theme',
+    isDark: true,
+    colors: {
+      background: '#202124',
+      backgroundSecondary: '#18191B',
+      backgroundTertiary: '#282A2E',
+      
+      text: '#F4F4F5',
+      textSecondary: '#C9CBD0',
+      textMuted: '#8E939C',
+      
+      primary: '#F52225',
+      primaryHover: '#D91E21',
+      primaryText: '#FFFFFF',
+      
+      secondary: '#282A2E',
+      secondaryText: '#F4F4F5',
+      
+      accent: '#FF393B',
+      accentHover: '#FF4547',
+      accentText: '#FFFFFF',
+      
+      border: '#44474D',
+      borderLight: '#303237',
+      
+      card: '#18191B',
+      cardHover: '#202124',
+      cardText: '#F4F4F5',
+      
+      input: '#44474D',
+      
+      success: '#34D399',
+      warning: '#FBBF24',
+      error: '#FF4547',
+      info: '#60A5FA',
+      
+      destructive: '#FF4547',
+      destructiveText: '#FFFFFF',
+      
+      navBackground: '#1B1C1F',
+      navText: '#C9CBD0',
+      navHover: '#202124',
+      navActive: '#FF3A3C',
+      
+      topBarBackground: '#18191B',
+      topBarText: '#F4F4F5',
+      
+      shadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
     },
   },
   
@@ -698,7 +860,7 @@ export const saveTheme = (themeId: string): void => {
 };
 
 export const loadTheme = (): string => {
-  return localStorage.getItem('prospace-theme') || 'vibrant';
+  return localStorage.getItem('prospace-theme') || 'light';
 };
 
 // Save theme to database for persistence across devices

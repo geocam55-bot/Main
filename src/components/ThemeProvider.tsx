@@ -174,8 +174,25 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
         : getSystemPrefersDark()
           ? getPreferredThemeForMode('dark')
           : getPreferredThemeForMode('light');
+    
     setThemeId(resolvedId);
     saveTheme(resolvedId);
+
+    // Apply immediate visual feedback to DOM
+    const immediateTheme = getTheme(resolvedId);
+    const root = document.documentElement;
+    if (immediateTheme.isDark) {
+      root.classList.add('dark');
+      document.body.classList.add('dark');
+      root.setAttribute('data-theme', 'dark');
+      root.setAttribute('data-mode', 'dark');
+    } else {
+      root.classList.remove('dark');
+      document.body.classList.remove('dark');
+      root.setAttribute('data-theme', 'light');
+      root.setAttribute('data-mode', 'light');
+    }
+
     if (userId) {
       await saveThemeToDatabase(resolvedId, userId);
     }
@@ -398,6 +415,67 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
     // Ring
     root.style.setProperty('--ring', hexToHSL(safeColors.primary));
 
+    // ProSpaces Logistics Color Palette Variables
+    if (newTheme.isDark) {
+      root.style.setProperty('--prospaces-bg-main', '#202124');
+      root.style.setProperty('--prospaces-bg-depth', '#18191B');
+      root.style.setProperty('--prospaces-bg-card', '#18191B');
+      root.style.setProperty('--prospaces-bg-bottom-nav', '#1C1D20');
+      root.style.setProperty('--prospaces-text-heading', '#F4F4F5');
+      root.style.setProperty('--prospaces-text-body', '#C9CBD0');
+      root.style.setProperty('--prospaces-text-secondary', '#8E939C');
+      root.style.setProperty('--prospaces-text-disabled', '#62666E');
+      root.style.setProperty('--prospaces-input-bg', '#1E1F22');
+      root.style.setProperty('--prospaces-input-border', '#44474D');
+      root.style.setProperty('--prospaces-input-border-focus', '#FF383A');
+      root.style.setProperty('--prospaces-input-text', '#F2F2F3');
+      root.style.setProperty('--prospaces-input-placeholder', '#90949B');
+      root.style.setProperty('--prospaces-input-icon', '#A5A8AD');
+      root.style.setProperty('--prospaces-btn-red', '#F52225');
+      root.style.setProperty('--prospaces-btn-red-hover', '#D91E21');
+      root.style.setProperty('--prospaces-btn-red-text', '#FFFFFF');
+      root.style.setProperty('--prospaces-link', '#FF4547');
+      root.style.setProperty('--prospaces-nav-active', '#FF3A3C');
+      root.style.setProperty('--prospaces-nav-icon-active', '#FF393B');
+      root.style.setProperty('--prospaces-nav-text-active', '#FF4547');
+      root.style.setProperty('--prospaces-nav-icon-inactive', '#8B9098');
+      root.style.setProperty('--prospaces-nav-text-inactive', '#A1A5AC');
+      root.style.setProperty('--prospaces-nav-border', '#303237');
+      root.style.setProperty('--prospaces-social-bg', '#1E1F22');
+      root.style.setProperty('--prospaces-social-border', '#4A4D53');
+      root.style.setProperty('--prospaces-social-text', '#F1F1F2');
+      root.style.setProperty('--prospaces-social-apple-icon', '#FFFFFF');
+    } else {
+      root.style.setProperty('--prospaces-bg-main', '#F7F8FA');
+      root.style.setProperty('--prospaces-bg-depth', '#FFFFFF');
+      root.style.setProperty('--prospaces-bg-card', '#FFFFFF');
+      root.style.setProperty('--prospaces-bg-bottom-nav', '#FFFFFF');
+      root.style.setProperty('--prospaces-text-heading', '#24262B');
+      root.style.setProperty('--prospaces-text-body', '#4F535B');
+      root.style.setProperty('--prospaces-text-secondary', '#7A7F87');
+      root.style.setProperty('--prospaces-text-disabled', '#A8ACB3');
+      root.style.setProperty('--prospaces-input-bg', '#FFFFFF');
+      root.style.setProperty('--prospaces-input-border', '#D7DADF');
+      root.style.setProperty('--prospaces-input-border-focus', '#EF2B2D');
+      root.style.setProperty('--prospaces-input-text', '#24262B');
+      root.style.setProperty('--prospaces-input-placeholder', '#777C84');
+      root.style.setProperty('--prospaces-input-icon', '#60656D');
+      root.style.setProperty('--prospaces-btn-red', '#F52225');
+      root.style.setProperty('--prospaces-btn-red-hover', '#D91E21');
+      root.style.setProperty('--prospaces-btn-red-text', '#FFFFFF');
+      root.style.setProperty('--prospaces-link', '#D92A2D');
+      root.style.setProperty('--prospaces-nav-active', '#E52B2F');
+      root.style.setProperty('--prospaces-nav-icon-active', '#E52B2F');
+      root.style.setProperty('--prospaces-nav-text-active', '#D9282C');
+      root.style.setProperty('--prospaces-nav-icon-inactive', '#6F747C');
+      root.style.setProperty('--prospaces-nav-text-inactive', '#6F747C');
+      root.style.setProperty('--prospaces-nav-border', '#E6E8EB');
+      root.style.setProperty('--prospaces-social-bg', '#FFFFFF');
+      root.style.setProperty('--prospaces-social-border', '#D1D4D9');
+      root.style.setProperty('--prospaces-social-text', '#24262B');
+      root.style.setProperty('--prospaces-social-apple-icon', '#000000');
+    }
+
     // Mobile control vars keep form controls readable even for custom themes.
     root.style.setProperty('--mobile-control-background', safeColors.card);
     root.style.setProperty('--mobile-control-foreground', ensureMinContrast(safeColors.cardText, safeColors.card, 4.5, [safeColors.text, safeColors.textSecondary]));
@@ -447,9 +525,9 @@ export function useTheme() {
 // Helper to get the stored preferred theme for a given mode
 function getPreferredThemeForMode(mode: 'light' | 'dark'): string {
   try {
-    return localStorage.getItem(`prospace-preferred-${mode}-theme`) || (mode === 'light' ? 'vibrant' : 'dark');
+    return localStorage.getItem(`prospace-preferred-${mode}-theme`) || (mode === 'light' ? 'light' : 'dark');
   } catch {
-    return mode === 'light' ? 'vibrant' : 'dark';
+    return mode === 'light' ? 'light' : 'dark';
   }
 }
 

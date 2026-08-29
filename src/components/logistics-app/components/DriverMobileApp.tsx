@@ -2280,16 +2280,18 @@ export default function DriverMobileApp({
 
         {/* ── PERSISTENT STANDALONE MOBILE BOTTOM NAVIGATION BAR ── */}
         {isUserAuthenticated && (
-          <div className="sticky bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-2 px-3 flex items-center justify-around text-xs font-bold text-slate-500 z-30 shadow-lg w-full max-w-md mx-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <div className="sticky bottom-0 inset-x-0 bg-[#FFFFFF]/95 dark:bg-[#1C1D20]/95 backdrop-blur-md border-t border-[#E6E8EB] dark:border-[#303237] py-2 px-3 flex items-center justify-around text-xs font-bold text-[#6F747C] dark:text-[#8B9098] z-30 shadow-lg w-full max-w-md mx-auto pb-[max(0.5rem,env(safe-area-inset-bottom))] transition-colors duration-200">
             
             <button 
               type="button"
               onClick={() => setActiveScreen('home')}
               className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
-                activeScreen === 'home' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+                activeScreen === 'home' 
+                  ? 'text-[#D9282C] dark:text-[#FF4547] bg-rose-50/80 dark:bg-rose-950/40 font-black' 
+                  : 'text-[#6F747C] dark:text-[#8B9098] hover:text-[#24262B] dark:hover:text-[#F4F4F5]'
               }`}
             >
-              <Building2 className="h-5 w-5" />
+              <Building2 className={`h-5 w-5 ${activeScreen === 'home' ? 'text-[#E52B2F] dark:text-[#FF393B]' : 'text-[#6F747C] dark:text-[#8B9098]'}`} />
               <span className="text-[10px]">Home</span>
             </button>
 
@@ -2297,10 +2299,12 @@ export default function DriverMobileApp({
               type="button"
               onClick={() => setActiveScreen('route')}
               className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
-                activeScreen === 'route' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+                activeScreen === 'route' 
+                  ? 'text-[#D9282C] dark:text-[#FF4547] bg-rose-50/80 dark:bg-rose-950/40 font-black' 
+                  : 'text-[#6F747C] dark:text-[#8B9098] hover:text-[#24262B] dark:hover:text-[#F4F4F5]'
               }`}
             >
-              <Navigation className="h-5 w-5" />
+              <Navigation className={`h-5 w-5 ${activeScreen === 'route' ? 'text-[#E52B2F] dark:text-[#FF393B]' : 'text-[#6F747C] dark:text-[#8B9098]'}`} />
               <span className="text-[10px]">Route Map</span>
             </button>
 
@@ -2308,10 +2312,12 @@ export default function DriverMobileApp({
               type="button"
               onClick={() => setActiveScreen('stop')}
               className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
-                activeScreen === 'stop' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+                activeScreen === 'stop' 
+                  ? 'text-[#D9282C] dark:text-[#FF4547] bg-rose-50/80 dark:bg-rose-950/40 font-black' 
+                  : 'text-[#6F747C] dark:text-[#8B9098] hover:text-[#24262B] dark:hover:text-[#F4F4F5]'
               }`}
             >
-              <FileText className="h-5 w-5" />
+              <FileText className={`h-5 w-5 ${activeScreen === 'stop' ? 'text-[#E52B2F] dark:text-[#FF393B]' : 'text-[#6F747C] dark:text-[#8B9098]'}`} />
               <span className="text-[10px]">ePOD Proof</span>
             </button>
 
@@ -2319,10 +2325,12 @@ export default function DriverMobileApp({
               type="button"
               onClick={() => setActiveScreen('earnings')}
               className={`flex flex-col items-center space-y-1 cursor-pointer transition-colors py-1 px-2.5 rounded-xl min-h-[44px] justify-center ${
-                activeScreen === 'earnings' ? 'text-blue-600 bg-blue-50/80 font-black' : 'hover:text-slate-800'
+                activeScreen === 'earnings' 
+                  ? 'text-[#D9282C] dark:text-[#FF4547] bg-rose-50/80 dark:bg-rose-950/40 font-black' 
+                  : 'text-[#6F747C] dark:text-[#8B9098] hover:text-[#24262B] dark:hover:text-[#F4F4F5]'
               }`}
             >
-              <UserIcon className="h-5 w-5" />
+              <UserIcon className={`h-5 w-5 ${activeScreen === 'earnings' ? 'text-[#E52B2F] dark:text-[#FF393B]' : 'text-[#6F747C] dark:text-[#8B9098]'}`} />
               <span className="text-[10px]">Profile</span>
             </button>
 

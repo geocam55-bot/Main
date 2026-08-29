@@ -1,6 +1,97 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* ProSpaces Logistics Light Mode Defaults */
+  --prospaces-bg-main: #F7F8FA;
+  --prospaces-bg-depth: #FFFFFF;
+  --prospaces-bg-card: #FFFFFF;
+  --prospaces-bg-bottom-nav: #FFFFFF;
+  --prospaces-text-heading: #24262B;
+  --prospaces-text-body: #4F535B;
+  --prospaces-text-secondary: #7A7F87;
+  --prospaces-text-disabled: #A8ACB3;
+  --prospaces-input-bg: #FFFFFF;
+  --prospaces-input-border: #D7DADF;
+  --prospaces-input-border-focus: #EF2B2D;
+  --prospaces-input-text: #24262B;
+  --prospaces-input-placeholder: #777C84;
+  --prospaces-input-icon: #60656D;
+  --prospaces-btn-red: #F52225;
+  --prospaces-btn-red-hover: #D91E21;
+  --prospaces-btn-red-text: #FFFFFF;
+  --prospaces-link: #D92A2D;
+  --prospaces-nav-active: #E52B2F;
+  --prospaces-nav-icon-active: #E52B2F;
+  --prospaces-nav-text-active: #D9282C;
+  --prospaces-nav-icon-inactive: #6F747C;
+  --prospaces-nav-text-inactive: #6F747C;
+  --prospaces-nav-border: #E6E8EB;
+  --prospaces-social-bg: #FFFFFF;
+  --prospaces-social-border: #D1D4D9;
+  --prospaces-social-text: #24262B;
+  --prospaces-social-apple-icon: #000000;
+}
+
+.dark {
+  /* ProSpaces Logistics Dark Mode Defaults */
+  --prospaces-bg-main: #202124;
+  --prospaces-bg-depth: #18191B;
+  --prospaces-bg-card: #18191B;
+  --prospaces-bg-bottom-nav: #1C1D20;
+  --prospaces-text-heading: #F4F4F5;
+  --prospaces-text-body: #C9CBD0;
+  --prospaces-text-secondary: #8E939C;
+  --prospaces-text-disabled: #62666E;
+  --prospaces-input-bg: #1E1F22;
+  --prospaces-input-border: #44474D;
+  --prospaces-input-border-focus: #FF383A;
+  --prospaces-input-text: #F2F2F3;
+  --prospaces-input-placeholder: #90949B;
+  --prospaces-input-icon: #A5A8AD;
+  --prospaces-btn-red: #F52225;
+  --prospaces-btn-red-hover: #D91E21;
+  --prospaces-btn-red-text: #FFFFFF;
+  --prospaces-link: #FF4547;
+  --prospaces-nav-active: #FF3A3C;
+  --prospaces-nav-icon-active: #FF393B;
+  --prospaces-nav-text-active: #FF4547;
+  --prospaces-nav-icon-inactive: #8B9098;
+  --prospaces-nav-text-inactive: #A1A5AC;
+  --prospaces-nav-border: #303237;
+  --prospaces-social-bg: #1E1F22;
+  --prospaces-social-border: #4A4D53;
+  --prospaces-social-text: #F1F1F2;
+  --prospaces-social-apple-icon: #FFFFFF;
+}
+
 @theme {
+  /* ProSpaces Logistics theme tokens */
+  --color-prospaces-main: var(--prospaces-bg-main);
+  --color-prospaces-depth: var(--prospaces-bg-depth);
+  --color-prospaces-card: var(--prospaces-bg-card);
+  --color-prospaces-bottom-nav: var(--prospaces-bg-bottom-nav);
+  --color-prospaces-heading: var(--prospaces-text-heading);
+  --color-prospaces-body: var(--prospaces-text-body);
+  --color-prospaces-secondary: var(--prospaces-text-secondary);
+  --color-prospaces-disabled: var(--prospaces-text-disabled);
+  --color-prospaces-input: var(--prospaces-input-bg);
+  --color-prospaces-input-border: var(--prospaces-input-border);
+  --color-prospaces-input-focus: var(--prospaces-input-border-focus);
+  --color-prospaces-input-text: var(--prospaces-input-text);
+  --color-prospaces-input-placeholder: var(--prospaces-input-placeholder);
+  --color-prospaces-input-icon: var(--prospaces-input-icon);
+  --color-prospaces-red: var(--prospaces-btn-red);
+  --color-prospaces-red-hover: var(--prospaces-btn-red-hover);
+  --color-prospaces-link: var(--prospaces-link);
+  --color-prospaces-nav-active: var(--prospaces-nav-active);
+  --color-prospaces-nav-icon-active: var(--prospaces-nav-icon-active);
+  --color-prospaces-nav-text-active: var(--prospaces-nav-text-active);
+  --color-prospaces-nav-icon-inactive: var(--prospaces-nav-icon-inactive);
+  --color-prospaces-nav-text-inactive: var(--prospaces-nav-text-inactive);
+  --color-prospaces-nav-border: var(--prospaces-nav-border);
+
   /* Direct color mappings from CSS custom properties */
   --color-background: var(--color-background);
   --color-background-secondary: var(--color-background-secondary);
@@ -43,10 +134,88 @@
   --color-ring: var(--color-primary);
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 html, body, #root {
-  background-color: var(--color-background, #f8fafc);
-  color: var(--color-text, #0f172a);
+  background-color: var(--prospaces-bg-main, #F7F8FA);
+  color: var(--prospaces-text-body, #4F535B);
   min-height: 100vh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark, html.dark body, html.dark #root {
+  background-color: var(--prospaces-bg-main, #202124);
+  color: var(--prospaces-text-body, #C9CBD0);
+}
+
+/* Comprehensive ProSpaces dark mode container and surface handling */
+.dark .bg-white:not([data-keep-light]) {
+  background-color: var(--prospaces-bg-depth, #18191B);
+}
+
+.dark .bg-slate-50:not([data-keep-light]),
+.dark .bg-gray-50:not([data-keep-light]) {
+  background-color: var(--prospaces-bg-main, #202124);
+}
+
+.dark .bg-slate-100:not([data-keep-light]),
+.dark .bg-gray-100:not([data-keep-light]) {
+  background-color: #1E1F22;
+}
+
+.dark .bg-slate-200:not([data-keep-light]),
+.dark .bg-slate-200\/60:not([data-keep-light]),
+.dark .bg-slate-200\/70:not([data-keep-light]),
+.dark .bg-gray-200:not([data-keep-light]) {
+  background-color: #282A2E;
+}
+
+.dark .border-slate-200:not([data-keep-light]),
+.dark .border-slate-200\/90:not([data-keep-light]),
+.dark .border-slate-200\/80:not([data-keep-light]),
+.dark .border-slate-200\/70:not([data-keep-light]),
+.dark .border-slate-200\/60:not([data-keep-light]),
+.dark .border-slate-200\/50:not([data-keep-light]),
+.dark .border-slate-100:not([data-keep-light]),
+.dark .border-gray-200:not([data-keep-light]),
+.dark .border-gray-100:not([data-keep-light]) {
+  border-color: #303237;
+}
+
+.dark .text-slate-900:not([data-keep-light]),
+.dark .text-slate-800:not([data-keep-light]),
+.dark .text-gray-900:not([data-keep-light]),
+.dark .text-gray-800:not([data-keep-light]) {
+  color: var(--prospaces-text-heading, #F4F4F5);
+}
+
+.dark .text-slate-700:not([data-keep-light]),
+.dark .text-slate-600:not([data-keep-light]),
+.dark .text-gray-700:not([data-keep-light]),
+.dark .text-gray-600:not([data-keep-light]) {
+  color: var(--prospaces-text-body, #C9CBD0);
+}
+
+.dark .text-slate-500:not([data-keep-light]),
+.dark .text-slate-400:not([data-keep-light]),
+.dark .text-gray-500:not([data-keep-light]),
+.dark .text-gray-400:not([data-keep-light]) {
+  color: var(--prospaces-text-secondary, #8E939C);
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]):not([data-keep-light]),
+.dark textarea:not([data-keep-light]),
+.dark select:not([data-keep-light]) {
+  background-color: var(--prospaces-input-bg, #1E1F22);
+  border-color: var(--prospaces-input-border, #44474D);
+  color: var(--prospaces-input-text, #F2F2F3);
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--prospaces-input-placeholder, #90949B);
 }
 
 /* Custom class for Printable Deck Planner hidden by default on screen */

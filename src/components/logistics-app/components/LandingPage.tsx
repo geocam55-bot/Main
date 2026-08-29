@@ -26,18 +26,20 @@ import {
   Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PROSPACES_LOGISTICS_LOGO, LOGO_BASE64 } from '../../LogoBase64';
+import { PROSPACES_LOGISTICS_LOGO, PROSPACES_LOGISTICS_LOGO_DARK, LOGO_BASE64 } from '../../LogoBase64';
 
 // Import local images with fallbacks
 import prospacesHeroScene from '../assets/images/prospaces_hero_scene_1783169931786.jpg';
 import samanthaTestimonial from '../assets/images/samantha_testimonial_1783169949359.jpg';
 
-const prospacesLogo = PROSPACES_LOGISTICS_LOGO || '/logistics-logo.jpg';
+const prospacesLogo = PROSPACES_LOGISTICS_LOGO || '/logistics-logo.png';
+const prospacesLogoDark = PROSPACES_LOGISTICS_LOGO_DARK || '/logistics-logo-dark.png';
 
-const getSafeLogoSrc = (img: any) => {
+const getSafeLogoSrc = (img: any, isDark?: boolean) => {
+  if (isDark) return PROSPACES_LOGISTICS_LOGO_DARK || '/logistics-logo-dark.png';
   if (typeof img === 'string' && img) return img;
   if (img && typeof img === 'object' && img.default) return img.default;
-  return PROSPACES_LOGISTICS_LOGO || '/logistics-logo.jpg';
+  return PROSPACES_LOGISTICS_LOGO || '/logistics-logo.png';
 };
 
 const getSafeHeroSceneSrc = (img: any) => {
@@ -164,12 +166,12 @@ export default function LandingPage({
               <img 
                 src={getSafeLogoSrc(prospacesLogo)} 
                 alt="ProSpaces Logo" 
-                className="h-20 sm:h-24 md:h-28 w-auto object-contain mix-blend-multiply transition-all"
+                className="h-20 sm:h-24 md:h-28 w-auto object-contain border-none ring-0 outline-none shadow-none bg-transparent transition-all"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
-                  if (target.src.endsWith('/logistics-logo.jpg')) return;
-                  target.src = '/logistics-logo.jpg';
+                  if (target.src.endsWith('/logistics-logo.png')) return;
+                  target.src = '/logistics-logo.png';
                 }}
               />
               <div className="flex flex-col">
@@ -830,14 +832,14 @@ export default function LandingPage({
             <div className="space-y-4">
               <div className="flex items-center space-x-3.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <img 
-                  src={getSafeLogoSrc(prospacesLogo)} 
+                  src={getSafeLogoSrc(prospacesLogoDark, true)} 
                   alt="ProSpaces Logo" 
-                  className="h-20 sm:h-24 w-auto object-contain brightness-110 rounded-lg bg-white/5 p-1"
+                  className="h-20 sm:h-24 w-auto object-contain brightness-110 border-none ring-0 outline-none shadow-none bg-transparent"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     const target = e.currentTarget as HTMLImageElement;
-                    if (target.src.endsWith('/logistics-logo.jpg')) return;
-                    target.src = '/logistics-logo.jpg';
+                    if (target.src.endsWith('/logistics-logo-dark.png')) return;
+                    target.src = '/logistics-logo-dark.png';
                   }}
                 />
                 <div className="flex flex-col">

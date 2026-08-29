@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { formatPhoneNumber } from '../lib/formatters';
 import { User, Branch } from '../types';
-import { Camera, Key, Sliders, Check, Phone, User as UserIcon, Building, Mail, FileText, Upload } from 'lucide-react';
+import { Camera, Key, Sliders, Check, Phone, User as UserIcon, Building, Mail, FileText, Upload, Sun, Moon, Monitor, Palette, Sparkles, CheckCircle2 } from 'lucide-react';
+import { useTheme, type ThemeMode } from '../../ThemeProvider';
+import { themes } from '../../../utils/themes';
 
 export const GuitaristSvg = () => (
   <svg viewBox="0 0 100 100" className="w-full h-full">
@@ -99,7 +101,7 @@ export function renderUserAvatarHelper(avatarUrl: string | undefined, name: stri
 interface UserProfileModalProps {
   currentUser: User;
   branches: Branch[];
-  initialTab?: 'info' | 'photo' | 'password';
+  initialTab?: 'info' | 'photo' | 'appearance' | 'password';
   onClose: () => void;
   onUpdateProfile: (updatedUser: User) => Promise<void>;
 }
@@ -111,7 +113,8 @@ export default function UserProfileModal({
   onClose,
   onUpdateProfile
 }: UserProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<'info' | 'photo' | 'password'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'info' | 'photo' | 'appearance' | 'password'>(initialTab);
+  const { themeMode, setThemeMode, themeId, setTheme, theme: activeTheme } = useTheme();
   
   // Personal Info Form States
   const [name, setName] = useState(currentUser.name || '');
@@ -297,13 +300,13 @@ export default function UserProfileModal({
       <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 text-slate-800 flex flex-col md:flex-row overflow-hidden max-h-[90vh] animate-fade-in">
         
         {/* Sidebar Nav */}
-        <div className="bg-slate-50 border-r border-slate-100 p-5 md:w-56 shrink-0 flex flex-col justify-between">
+        <div className="bg-slate-50 dark:bg-slate-850 border-r border-slate-100 dark:border-slate-800 p-5 md:w-56 shrink-0 flex flex-col justify-between">
           <div>
             <div className="flex items-center space-x-3 mb-6">
               {renderUserAvatarHelper(avatarUrl, currentUser.name, "h-11 w-11")}
               <div className="text-left font-sans">
-                <p className="text-xs font-black text-slate-900 truncate max-w-[120px]">{currentUser.name}</p>
-                <span className="inline-block text-[9px] font-mono font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 mt-0.5">
+                <p className="text-xs font-black text-slate-900 dark:text-slate-100 truncate max-w-[120px]">{currentUser.name}</p>
+                <span className="inline-block text-[9px] font-mono font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-100 dark:border-amber-800 mt-0.5">
                   {currentUser.role}
                 </span>
               </div>
@@ -315,7 +318,7 @@ export default function UserProfileModal({
                 className={`w-full flex items-center space-x-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-all ${
                   activeTab === 'info'
                     ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Sliders className="h-4 w-4" />
@@ -327,7 +330,7 @@ export default function UserProfileModal({
                 className={`w-full flex items-center space-x-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-all ${
                   activeTab === 'photo'
                     ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Camera className="h-4 w-4" />
@@ -335,11 +338,23 @@ export default function UserProfileModal({
               </button>
 
               <button
+                onClick={() => setActiveTab('appearance')}
+                className={`w-full flex items-center space-x-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                  activeTab === 'appearance'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Palette className="h-4 w-4" />
+                <span>Theme & Modes</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('password')}
                 className={`w-full flex items-center space-x-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-all ${
                   activeTab === 'password'
                     ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Key className="h-4 w-4" />
@@ -348,10 +363,10 @@ export default function UserProfileModal({
             </nav>
           </div>
 
-          <div className="pt-4 border-t border-slate-200 text-center md:text-left mt-4 md:mt-0">
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 text-center md:text-left mt-4 md:mt-0">
             <button
               onClick={onClose}
-              className="text-xs font-black text-slate-500 hover:text-slate-800 transition-all py-1.5 px-3 bg-white border border-slate-200 rounded-xl w-full"
+              className="text-xs font-black text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-all py-1.5 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl w-full cursor-pointer"
             >
               Done & Close
             </button>
@@ -359,17 +374,18 @@ export default function UserProfileModal({
         </div>
 
         {/* Content Region */}
-        <div className="flex-1 p-6 flex flex-col justify-between overflow-y-auto min-h-[350px] md:min-h-0">
+        <div className="flex-1 p-6 flex flex-col justify-between overflow-y-auto min-h-[350px] md:min-h-0 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 font-sans">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 font-sans">
                 {activeTab === 'info' && "Customize Profile Details"}
                 {activeTab === 'photo' && "Select or Upload Photo"}
+                {activeTab === 'appearance' && "Appearance & Display Modes"}
                 {activeTab === 'password' && "Change Account Password"}
               </h3>
               <button
                 onClick={onClose}
-                className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-50 transition-all text-xs font-sans"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg p-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-xs font-sans cursor-pointer"
               >
                 ✕
               </button>
@@ -556,7 +572,198 @@ export default function UserProfileModal({
               </div>
             )}
 
-            {/* TAB 3: Change Password */}
+            {/* TAB 3: Appearance & Display Modes */}
+            {activeTab === 'appearance' && (
+              <div className="space-y-5 text-left animate-fade-in" id="appearance-settings-panel">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Display Theme Mode
+                    </label>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                      Active: {themeMode.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
+                    Choose how ProSpaces Logistics renders across your desktop, dispatch stations, and mobile devices.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Light Mode Card */}
+                    <button
+                      type="button"
+                      onClick={() => setThemeMode('light')}
+                      className={`p-3.5 rounded-2xl border text-left transition-all relative group cursor-pointer flex flex-col justify-between ${
+                        themeMode === 'light'
+                          ? 'border-blue-600 dark:border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 ring-2 ring-blue-500/20 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className={`p-2 rounded-xl ${themeMode === 'light' ? 'bg-blue-600 text-white' : 'bg-amber-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400'}`}>
+                          <Sun className="h-4 w-4" />
+                        </div>
+                        {themeMode === 'light' && (
+                          <span className="h-2 w-2 rounded-full bg-blue-600 ring-4 ring-blue-100 dark:ring-blue-950" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                          Light Mode
+                        </h4>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-1">
+                          Daylight high-contrast layout for dispatch desks & bright offices.
+                        </p>
+                      </div>
+                      
+                      {/* Mini preview */}
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-1.5 space-y-1">
+                        <div className="h-1.5 w-1/2 bg-blue-500 rounded-xs" />
+                        <div className="h-1.5 w-full bg-slate-200 rounded-xs" />
+                      </div>
+                    </button>
+
+                    {/* Dark Mode Card */}
+                    <button
+                      type="button"
+                      onClick={() => setThemeMode('dark')}
+                      className={`p-3.5 rounded-2xl border text-left transition-all relative group cursor-pointer flex flex-col justify-between ${
+                        themeMode === 'dark'
+                          ? 'border-blue-600 dark:border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 ring-2 ring-blue-500/20 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className={`p-2 rounded-xl ${themeMode === 'dark' ? 'bg-blue-600 text-white' : 'bg-indigo-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400'}`}>
+                          <Moon className="h-4 w-4" />
+                        </div>
+                        {themeMode === 'dark' && (
+                          <span className="h-2 w-2 rounded-full bg-blue-600 ring-4 ring-blue-100 dark:ring-blue-950" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                          Dark Mode
+                        </h4>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-1">
+                          Low-glare dark palette optimized for fleet night shifts & low-light cabs.
+                        </p>
+                      </div>
+                      
+                      {/* Mini preview */}
+                      <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900 p-1.5 space-y-1">
+                        <div className="h-1.5 w-1/2 bg-blue-500 rounded-xs" />
+                        <div className="h-1.5 w-full bg-slate-700 rounded-xs" />
+                      </div>
+                    </button>
+
+                    {/* System Sync Card */}
+                    <button
+                      type="button"
+                      onClick={() => setThemeMode('system')}
+                      className={`p-3.5 rounded-2xl border text-left transition-all relative group cursor-pointer flex flex-col justify-between ${
+                        themeMode === 'system'
+                          ? 'border-blue-600 dark:border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 ring-2 ring-blue-500/20 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className={`p-2 rounded-xl ${themeMode === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                          <Monitor className="h-4 w-4" />
+                        </div>
+                        {themeMode === 'system' && (
+                          <span className="h-2 w-2 rounded-full bg-blue-600 ring-4 ring-blue-100 dark:ring-blue-950" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                          System Sync
+                        </h4>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-1">
+                          Automatically synchronizes with your device operating system setting.
+                        </p>
+                      </div>
+                      
+                      {/* Mini preview */}
+                      <div className="mt-3 rounded-lg border border-slate-300 dark:border-slate-700 flex overflow-hidden h-7">
+                        <div className="w-1/2 bg-slate-100 p-1">
+                          <div className="h-1.5 w-full bg-blue-500 rounded-xs" />
+                        </div>
+                        <div className="w-1/2 bg-slate-900 p-1">
+                          <div className="h-1.5 w-full bg-amber-400 rounded-xs" />
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Accent Color Palettes */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Color Palette Presets
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Current: {activeTheme?.name || 'Default'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {Object.values(themes).slice(0, 6).map((thm) => {
+                      const isSelected = themeId === thm.id;
+                      return (
+                        <button
+                          key={thm.id}
+                          type="button"
+                          onClick={() => setTheme(thm.id)}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 shadow-xs'
+                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-850'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <p className="text-[11px] font-bold truncate text-slate-900 dark:text-slate-100">{thm.name}</p>
+                            <p className="text-[9px] text-slate-400 truncate">{thm.isDark ? 'Dark Base' : 'Light Base'}</p>
+                          </div>
+                          <div className="flex items-center space-x-1 shrink-0">
+                            <span 
+                              className="h-3.5 w-3.5 rounded-full border border-black/10 shadow-xs" 
+                              style={{ backgroundColor: thm.colors.primary }} 
+                            />
+                            <span 
+                              className="h-3.5 w-3.5 rounded-full border border-black/10 shadow-xs" 
+                              style={{ backgroundColor: thm.colors.accent }} 
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl p-3 flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+                    <span className="text-slate-600 dark:text-slate-300 text-[11px]">
+                      Theme preferences are stored locally and automatically synchronized to your authenticated profile.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSuccessMsg("Theme preferences saved and applied!");
+                      setTimeout(() => setSuccessMsg(null), 3000);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shrink-0 cursor-pointer shadow-xs transition-all"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: Change Password */}
             {activeTab === 'password' && (
               <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left">
                 <div className="space-y-1">

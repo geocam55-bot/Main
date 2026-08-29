@@ -48,11 +48,14 @@ import {
   Map as MapIcon, LayoutDashboard, Scan, ClipboardList, Layers3, Store, Shield, Users, 
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
-  Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2, Radio
+  Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2, Radio,
+  Sun, Moon, Monitor, Palette
 } from 'lucide-react';
-import { PROSPACES_LOGISTICS_LOGO, LOGO_BASE64 } from '../LogoBase64';
+import { useTheme, type ThemeMode } from '../ThemeProvider';
+import { PROSPACES_LOGISTICS_LOGO, PROSPACES_LOGISTICS_LOGO_DARK, LOGO_BASE64 } from '../LogoBase64';
 
-const prospacesLogo = PROSPACES_LOGISTICS_LOGO || '/logistics-logo.jpg';
+const prospacesLogo = PROSPACES_LOGISTICS_LOGO || '/logistics-logo.png';
+const prospacesLogoDark = PROSPACES_LOGISTICS_LOGO_DARK || '/logistics-logo-dark.png';
 
 // Custom fetch utility to automatically inject custom Supabase headers for stateless backend resilience
 async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -370,7 +373,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   // User Profile Menu & Modal states
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileActiveTab, setProfileActiveTab] = useState<'info' | 'photo' | 'password'>('info');
+  const [profileActiveTab, setProfileActiveTab] = useState<'info' | 'photo' | 'appearance' | 'password'>('info');
+  const { themeMode, setThemeMode } = useTheme();
 
   // User Password Change states
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -2322,14 +2326,14 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
             <div className="flex items-center space-x-3.5 text-center sm:text-left">
               <div className="shrink-0 flex items-center justify-center">
                 <img 
-                  src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
+                  src={typeof prospacesLogoDark === 'string' && prospacesLogoDark ? prospacesLogoDark : '/logistics-logo-dark.png'} 
                   alt="ProSpaces Logo" 
-                  className="h-16 sm:h-20 w-auto object-contain rounded-lg p-1 bg-white"
+                  className="h-10 sm:h-12 w-auto object-contain border-none ring-0 outline-none shadow-none bg-transparent"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     const target = e.currentTarget as HTMLImageElement;
-                    if (target.src.endsWith('/logistics-logo.jpg')) return;
-                    target.src = '/logistics-logo.jpg';
+                    if (target.src.endsWith('/logistics-logo-dark.png')) return;
+                    target.src = '/logistics-logo-dark.png';
                   }}
                 />
               </div>
@@ -2444,10 +2448,10 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 {isUserMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />
-                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 p-4 z-50 animate-fade-in text-left">
-                      <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center mb-3">
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-4 z-50 animate-fade-in text-left">
+                      <div className="bg-slate-50/70 dark:bg-slate-850 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center text-center mb-3">
                         <div className="relative group mb-3">
-                          <div className="h-20 w-20 rounded-full overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center">
+                          <div className="h-20 w-20 rounded-full overflow-hidden border-2 border-white dark:border-slate-700 shadow-md bg-white dark:bg-slate-800 flex items-center justify-center">
                             {renderUserAvatarHelper(currentUser.avatarUrl, currentUser.name, "h-full w-full")}
                           </div>
                           <button 
@@ -2463,25 +2467,79 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                           </button>
                         </div>
 
-                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-800 leading-snug">
+                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-snug">
                           {currentUser.name} &bull; {currentUser.role}
                         </h4>
-                        <p className="text-[10px] sm:text-xs text-slate-500 truncate max-w-full font-medium mt-0.5">
+                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate max-w-full font-medium mt-0.5">
                           {currentUser.email}
                         </p>
+                      </div>
+
+                      {/* Theme Quick Switcher in User Menu */}
+                      <div className="mb-2.5 p-2 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center justify-between px-1 mb-1.5">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1">
+                            <Palette className="h-3 w-3 text-blue-500" />
+                            <span>Theme Mode</span>
+                          </span>
+                          <span className="text-[9px] font-mono text-blue-600 dark:text-blue-400 font-bold capitalize bg-blue-50 dark:bg-blue-950/80 px-1.5 py-0.5 rounded border border-blue-200/60 dark:border-blue-800">
+                            {themeMode}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 bg-slate-200/70 dark:bg-slate-800 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setThemeMode('light')}
+                            className={`flex items-center justify-center space-x-1 py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                              themeMode === 'light'
+                                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                            title="Light Mode"
+                          >
+                            <Sun className="h-3.5 w-3.5" />
+                            <span>Light</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setThemeMode('dark')}
+                            className={`flex items-center justify-center space-x-1 py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                              themeMode === 'dark'
+                                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                            title="Dark Mode"
+                          >
+                            <Moon className="h-3.5 w-3.5" />
+                            <span>Dark</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setThemeMode('system')}
+                            className={`flex items-center justify-center space-x-1 py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                              themeMode === 'system'
+                                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                            title="System Sync"
+                          >
+                            <Monitor className="h-3.5 w-3.5" />
+                            <span>System</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="space-y-0.5">
                         <button
                           onClick={() => {
                             setIsUserMenuOpen(false);
-                            setProfileActiveTab('password');
+                            setProfileActiveTab('appearance');
                             setShowProfileModal(true);
                           }}
-                          className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-xl transition-all font-bold text-left cursor-pointer"
+                          className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
                         >
-                          <Key className="h-4 w-4 text-slate-400" />
-                          <span>Passwords and autofill</span>
+                          <Palette className="h-4 w-4 text-blue-500" />
+                          <span>Appearance & Theme</span>
                         </button>
 
                         <button
@@ -2490,7 +2548,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                             setProfileActiveTab('info');
                             setShowProfileModal(true);
                           }}
-                          className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-xl transition-all font-bold text-left cursor-pointer"
+                          className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
                         >
                           <Sliders className="h-4 w-4 text-slate-400" />
                           <span>Customize profile details</span>
@@ -2502,17 +2560,29 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                             setProfileActiveTab('photo');
                             setShowProfileModal(true);
                           }}
-                          className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-xl transition-all font-bold text-left cursor-pointer"
+                          className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
                         >
                           <Camera className="h-4 w-4 text-slate-400" />
                           <span>Customize photo / avatar</span>
                         </button>
 
-                        <div className="border-t border-slate-100 my-2" />
+                        <button
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            setProfileActiveTab('password');
+                            setShowProfileModal(true);
+                          }}
+                          className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
+                        >
+                          <Key className="h-4 w-4 text-slate-400" />
+                          <span>Passwords and autofill</span>
+                        </button>
 
-                        <div className="px-3 py-1 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                        <div className="border-t border-slate-100 dark:border-slate-800 my-2" />
+
+                        <div className="px-3 py-1 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                           <span>Sync engine status</span>
-                          <span className="flex items-center space-x-1 text-green-600 font-bold">
+                          <span className="flex items-center space-x-1 text-green-600 dark:text-green-400 font-bold">
                             <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
                             <span>Sync is on</span>
                           </span>
@@ -2523,7 +2593,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                             setIsUserMenuOpen(false);
                             handleLogout();
                           }}
-                          className="w-full flex items-center space-x-3 px-3 py-2.5 text-xs text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-black text-left cursor-pointer"
+                          className="w-full flex items-center space-x-3 px-3 py-2.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all font-black text-left cursor-pointer"
                         >
                           <LogOut className="h-4 w-4 text-rose-400" />
                           <span>Logoff</span>
@@ -2581,7 +2651,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   const showAdminSpace = isNavAdmin || isNavDispatcher;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-gray-800 antialiased selection:bg-blue-600 selection:text-white w-full max-w-full overflow-x-hidden" id="main-app-container">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans text-gray-800 dark:text-slate-100 antialiased selection:bg-blue-600 selection:text-white w-full max-w-full overflow-x-hidden" id="main-app-container">
       
       {/* Super Admin Top Controller Banner when in App Workspace Mode (Hidden in driver mobile app) */}
       {currentUser.role === 'SUPER_ADMIN' && !['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
@@ -2628,45 +2698,56 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       
       {/* Enterprise Sticky Brand Header & Unified Navigation (Hidden when in standalone Driver App) */}
       {!['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-200" id="prospaces-header">
+        <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs transition-all duration-200" id="prospaces-header">
         <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-3">
           
           {/* Logo & title context */}
-          <div className="flex items-center space-x-3 sm:space-x-5 text-left py-1">
+          <div className="flex items-center space-x-2.5 sm:space-x-3.5 text-left py-0.5">
             <div className="shrink-0 flex items-center justify-center">
               <img 
-                src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.jpg'} 
+                src={typeof prospacesLogo === 'string' && prospacesLogo ? prospacesLogo : '/logistics-logo.png'} 
                 alt="ProSpaces Logo" 
-                className="h-14 sm:h-20 md:h-24 w-auto object-contain animate-fade-in mix-blend-multiply border-none ring-0 outline-none shadow-none transition-all"
+                className="h-10 sm:h-11 md:h-12 w-auto object-contain animate-fade-in dark:hidden border-none ring-0 outline-none shadow-none bg-transparent transition-all"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
-                  if (target.src.endsWith('/logistics-logo.jpg')) return;
-                  target.src = '/logistics-logo.jpg';
+                  if (target.src.endsWith('/logistics-logo.png')) return;
+                  target.src = '/logistics-logo.png';
+                }}
+              />
+              <img 
+                src={typeof prospacesLogoDark === 'string' && prospacesLogoDark ? prospacesLogoDark : '/logistics-logo-dark.png'} 
+                alt="ProSpaces Logo" 
+                className="h-10 sm:h-11 md:h-12 w-auto object-contain animate-fade-in hidden dark:block border-none ring-0 outline-none shadow-none bg-transparent transition-all"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (target.src.endsWith('/logistics-logo-dark.png')) return;
+                  target.src = '/logistics-logo-dark.png';
                 }}
               />
             </div>
-            <div>
+            <div className="flex flex-col justify-center">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="bg-blue-50 text-blue-600 border border-blue-200/50 text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded font-mono leading-none">
+                <span className="bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800 text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded font-mono leading-none">
                   Tenant
                 </span>
-                <span className="text-slate-400 text-[9px] uppercase font-bold tracking-wider font-sans leading-none hidden xs:inline">Active Workspace:</span>
+                <span className="text-slate-400 dark:text-slate-500 text-[9px] uppercase font-bold tracking-wider font-sans leading-none hidden xs:inline">Active Workspace:</span>
               </div>
-              <h1 className="font-sans font-black text-slate-900 text-xs sm:text-base tracking-tight leading-tight m-0 truncate max-w-[150px] sm:max-w-none">
+              <h1 className="font-sans font-black text-slate-900 dark:text-white text-xs sm:text-sm md:text-base tracking-tight leading-tight m-0 truncate max-w-[150px] sm:max-w-none">
                 {currentTenant.name}
               </h1>
-              <p className="text-slate-500 text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider mt-0.5 leading-none flex items-center gap-1 sm:gap-1.5">
+              <p className="text-slate-500 dark:text-slate-400 text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider mt-0.5 leading-none flex items-center gap-1 sm:gap-1.5">
                 <span>Enterprise Logistics Portal</span>
                 <span className="opacity-40">&bull;</span>
-                <span className="bg-slate-100 border border-slate-200 text-slate-700 px-1 py-0.5 rounded text-[8px] font-mono font-bold leading-none">{currentTenant.code}</span>
+                <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-1 py-0.5 rounded text-[8px] font-mono font-bold leading-none">{currentTenant.code}</span>
               </p>
             </div>
           </div>
 
           {/* Quick Stats & Logged-In User Profile context */}
           <div className="flex items-center justify-end gap-2 sm:gap-3 shrink-0">
-            <div className="hidden md:flex items-center space-x-1.5 bg-slate-50 border border-slate-200/85 px-2.5 py-1 rounded-lg text-xs font-mono text-slate-600">
+            <div className="hidden md:flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/85 dark:border-slate-700 px-2.5 py-1 rounded-lg text-xs font-mono text-slate-600 dark:text-slate-300">
               <Store className="h-3.5 w-3.5 text-slate-400" />
               <span>{branches.length} Regs &bull; {trucks.length} Vehs</span>
             </div>
@@ -2675,17 +2756,17 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
             <div className="relative flex items-center">
               <button 
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center space-x-1 sm:space-x-2 hover:bg-slate-50 p-1 sm:p-1.5 rounded-2xl transition-all cursor-pointer select-none text-left"
+                className="flex items-center space-x-1 sm:space-x-2 hover:bg-slate-50 dark:hover:bg-slate-800 p-1 sm:p-1.5 rounded-2xl transition-all cursor-pointer select-none text-left"
                 id="user-menu-trigger"
               >
                 <div className="hidden sm:flex flex-col text-right font-sans">
-                  <span className="text-xs font-black leading-none text-slate-800">{currentUser.name}</span>
-                  <span className="text-[9px] font-mono text-slate-500 leading-none mt-1 uppercase font-bold tracking-wider">
+                  <span className="text-xs font-black leading-none text-slate-800 dark:text-slate-100">{currentUser.name}</span>
+                  <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400 leading-none mt-1 uppercase font-bold tracking-wider">
                     {currentUser.role}
                   </span>
                 </div>
                 <div className="sm:hidden flex flex-col text-right pr-1 font-sans">
-                  <span className="text-[10px] font-bold leading-none text-slate-800 truncate max-w-[80px]">{currentUser.name.split(' ')[0]}</span>
+                  <span className="text-[10px] font-bold leading-none text-slate-800 dark:text-slate-100 truncate max-w-[80px]">{currentUser.name.split(' ')[0]}</span>
                   <span className="text-[8px] font-mono text-slate-400 leading-none mt-0.5 uppercase tracking-wider">
                     {currentUser.role}
                   </span>
@@ -2697,10 +2778,10 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               {isUserMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 p-4 z-50 animate-fade-in text-left">
-                    <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center mb-3">
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-4 z-50 animate-fade-in text-left">
+                    <div className="bg-slate-50/70 dark:bg-slate-850 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center text-center mb-3">
                       <div className="relative group mb-3">
-                        <div className="h-20 w-20 rounded-full overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center">
+                        <div className="h-20 w-20 rounded-full overflow-hidden border-2 border-white dark:border-slate-700 shadow-md bg-white dark:bg-slate-800 flex items-center justify-center">
                           {renderUserAvatarHelper(currentUser.avatarUrl, currentUser.name, "h-full w-full")}
                         </div>
                         <button 
@@ -2716,25 +2797,79 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                         </button>
                       </div>
 
-                      <h4 className="text-xs sm:text-sm font-extrabold text-slate-800 leading-snug">
+                      <h4 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-snug">
                         {currentUser.name} &bull; {currentUser.role}
                       </h4>
-                      <p className="text-[10px] sm:text-xs text-slate-500 truncate max-w-full font-medium mt-0.5">
+                      <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate max-w-full font-medium mt-0.5">
                         {currentUser.email}
                       </p>
+                    </div>
+
+                    {/* Theme Quick Switcher in User Menu */}
+                    <div className="mb-2.5 p-2 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between px-1 mb-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1">
+                          <Palette className="h-3 w-3 text-blue-500" />
+                          <span>Theme Mode</span>
+                        </span>
+                        <span className="text-[9px] font-mono text-blue-600 dark:text-blue-400 font-bold capitalize bg-blue-50 dark:bg-blue-950/80 px-1.5 py-0.5 rounded border border-blue-200/60 dark:border-blue-800">
+                          {themeMode}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 bg-slate-200/70 dark:bg-slate-800 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setThemeMode('light')}
+                          className={`flex items-center justify-center space-x-1 py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                            themeMode === 'light'
+                              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                          title="Light Mode"
+                        >
+                          <Sun className="h-3.5 w-3.5" />
+                          <span>Light</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setThemeMode('dark')}
+                          className={`flex items-center justify-center space-x-1 py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                            themeMode === 'dark'
+                              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                          title="Dark Mode"
+                        >
+                          <Moon className="h-3.5 w-3.5" />
+                          <span>Dark</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setThemeMode('system')}
+                          className={`flex items-center justify-center space-x-1 py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                            themeMode === 'system'
+                              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                          title="System Sync"
+                        >
+                          <Monitor className="h-3.5 w-3.5" />
+                          <span>System</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-0.5">
                       <button
                         onClick={() => {
                           setIsUserMenuOpen(false);
-                          setProfileActiveTab('password');
+                          setProfileActiveTab('appearance');
                           setShowProfileModal(true);
                         }}
-                        className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-xl transition-all font-bold text-left cursor-pointer"
+                        className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
                       >
-                        <Key className="h-4 w-4 text-slate-400" />
-                        <span>Passwords and autofill</span>
+                        <Palette className="h-4 w-4 text-blue-500" />
+                        <span>Appearance & Theme</span>
                       </button>
 
                       <button
@@ -2743,7 +2878,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                           setProfileActiveTab('info');
                           setShowProfileModal(true);
                         }}
-                        className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-xl transition-all font-bold text-left cursor-pointer"
+                        className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
                       >
                         <Sliders className="h-4 w-4 text-slate-400" />
                         <span>Customize profile details</span>
@@ -2755,17 +2890,29 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                           setProfileActiveTab('photo');
                           setShowProfileModal(true);
                         }}
-                        className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-xl transition-all font-bold text-left cursor-pointer"
+                        className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
                       >
                         <Camera className="h-4 w-4 text-slate-400" />
                         <span>Customize photo / avatar</span>
                       </button>
 
-                      <div className="border-t border-slate-100 my-2" />
+                      <button
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          setProfileActiveTab('password');
+                          setShowProfileModal(true);
+                        }}
+                        className="w-full flex items-center space-x-3 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all font-bold text-left cursor-pointer"
+                      >
+                        <Key className="h-4 w-4 text-slate-400" />
+                        <span>Passwords and autofill</span>
+                      </button>
 
-                      <div className="px-3 py-1 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                      <div className="border-t border-slate-100 dark:border-slate-800 my-2" />
+
+                      <div className="px-3 py-1 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                         <span>Sync engine status</span>
-                        <span className="flex items-center space-x-1 text-green-600 font-bold">
+                        <span className="flex items-center space-x-1 text-green-600 dark:text-green-400 font-bold">
                           <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
                           <span>Sync is on</span>
                         </span>
@@ -2776,7 +2923,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                           setIsUserMenuOpen(false);
                           handleLogout();
                         }}
-                        className="w-full flex items-center space-x-3 px-3 py-2.5 text-xs text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-black text-left cursor-pointer"
+                        className="w-full flex items-center space-x-3 px-3 py-2.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all font-black text-left cursor-pointer"
                       >
                         <LogOut className="h-4 w-4 text-rose-400" />
                         <span>Logoff</span>
@@ -3042,7 +3189,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         </div>
 
         {/* Unified Classified Navigation Subbar inside Sticky Header */}
-        <div className="hidden lg:block border-t border-slate-100 bg-slate-50/70 py-1.5 select-none" id="prospaces-nav-unified-sticky">
+        <div className="hidden lg:block border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 py-1.5 select-none" id="prospaces-nav-unified-sticky">
           <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8">
             <div className="flex items-center space-x-2 lg:space-x-4">
               
@@ -3053,21 +3200,21 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 >
                   <button 
                     onClick={() => setActiveNavDropdown(prev => prev === 'dispatcher' ? null : 'dispatcher')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
                     <span>Dispatcher Space</span>
                     <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'dispatcher' ? 'rotate-180' : ''}`} />
                   </button>
                   <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'dispatcher' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white border border-slate-200 shadow-xl shadow-slate-200/50 rounded-xl p-1.5">
+                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
                       <button
                         onClick={() => { setActiveTab('telematics'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'telematics' || activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'telematics' || activeTab === 'dashboard' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
-                        <MapIcon className="h-4 w-4 text-blue-600" />
+                        <MapIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                         <span>Map</span>
                       </button>
 
@@ -3075,7 +3222,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                         <button
                           onClick={() => { setActiveTab('live-dashboard'); setActiveNavDropdown(null); }}
                           className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                            activeTab === 'live-dashboard' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            activeTab === 'live-dashboard' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`}
                         >
                           <Activity className="h-4 w-4 text-[#FF5A1F]" />
@@ -3086,7 +3233,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                       <button
                         onClick={() => { setActiveTab('queue'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'queue' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'queue' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <ClipboardList className="h-4 w-4" />
@@ -3097,10 +3244,10 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                         <button
                           onClick={() => { setActiveTab('document-import'); setActiveNavDropdown(null); }}
                           className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                            activeTab === 'document-import' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            activeTab === 'document-import' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`}
                         >
-                          <FileDown className="h-4 w-4 text-indigo-600" />
+                          <FileDown className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                           <span>Doc Import</span>
                         </button>
                       )}
@@ -3116,21 +3263,21 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 >
                   <button 
                     onClick={() => setActiveNavDropdown(prev => prev === 'picker' ? null : 'picker')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                     <span>Picker Space</span>
                     <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'picker' ? 'rotate-180' : ''}`} />
                   </button>
                   <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'picker' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white border border-slate-200 shadow-xl shadow-slate-200/50 rounded-xl p-1.5">
+                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
                       <button
                         onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'scanner' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'scanner' ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
-                        <Scan className="h-4 w-4 text-amber-600" />
+                        <Scan className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                         <span>Loading Scanner</span>
                       </button>
                     </div>
@@ -3145,26 +3292,26 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 >
                   <button 
                     onClick={() => setActiveNavDropdown(prev => prev === 'driver' ? null : 'driver')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                     <span>Driver Space</span>
                     <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'driver' ? 'rotate-180' : ''}`} />
                   </button>
                   <div className={`absolute left-0 top-full pt-1 min-w-[220px] z-[100] transition-all duration-200 ${activeNavDropdown === 'driver' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white border border-slate-200 shadow-xl shadow-slate-200/50 rounded-xl p-1.5 space-y-0.5">
+                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5 space-y-0.5">
                       <button
                         onClick={() => {
                           setShowDriverTruckModal(true);
                           setActiveNavDropdown(null);
                         }}
-                        className="w-full text-left px-3 py-2 text-xs font-extrabold rounded-lg flex items-center justify-between transition-all cursor-pointer bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200/60"
+                        className="w-full text-left px-3 py-2 text-xs font-extrabold rounded-lg flex items-center justify-between transition-all cursor-pointer bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/80 border border-blue-200/60 dark:border-blue-800"
                       >
                         <div className="flex items-center space-x-2.5">
-                          <TruckIcon className="h-4 w-4 text-blue-600" />
+                          <TruckIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                           <span>Change Assigned Truck</span>
                         </div>
-                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 text-blue-900 truncate max-w-[75px]">
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-200 truncate max-w-[75px]">
                           {driverAssignedTruck ? driverAssignedTruck.name.split(' ')[0] : 'None'}
                         </span>
                       </button>
@@ -3176,25 +3323,25 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                           try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
                         }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'driver' || activeTab === 'epod' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'driver' || activeTab === 'epod' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
-                        <TruckIcon className="h-4 w-4 text-emerald-600" />
+                        <TruckIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                         <span>Driver Mobile App</span>
                       </button>
                       <button
                         onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'scanner' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'scanner' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
-                        <Scan className="h-4 w-4 text-amber-600" />
+                        <Scan className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                         <span>Loading Scanner</span>
                       </button>
                       <button
                         onClick={() => { setActiveTab('inspections'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'inspections' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'inspections' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <Shield className="h-4 w-4 text-blue-500" />
@@ -3203,7 +3350,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                       <button
                         onClick={() => { setActiveTab('fuel'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'fuel' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'fuel' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <Activity className="h-4 w-4 text-rose-500" />
@@ -3221,18 +3368,18 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 >
                   <button 
                     onClick={() => setActiveNavDropdown(prev => prev === 'admin' ? null : 'admin')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600 dark:bg-slate-400"></span>
                     <span>Admin Space</span>
                     <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'admin' ? 'rotate-180' : ''}`} />
                   </button>
                   <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'admin' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white border border-slate-200 shadow-xl shadow-slate-200/50 rounded-xl p-1.5">
+                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
                       <button
                         onClick={() => { setActiveTab('enterprise-hub'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'enterprise-hub' ? 'bg-purple-50 text-purple-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          activeTab === 'enterprise-hub' ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <Sparkles className="h-4 w-4 text-purple-500" />
@@ -3241,7 +3388,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                       <button
                         onClick={() => { setActiveTab('stores'); setActiveNavDropdown(null); }}
                         className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          ['stores', 'trucks', 'gps', 'users', 'architecture'].includes(activeTab) ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          ['stores', 'trucks', 'gps', 'users', 'architecture'].includes(activeTab) ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <Settings className="h-4 w-4" />
@@ -3262,7 +3409,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 className={`ml-auto flex items-center space-x-2 px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer shadow-sm ${
                   activeTab === 'driver' || activeTab === 'epod'
                     ? 'bg-emerald-600 text-white shadow-emerald-500/20'
-                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80'
+                    : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800'
                 }`}
               >
                 <TruckIcon className="h-3.5 w-3.5 text-current" />
@@ -3284,38 +3431,38 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
 
         {/* Secondary Sub-navigation for Fleet Setup */}
         {['stores', 'trucks', 'gps', 'users', 'architecture'].includes(activeTab) && (
-          <div className="bg-slate-100 border border-slate-200/50 p-1 rounded-xl flex flex-nowrap overflow-x-auto gap-1 shadow-inner w-full scrollbar-none select-none animate-fade-in" id="prospaces-subnav" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-1 rounded-xl flex flex-nowrap overflow-x-auto gap-1 shadow-inner w-full scrollbar-none select-none animate-fade-in" id="prospaces-subnav" style={{ WebkitOverflowScrolling: 'touch' }}>
             <button
               onClick={() => setActiveTab('stores')}
               className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
                 activeTab === 'stores'
-                  ? 'bg-white text-blue-800 shadow-xs border border-slate-200/40'
-                  : 'text-gray-500 hover:bg-white/50 hover:text-gray-800'
+                  ? 'bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 shadow-xs border border-slate-200/40 dark:border-slate-700'
+                  : 'text-gray-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-gray-800 dark:hover:text-slate-200'
               }`}
             >
-              <Store className="h-3.5 w-3.5 text-blue-600" />
+              <Store className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               <span>Stores</span>
             </button>
             <button
               onClick={() => setActiveTab('trucks')}
               className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
                 activeTab === 'trucks'
-                  ? 'bg-white text-blue-800 shadow-xs border border-slate-200/40'
-                  : 'text-gray-500 hover:bg-white/50 hover:text-gray-800'
+                  ? 'bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 shadow-xs border border-slate-200/40 dark:border-slate-700'
+                  : 'text-gray-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-gray-800 dark:hover:text-slate-200'
               }`}
             >
-              <TruckIcon className="h-3.5 w-3.5 text-blue-600" />
+              <TruckIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               <span>Trucks</span>
             </button>
             <button
               onClick={() => setActiveTab('telematics')}
               className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
                 activeTab === 'telematics' || activeTab === 'dashboard'
-                  ? 'bg-white text-blue-800 shadow-xs border border-slate-200/40'
-                  : 'text-gray-500 hover:bg-white/50 hover:text-gray-800'
+                  ? 'bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 shadow-xs border border-slate-200/40 dark:border-slate-700'
+                  : 'text-gray-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-gray-800 dark:hover:text-slate-200'
               }`}
             >
-              <MapIcon className="h-3.5 w-3.5 text-blue-600" />
+              <MapIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               <span>Map</span>
             </button>
             {currentUser?.role === 'Admin' && (
@@ -3323,8 +3470,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 onClick={() => setActiveTab('gps')}
                 className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
                   activeTab === 'gps'
-                    ? 'bg-white text-blue-800 shadow-xs border border-slate-200/40'
-                    : 'text-gray-500 hover:bg-white/50 hover:text-gray-800'
+                    ? 'bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 shadow-xs border border-slate-200/40 dark:border-slate-700'
+                    : 'text-gray-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-gray-800 dark:hover:text-slate-200'
                 }`}
               >
                 <Compass className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
@@ -3335,22 +3482,22 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               onClick={() => setActiveTab('users')}
               className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
                 activeTab === 'users'
-                  ? 'bg-white text-blue-800 shadow-xs border border-slate-200/40'
-                  : 'text-gray-500 hover:bg-white/50 hover:text-gray-800'
+                  ? 'bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 shadow-xs border border-slate-200/40 dark:border-slate-700'
+                  : 'text-gray-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-gray-800 dark:hover:text-slate-200'
               }`}
             >
-              <Users className="h-3.5 w-3.5 text-blue-600" />
+              <Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               <span>Users</span>
             </button>
             <button
               onClick={() => setActiveTab('architecture')}
               className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
                 activeTab === 'architecture'
-                  ? 'bg-white text-blue-800 shadow-xs border border-slate-200/40'
-                  : 'text-gray-500 hover:bg-white/50 hover:text-gray-800'
+                  ? 'bg-white dark:bg-slate-800 text-blue-800 dark:text-blue-400 shadow-xs border border-slate-200/40 dark:border-slate-700'
+                  : 'text-gray-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-gray-800 dark:hover:text-slate-200'
               }`}
             >
-              <Layers3 className="h-3.5 w-3.5 text-blue-600" />
+              <Layers3 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               <span>Overall Architecture</span>
             </button>
           </div>
