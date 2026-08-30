@@ -12,7 +12,7 @@ import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { DailyBriefingPopup } from './components/DailyBriefingPopup';
 import { Toaster } from './components/ui/sonner';
 import ErrorBoundary, { ErrorBoundaryFallback } from './components/ErrorBoundary';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { createClient, clearStaleAuthTokens, handleAuthError } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import { getTheme } from './utils/themes';

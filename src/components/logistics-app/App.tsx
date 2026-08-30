@@ -766,11 +766,10 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           id: t.id,
           tenantId: currentTenant.id,
           name: t.name,
-          type: serializeToType(t.type),
+          type: serializeToType(t.type, t.registrationDueDate, t.imageUrl),
           driver: t.driver,
           branchId: t.branchId,
-          image_url: t.imageUrl || null,
-          registration_due_date: t.registrationDueDate || null
+          registrationDueDate: t.registrationDueDate || null
         }));
         await supabase.from("trucks").upsert(serializedTrucks);
         console.log("Written driver truck update directly to Supabase trucks table.");

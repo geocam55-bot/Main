@@ -11,12 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   Blocks,
-  BrushCleaning,
+  Paintbrush,
   Copy,
   Eye,
   GitBranch,
@@ -1935,7 +1935,7 @@ export function EmailDesignStudio({ user }: EmailDesignStudioProps) {
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
-                    <BrushCleaning className="h-4 w-4 text-sky-600" />
+                    <Paintbrush className="h-4 w-4 text-sky-600" />
                     Variable search
                   </div>
                   <div className="mt-3 space-y-2">
