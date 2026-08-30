@@ -29,17 +29,49 @@ for (const dir of allDestDirs) {
   }
 }
 
+// Ensure logistics PNG logos exist and are synchronized across all public and dist directories
+const syncFileToTargets = (sourceRelativePath, targets) => {
+  const src = path.join(process.cwd(), sourceRelativePath);
+  if (fs.existsSync(src)) {
+    const buf = fs.readFileSync(src);
+    for (const t of targets) {
+      const dest = path.join(process.cwd(), t);
+      const dir = path.dirname(dest);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(dest, buf);
+    }
+  }
+};
+
+// Sync transparent logistics PNG logos
+syncFileToTargets('public/logistics-logo.png', [
+  'src/public/logistics-logo.png',
+  'src/public/prospaces-logistics-logo.png',
+  'dist/logistics-logo.png',
+  'dist/prospaces-logistics-logo.png',
+  'src/assets/logistics-logo.png',
+  'src/assets/prospaces-logistics-logo.png'
+]);
+
+syncFileToTargets('public/logistics-logo-dark.png', [
+  'src/public/logistics-logo-dark.png',
+  'src/public/prospaces-logistics-logo-dark.png',
+  'dist/logistics-logo-dark.png',
+  'dist/prospaces-logistics-logo-dark.png',
+  'src/assets/logistics-logo-dark.png',
+  'src/assets/prospaces-logistics-logo-dark.png'
+]);
+
 // Write CRM Logo buffers
 if (crmLogoBuffer) {
   const crmTargets = [
     'public/logo.jpg',
-    'public/logo.png',
     'public/prospaces-crm-logo.jpg',
     'src/public/logo.jpg',
-    'src/public/logo.png',
+    'src/public/prospaces-crm-logo.jpg',
     'dist/logo.jpg',
-    'dist/logo.png',
-    'src/assets/logo.png',
+    'dist/prospaces-crm-logo.jpg',
+    'src/assets/logo.jpg',
     'src/assets/prospaces_crm_logo.jpg'
   ];
   for (const t of crmTargets) {
@@ -47,7 +79,6 @@ if (crmLogoBuffer) {
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(fullPath, crmLogoBuffer);
-    console.log(`[Prebuild] Wrote CRM logo to ${t}`);
   }
 }
 
@@ -59,8 +90,10 @@ if (effectiveLogisticsBuffer) {
     'public/prospaces-logistics-logo.jpg',
     'public/images/logo_no_border_tight_1783077241511.jpg',
     'src/public/logistics-logo.jpg',
+    'src/public/prospaces-logistics-logo.jpg',
     'src/public/images/logo_no_border_tight_1783077241511.jpg',
     'dist/logistics-logo.jpg',
+    'dist/prospaces-logistics-logo.jpg',
     'dist/images/logo_no_border_tight_1783077241511.jpg',
     'src/assets/prospaces_logistics_logo.jpg',
     'src/components/logistics-app/assets/images/logo_no_border_tight_1783077241511.jpg'
@@ -70,7 +103,6 @@ if (effectiveLogisticsBuffer) {
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(fullPath, effectiveLogisticsBuffer);
-    console.log(`[Prebuild] Wrote Logistics logo to ${t}`);
   }
 }
 
@@ -95,7 +127,6 @@ if (faviconPngBuffer) {
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(fullPath, faviconPngBuffer);
-    console.log(`[Prebuild] Wrote brand favicon to ${t}`);
   }
 }
 
@@ -120,3 +151,4 @@ if (fs.existsSync(imagesSrcDir)) {
   }
 }
 
+console.log('[Prebuild] Successfully synchronized all assets and transparent logos.');

@@ -11,7 +11,11 @@ const prospacesLogoDark = PROSPACES_LOGISTICS_LOGO_DARK || '/logistics-logo-dark
 
 // Custom fetch utility to automatically inject custom Supabase headers for stateless backend resilience
 async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input && 'url' in (input as any) ? (input as any).url : ''));
+  let url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input && 'url' in (input as any) ? (input as any).url : ''));
+  if (url && (url.startsWith('api/') || url.startsWith('./api/'))) {
+    url = '/' + url.replace(/^\.\//, '');
+    input = url;
+  }
   if (url && (url.startsWith('/api/') || url.includes('/api/'))) {
     const savedUrl = localStorage.getItem('prospaces_custom_supabase_url');
     const savedKey = localStorage.getItem('prospaces_custom_supabase_key');

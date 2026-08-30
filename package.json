@@ -98,7 +98,7 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node prebuild.js && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && node prebuild.js && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "USE_STATIC_BUILD=true node dist/server.cjs",
     "lint": "echo 'No lint script defined'"
   }

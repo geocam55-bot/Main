@@ -1021,6 +1021,17 @@ export async function saveTenantStateDirect(
     };
   });
 
+  const safeBulkUpsert = async (table: string, records: any[]) => {
+    if (!records || records.length === 0) return;
+    const client = getFrontendSupabase();
+    if (!client) return;
+    try {
+      await client.from(table).upsert(records);
+    } catch (err) {
+      console.warn(`safeBulkUpsert warning for ${table}:`, err);
+    }
+  };
+
   await Promise.allSettled([
     safeBulkUpsert("branches", mappedBranches),
     safeBulkUpsert("trucks", serializedTrucks),
