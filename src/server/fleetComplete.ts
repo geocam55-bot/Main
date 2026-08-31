@@ -155,6 +155,15 @@ export async function getValidToken(
     }
   }
 
+  // If fresh login failed or credentials were empty, fallback to raw access token in credentials
+  if (!cachedTokens.accessToken && (creds as any).accessToken) {
+    const rawToken = resolveSecret((creds as any).accessToken);
+    if (rawToken && rawToken.length > 20) {
+      cachedTokens.accessToken = rawToken.replace(/^Bearer\s+/i, '').trim();
+      cachedTokens.expiresAt = now + 3600 * 1000;
+    }
+  }
+
   return {
     accessToken: cachedTokens.accessToken,
     fleetId: cachedTokens.fleetId || 'abb3c44d-0588-486d-9e49-441d9639727c',

@@ -4862,7 +4862,7 @@ async function getFleetId(token: string): Promise<string | null> {
     }
   });
 
-  app.get("/api/vehicles", async (req, res) => {
+  app.get(["/api/vehicles", "/api/v1/vehicles", "/api/telematics/vehicles", "/api/v1/telematics/vehicles"], async (req, res) => {
     try {
       const credentialsSupplier = async () => {
         const conn = await getActiveConnection();
