@@ -45,7 +45,6 @@
     "cors": "^2.8.5",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.5.2",
-    "esbuild": "^0.28.2",
     "express": "^5.2.1",
     "hono": "^4.7.2",
     "html5-qrcode": "^2.3.8",

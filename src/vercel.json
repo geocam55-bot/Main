@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "build",
+  "outputDirectory": "dist",
   "headers": [
     {
       "source": "/favicon.(ico|svg|png)",
@@ -27,6 +27,7 @@
     { "source": "/it.html", "destination": "/it.html" },
     { "source": "/marketing.html", "destination": "/marketing.html" },
     { "source": "/insights.html", "destination": "/insights.html" },
+    { "source": "/logistics.html", "destination": "/logistics.html" },
     { "source": "/project-wizards.html", "destination": "/project-wizards.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

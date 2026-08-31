@@ -400,6 +400,8 @@ html.dark, html.dark body, html.dark #root {
     display: none !important;
   }
   
-  scrollbar-width: none !important;
+  * {
+    scrollbar-width: none !important;
+  }
 }
 
