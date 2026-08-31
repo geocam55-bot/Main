@@ -83,11 +83,12 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     statusFilter,
     searchQuery
   });
-  // Filter vehicles to strictly match Supabase trucks (16 units)
+  // Filter vehicles to strictly match Supabase trucks and include all active telematics units
   const vehicles = useMemo(() => {
     const baseTrucks = (trucks && trucks.length > 0) ? trucks : DEFAULT_TRUCKS;
+    const matchedRawIds = new Set<string>();
 
-    return baseTrucks.map((t, index) => {
+    const mapped = baseTrucks.map((t, index) => {
       const tId = (t.id || "").toLowerCase();
       const tName = (t.name || "").toLowerCase();
       const tVin = (t.vin || "").toLowerCase();
@@ -120,6 +121,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         : (matchedRaw?.driver?.name || 'Unassigned');
 
       if (matchedRaw) {
+        if (matchedRaw.vehicleId) matchedRawIds.add(matchedRaw.vehicleId.toLowerCase());
+        if (matchedRaw.truckName) matchedRawIds.add(matchedRaw.truckName.toLowerCase());
         return {
           ...matchedRaw,
           vehicleId: t.id,
@@ -180,6 +183,15 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         activeRoute: undefined
       };
     });
+
+    // Also include any raw telemetry vehicles that were not in baseTrucks
+    const additionalRaw = rawVehicles.filter(rv => {
+      const vId = (rv.vehicleId || "").toLowerCase();
+      const vName = (rv.truckName || "").toLowerCase();
+      return !matchedRawIds.has(vId) && !matchedRawIds.has(vName);
+    });
+
+    return [...mapped, ...additionalRaw];
   }, [trucks, rawVehicles]);
 
   // Filtered vehicles for left panel and map views
