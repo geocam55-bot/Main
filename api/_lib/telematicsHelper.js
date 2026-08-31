@@ -17,11 +17,23 @@ export function decrypt(text) {
   try {
     const iv = Buffer.from(parts[0], 'hex');
     const encryptedText = Buffer.from(parts[1], 'hex');
-    const key = crypto.scryptSync('prospaces-telematics-secret-2026', 'salt', 32);
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-    let decrypted = decipher.update(encryptedText);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    return decrypted.toString('utf8');
+    
+    // Try primary key
+    try {
+      const key = crypto.scryptSync('prospaces_secure_key_2025', 'salt_prospaces_logistics', 32);
+      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+      let decrypted = decipher.update(encryptedText);
+      decrypted = Buffer.concat([decrypted, decipher.final()]);
+      const res = decrypted.toString('utf8');
+      if (res && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(res)) return res;
+    } catch (_) {}
+
+    // Fallback key
+    const key2 = crypto.scryptSync('prospaces-telematics-secret-2026', 'salt', 32);
+    const decipher2 = crypto.createDecipheriv('aes-256-cbc', key2, iv);
+    let decrypted2 = decipher2.update(encryptedText);
+    decrypted2 = Buffer.concat([decrypted2, decipher2.final()]);
+    return decrypted2.toString('utf8');
   } catch (e) {
     return text;
   }
@@ -214,6 +226,44 @@ export async function getFleetCompleteToken(conn) {
         const expiresIn = data.expires_in || (3600 * 24 * 30); // 30 days default
         const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
+        let resolvedFleetId = defaultFleetId;
+        let resolvedUserId = null;
+
+        // Dynamically query getUserInfo to get real fleetId for RONA (national)
+        try {
+          const userRes = await fetch('https://api.fleetcomplete.com/graphql', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${cleanToken}`
+            },
+            body: JSON.stringify({
+              query: `
+                query {
+                  getUserInfo {
+                    userId
+                    fleetId
+                    firstName
+                    lastName
+                    email
+                  }
+                }
+              `
+            }),
+            signal: AbortSignal.timeout(6000)
+          });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            const uInfo = userData.data?.getUserInfo;
+            if (uInfo?.fleetId) {
+              resolvedFleetId = uInfo.fleetId;
+            }
+            if (uInfo?.userId) {
+              resolvedUserId = uInfo.userId;
+            }
+          }
+        } catch (_) {}
+
         // Update active connection with latest token in background
         saveActiveConnection({
           ...activeConn,
@@ -221,7 +271,7 @@ export async function getFleetCompleteToken(conn) {
           token_expires_at: expiresAt
         }).catch(() => {});
 
-        return { token: cleanToken, fleetId: defaultFleetId, userId: null };
+        return { token: cleanToken, fleetId: resolvedFleetId, userId: resolvedUserId };
       }
     }
   } catch (err) {
