@@ -45,7 +45,7 @@
     "cors": "^2.8.5",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.5.2",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "express": "^5.2.1",
     "hono": "^4.7.2",
     "html5-qrcode": "^2.3.8",
@@ -88,6 +88,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.25.0",
     "jsdom": "^26.0.0",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",
@@ -96,7 +97,7 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && node -e \"const fs=require('fs'); if(fs.existsSync('dist')){fs.cpSync('dist','build',{recursive:true});}\"",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "lint": "echo 'No lint script defined'"
   }

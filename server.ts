@@ -2083,6 +2083,11 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Essential Health Check for Container Ingress & Reverse Proxy
+  app.get(['/api/health', '/healthz', '/health'], (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   // Root level diagnostics to verify server is actually running and receiving traffic
   try {
     
@@ -2852,8 +2857,10 @@ Result:
     }
   }
 
-  // Trigger sync on server startup
-  syncLocalEnvironmentToSupabase();
+  // Trigger sync on server startup in background
+  syncLocalEnvironmentToSupabase().catch(err => {
+    console.log('[Server Config Sync] Background sync handled notice:', err?.message || err);
+  });
 
   // Register Logistics Space API endpoints (state, user-heartbeat, telematics, tenants, etc.)
   registerLogisticsServer(app);
