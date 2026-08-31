@@ -4907,33 +4907,39 @@ async function getFleetId(token: string): Promise<string | null> {
         // Trigger background in-memory telemetry update
         syncFleetCompleteTelemetry().catch((e) => console.warn("[Fleet Sync Notice]", e));
 
-        // Filter out any Fleet Complete vehicles not configured in the Supabase trucks table
-        const filteredFcVehicles = fcResult.vehicles.filter((fv: any) => {
-          const fvId = String(fv.id || '').toLowerCase();
-          const fvName = String(fv.name || '').toLowerCase();
-          const fvUNum = extractTruckUnitNumber(fv.name) || extractTruckUnitNumber(fv.id);
+        // Return all Fleet Complete vehicles (or prioritized matched trucks if trucks table has entries)
+        let returnedVehicles = fcResult.vehicles;
+        if (dbTrucks.length > 0) {
+          const matchedFcVehicles = fcResult.vehicles.filter((fv: any) => {
+            const fvId = String(fv.id || '').toLowerCase();
+            const fvName = String(fv.name || '').toLowerCase();
+            const fvUNum = extractTruckUnitNumber(fv.name) || extractTruckUnitNumber(fv.id);
 
-          return dbTrucks.some((t: any) => {
-            const tId = String(t.id || '').toLowerCase();
-            const tName = String(t.name || '').toLowerCase();
-            const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
-            const deserialized = t.type && t.type.includes("||") ? deserializeType(t) : t;
-            return (
-              tId === fvId ||
-              tName === fvName ||
-              (fvUNum && tUNum && fvUNum === tUNum) ||
-              (deserialized.gpsDeviceId && deserialized.gpsDeviceId === fv.hardwareId) ||
-              (deserialized.vin && fv.vin && deserialized.vin.toLowerCase() === fv.vin.toLowerCase())
-            );
+            return dbTrucks.some((t: any) => {
+              const tId = String(t.id || '').toLowerCase();
+              const tName = String(t.name || '').toLowerCase();
+              const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
+              const deserialized = t.type && t.type.includes("||") ? deserializeType(t) : t;
+              return (
+                tId === fvId ||
+                tName === fvName ||
+                (fvUNum && tUNum && fvUNum === tUNum) ||
+                (deserialized.gpsDeviceId && deserialized.gpsDeviceId === fv.hardwareId) ||
+                (deserialized.vin && fv.vin && deserialized.vin.toLowerCase() === fv.vin.toLowerCase())
+              );
+            });
           });
-        });
+          if (matchedFcVehicles.length > 0) {
+            returnedVehicles = matchedFcVehicles;
+          }
+        }
 
         return res.json({
           success: true,
           source: 'fleet_complete',
           isStale: false,
           fleetId: fcResult.fleetId || cachedFleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
-          vehicles: filteredFcVehicles,
+          vehicles: returnedVehicles,
           timestamp: new Date().toISOString()
         });
       }

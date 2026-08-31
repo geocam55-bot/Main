@@ -2,6 +2,7 @@
  * Fleet Complete Telemetry Integration Module
  * Authenticates against Fleet Complete API and retrieves exact live coordinates from the Fleet Complete database.
  */
+import crypto from 'crypto';
 
 export interface FleetVehicleTelemetry {
   id: string;
@@ -58,15 +59,36 @@ export const LAST_KNOWN_FLEET_COMPLETE_LOCATIONS: FleetVehicleTelemetry[] = [];
  * Validates or retrieves active Fleet Complete Bearer Token & Fleet / User identifiers
  */
 export async function getValidToken(
-  credentialsSupplier?: () => Promise<{ username?: string; password?: string; apiUrl?: string; apiKey?: string; accessToken?: string }>,
+  credentialsSupplier?: () => Promise<{ username?: string; password?: string; apiUrl?: string; apiKey?: string; accessToken?: string; client_secret?: string; client_id?: string }>,
   forceRefresh = false
 ): Promise<{ accessToken: string | null; fleetId: string | null; userId: string | null }> {
   const now = Date.now();
   const creds = credentialsSupplier ? await credentialsSupplier() : {};
-  const username = creds.username || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || '';
-  const rawPassword = creds.password && creds.password !== 'test_secret' ? creds.password : undefined;
-  const password = rawPassword || process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || creds.password;
-  const tokenUrl = creds.apiUrl || process.env.FLEET_COMPLETE_API_URL || 'https://api.fleetcomplete.com/login/token';
+  const rawUser = creds.username || (creds as any).client_id || process.env.FLEET_COMPLETE_USERNAME || process.env.FLEET_COMPLETE_USER || '';
+  const rawPass = creds.password || (creds as any).client_secret || process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || '';
+  const tokenUrl = creds.apiUrl || (creds as any).api_url || process.env.FLEET_COMPLETE_API_URL || 'https://api.fleetcomplete.com/login/token';
+
+  // Helper to decrypt stored symmetric tokens/passwords if encrypted
+  const resolveSecret = (secret: string): string => {
+    if (!secret || secret === 'test_secret' || secret === '••••••••••••') return '';
+    if (secret.includes(':') && secret.length > 32) {
+      try {
+        const parts = secret.split(':');
+        if (parts.length === 2) {
+          const iv = Buffer.from(parts[0], 'hex');
+          const encryptedText = Buffer.from(parts[1], 'hex');
+          const key = crypto.scryptSync('prospaces_secure_key_2025', 'salt_prospaces_logistics', 32);
+          const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+          const decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
+          return decrypted.toString('utf8');
+        }
+      } catch (_) {}
+    }
+    return secret;
+  };
+
+  const username = rawUser;
+  const password = resolveSecret(rawPass);
 
   // If token is already cached and not expired, return it
   if (!forceRefresh && cachedTokens.accessToken && cachedTokens.expiresAt > now + 60 * 1000) {
