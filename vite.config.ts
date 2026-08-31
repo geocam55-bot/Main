@@ -80,6 +80,7 @@
     build: {
       target: 'esnext',
       outDir: 'dist',
+      chunkSizeWarningLimit: 2500,
       modulePreload: false,
       rollupOptions: {
         input: {
