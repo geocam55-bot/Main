@@ -44,23 +44,16 @@ interface TelematicsMapViewProps {
   viewingTripsFor?: string | null;
 }
 
-// Load API key - must be done dynamically for Vite production builds
-const API_KEY_STATIC = (() => {
-  try {
-    // Try import.meta.env first (Vite way)
-    if ((import.meta as any)?.env) {
-      const env = (import.meta as any).env;
-      return env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-             env.VITE_GOOGLE_MAPS_API_KEY ||
-             env.GOOGLE_MAPS_PLATFORM_KEY ||
-             env.GOOGLE_MAPS_API_KEY ||
-             '';
-    }
-  } catch (_) {}
-  
-  // Fallback - in Vite, process.env won't work at runtime
-  return '';
-})();
+// Load API key - injected at build time by Vite via define in vite.config.ts
+// These values are replaced during the build process from Vercel environment
+const API_KEY_STATIC =
+  typeof process !== 'undefined' && process.env?.GOOGLE_MAPS_PLATFORM_KEY
+    ? process.env.GOOGLE_MAPS_PLATFORM_KEY
+    : typeof process !== 'undefined' && process.env?.VITE_GOOGLE_MAPS_PLATFORM_KEY
+    ? process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY
+    : typeof process !== 'undefined' && process.env?.GOOGLE_MAPS_API_KEY
+    ? process.env.GOOGLE_MAPS_API_KEY
+    : '';
 
 // Default center: Dartmouth / Halifax Regional Logistics Corridor
 const REGIONAL_CENTER = { lat: 44.69098, lng: -63.59854 };
