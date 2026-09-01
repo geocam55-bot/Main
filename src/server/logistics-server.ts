@@ -5132,50 +5132,10 @@ async function getFleetId(token: string): Promise<string | null> {
       }
 
       if (activeTrucks.length === 0) {
-        activeTrucks = fcVehiclesList.map((fv: any) => ({
-          id: fv.id || fv.name,
-          name: fv.name || fv.id,
-          vin: fv.vin,
-          licensePlate: fv.licensePlate,
-          model: fv.model || (fv.make ? `${fv.make} Commercial` : 'Commercial Hauler'),
-          driver: fv.driver,
-          gpsDeviceId: fv.hardwareId,
-          gpsDeviceName: fv.name,
-          lat: fv.lat,
-          lng: fv.lng,
-          speed: fv.speed,
-          heading: fv.heading,
-          ignitionStatus: fv.ignitionStatus
-        }));
-      } else {
-        // Append any Fleet Complete vehicle that is not in database trucks
-        for (const fv of fcVehiclesList) {
-          const vUNum = extractTruckUnitNumber(fv.name) || extractTruckUnitNumber(fv.id);
-          const exists = activeTrucks.some((t: any) => {
-            const tUNum = extractTruckUnitNumber(t.id) || extractTruckUnitNumber(t.name);
-            return (
-              String(t.id).toLowerCase() === String(fv.id).toLowerCase() ||
-              String(t.name).toLowerCase() === String(fv.name).toLowerCase() ||
-              (vUNum && tUNum && vUNum === tUNum)
-            );
-          });
-          if (!exists) {
-            activeTrucks.push({
-              id: fv.id || fv.name,
-              name: fv.name || fv.id,
-              vin: fv.vin,
-              licensePlate: fv.licensePlate,
-              model: fv.model || (fv.make ? `${fv.make} Commercial` : 'Commercial Truck'),
-              driver: fv.driver,
-              gpsDeviceId: fv.hardwareId,
-              gpsDeviceName: fv.name,
-              lat: fv.lat,
-              lng: fv.lng,
-              speed: fv.speed,
-              heading: fv.heading,
-              ignitionStatus: fv.ignitionStatus
-            });
-          }
+        const tenantId = normalizeTenantId(req.query.tenantId || 'rona_atlantic');
+        const inMem = inMemoryTenantStates[tenantId] || inMemoryTenantStates["t-prospaces-main"];
+        if (inMem && Array.isArray(inMem.trucks) && inMem.trucks.length > 0) {
+          activeTrucks = deduplicateServerTrucks(inMem.trucks);
         }
       }
 

@@ -7,9 +7,10 @@ export default async function handler(req, res) {
   try {
     const statusFilter = (req.query.status || 'all').toLowerCase().trim();
     const search = (req.query.search || '').toLowerCase().trim();
+    const tenantId = req.query.tenantId || req.query.tenant || 'rona_atlantic';
 
     const conn = await getActiveConnection();
-    const result = await fetchLiveFleetCompleteVehicles();
+    const result = await fetchLiveFleetCompleteVehicles(tenantId);
 
     let list = result.vehicles || [];
 
