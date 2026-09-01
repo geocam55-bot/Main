@@ -33,6 +33,7 @@ import {
   Loader2,
   Download,
   RefreshCw,
+  ShoppingCart,
 } from 'lucide-react';
 import { inventoryAPI } from '../utils/api';
 import type { User } from '../App';
@@ -54,6 +55,7 @@ import { showOptimizationInstructions } from '../utils/show-optimization-instruc
 import { getPriceTierLabel, isTierActive, getActiveTierNumbers } from '../lib/global-settings';
 import { settingsAPI } from '../utils/api';
 import { InventoryDiagnostic } from './InventoryDiagnostic';
+import { ShoppingListSubModule } from './inventory/ShoppingListSubModule';
 // import { ImportExport } from './ImportExport';
 
 // Module-level singleton — avoids re-creation per render
@@ -63,6 +65,7 @@ const supabase = createClient();
 interface InventoryProps {
   user: User;
   onNavigate?: (view: string) => void;
+  initialTab?: string;
 }
 
 interface InventoryItem {
@@ -99,7 +102,7 @@ interface InventoryItem {
   updatedAt: string;
 }
 
-export function Inventory({ user, onNavigate }: InventoryProps) {
+export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   const isAdminOrSuperAdmin = user.role === 'admin' || user.role === 'super_admin';
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,7 +112,7 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [activeTab, setActiveTab] = useState('items');
+  const [activeTab, setActiveTab] = useState(initialTab || 'items');
   const [showImportExportWindow, setShowImportExportWindow] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [scanResult, setScanResult] = useState<{ title: string; message: string; type: 'info' | 'success' | 'error'; action?: () => void } | null>(null);
@@ -157,6 +160,70 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
   } | null>(null);
   const notificationTimeoutRef = useRef<number | null>(null);
   const migrationCheckedRef = useRef(false);
+
+  // Shopping List count state
+  const [shoppingListCount, setShoppingListCount] = useState<number>(0);
+
+  // Sync shopping list count from localStorage
+  useEffect(() => {
+    const updateCount = () => {
+      try {
+        const userOrgId = user.organizationId || user.organization_id || 'org_001';
+        const saved = localStorage.getItem(`prospaces_shopping_list_${userOrgId}`);
+        if (saved) {
+          const list = JSON.parse(saved);
+          setShoppingListCount(Array.isArray(list) ? list.length : 0);
+        } else {
+          setShoppingListCount(0);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    updateCount();
+    window.addEventListener('storage', updateCount);
+    return () => window.removeEventListener('storage', updateCount);
+  }, [user.organizationId, user.organization_id]);
+
+  const handleAddToShoppingList = (item: InventoryItem) => {
+    try {
+      const userOrgId = user.organizationId || user.organization_id || 'org_001';
+      const storageKey = `prospaces_shopping_list_${userOrgId}`;
+      const saved = localStorage.getItem(storageKey);
+      let currentList: any[] = saved ? JSON.parse(saved) : [];
+      
+      const existing = currentList.find(p => p.sku === item.sku);
+      if (existing) {
+        existing.quantity = (existing.quantity || 1) + 1;
+      } else {
+        currentList.push({
+          id: 'sl_' + Math.random().toString(36).substring(2, 9),
+          inventoryId: item.id,
+          sku: item.sku || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+          name: item.name || 'Unnamed Material',
+          description: item.description || item.name || '',
+          category: item.category || 'General Building Supply',
+          unitOfMeasure: (item.unitOfMeasure || 'ea').toUpperCase(),
+          cost: Number(item.cost || 0),
+          unitPrice: Number(item.unitPrice || item.priceTier1 || 0),
+          quantity: 1,
+          quantityOnHand: item.quantityOnHand ?? 0,
+          competitorData: { status: 'idle' }
+        });
+      }
+      localStorage.setItem(storageKey, JSON.stringify(currentList));
+      setShoppingListCount(currentList.length);
+      toast.success(`Added ${item.name} to Shopping List`, {
+        action: {
+          label: 'View List',
+          onClick: () => setActiveTab('shopping-list')
+        }
+      });
+    } catch (e) {
+      console.error('Failed to add to shopping list:', e);
+      toast.error('Failed to add item to shopping list');
+    }
+  };
 
   // Form state
   const [formData, setFormData] = useState({
@@ -1514,6 +1581,12 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                 <Badge className="ml-2 bg-red-100 text-red-700">{displayLowStockCount.toLocaleString()}</Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="shopping-list" className="whitespace-nowrap">
+              Shopping List
+              {shoppingListCount > 0 && (
+                <Badge className="ml-2 bg-emerald-100 text-emerald-700 border-emerald-200">{shoppingListCount.toLocaleString()}</Badge>
+              )}
+            </TabsTrigger>
 
             {isAdminOrSuperAdmin && (
               <TabsTrigger value="diagnostic" className="whitespace-nowrap">
@@ -1970,6 +2043,15 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                             )}
                           </div>
                           <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddToShoppingList(item)}
+                              title="Add to Shopping List"
+                              className="border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+                            >
+                              <ShoppingCart className="h-4 w-4" />
+                            </Button>
                             {canChange('inventory', user.role) && (
                             <Button
                               variant="outline"
@@ -2330,13 +2412,36 @@ export function Inventory({ user, onNavigate }: InventoryProps) {
                           </div>
                         </div>
                       </div>
-                      <Button className="w-full sm:w-auto" onClick={() => handleOpenDialog(item)}>Update Stock</Button>
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto mt-4 sm:mt-0">
+                        <Button 
+                          variant="outline"
+                          onClick={() => handleAddToShoppingList(item)}
+                          className="w-full sm:w-auto border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+                        >
+                          <ShoppingCart className="h-4 w-4 mr-2" />
+                          Add to Shopping List
+                        </Button>
+                        {canChange('inventory', user.role) && (
+                          <Button className="w-full sm:w-auto" onClick={() => handleOpenDialog(item)}>
+                            Update Stock
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
               ))
             )}
           </div>
+        </TabsContent>
+        
+        <TabsContent value="shopping-list" className="space-y-4 mt-6">
+          <ShoppingListSubModule 
+            user={user} 
+            items={items} 
+            searchQuery={searchQuery}
+            onNavigateToCatalog={() => setActiveTab('items')} 
+          />
         </TabsContent>
 
 

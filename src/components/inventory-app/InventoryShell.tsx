@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import {
   Package,
+  ShoppingCart,
   BarChart3,
   AlertTriangle,
   Search,
@@ -46,7 +47,7 @@ const SettingsComponent = lazyNamed(
   'Settings'
 );
 
-type InventoryView = 'home' | 'catalog' | 'messages' | 'profile';
+type InventoryView = 'home' | 'catalog' | 'shopping-list' | 'messages' | 'profile';
 
 interface NavItem {
   id: InventoryView;
@@ -60,6 +61,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: LayoutDashboard, color: 'text-slate-600', bgColor: 'bg-slate-100' },
   { id: 'catalog', label: 'Inventory Catalog', icon: Package, color: 'text-emerald-600', bgColor: 'bg-emerald-50', module: 'inventory' },
+  { id: 'shopping-list', label: 'Shopping List', icon: ShoppingCart, color: 'text-emerald-600', bgColor: 'bg-emerald-100', module: 'inventory' },
   { id: 'messages', label: 'Message Space', icon: MessageSquare, color: 'text-violet-600', bgColor: 'bg-violet-50', module: 'messages' },
 ];
 
@@ -279,7 +281,8 @@ export function InventoryShell({ user, accessToken, onLogout }: InventoryShellPr
         )}
 
         <Suspense fallback={<ModuleLoading />}>
-          {currentView === 'catalog' && canOpenCatalog && <Inventory user={currentUser} />}
+          {currentView === 'catalog' && canOpenCatalog && <Inventory user={currentUser} initialTab="items" />}
+          {currentView === 'shopping-list' && canOpenCatalog && <Inventory user={currentUser} initialTab="shopping-list" />}
           {currentView === 'messages' && canView('messages', currentUser.role) && <MessagingHub user={currentUser} />}
           {currentView === 'profile' && (
             <SettingsComponent
@@ -323,6 +326,15 @@ function HomeView({
       module: 'inventory',
     },
     {
+      id: 'shopping-list',
+      label: 'Shopping List & Pricing',
+      description: 'Build material lists and instantly benchmark live competitive prices against Kent Building Supplies and Home Depot in Halifax, NS.',
+      icon: ShoppingCart,
+      gradient: 'from-amber-500 to-orange-600',
+      shadow: 'shadow-orange-500/20',
+      module: 'inventory',
+    },
+    {
       id: 'messages',
       label: 'Message Space',
       description: 'Collaborate with teammates, ask about product availability, stock replenishment plans, or share layout requests in real-time.',
@@ -344,7 +356,7 @@ function HomeView({
   const { theme } = useTheme();
 
   const visibleCards = cards.filter((card) => {
-    if (card.id === 'catalog') return canOpenCatalog;
+    if (card.id === 'catalog' || card.id === 'shopping-list') return canOpenCatalog;
     if (card.module && !canView(card.module, user.role)) return false;
     return true;
   });

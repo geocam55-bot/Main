@@ -2830,7 +2830,6 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
     // Executing the process instantly by triggering a temporary internal unattended task
     const tempTask: ScheduledTask = {
-      id: "temp-manual-" + Math.random().toString(36).slice(2, 6),
       name: `Instant Manual ${manualType === "import" ? "Import" : "Export"}`,
       description: "Triggered manually via Interactive Workspace",
       status: "active",
@@ -2852,16 +2851,35 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
-      // Register temporary task, run it, and delete it immediately
-      const registerRes = await safeFetch("/api/import-export/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tempTask)
-      });
-      const registerData = await registerRes.json();
       
-      if (registerData.success) {
-        const runRes = await safeFetch(`/api/import-export/tasks/${registerData.task.id}/run`, {
+      let tempTaskId = "";
+      if (connectionMode === "supabase") {
+        tempTaskId = "temp-manual-" + Math.random().toString(36).slice(2, 8);
+        tempTask.id = tempTaskId;
+        const { data: catData } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', 'import_export_tasks')
+          .maybeSingle();
+        let currentTasks = catData?.value || [];
+        if (!Array.isArray(currentTasks)) currentTasks = [];
+        currentTasks.push({ ...tempTask, createdAt: new Date().toISOString() });
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_tasks',
+          value: currentTasks
+        });
+      } else {
+        const registerRes = await safeFetch("/api/import-export/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(tempTask)
+        });
+        const registerData = await registerRes.json();
+        if (registerData.success) tempTaskId = registerData.task.id;
+      }
+      
+      if (tempTaskId) {
+        const runRes = await safeFetch(`/api/import-export/tasks/${tempTaskId}/run`, {
           method: "POST",
           headers: session?.access_token ? {
             "Authorization": `Bearer ${session.access_token}`
@@ -2870,7 +2888,23 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         const runData = await runRes.json();
         
         // delete temporary helper
-        await safeFetch(`/api/import-export/tasks/${registerData.task.id}`, { method: "DELETE" });
+        if (connectionMode === "supabase") {
+          const { data: catData } = await supabase
+            .from('kv_store_8405be07')
+            .select('value')
+            .eq('key', 'import_export_tasks')
+            .maybeSingle();
+          let currentTasks = catData?.value || [];
+          if (Array.isArray(currentTasks)) {
+            currentTasks = currentTasks.filter((t: any) => t.id !== tempTaskId);
+            await supabase.from('kv_store_8405be07').upsert({
+              key: 'import_export_tasks',
+              value: currentTasks
+            });
+          }
+        } else {
+          await safeFetch(`/api/import-export/tasks/${tempTaskId}`, { method: "DELETE" });
+        }
 
         if (runData.success) {
           if (runData.logResult.status === 'success') {

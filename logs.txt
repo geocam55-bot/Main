@@ -1,0 +1,8 @@
+
+> prospaces-crm@0.1.0 dev
+> tsx server.ts
+
+[Server Config Sync] Checking and ensuring RLS on kv_store_8405be07 is configured...
+WebSocket server error: Port 24678 is already in use
+Server running on http://0.0.0.0:3000
+[Server Config Sync] Successfully disabled RLS on kv_store_8405be07 table.
