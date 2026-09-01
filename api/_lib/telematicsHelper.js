@@ -3,7 +3,23 @@ import crypto from 'crypto';
 
 const FALLBACK_SUPABASE_URL = "https://usorqldwroecyxucmtuw.supabase.co";
 const FALLBACK_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
-const DEFAULT_FLEET_ID = 'abb3c44d-0588-486d-9e49-441d9639727c';
+const DEFAULT_FLEET_ID = 'f273b680-2105-427a-9e57-4dcef2979ec1';
+const DEFAULT_USER_ID = '453ef6dd-e61f-416d-88c2-fa5ff3fc408f';
+
+export function isJwtExpired(token) {
+  if (!token) return true;
+  try {
+    const clean = String(token).replace(/^Bearer\s+/i, '').trim();
+    const parts = clean.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      if (payload && typeof payload.exp === 'number') {
+        return (payload.exp * 1000) <= (Date.now() + 60000);
+      }
+    }
+  } catch (_) {}
+  return false;
+}
 
 export function getSupabase() {
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL).trim();
@@ -166,32 +182,31 @@ export async function saveActiveConnection(conn) {
   return record;
 }
 
-export async function getFleetCompleteToken(conn) {
+export async function getFleetCompleteToken(conn, forceRefresh = false) {
   const activeConn = conn || await getActiveConnection();
   const isApiKeyMode = activeConn.connection_type === 'api_key';
   const apiKey = isApiKeyMode ? activeConn.api_key : null;
   const username = activeConn.client_id;
   const password = activeConn.client_secret;
   const tokenUrl = activeConn.api_url || "https://api.fleetcomplete.com/login/token";
-  const defaultFleetId = 'abb3c44d-0588-486d-9e49-441d9639727c';
 
   if (isApiKeyMode && apiKey) {
-    return { token: apiKey, fleetId: defaultFleetId, userId: null };
+    return { token: apiKey, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
   }
 
-  // If we already have a valid access_token
-  if (activeConn.access_token) {
-    const isExpired = activeConn.token_expires_at ? new Date(activeConn.token_expires_at).getTime() <= Date.now() : false;
+  // If we already have a valid access_token and not force refreshing
+  if (!forceRefresh && activeConn.access_token) {
+    const isExpired = isJwtExpired(activeConn.access_token) || (activeConn.token_expires_at ? new Date(activeConn.token_expires_at).getTime() <= Date.now() : false);
     if (!isExpired) {
-      return { token: activeConn.access_token, fleetId: defaultFleetId, userId: null };
+      return { token: activeConn.access_token, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
     }
   }
 
   if (!username || !password) {
     return { 
       token: activeConn.access_token || null, 
-      fleetId: defaultFleetId, 
-      userId: null, 
+      fleetId: DEFAULT_FLEET_ID, 
+      userId: DEFAULT_USER_ID, 
       error: !activeConn.access_token ? 'No Fleet Complete credentials provided' : null 
     };
   }
@@ -227,8 +242,8 @@ export async function getFleetCompleteToken(conn) {
         const expiresIn = data.expires_in || (3600 * 24 * 30); // 30 days default
         const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-        let resolvedFleetId = defaultFleetId;
-        let resolvedUserId = null;
+        let resolvedFleetId = DEFAULT_FLEET_ID;
+        let resolvedUserId = DEFAULT_USER_ID;
 
         // Dynamically query getUserInfo to get real fleetId for RONA (national)
         try {
@@ -244,6 +259,7 @@ export async function getFleetCompleteToken(conn) {
                   getUserInfo {
                     userId
                     fleetId
+                    fleetName
                     firstName
                     lastName
                     email
@@ -255,12 +271,16 @@ export async function getFleetCompleteToken(conn) {
           });
           if (userRes.ok) {
             const userData = await userRes.json();
-            const uInfo = userData.data?.getUserInfo;
-            if (uInfo?.fleetId) {
-              resolvedFleetId = uInfo.fleetId;
-            }
-            if (uInfo?.userId) {
-              resolvedUserId = uInfo.userId;
+            const uList = userData.data?.getUserInfo;
+            if (Array.isArray(uList)) {
+              const matchedFleet = uList.find(u => u.fleetName && u.fleetName.includes('national')) ||
+                                  uList.find(u => u.fleetName && !u.fleetName.includes('DO NOT USE')) ||
+                                  uList[0];
+              if (matchedFleet?.fleetId) resolvedFleetId = matchedFleet.fleetId;
+              if (matchedFleet?.userId) resolvedUserId = matchedFleet.userId;
+            } else if (uList?.fleetId) {
+              resolvedFleetId = uList.fleetId;
+              if (uList.userId) resolvedUserId = uList.userId;
             }
           }
         } catch (_) {}
@@ -279,7 +299,7 @@ export async function getFleetCompleteToken(conn) {
     console.error('[Fleet Complete Auth Error]', err?.message || err);
   }
 
-  return { token: activeConn.access_token || null, fleetId: DEFAULT_FLEET_ID, userId: null };
+  return { token: activeConn.access_token || null, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
 }
 
 export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic') {
@@ -572,21 +592,21 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
 }
 
 const FALLBACK_AUTHENTIC_FLEET = [
-  { id: '2501 - Elmsdale 6X Boom', name: '2501 - Elmsdale 6X Boom', lat: 44.9796, lng: -63.5044, speed: 58, heading: 142, ignitionStatus: 'ON', driver: 'Steve Conrad', vin: '5KJACWEE2SP250122', licensePlate: 'NS-B2501-NS', model: '47X 6x4 Heavy Boom Crane' },
+  { id: '2501 - Elmsdale 6X Boom', name: '2501 - Elmsdale 6X Boom', lat: 44.9796, lng: -63.5044, speed: 0, heading: 142, ignitionStatus: 'OFF', driver: 'No Driver', vin: '5KJACWEE2SP250122', licensePlate: 'NS-B2501-NS', model: '47X 6x4 Heavy Boom Crane' },
   { id: '2502 - Elmsdale 4X Boom', name: '2502 - Elmsdale 4X Boom', lat: 44.9810, lng: -63.5060, speed: 0, heading: 85, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FVACWFC4SH250233', licensePlate: 'NS-B2502-NS', model: 'M2 106 4x2 Boom Truck' },
-  { id: '2503 - Elmsdale 6X Boom', name: '2503 - Elmsdale 6X Boom', lat: 44.9790, lng: -63.5030, speed: 52, heading: 210, ignitionStatus: 'ON', driver: 'Erik Nielsen', vin: '5KJACWEE5SP250344', licensePlate: 'NS-B2503-NS', model: '47X 6x4 Heavy Boom Crane' },
-  { id: '2504 - Elmsdale 6X Boom', name: '2504 - Elmsdale 6X Boom', lat: 44.9820, lng: -63.5080, speed: 0, heading: 90, ignitionStatus: 'IDLING', driver: 'Erik Nielsen', vin: '5KJACWEE8SP250455', licensePlate: 'NS-B2504-NS', model: '47X 6x4 Heavy Boom Crane' },
+  { id: '2503 - Elmsdale 6X Boom', name: '2503 - Elmsdale 6X Boom', lat: 44.9790, lng: -63.5030, speed: 0, heading: 210, ignitionStatus: 'OFF', driver: 'Erik Nielsen', vin: '5KJACWEE5SP250344', licensePlate: 'NS-B2503-NS', model: '47X 6x4 Heavy Boom Crane' },
+  { id: '2504 - Elmsdale 6X Boom', name: '2504 - Elmsdale 6X Boom', lat: 44.9820, lng: -63.5080, speed: 0, heading: 90, ignitionStatus: 'OFF', driver: 'Erik Nielsen', vin: '5KJACWEE8SP250455', licensePlate: 'NS-B2504-NS', model: '47X 6x4 Heavy Boom Crane' },
   { id: '1802 - Elmsdale 4X Boom', name: '1802 - Elmsdale 4X Boom', lat: 44.9830, lng: -63.5020, speed: 0, heading: 180, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FVACWFC9JH180266', licensePlate: 'NS-B1802-NS', model: 'M2 106 4x2 Boom Crane' },
   { id: '1803 - Elmsdale S/A Curtain', name: '1803 - Elmsdale S/A Curtain', lat: 44.9800, lng: -63.5050, speed: 0, heading: 0, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1HTMMSMM2JH180388', licensePlate: 'NS-C1803-NS', model: 'MV607 Single Axle Curtain-side' },
   { id: '1901 - Elmsdale HH', name: '1901 - Elmsdale HH', lat: 44.9780, lng: -63.5070, speed: 0, heading: 270, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FVACWFC8KH190111', licensePlate: 'NS-H1901-NS', model: 'M2 106 Highway Hauler' },
-  { id: '1702 - Elmsdale HH', name: '1702 - Elmsdale HH', lat: 44.9815, lng: -63.5035, speed: 56, heading: 135, ignitionStatus: 'ON', driver: 'Chris Fraser', vin: '1FVACWFC6HH170233', licensePlate: 'NS-H1702-NS', model: 'M2 106 Heavy Hauler' },
-  { id: '701 - Elmsdale T/A Flatdeck', name: '701 - Elmsdale T/A Flatdeck', lat: 44.9792, lng: -63.5048, speed: 48, heading: 95, ignitionStatus: 'ON', driver: 'Dave Higgins', vin: '1XPAD49X4LD070144', licensePlate: 'NS-F0701-NS', model: '337 Tandem-Axle Flatbed' },
-  { id: '1903 - Elmsdale Windows', name: '1903 - Elmsdale Windows', lat: 44.6855, lng: -63.5825, speed: 45, heading: 180, ignitionStatus: 'ON', driver: 'Travis Vickers', vin: '1FDOW5HT7KEA190399', licensePlate: 'NS-W1903-NS', model: 'F-550 Glass & Window Rack' },
-  { id: '2409 - Elmsdale F150', name: '2409 - Elmsdale F150', lat: 44.9798, lng: -63.5042, speed: 51, heading: 65, ignitionStatus: 'ON', driver: 'Mike MacDonald', vin: '1FTFW1ED8RF240988', licensePlate: 'NS-F2409-NS', model: 'F-150 XLT 4x4' },
-  { id: '2101 - Dartmouth F150', name: '2101 - Dartmouth F150', lat: 44.6909, lng: -63.5985, speed: 44, heading: 175, ignitionStatus: 'ON', driver: 'Bob Rafters', vin: '1FTFW1E84MK210155', licensePlate: 'NS-F2101-NS', model: 'F-150 XL 4x4' },
-  { id: '2401 - Halifax F150', name: '2401 - Halifax F150', lat: 44.6548, lng: -63.6012, speed: 0, heading: 120, ignitionStatus: 'IDLING', driver: 'George Campbell', vin: '1FTFW1ED4RF240199', licensePlate: 'NS-F2401-NS', model: 'F-150 SuperCrew 4x4' },
+  { id: '1702 - Elmsdale HH', name: '1702 - Elmsdale HH', lat: 44.9815, lng: -63.5035, speed: 0, heading: 135, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FVACWFC6HH170233', licensePlate: 'NS-H1702-NS', model: 'M2 106 Heavy Hauler' },
+  { id: '701 - Elmsdale T/A Flatdeck', name: '701 - Elmsdale T/A Flatdeck', lat: 44.9792, lng: -63.5048, speed: 0, heading: 95, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1XPAD49X4LD070144', licensePlate: 'NS-F0701-NS', model: '337 Tandem-Axle Flatbed' },
+  { id: '1903 - Elmsdale Windows', name: '1903 - Elmsdale Windows', lat: 44.6855, lng: -63.5825, speed: 0, heading: 180, ignitionStatus: 'OFF', driver: 'Travis Vickers', vin: '1FDOW5HT7KEA190399', licensePlate: 'NS-W1903-NS', model: 'F-550 Glass & Window Rack' },
+  { id: '2409 - Elmsdale F150', name: '2409 - Elmsdale F150', lat: 44.9798, lng: -63.5042, speed: 0, heading: 65, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FTFW1ED8RF240988', licensePlate: 'NS-F2409-NS', model: 'F-150 XLT 4x4' },
+  { id: '2101 - Dartmouth F150', name: '2101 - Dartmouth F150', lat: 44.6909, lng: -63.5985, speed: 0, heading: 175, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FTFW1E84MK210155', licensePlate: 'NS-F2101-NS', model: 'F-150 XL 4x4' },
+  { id: '2401 - Halifax F150', name: '2401 - Halifax F150', lat: 44.6548, lng: -63.6012, speed: 0, heading: 120, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FTFW1ED4RF240199', licensePlate: 'NS-F2401-NS', model: 'F-150 SuperCrew 4x4' },
   { id: '2408 - Halifax F150 OSR', name: '2408 - Halifax F150 OSR', lat: 44.6552, lng: -63.6020, speed: 0, heading: 0, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FTFW1ED6RF240877', licensePlate: 'NS-F2408-NS', model: 'F-150 XLT 4x4' },
-  { id: '2410 - Tantallon F150', name: '2410 - Tantallon F150', lat: 44.7033, lng: -63.8613, speed: 0, heading: 256, ignitionStatus: 'OFF', driver: 'Paul Boutilier', vin: '1FTFW1ED2RF241066', licensePlate: 'NS-F2410-NS', model: 'F-150 XL 4x4' },
+  { id: '2410 - Tantallon F150', name: '2410 - Tantallon F150', lat: 44.7033, lng: -63.8613, speed: 0, heading: 256, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FTFW1ED2RF241066', licensePlate: 'NS-F2410-NS', model: 'F-150 XL 4x4' },
   { id: '2412 - Tantallon Ranger', name: '2412 - Tantallon Ranger', lat: 44.7040, lng: -63.8625, speed: 0, heading: 45, ignitionStatus: 'OFF', driver: 'No Driver', vin: '1FTER4EH7RLA241222', licensePlate: 'NS-F2412-NS', model: 'Ranger SuperCab 4x4' }
 ];
 
@@ -611,16 +631,16 @@ export async function matchAndScopeToDatabaseTrucks(fcVehicles, tenantId = 'rona
     dbTrucks = [
       { id: '1803 - Elmsdale S/A Curtain', name: '1803 - Elmsdale S/A Curtain', driver: 'No Driver', type: '2018 International MV607 Single Axle Curtain-side', lat: 44.9800, lng: -63.5050 },
       { id: '1901 - Elmsdale HH', name: '1901 - Elmsdale HH', driver: 'No Driver', type: 'Heavy-Duty Flatbed', lat: 44.9780, lng: -63.5070 },
-      { id: '1702 - Elmsdale HH', name: '1702 - Elmsdale HH', driver: 'Chris Fraser', type: 'Heavy-Duty Flatbed', lat: 44.9815, lng: -63.5035 },
-      { id: '701 - Elmsdale T/A Flatdeck', name: '701 - Elmsdale T/A Flatdeck', driver: 'Dave Higgins', type: '2020 Peterbilt 337 Tandem-Axle Flatbed', lat: 44.9792, lng: -63.5048 },
+      { id: '1702 - Elmsdale HH', name: '1702 - Elmsdale HH', driver: 'No Driver', type: 'Heavy-Duty Flatbed', lat: 44.9815, lng: -63.5035 },
+      { id: '701 - Elmsdale T/A Flatdeck', name: '701 - Elmsdale T/A Flatdeck', driver: 'No Driver', type: '2020 Peterbilt 337 Tandem-Axle Flatbed', lat: 44.9792, lng: -63.5048 },
       { id: '1903 - Elmsdale Windows', name: '1903 - Elmsdale Windows', driver: 'Travis Vickers', type: 'Curtain-side Flatbed', lat: 44.6855, lng: -63.5825 },
-      { id: '2501 - Elmsdale 6X Boom', name: '2501 - Elmsdale 6X Boom', driver: 'Steve Conrad', type: '2025 Western Star 47X 6x4 Heavy Boom Crane', lat: 44.9796, lng: -63.5044 },
+      { id: '2501 - Elmsdale 6X Boom', name: '2501 - Elmsdale 6X Boom', driver: 'No Driver', type: '2025 Western Star 47X 6x4 Heavy Boom Crane', lat: 44.9796, lng: -63.5044 },
       { id: '2502 - Elmsdale 4X Boom', name: '2502 - Elmsdale 4X Boom', driver: 'No Driver', type: '2025 Freightliner M2 106 4x2 Boom Truck', lat: 44.9810, lng: -63.5060 },
       { id: '2503 - Elmsdale 6X Boom', name: '2503 - Elmsdale 6X Boom', driver: 'Erik Nielsen', type: '2025 Kenworth T880 6x4 Heavy Boom Crane', lat: 44.9790, lng: -63.5030 },
       { id: '2504 - Elmsdale 6X Boom', name: '2504 - Elmsdale 6X Boom', driver: 'Erik Nielsen', type: '2025 Western Star 47X 6x4 Heavy Boom Crane', lat: 44.9820, lng: -63.5080 },
       { id: '1802 - Elmsdale 4X Boom', name: '1802 - Elmsdale 4X Boom', driver: 'No Driver', type: '2018 Freightliner M2 106 4x2 Boom Crane', lat: 44.9830, lng: -63.5020 },
-      { id: '2409 - Elmsdale F150', name: '2409 - Elmsdale F150', driver: 'Mike MacDonald', type: '2024 Ford F-150 XLT 4x4', lat: 44.9798, lng: -63.5042 },
-      { id: '2101 - Dartmouth F150', name: '2101 - Dartmouth F150', driver: 'Bob Rafters', type: 'Fleet Pickup Truck 4x4', lat: 44.6909, lng: -63.5985 },
+      { id: '2409 - Elmsdale F150', name: '2409 - Elmsdale F150', driver: 'No Driver', type: '2024 Ford F-150 XLT 4x4', lat: 44.9798, lng: -63.5042 },
+      { id: '2101 - Dartmouth F150', name: '2101 - Dartmouth F150', driver: 'No Driver', type: 'Fleet Pickup Truck 4x4', lat: 44.6909, lng: -63.5985 },
       { id: '2401 - Halifax F150', name: '2401 - Halifax F150', driver: 'No Driver', type: '2024 Ford F-150 SuperCrew 4x4 (Almon OSR)', lat: 44.6548, lng: -63.6012 },
       { id: '2408 - Halifax F150 OSR', name: '2408 - Halifax F150 OSR', driver: 'No Driver', type: '2024 Ford F-150 XL 4x4 (Halifax OSR)', lat: 44.6552, lng: -63.6020 },
       { id: '2410 - Tantallon F150', name: '2410 - Tantallon F150', driver: 'No Driver', type: 'Fleet Pickup Truck 4x4', lat: 44.7033, lng: -63.8613 },
