@@ -13,7 +13,7 @@ export default async function handler(req, res) {
         success: true,
         source: "fleet_complete",
         isStale: false,
-        fleetId: result.fleetId || "f273b680-2105-427a-9e57-4dcef2979ec1",
+        fleetId: result.fleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
         vehicles: result.vehicles,
         timestamp: new Date().toISOString()
       });
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       success: true,
       source: "fleet_complete",
       isStale: false,
-      fleetId: "f273b680-2105-427a-9e57-4dcef2979ec1",
+      fleetId: "abb3c44d-0588-486d-9e49-441d9639727c",
       warning: result.message || "No live vehicles reported from Fleet Complete at this moment.",
       vehicles: [],
       timestamp: new Date().toISOString()

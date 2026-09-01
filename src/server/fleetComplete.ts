@@ -47,8 +47,8 @@ interface TokenCache {
 let cachedTokens: TokenCache = {
   accessToken: null,
   expiresAt: 0,
-  fleetId: 'f273b680-2105-427a-9e57-4dcef2979ec1', // RONA (national)
-  userId: '453ef6dd-e61f-416d-88c2-fa5ff3fc408f',
+  fleetId: 'abb3c44d-0588-486d-9e49-441d9639727c',
+  userId: 'f436a0d5-fa20-42ab-b272-15cf68164a1b',
   lastLoginAttempt: 0,
 };
 
@@ -730,8 +730,7 @@ export async function getValidToken(
 
             if (userRes.ok) {
               const uJson = await userRes.json();
-              const fleets = uJson.data?.getUserInfo || [];
-              const uInfo = fleets.find((f: any) => !f.fleetName?.toLowerCase().includes('do not use')) || fleets[0];
+              const uInfo = uJson.data?.getUserInfo?.[0];
               if (uInfo) {
                 if (uInfo.fleetId) cachedTokens.fleetId = uInfo.fleetId;
                 if (uInfo.userId) cachedTokens.userId = uInfo.userId;
@@ -741,8 +740,8 @@ export async function getValidToken(
 
           return {
             accessToken: cleanToken,
-            fleetId: cachedTokens.fleetId || 'f273b680-2105-427a-9e57-4dcef2979ec1',
-            userId: cachedTokens.userId || '453ef6dd-e61f-416d-88c2-fa5ff3fc408f',
+            fleetId: cachedTokens.fleetId,
+            userId: cachedTokens.userId,
           };
         }
       }
@@ -762,8 +761,8 @@ export async function getValidToken(
 
   return {
     accessToken: cachedTokens.accessToken,
-    fleetId: cachedTokens.fleetId || 'f273b680-2105-427a-9e57-4dcef2979ec1',
-    userId: cachedTokens.userId || '453ef6dd-e61f-416d-88c2-fa5ff3fc408f',
+    fleetId: cachedTokens.fleetId || 'abb3c44d-0588-486d-9e49-441d9639727c',
+    userId: cachedTokens.userId || 'f436a0d5-fa20-42ab-b272-15cf68164a1b',
   };
 }
 
@@ -859,10 +858,16 @@ export async function getVehiclePositions(
               const odo = latest.odometer || {};
               const addr = latest.address || {};
 
-              const rawTimestamp = latest.timestamp ? Number(latest.timestamp) : 0;
-              const timestamp = rawTimestamp > 0 ? new Date(rawTimestamp).toISOString() : new Date().toISOString();
-              const ageMinutes = rawTimestamp > 0 ? (Date.now() - rawTimestamp) / 60000 : 999999;
-              const isStale = ageMinutes > 20; // Dormant / parked overnight (packet older than 20 mins)
+              const rawTimestamp = typeof latest.timestamp === 'number' 
+                ? latest.timestamp 
+                : (latest.timestamp ? new Date(latest.timestamp).getTime() : 0);
+              const timestamp = rawTimestamp > 0 && !isNaN(rawTimestamp) 
+                ? new Date(rawTimestamp).toISOString() 
+                : (typeof latest.timestamp === 'string' && latest.timestamp.trim() !== '' ? latest.timestamp : new Date().toISOString());
+              const ageMinutes = rawTimestamp > 0 && !isNaN(rawTimestamp) 
+                ? (Date.now() - rawTimestamp) / 60000 
+                : 0;
+              const isStale = ageMinutes > 60;
 
               const lat = typeof gps.latitude === 'number' ? gps.latitude : null;
               const lng = typeof gps.longitude === 'number' ? gps.longitude : null;
@@ -873,20 +878,18 @@ export async function getVehiclePositions(
               let speed = 0;
               let ignitionStatus: 'ON' | 'OFF' | 'IDLING' | 'UNKNOWN' = 'OFF';
 
-              if (!isStale) {
-                const rawGpsSpeed = typeof gps.speed === 'number' && !isNaN(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
-                const isEngineOn = ignition.engineStatus === true;
+              const rawGpsSpeed = typeof gps.speed === 'number' && !isNaN(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
+              const isEngineOn = ignition.engineStatus === true;
 
-                if (isEngineOn && rawGpsSpeed >= 5) {
-                  speed = rawGpsSpeed;
-                  ignitionStatus = 'ON';
-                } else if (isEngineOn) {
-                  speed = 0;
-                  ignitionStatus = 'IDLING';
-                } else {
-                  speed = 0;
-                  ignitionStatus = 'OFF';
-                }
+              if (rawGpsSpeed >= 5 || (isEngineOn && rawGpsSpeed >= 3)) {
+                speed = rawGpsSpeed;
+                ignitionStatus = 'ON';
+              } else if (isEngineOn || (rawGpsSpeed > 0 && rawGpsSpeed < 5)) {
+                speed = rawGpsSpeed;
+                ignitionStatus = 'IDLING';
+              } else {
+                speed = 0;
+                ignitionStatus = 'OFF';
               }
 
               return {
