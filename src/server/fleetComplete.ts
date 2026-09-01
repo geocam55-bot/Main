@@ -47,8 +47,8 @@ interface TokenCache {
 let cachedTokens: TokenCache = {
   accessToken: null,
   expiresAt: 0,
-  fleetId: 'abb3c44d-0588-486d-9e49-441d9639727c',
-  userId: 'f436a0d5-fa20-42ab-b272-15cf68164a1b',
+  fleetId: 'f273b680-2105-427a-9e57-4dcef2979ec1', // RONA (national)
+  userId: '453ef6dd-e61f-416d-88c2-fa5ff3fc408f',
   lastLoginAttempt: 0,
 };
 
@@ -730,7 +730,8 @@ export async function getValidToken(
 
             if (userRes.ok) {
               const uJson = await userRes.json();
-              const uInfo = uJson.data?.getUserInfo?.[0];
+              const fleets = uJson.data?.getUserInfo || [];
+              const uInfo = fleets.find((f: any) => !f.fleetName?.toLowerCase().includes('do not use')) || fleets[0];
               if (uInfo) {
                 if (uInfo.fleetId) cachedTokens.fleetId = uInfo.fleetId;
                 if (uInfo.userId) cachedTokens.userId = uInfo.userId;
@@ -740,8 +741,8 @@ export async function getValidToken(
 
           return {
             accessToken: cleanToken,
-            fleetId: cachedTokens.fleetId,
-            userId: cachedTokens.userId,
+            fleetId: cachedTokens.fleetId || 'f273b680-2105-427a-9e57-4dcef2979ec1',
+            userId: cachedTokens.userId || '453ef6dd-e61f-416d-88c2-fa5ff3fc408f',
           };
         }
       }
@@ -761,8 +762,8 @@ export async function getValidToken(
 
   return {
     accessToken: cachedTokens.accessToken,
-    fleetId: cachedTokens.fleetId || 'abb3c44d-0588-486d-9e49-441d9639727c',
-    userId: cachedTokens.userId || 'f436a0d5-fa20-42ab-b272-15cf68164a1b',
+    fleetId: cachedTokens.fleetId || 'f273b680-2105-427a-9e57-4dcef2979ec1',
+    userId: cachedTokens.userId || '453ef6dd-e61f-416d-88c2-fa5ff3fc408f',
   };
 }
 

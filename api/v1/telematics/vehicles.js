@@ -60,7 +60,7 @@ export default async function handler(req, res) {
         totalActiveDeliveries: 0
       },
       source: result.source || "fleet_complete",
-      fleetId: result.fleetId || "abb3c44d-0588-486d-9e49-441d9639727c",
+      fleetId: result.fleetId || "f273b680-2105-427a-9e57-4dcef2979ec1",
       timestamp: new Date().toISOString()
     });
   } catch (error) {
