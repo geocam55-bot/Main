@@ -44,17 +44,23 @@ interface TelematicsMapViewProps {
   viewingTripsFor?: string | null;
 }
 
-const API_KEY_STATIC =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.GOOGLE_MAPS_API_KEY ||
-  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.VITE_GOOGLE_MAPS_API_KEY ||
-  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||
-  '';
+// Load API key - must be done dynamically for Vite production builds
+const API_KEY_STATIC = (() => {
+  try {
+    // Try import.meta.env first (Vite way)
+    if ((import.meta as any)?.env) {
+      const env = (import.meta as any).env;
+      return env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+             env.VITE_GOOGLE_MAPS_API_KEY ||
+             env.GOOGLE_MAPS_PLATFORM_KEY ||
+             env.GOOGLE_MAPS_API_KEY ||
+             '';
+    }
+  } catch (_) {}
+  
+  // Fallback - in Vite, process.env won't work at runtime
+  return '';
+})();
 
 // Default center: Dartmouth / Halifax Regional Logistics Corridor
 const REGIONAL_CENTER = { lat: 44.69098, lng: -63.59854 };
@@ -543,8 +549,64 @@ export default function TelematicsMapView({
         </div>
       )}
 
-      <APIProvider apiKey={apiKey} version="weekly">
-        <div className="relative w-full h-full flex-1">
+      {/* Check if we have a valid API key */}
+      {!apiKey || apiKey === '' || apiKey === 'YOUR_API_KEY' ? (
+        <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-slate-950">
+          <div className="flex flex-col items-center max-w-md space-y-4 text-center">
+            <div className="h-16 w-16 rounded-full bg-amber-100/20 border-2 border-amber-500/40 flex items-center justify-center">
+              <Key className="h-8 w-8 text-amber-500" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-slate-100">Google Maps API Key Required</h3>
+              <p className="text-xs text-slate-400">A valid Google Maps Platform API key is needed to display the interactive map. However, your fleet vehicles are still available:</p>
+            </div>
+            
+            {vehicles && vehicles.length > 0 && (
+              <div className="w-full space-y-2 pt-2 max-h-64 overflow-y-auto">
+                <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Live Fleet Vehicles ({vehicles.length})</p>
+                <div className="space-y-1">
+                  {vehicles.slice(0, 10).map((v) => {
+                    const status = v.status || v.motionStatus || 'STOPPED';
+                    const statusColor = status === 'MOVING' 
+                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300' 
+                      : status === 'IDLE' 
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-300' 
+                      : 'bg-slate-600/20 border-slate-600 text-slate-300';
+                    const tel = v.telematics || v.telemetry || {};
+                    const lat = tel.latitude || tel.lat || 'N/A';
+                    const lng = tel.longitude || tel.lng || 'N/A';
+                    
+                    return (
+                      <div 
+                        key={v.vehicleId} 
+                        className={`text-[11px] px-3 py-2 rounded-lg border transition-all cursor-pointer hover:bg-opacity-40 ${statusColor}`}
+                        onClick={() => onSelectVehicle(v.vehicleId)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-mono font-semibold">{v.truckName}</div>
+                          <span className="font-bold text-xs">{status}</span>
+                        </div>
+                        <div className="text-[10px] opacity-75 mt-0.5">
+                          {typeof lat === 'number' ? lat.toFixed(4) : lat}, {typeof lng === 'number' ? lng.toFixed(4) : lng}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            <button
+              onClick={() => setShowKeyModal(true)}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer mt-4"
+            >
+              Add Google Maps API Key
+            </button>
+          </div>
+        </div>
+      ) : (
+        <APIProvider apiKey={apiKey} version="weekly">
+          <div className="relative w-full h-full flex-1">
           <Map
             defaultCenter={REGIONAL_CENTER}
             defaultZoom={12}
@@ -841,6 +903,7 @@ export default function TelematicsMapView({
           </div>
         </div>
       </APIProvider>
+      )}
     </div>
   );
 }
