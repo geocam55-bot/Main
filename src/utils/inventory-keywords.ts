@@ -96,7 +96,7 @@ function safeSplit(text: string): string[] {
   return text
     .split(/\s+/)
     .map(normalizeToken)
-    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
+    .filter((t) => t.length >= 1 && !STOP_WORDS.has(t));
 }
 
 function normalizeTextValue(value: unknown): string {
@@ -243,13 +243,13 @@ export function expandInventorySearchTerms(query: string): string[] {
   }
 
   const normalizedQuery = sanitizeSearchToken(query);
-  if (normalizedQuery.length >= 2 && normalizedQuery.split(' ').length <= 6) {
+  if (normalizedQuery.length >= 1 && normalizedQuery.split(' ').length <= 6) {
     expanded.add(normalizedQuery);
   }
 
   return Array.from(expanded)
-    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t))
-    .slice(0, 4);
+    .filter((t) => t.length >= 1 && !STOP_WORDS.has(t))
+    .slice(0, 6);
 }
 
 export function buildInventoryOrSearchClause(terms: string[]): string {
@@ -257,8 +257,10 @@ export function buildInventoryOrSearchClause(terms: string[]): string {
   const clauses: string[] = [];
 
   for (const term of terms) {
+    const clean = sanitizeSearchToken(term);
+    if (!clean) continue;
     for (const field of fields) {
-      clauses.push(`${field}.ilike.%${term}%`);
+      clauses.push(`${field}.ilike.%${clean}%`);
     }
   }
 
@@ -266,10 +268,25 @@ export function buildInventoryOrSearchClause(terms: string[]): string {
 }
 
 export function buildInventoryAndSearchClause(query: string): string {
-  const tokens = safeSplit(query);
-  if (tokens.length === 0) return '';
+  const trimmed = query.trim();
+  if (!trimmed) return '';
 
+  const sanitized = sanitizeSearchToken(trimmed);
+  const tokens = safeSplit(trimmed);
   const fields = ['name', 'sku', 'description', 'category', 'supplier'];
+
+  // If query is short or dimension like "2 x" or "2x4"
+  if (tokens.length === 0) {
+    if (sanitized) {
+      const subClauses: string[] = [];
+      for (const field of fields) {
+        subClauses.push(`${field}.ilike.%${sanitized}%`);
+      }
+      return subClauses.join(',');
+    }
+    return '';
+  }
+
   const orClauses: string[] = [];
 
   for (const token of tokens) {
@@ -287,7 +304,12 @@ export function buildInventoryAndSearchClause(query: string): string {
     }
   }
 
-  if (orClauses.length === 0) return '';
+  if (orClauses.length === 0) {
+    if (sanitized) {
+      return fields.map(f => `${f}.ilike.%${sanitized}%`).join(',');
+    }
+    return '';
+  }
   if (orClauses.length === 1) {
     const rawInner = orClauses[0].slice(3, -1); // remove "or(" and ")"
     return rawInner;

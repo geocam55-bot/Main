@@ -2439,6 +2439,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
           <ShoppingListSubModule 
             user={user} 
             items={items} 
+            availableCategories={availableCategories}
             searchQuery={searchQuery}
             onNavigateToCatalog={() => setActiveTab('items')} 
           />

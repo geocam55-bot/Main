@@ -1,5 +1,18 @@
 [
   {
+    "id": "log-1ids29w",
+    "taskId": "task-demo-1",
+    "taskName": "Unattended Nightly Contacts Backup",
+    "timestamp": "2026-09-02T13:37:48.623Z",
+    "actionType": "export",
+    "module": "contacts",
+    "fileStorage": "local",
+    "fileName": "nightly_contacts_backup.csv",
+    "status": "success",
+    "recordCount": 3,
+    "message": "Successfully exported 3 records from contacts to unattended local storage file: nightly_contacts_backup.csv"
+  },
+  {
     "id": "log-sx6zitl",
     "taskId": "task-demo-1",
     "taskName": "Unattended Nightly Contacts Backup",

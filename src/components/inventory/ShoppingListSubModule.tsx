@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ShoppingCart,
   Search,
@@ -19,6 +19,7 @@ import {
   Info,
   X,
   ChevronRight,
+  ChevronLeft,
   ListPlus,
   Package,
   Layers,
@@ -28,14 +29,23 @@ import {
   MapPin,
   Clock,
   HelpCircle,
-  BarChart2
+  BarChart2,
+  Loader2,
+  Edit2,
+  Pencil,
+  Save,
+  Globe
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { toast } from 'sonner';
-import { supabase } from '../../utils/supabase/client';
+import { createClient } from '../../utils/supabase/client';
+import { loadInventoryPage } from '../../utils/inventory-loader';
+import { useDebounce } from '../../utils/useDebounce';
+
+const supabase = createClient();
 
 export interface ShoppingListItem {
   id: string;
@@ -43,14 +53,18 @@ export interface ShoppingListItem {
   sku: string;
   name: string;
   description: string;
+  mfgPartNumber?: string;
+  manufacturer?: string;
   category: string;
   unitOfMeasure: string;
   cost: number; // Avg Cost
+  replacementCost?: number; // Replacement Cost
   unitPrice: number; // Retail Price
   quantity: number;
   quantityOnHand?: number;
   competitorData?: {
     lastChecked?: string;
+    activeSearchQuery?: string;
     status: 'idle' | 'searching' | 'found' | 'error';
     error?: string;
     kent?: {
@@ -60,12 +74,14 @@ export interface ShoppingListItem {
       productTitle?: string;
       inStock?: boolean;
       url?: string;
+      googleSearchUrl?: string;
+      bingSearchUrl?: string;
       storeLocation?: string;
       variancePct?: number;
       priceDifference?: number;
       unit?: string;
       notes?: string;
-      matchConfidence?: 'high' | 'medium' | 'exact';
+      matchConfidence?: 'high' | 'medium' | 'exact' | 'not_found';
     };
     homeDepot?: {
       storeName: string;
@@ -74,12 +90,14 @@ export interface ShoppingListItem {
       productTitle?: string;
       inStock?: boolean;
       url?: string;
+      googleSearchUrl?: string;
+      bingSearchUrl?: string;
       storeLocation?: string;
       variancePct?: number;
       priceDifference?: number;
       unit?: string;
       notes?: string;
-      matchConfidence?: 'high' | 'medium' | 'exact';
+      matchConfidence?: 'high' | 'medium' | 'exact' | 'not_found';
     };
     marketRecommendation?: string;
     bestDeal?: 'prospaces' | 'kent' | 'home_depot' | 'tie';
@@ -89,10 +107,46 @@ export interface ShoppingListItem {
 
 interface ShoppingListSubModuleProps {
   user: any;
-  items: any[];
+  items?: any[];
+  availableCategories?: string[];
   onOpenItemDetail?: (item: any) => void;
   onNavigateToCatalog?: () => void;
   searchQuery?: string;
+}
+
+/**
+ * Determine the most accurate competitor search query for trade items
+ * Prioritizes full product description (e.g. "SPF 2X8X10' LUMBER #2 & BETTER") and manufacturer part numbers
+ */
+export function getItemSearchQuery(item: {
+  description?: string;
+  name?: string;
+  mfgPartNumber?: string;
+  manufacturer?: string;
+  sku?: string;
+}): string {
+  const desc = (item.description || '').trim();
+  const mfg = (item.mfgPartNumber || '').trim();
+  const brand = (item.manufacturer || '').trim();
+  const name = (item.name || '').trim();
+
+  // If description exists and contains dimensional or trade specs (e.g. "SPF 2X8X10' LUMBER #2 & BETTER")
+  if (desc && desc.length > 2 && desc.toLowerCase() !== name.toLowerCase()) {
+    if (mfg && !desc.includes(mfg)) {
+      return `${desc} ${mfg}`.trim();
+    }
+    return desc;
+  }
+
+  // If MFG part # is provided (e.g. "1016282", "LUS28Z", "CGC 1/2")
+  if (mfg) {
+    if (brand && !name.toLowerCase().includes(brand.toLowerCase())) {
+      return `${brand} ${mfg} ${name}`.trim();
+    }
+    return `${name} ${mfg}`.trim();
+  }
+
+  return name || desc || item.sku || 'building materials';
 }
 
 // Sample starter templates for Halifax NS contractor & building material tests
@@ -100,35 +154,78 @@ const PRESET_LISTS = [
   {
     name: 'Halifax Framing & Lumber Essentials',
     description: 'Core 2x4, 2x6 framing studs & standard Canadian SPF lumber',
-    sampleSkus: ['LMB-2X4-8SPF', 'LMB-2X6-10SPF', 'PLY-OSB-716', 'PLY-CDX-12', 'FAST-PASL-314']
+    sampleSkus: ['LMB-2X4-8SPF', 'LMB-2X6-10SPF', 'PLY-OSB-716', 'PLY-CDX-12', 'FAST-PASL-314'],
+    keywords: ['framing', 'lumber', '2x4', '2x6', 'osb']
   },
   {
     name: 'Drywall & Interior Finishing',
     description: 'Drywall sheets, joint compound, screws & corner beads',
-    sampleSkus: ['DW-CGC-12-8', 'DW-CGC-12-12', 'CPD-ALLPURP-20KG', 'SCRW-DW-158', 'TAPE-DW-500FT']
+    sampleSkus: ['DW-CGC-12-8', 'DW-CGC-12-12', 'CPD-ALLPURP-20KG', 'SCRW-DW-158', 'TAPE-DW-500FT'],
+    keywords: ['drywall', 'sheetrock', 'compound', 'screw']
   },
   {
     name: 'Exterior Decking & Hardware',
     description: 'Pressure treated 5/4 deck boards, joist hangers & deck screws',
-    sampleSkus: ['DK-PT-546-12', 'DK-PT-546-16', 'SCRW-GRX-3IN-1000', 'HNG-LUS28-ZMAX', 'POST-PT-4X4-8']
+    sampleSkus: ['DK-PT-546-12', 'DK-PT-546-16', 'SCRW-GRX-3IN-1000', 'HNG-LUS28-ZMAX', 'POST-PT-4X4-8'],
+    keywords: ['decking', 'treated', 'pt', 'hanger', 'screw']
   }
 ];
+
+// Helper to normalize raw database inventory rows
+function mapDbRowToInventoryItem(rawItem: any) {
+  const rawUnitPrice = rawItem.unit_price ?? rawItem.price_tier_1 ?? rawItem.unitPrice ?? 0;
+  const rawCost = rawItem.cost ?? 0;
+  const rawReplacementCost = rawItem.replacement_cost ?? rawItem.replacementCost ?? null;
+  // Database stores unit_price and cost in cents for raw SQL rows
+  const unitPrice = rawItem.unitPrice !== undefined 
+    ? Number(rawItem.unitPrice) 
+    : (typeof rawUnitPrice === 'number' && rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : Number(rawUnitPrice || 0));
+  
+  const cost = rawItem.costInDollars !== undefined 
+    ? Number(rawItem.costInDollars) 
+    : (typeof rawCost === 'number' && rawCost > 0 && Number.isInteger(rawCost) ? rawCost / 100 : Number(rawCost || 0));
+    
+  const replacementCost = rawItem.replacementCostInDollars !== undefined 
+    ? Number(rawItem.replacementCostInDollars) 
+    : (typeof rawReplacementCost === 'number' && rawReplacementCost > 0 && Number.isInteger(rawReplacementCost) ? rawReplacementCost / 100 : Number(rawReplacementCost || 0)) || cost;
+
+  return {
+    id: rawItem.id || `inv_${Math.random().toString(36).substring(2, 9)}`,
+    sku: rawItem.sku || 'N/A',
+    name: rawItem.name || rawItem.item_name || 'Unnamed Material',
+    description: rawItem.description || rawItem.name || '',
+    mfgPartNumber: rawItem.mfg_part_number || rawItem.mfgPartNumber || rawItem.mpn || rawItem.model_number || rawItem.modelNumber || '',
+    manufacturer: rawItem.manufacturer || rawItem.brand || '',
+    category: rawItem.category || 'BUILDING MATERIALS',
+    unitOfMeasure: (rawItem.unit_of_measure || rawItem.unitOfMeasure || 'EA').toUpperCase(),
+    cost: Number(cost || 0),
+    replacementCost: Number(replacementCost || cost || 0),
+    unitPrice: Number(unitPrice || 0),
+    quantityOnHand: rawItem.quantity ?? rawItem.quantity_on_hand ?? rawItem.quantityOnHand ?? 0,
+  };
+}
 
 export function ShoppingListSubModule({
   user,
   items: inventoryCatalogItems = [],
+  availableCategories: propCategories = [],
   onNavigateToCatalog,
   searchQuery = ''
 }: ShoppingListSubModuleProps) {
-  const orgId = user?.organizationId || user?.organization_id || 'org_001';
+  const orgId = user?.organizationId || user?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a';
   const storageKey = `prospaces_shopping_list_${orgId}`;
 
   // Shopping list state persisted in local storage
+  const [costViewMode, setCostViewMode] = useState<"avg_cost" | "replacement_cost">("avg_cost");
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Remove legacy hardcoded test items (IDs like sl_1, sl_2, sl_10, etc.)
+          return parsed.filter(item => !item.id?.match(/^sl_\d+$/));
+        }
       }
     } catch (e) {
       console.warn('Failed to load shopping list from storage:', e);
@@ -136,17 +233,54 @@ export function ShoppingListSubModule({
     return [];
   });
 
-  // UI state
+  // Category state (loaded across full organization inventory)
+  const [categories, setCategories] = useState<string[]>(() => propCategories.length > 0 ? propCategories : []);
+
+  // UI state for item picker modal
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+  const debouncedPickerSearch = useDebounce(pickerSearchQuery, 250);
   const [pickerCategory, setPickerCategory] = useState('all');
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [pickerPage, setPickerPage] = useState(1);
+  const pickerItemsPerPage = 40;
+  
+  // Live items fetched from database for the picker
+  const [dbPickerItems, setDbPickerItems] = useState<any[]>([]);
+  const [dbPickerTotalCount, setDbPickerTotalCount] = useState(0);
+  const [isPickerLoading, setIsPickerLoading] = useState(false);
+  
+  // Track selected items across different search queries/pages: itemId -> itemData
+  const [selectedItemsMap, setSelectedItemsMap] = useState<Record<string, any>>({});
+
+  // Quick add state
+  const [quickAddSku, setQuickAddSku] = useState('');
+  const debouncedQuickAdd = useDebounce(quickAddSku, 250);
+  const [quickAddSuggestions, setQuickAddSuggestions] = useState<any[]>([]);
+  const [isSearchingQuickAdd, setIsSearchingQuickAdd] = useState(false);
+  const [showQuickAddDropdown, setShowQuickAddDropdown] = useState(false);
+
+  // Competitor intelligence state
   const [isSearchingAll, setIsSearchingAll] = useState(false);
   const [searchProgress, setSearchProgress] = useState({ current: 0, total: 0 });
   const [selectedDetailItem, setSelectedDetailItem] = useState<ShoppingListItem | null>(null);
-  const [quickAddSku, setQuickAddSku] = useState('');
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
+  const [isModalSearching, setIsModalSearching] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ itemId: string; competitor: 'kent' | 'homeDepot' } | null>(null);
+  const [tempEditPrice, setTempEditPrice] = useState<string>('');
+  const [modalCustomKentPrice, setModalCustomKentPrice] = useState<string>('');
+  const [modalCustomHdPrice, setModalCustomHdPrice] = useState<string>('');
 
-  // Save to localStorage
+  // Sync modal query and manual prices when selectedDetailItem changes
+  useEffect(() => {
+    if (selectedDetailItem) {
+      const defaultQuery = selectedDetailItem.competitorData?.activeSearchQuery || getItemSearchQuery(selectedDetailItem);
+      setModalSearchQuery(defaultQuery);
+      setModalCustomKentPrice(selectedDetailItem.competitorData?.kent?.price ? String(selectedDetailItem.competitorData.kent.price) : '');
+      setModalCustomHdPrice(selectedDetailItem.competitorData?.homeDepot?.price ? String(selectedDetailItem.competitorData.homeDepot.price) : '');
+    }
+  }, [selectedDetailItem?.id]);
+
+  // Save to localStorage whenever shopping list updates
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(shoppingList));
@@ -155,64 +289,167 @@ export function ShoppingListSubModule({
     }
   }, [shoppingList, storageKey]);
 
-  // Extract distinct categories from inventory for the picker
-  const pickerCategories = useMemo(() => {
-    const cats = new Set<string>();
-    inventoryCatalogItems.forEach(item => {
-      if (item.category && typeof item.category === 'string') {
-        cats.add(item.category.trim());
-      }
-    });
-    return Array.from(cats).sort();
-  }, [inventoryCatalogItems]);
+  // Load all distinct categories across the database if not provided
+  useEffect(() => {
+    if (propCategories.length > 0) {
+      setCategories(propCategories);
+      return;
+    }
 
-  // Filtered items in picker
-  const filteredPickerItems = useMemo(() => {
-    const q = pickerSearchQuery.toLowerCase().trim();
-    return inventoryCatalogItems.filter(item => {
-      if (pickerCategory !== 'all' && item.category !== pickerCategory) {
-        return false;
-      }
-      if (!q) return true;
-      const sku = (item.sku || '').toLowerCase();
-      const name = (item.name || '').toLowerCase();
-      const desc = (item.description || '').toLowerCase();
-      const cat = (item.category || '').toLowerCase();
-      return sku.includes(q) || name.includes(q) || desc.includes(q) || cat.includes(q);
-    });
-  }, [inventoryCatalogItems, pickerSearchQuery, pickerCategory]);
+    let isMounted = true;
+    async function fetchAllCategories() {
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: orgId });
+        if (!rpcError && rpcData && Array.isArray(rpcData)) {
+          const uniqueCats = rpcData.map((row: any) => typeof row === 'object' ? row.category : row).filter(Boolean);
+          const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+          if (isMounted) setCategories(sorted);
+          return;
+        }
 
-  // Add items to shopping list
+        // Direct select fallback
+        const { data: catData, error: catError } = await supabase
+          .from('inventory')
+          .select('category')
+          .eq('organization_id', orgId);
+
+        if (!catError && catData && isMounted) {
+          const set = new Set<string>();
+          catData.forEach(r => { if (r.category) set.add(r.category.trim()); });
+          const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+          setCategories(sorted);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch distinct categories:', err);
+      }
+    }
+
+    fetchAllCategories();
+    return () => { isMounted = false; };
+  }, [orgId, propCategories]);
+
+  // Live database query when picker opens or when search/category/page changes
+  useEffect(() => {
+    if (!isPickerOpen) return;
+
+    let isMounted = true;
+    async function loadPickerItems() {
+      setIsPickerLoading(true);
+      try {
+        const result = await loadInventoryPage({
+          organizationId: orgId,
+          currentPage: pickerPage,
+          itemsPerPage: pickerItemsPerPage,
+          searchQuery: debouncedPickerSearch,
+          categoryFilter: pickerCategory,
+          statusFilter: 'all'
+        });
+
+        if (isMounted) {
+          const mapped = result.items.map(mapDbRowToInventoryItem);
+          setDbPickerItems(mapped);
+          setDbPickerTotalCount(result.totalCount);
+        }
+      } catch (err) {
+        console.error('Failed to load items in picker:', err);
+        if (isMounted) {
+          setDbPickerItems([]);
+          setDbPickerTotalCount(0);
+        }
+      } finally {
+        if (isMounted) setIsPickerLoading(false);
+      }
+    }
+
+    loadPickerItems();
+    return () => { isMounted = false; };
+  }, [isPickerOpen, orgId, debouncedPickerSearch, pickerCategory, pickerPage]);
+
+  // Reset picker page to 1 when search or category filter changes
+  useEffect(() => {
+    setPickerPage(1);
+  }, [debouncedPickerSearch, pickerCategory]);
+
+  // Live Quick Add autocomplete query against full database
+  useEffect(() => {
+    const q = debouncedQuickAdd.trim();
+    if (!q || q.length < 2) {
+      setQuickAddSuggestions([]);
+      setShowQuickAddDropdown(false);
+      return;
+    }
+
+    let isMounted = true;
+    async function fetchQuickSuggestions() {
+      setIsSearchingQuickAdd(true);
+      try {
+        const result = await loadInventoryPage({
+          organizationId: orgId,
+          currentPage: 1,
+          itemsPerPage: 6,
+          searchQuery: q,
+          categoryFilter: 'all'
+        });
+
+        if (isMounted) {
+          const mapped = result.items.map(mapDbRowToInventoryItem);
+          setQuickAddSuggestions(mapped);
+          setShowQuickAddDropdown(mapped.length > 0);
+        }
+      } catch (err) {
+        if (isMounted) setQuickAddSuggestions([]);
+      } finally {
+        if (isMounted) setIsSearchingQuickAdd(false);
+      }
+    }
+
+    fetchQuickSuggestions();
+    return () => { isMounted = false; };
+  }, [debouncedQuickAdd, orgId]);
+
+  // Toggle selection for an item in picker
+  const toggleItemSelection = (item: any) => {
+    setSelectedItemsMap(prev => {
+      const next = { ...prev };
+      if (next[item.id]) {
+        delete next[item.id];
+      } else {
+        next[item.id] = item;
+      }
+      return next;
+    });
+  };
+
+  // Add all selected items from picker to shopping list
   const handleAddItemsFromPicker = () => {
-    if (selectedItemIds.length === 0) return;
+    const itemsToAdd = Object.values(selectedItemsMap);
+    if (itemsToAdd.length === 0) return;
 
-    const itemsToAdd = inventoryCatalogItems.filter(i => selectedItemIds.includes(i.id));
     setShoppingList(prev => {
       const existingMap = new Map(prev.map(p => [p.sku, p]));
       const nextList = [...prev];
 
-      itemsToAdd.forEach(invItem => {
+      itemsToAdd.forEach((invItem: any) => {
         const sku = invItem.sku || invItem.id;
         if (existingMap.has(sku)) {
-          // Increment quantity
           const existing = existingMap.get(sku)!;
           existing.quantity = (existing.quantity || 1) + 1;
         } else {
           const newItem: ShoppingListItem = {
             id: 'sl_' + Math.random().toString(36).substring(2, 9),
             inventoryId: invItem.id,
-            sku: invItem.sku || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-            name: invItem.name || 'Unnamed Material',
-            description: invItem.description || invItem.name || '',
+            sku: invItem.sku,
+            name: invItem.name,
+            description: invItem.description || invItem.name,
+            mfgPartNumber: invItem.mfgPartNumber || invItem.mfg_part_number || '',
+            manufacturer: invItem.manufacturer || invItem.brand || '',
             category: invItem.category || 'General Building Supply',
-            unitOfMeasure: (invItem.unitOfMeasure || 'ea').toUpperCase(),
+            unitOfMeasure: (invItem.unitOfMeasure || 'EA').toUpperCase(),
             cost: Number(invItem.cost || 0),
-            unitPrice: Number(invItem.unitPrice || invItem.priceTier1 || 0),
+            unitPrice: Number(invItem.unitPrice || 0),
             quantity: 1,
             quantityOnHand: invItem.quantityOnHand ?? 0,
-            competitorData: {
-              status: 'idle'
-            }
+            competitorData: { status: 'idle' }
           };
           nextList.push(newItem);
           existingMap.set(sku, newItem);
@@ -223,119 +460,179 @@ export function ShoppingListSubModule({
     });
 
     toast.success(`Added ${itemsToAdd.length} item${itemsToAdd.length > 1 ? 's' : ''} to Shopping List`);
-    setSelectedItemIds([]);
+    setSelectedItemsMap({});
     setIsPickerOpen(false);
   };
 
-  // Quick add from search bar or manual entry
-  const handleQuickAdd = () => {
-    if (!quickAddSku.trim()) return;
-    const match = inventoryCatalogItems.find(
-      i => (i.sku || '').toLowerCase() === quickAddSku.toLowerCase().trim() ||
-           (i.name || '').toLowerCase().includes(quickAddSku.toLowerCase().trim())
-    );
-
-    if (match) {
-      setShoppingList(prev => {
-        const existing = prev.find(p => p.sku === match.sku);
-        if (existing) {
-          return prev.map(p => p.sku === match.sku ? { ...p, quantity: p.quantity + 1 } : p);
+  // Add a specific item directly to shopping list
+  const handleAddSingleItem = (invItem: any) => {
+    setShoppingList(prev => {
+      const sku = invItem.sku || invItem.id;
+      const existing = prev.find(p => p.sku === sku);
+      if (existing) {
+        return prev.map(p => p.sku === sku ? { ...p, quantity: (p.quantity || 1) + 1 } : p);
+      }
+      return [
+        ...prev,
+        {
+          id: 'sl_' + Math.random().toString(36).substring(2, 9),
+          inventoryId: invItem.id,
+          sku: invItem.sku,
+          name: invItem.name,
+          description: invItem.description || invItem.name,
+          mfgPartNumber: invItem.mfgPartNumber || invItem.mfg_part_number || '',
+          manufacturer: invItem.manufacturer || invItem.brand || '',
+          category: invItem.category || 'Materials',
+          unitOfMeasure: (invItem.unitOfMeasure || 'EA').toUpperCase(),
+          cost: Number(invItem.cost || 0),
+          unitPrice: Number(invItem.unitPrice || 0),
+          quantity: 1,
+          quantityOnHand: invItem.quantityOnHand ?? 0,
+          competitorData: { status: 'idle' }
         }
-        return [
-          ...prev,
-          {
-            id: 'sl_' + Math.random().toString(36).substring(2, 9),
-            inventoryId: match.id,
-            sku: match.sku,
-            name: match.name,
-            description: match.description || match.name,
-            category: match.category || 'Materials',
-            unitOfMeasure: (match.unitOfMeasure || 'ea').toUpperCase(),
-            cost: Number(match.cost || 0),
-            unitPrice: Number(match.unitPrice || match.priceTier1 || 0),
-            quantity: 1,
-            quantityOnHand: match.quantityOnHand ?? 0,
-            competitorData: { status: 'idle' }
-          }
-        ];
-      });
-      toast.success(`Added ${match.name} to Shopping List`);
-      setQuickAddSku('');
-    } else {
-      // Create a custom item
-      const newItem: ShoppingListItem = {
-        id: 'sl_' + Math.random().toString(36).substring(2, 9),
-        sku: quickAddSku.toUpperCase().trim(),
-        name: quickAddSku.trim(),
-        description: `Manual entry: ${quickAddSku.trim()}`,
-        category: 'Custom Search',
-        unitOfMeasure: 'EA',
-        cost: 0,
-        unitPrice: 0,
-        quantity: 1,
-        competitorData: { status: 'idle' }
-      };
-      setShoppingList(prev => [...prev, newItem]);
-      toast.info(`Created custom item "${quickAddSku}" on Shopping List`);
-      setQuickAddSku('');
-    }
+      ];
+    });
+    toast.success(`Added "${invItem.name}" to Shopping List`);
+    setQuickAddSku('');
+    setShowQuickAddDropdown(false);
   };
 
-  // Load a preset template
-  const handleLoadPreset = (preset: typeof PRESET_LISTS[0]) => {
-    const matched = inventoryCatalogItems.filter(i => 
-      preset.sampleSkus.some(s => (i.sku || '').toLowerCase().includes(s.toLowerCase()))
-    );
+  // Manual Quick Add entry
+  const handleQuickAddSubmit = async () => {
+    const q = quickAddSku.trim();
+    if (!q) return;
 
-    const listToAdd: ShoppingListItem[] = [];
-    if (matched.length > 0) {
-      matched.forEach(m => {
-        listToAdd.push({
-          id: 'sl_' + Math.random().toString(36).substring(2, 9),
-          inventoryId: m.id,
-          sku: m.sku,
-          name: m.name,
-          description: m.description || m.name,
-          category: m.category || 'Materials',
-          unitOfMeasure: (m.unitOfMeasure || 'ea').toUpperCase(),
-          cost: Number(m.cost || 0),
-          unitPrice: Number(m.unitPrice || m.priceTier1 || 0),
-          quantity: 1,
-          quantityOnHand: m.quantityOnHand ?? 0,
-          competitorData: { status: 'idle' }
-        });
-      });
-    } else {
-      // Provide realistic default materials for testing when database is sparse
-      const fallbackTemplates: Record<string, ShoppingListItem[]> = {
-        'Halifax Framing & Lumber Essentials': [
-          { id: 'sl_1', sku: 'LMB-2X4-8SPF', name: '2x4x8 SPF Premium Kiln-Dried Stud', description: 'Grade #2 SPF Framing Lumber 2 in. x 4 in. x 8 ft.', category: 'Lumber & Framing', unitOfMeasure: 'EA', cost: 3.45, unitPrice: 4.98, quantity: 48, competitorData: { status: 'idle' } },
-          { id: 'sl_2', sku: 'LMB-2X6-10SPF', name: '2x6x10 SPF Premium Framing Lumber', description: 'Grade #2 SPF Construction Lumber 2 in. x 6 in. x 10 ft.', category: 'Lumber & Framing', unitOfMeasure: 'EA', cost: 7.20, unitPrice: 9.95, quantity: 24, competitorData: { status: 'idle' } },
-          { id: 'sl_3', sku: 'PLY-OSB-716', name: '7/16 in. 4x8 Oriented Strand Board (OSB)', description: 'Exterior Sheathing OSB 4 ft. x 8 ft. x 7/16 in.', category: 'Sheathing & Plywood', unitOfMeasure: 'SHT', cost: 14.50, unitPrice: 19.98, quantity: 30, competitorData: { status: 'idle' } },
-          { id: 'sl_4', sku: 'FAST-PASL-314', name: 'Paslode 3-1/4 in. Framing Nails (2500 Pack)', description: '30-degree paper tape framing nails galvanized 3-1/4 x .131', category: 'Fasteners & Hardware', unitOfMeasure: 'BOX', cost: 55.00, unitPrice: 79.99, quantity: 2, competitorData: { status: 'idle' } }
-        ],
-        'Drywall & Interior Finishing': [
-          { id: 'sl_10', sku: 'DW-CGC-12-8', name: 'CGC Sheetrock 1/2 in. x 4 ft. x 8 ft. Drywall', description: 'Regular drywall gypsum panel for wall and ceiling framing', category: 'Drywall & Plaster', unitOfMeasure: 'SHT', cost: 11.25, unitPrice: 15.98, quantity: 40, competitorData: { status: 'idle' } },
-          { id: 'sl_11', sku: 'CPD-ALLPURP-20KG', name: 'CGC Sheetrock Dust Control Joint Compound 20kg', description: 'Ready-mixed all-purpose joint compound pale beige pail', category: 'Drywall & Plaster', unitOfMeasure: 'PL', cost: 18.50, unitPrice: 26.99, quantity: 4, competitorData: { status: 'idle' } },
-          { id: 'sl_12', sku: 'SCRW-DW-158', name: '1-5/8 in. Coarse Thread Drywall Screws (5 lb)', description: '#6 bugle head phosphate coated drywall screws', category: 'Fasteners & Hardware', unitOfMeasure: 'BOX', cost: 17.50, unitPrice: 24.95, quantity: 3, competitorData: { status: 'idle' } }
-        ],
-        'Exterior Decking & Hardware': [
-          { id: 'sl_20', sku: 'DK-PT-546-12', name: '5/4 in. x 6 in. x 12 ft. Pressure Treated Decking', description: 'MicroPro Sienna premium radius edge pressure treated deck board', category: 'Decking & Railing', unitOfMeasure: 'EA', cost: 9.80, unitPrice: 14.49, quantity: 36, competitorData: { status: 'idle' } },
-          { id: 'sl_21', sku: 'SCRW-GRX-3IN-1000', name: 'GRK Fasteners 3 in. R4 Multi-Purpose Screws (1000 ct)', description: '#9 x 3 in. climatek coated exterior framing & deck screws', category: 'Fasteners & Hardware', unitOfMeasure: 'BOX', cost: 68.00, unitPrice: 94.50, quantity: 2, competitorData: { status: 'idle' } },
-          { id: 'sl_22', sku: 'HNG-LUS28-ZMAX', name: 'Simpson Strong-Tie LUS28Z Double Joist Hanger', description: '2x8 ZMAX galvanized face mount joist hanger', category: 'Fasteners & Hardware', unitOfMeasure: 'EA', cost: 2.10, unitPrice: 3.49, quantity: 20, competitorData: { status: 'idle' } }
-        ]
-      };
-      const defaults = fallbackTemplates[preset.name] || fallbackTemplates['Halifax Framing & Lumber Essentials'];
-      defaults.forEach(d => listToAdd.push(d));
+    // Check if quick add matches top suggestion
+    if (quickAddSuggestions.length > 0) {
+      handleAddSingleItem(quickAddSuggestions[0]);
+      return;
     }
 
-    setShoppingList(listToAdd);
-    toast.success(`Loaded preset: ${preset.name} (${listToAdd.length} items)`);
+    // Try live database lookup for exact SKU or name or description
+    try {
+      const res = await loadInventoryPage({
+        organizationId: orgId,
+        currentPage: 1,
+        itemsPerPage: 1,
+        searchQuery: q,
+        categoryFilter: 'all'
+      });
+
+      if (res.items.length > 0) {
+        const item = mapDbRowToInventoryItem(res.items[0]);
+        handleAddSingleItem(item);
+        return;
+      }
+    } catch (e) {
+      console.warn('Quick add query error:', e);
+    }
+
+    // Create custom manual item if not found in database
+    const newItem: ShoppingListItem = {
+      id: 'sl_' + Math.random().toString(36).substring(2, 9),
+      sku: q.toUpperCase().replace(/\s+/g, '-'),
+      name: q,
+      description: q,
+      mfgPartNumber: '',
+      manufacturer: '',
+      category: 'Custom Search',
+      unitOfMeasure: 'EA',
+      cost: 0,
+      unitPrice: 0,
+      quantity: 1,
+      competitorData: { status: 'idle' }
+    };
+    setShoppingList(prev => [...prev, newItem]);
+    toast.info(`Created custom item "${q}" on Shopping List`);
+    setQuickAddSku('');
+    setShowQuickAddDropdown(false);
+  };
+
+  // Load a preset template querying database for actual matches
+  const handleLoadPreset = async (preset: typeof PRESET_LISTS[0]) => {
+    toast.loading(`Loading ${preset.name}...`, { id: 'load-preset' });
+
+    try {
+      // Query database for matching items
+      const matchedItems: any[] = [];
+      for (const sku of preset.sampleSkus) {
+        const res = await loadInventoryPage({
+          organizationId: orgId,
+          currentPage: 1,
+          itemsPerPage: 1,
+          searchQuery: sku,
+          categoryFilter: 'all'
+        });
+        if (res.items.length > 0) {
+          matchedItems.push(mapDbRowToInventoryItem(res.items[0]));
+        }
+      }
+
+      // If no exact SKU matches, search by keywords
+      if (matchedItems.length === 0 && preset.keywords) {
+        for (const kw of preset.keywords.slice(0, 3)) {
+          const res = await loadInventoryPage({
+            organizationId: orgId,
+            currentPage: 1,
+            itemsPerPage: 2,
+            searchQuery: kw,
+            categoryFilter: 'all'
+          });
+          res.items.forEach(raw => {
+            const mapped = mapDbRowToInventoryItem(raw);
+            if (!matchedItems.some(m => m.sku === mapped.sku)) {
+              matchedItems.push(mapped);
+            }
+          });
+        }
+      }
+
+      const listToAdd: ShoppingListItem[] = [];
+
+      if (matchedItems.length > 0) {
+        matchedItems.forEach(m => {
+          listToAdd.push({
+            id: 'sl_' + Math.random().toString(36).substring(2, 9),
+            inventoryId: m.id,
+            sku: m.sku,
+            name: m.name,
+            description: m.description || m.name,
+            mfgPartNumber: m.mfgPartNumber || '',
+            manufacturer: m.manufacturer || '',
+            category: m.category || 'Materials',
+            unitOfMeasure: (m.unitOfMeasure || 'EA').toUpperCase(),
+            cost: Number(m.cost || 0),
+            unitPrice: Number(m.unitPrice || 0),
+            quantity: m.category === 'Lumber & Framing' || m.category === 'BUILDING MATERIALS' ? 24 : 10,
+            quantityOnHand: m.quantityOnHand ?? 0,
+            competitorData: { status: 'idle' }
+          });
+        });
+        setShoppingList(listToAdd);
+        toast.success(`Loaded ${preset.name} (${listToAdd.length} catalog materials)`, { id: 'load-preset' });
+      } else {
+        toast.dismiss('load-preset');
+        toast.info(`No existing materials matched "${preset.name}". Use "Add From Inventory" to browse your catalog.`, { id: 'load-preset' });
+      }
+    } catch (e) {
+      toast.error('Failed to load preset', { id: 'load-preset' });
+    }
   };
 
   // Remove item
   const handleRemoveItem = (id: string) => {
     setShoppingList(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Purge any legacy test / mock items
+  const handlePurgeTestItems = () => {
+    const cleaned = shoppingList.filter(p => !p.id?.match(/^sl_\d+$/));
+    if (cleaned.length !== shoppingList.length) {
+      setShoppingList(cleaned);
+      toast.success('Removed test data items from Shopping List');
+    } else {
+      toast.info('No test data items detected');
+    }
   };
 
   // Update quantity
@@ -355,8 +652,15 @@ export function ShoppingListSubModule({
     }
   };
 
-  // Web search competitor pricing for a single item
-  const searchCompetitorForItem = async (item: ShoppingListItem): Promise<ShoppingListItem> => {
+  // Competitor pricing search for single item
+  const searchCompetitorForItem = async (item: ShoppingListItem, customQuery?: string): Promise<ShoppingListItem> => {
+    const searchQuery = customQuery && customQuery.trim() ? customQuery.trim() : getItemSearchQuery(item);
+    const kentDirectSearchUrl = `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(searchQuery)}`;
+    const hdDirectSearchUrl = `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(searchQuery)}`;
+    const googleKentSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`KENT BUILDING SUPPLIES PRICE FOR ${searchQuery}`)}`;
+    const googleHdSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`THE HOME DEPOT CANADA PRICE FOR ${searchQuery}`)}`;
+    const bingKentSearchUrl = `https://www.bing.com/search?q=${encodeURIComponent(`KENT BUILDING SUPPLIES PRICE FOR ${searchQuery}`)}`;
+
     try {
       const response = await fetch('/api/inventory/competitor-pricing', {
         method: 'POST',
@@ -365,6 +669,9 @@ export function ShoppingListSubModule({
           sku: item.sku,
           name: item.name,
           description: item.description,
+          mfgPartNumber: item.mfgPartNumber,
+          manufacturer: item.manufacturer,
+          searchQuery,
           category: item.category,
           unitOfMeasure: item.unitOfMeasure,
           cost: item.cost,
@@ -408,38 +715,49 @@ export function ShoppingListSubModule({
           ...item,
           competitorData: {
             lastChecked: new Date().toISOString(),
+            activeSearchQuery: searchQuery,
             status: 'found',
             kent: {
               storeName: p.kent?.storeName || 'Kent Building Supplies (Halifax/Dartmouth, NS)',
               price: kentPrice,
-              sku: p.kent?.sku,
-              productTitle: p.kent?.productTitle || item.name,
-              inStock: p.kent?.inStock ?? true,
-              url: p.kent?.url || `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(item.sku + ' ' + item.name)}`,
-              storeLocation: p.kent?.storeLocation || 'Halifax / Bayers Lake / Dartmouth, NS',
+              sku: p.kent?.sku || item.mfgPartNumber || '',
+              productTitle: p.kent?.productTitle || (kentPrice > 0 ? (item.description || item.name) : ''),
+              inStock: p.kent?.inStock ?? (kentPrice > 0),
+              url: p.kent?.url || kentDirectSearchUrl,
+              googleSearchUrl: p.kent?.googleSearchUrl || googleKentSearchUrl,
+              bingSearchUrl: p.kent?.bingSearchUrl || bingKentSearchUrl,
+              storeLocation: p.kent?.storeLocation || 'Halifax Bayers Lake / Dartmouth, NS',
               priceDifference: kentDiff,
               variancePct: kentVar,
               unit: p.kent?.unit || item.unitOfMeasure,
-              notes: p.kent?.notes,
-              matchConfidence: p.kent?.matchConfidence || 'high'
+              notes: p.kent?.notes || (kentPrice > 0 ? 'Live price extracted' : 'Not listed on competitor site'),
+              matchConfidence: p.kent?.matchConfidence || (kentPrice > 0 ? 'high' : 'not_found')
             },
             homeDepot: {
               storeName: p.homeDepot?.storeName || 'The Home Depot (Halifax Lacewood / Dartmouth Crossing, NS)',
               price: hdPrice,
-              sku: p.homeDepot?.sku,
-              productTitle: p.homeDepot?.productTitle || item.name,
-              inStock: p.homeDepot?.inStock ?? true,
-              url: p.homeDepot?.url || `https://www.homedepot.ca/search?q=${encodeURIComponent(item.sku + ' ' + item.name)}`,
+              sku: p.homeDepot?.sku || item.mfgPartNumber || '',
+              productTitle: p.homeDepot?.productTitle || (hdPrice > 0 ? (item.description || item.name) : ''),
+              inStock: p.homeDepot?.inStock ?? (hdPrice > 0),
+              url: p.homeDepot?.url || hdDirectSearchUrl,
+              googleSearchUrl: p.homeDepot?.googleSearchUrl || googleHdSearchUrl,
               storeLocation: p.homeDepot?.storeLocation || 'Halifax Lacewood / Dartmouth Crossing, NS',
               priceDifference: hdDiff,
               variancePct: hdVar,
               unit: p.homeDepot?.unit || item.unitOfMeasure,
-              notes: p.homeDepot?.notes,
-              matchConfidence: p.homeDepot?.matchConfidence || 'high'
+              notes: p.homeDepot?.notes || (hdPrice > 0 ? 'Live price extracted' : 'Not listed on competitor site'),
+              matchConfidence: p.homeDepot?.matchConfidence || (hdPrice > 0 ? 'high' : 'not_found')
             },
-            marketRecommendation: p.recommendation || p.marketRecommendation,
+            marketRecommendation: p.recommendation || (kentPrice > 0 || hdPrice > 0 
+              ? `Live search retrieved current competitive pricing for ${item.description || item.name}.`
+              : `Pricing search completed for "${searchQuery}".`),
             bestDeal,
-            groundingSources: p.groundingSources || []
+            groundingSources: p.groundingSources || [
+              { title: `Google Search: "KENT BUILDING SUPPLIES PRICE FOR ${searchQuery}"`, url: googleKentSearchUrl },
+              { title: `Google Search: "THE HOME DEPOT CANADA PRICE FOR ${searchQuery}"`, url: googleHdSearchUrl },
+              { title: `Kent.ca Search for "${searchQuery}"`, url: kentDirectSearchUrl },
+              { title: `HomeDepot.ca Search for "${searchQuery}"`, url: hdDirectSearchUrl }
+            ]
           }
         };
       } else {
@@ -447,50 +765,59 @@ export function ShoppingListSubModule({
       }
     } catch (err: any) {
       console.warn(`Competitor search failed for ${item.sku}:`, err);
-      // Construct an intelligent realistic Halifax estimation so UI never fails
-      const fallbackKentPrice = item.unitPrice > 0 ? Number((item.unitPrice * (0.97 + Math.random() * 0.12)).toFixed(2)) : 10.99;
-      const fallbackHdPrice = item.unitPrice > 0 ? Number((item.unitPrice * (0.96 + Math.random() * 0.14)).toFixed(2)) : 11.49;
-      const kentDiff = Number((fallbackKentPrice - item.unitPrice).toFixed(2));
-      const hdDiff = Number((fallbackHdPrice - item.unitPrice).toFixed(2));
 
       return {
         ...item,
         competitorData: {
           lastChecked: new Date().toISOString(),
-          status: 'found',
+          activeSearchQuery: searchQuery,
+          status: 'error',
           kent: {
-            storeName: 'Kent Building Supplies (Halifax / Bayers Lake, NS)',
-            price: fallbackKentPrice,
-            productTitle: item.name,
-            inStock: true,
-            url: `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(item.name)}`,
+            storeName: 'Kent Building Supplies (Halifax Bayers Lake, NS)',
+            price: 0,
+            sku: item.mfgPartNumber || '',
+            productTitle: '',
+            inStock: false,
+            url: kentDirectSearchUrl,
+            googleSearchUrl: googleKentSearchUrl,
+            bingSearchUrl: bingKentSearchUrl,
             storeLocation: 'Halifax Bayers Lake, NS',
-            priceDifference: kentDiff,
-            variancePct: Number(((kentDiff / (item.unitPrice || 1)) * 100).toFixed(1)),
+            priceDifference: 0,
+            variancePct: 0,
             unit: item.unitOfMeasure,
-            matchConfidence: 'medium'
+            notes: `Live price query failed. Click to search directly on Google / Kent.ca for "${searchQuery}".`,
+            matchConfidence: 'not_found'
           },
           homeDepot: {
             storeName: 'The Home Depot (Halifax Lacewood Dr, NS)',
-            price: fallbackHdPrice,
-            productTitle: item.name,
-            inStock: true,
-            url: `https://www.homedepot.ca/search?q=${encodeURIComponent(item.name)}`,
+            price: 0,
+            sku: item.mfgPartNumber || '',
+            productTitle: '',
+            inStock: false,
+            url: hdDirectSearchUrl,
+            googleSearchUrl: googleHdSearchUrl,
             storeLocation: 'Halifax Lacewood Dr, NS',
-            priceDifference: hdDiff,
-            variancePct: Number(((hdDiff / (item.unitPrice || 1)) * 100).toFixed(1)),
+            priceDifference: 0,
+            variancePct: 0,
             unit: item.unitOfMeasure,
-            matchConfidence: 'medium'
+            notes: `Live price query failed. Click to search directly on Google / HomeDepot.ca for "${searchQuery}".`,
+            matchConfidence: 'not_found'
           },
-          bestDeal: item.unitPrice <= Math.min(fallbackKentPrice, fallbackHdPrice) ? 'prospaces' : fallbackKentPrice < fallbackHdPrice ? 'kent' : 'home_depot',
-          marketRecommendation: `Halifax market retail price range: $${Math.min(fallbackKentPrice, fallbackHdPrice).toFixed(2)} - $${Math.max(fallbackKentPrice, fallbackHdPrice).toFixed(2)} CAD.`
+          bestDeal: 'prospaces',
+          marketRecommendation: `Live price query could not complete. You can click the Google / retailer links to verify in-store prices for "${searchQuery}".`,
+          groundingSources: [
+            { title: `Google Search: "KENT BUILDING SUPPLIES PRICE FOR ${searchQuery}"`, url: googleKentSearchUrl },
+            { title: `Google Search: "THE HOME DEPOT CANADA PRICE FOR ${searchQuery}"`, url: googleHdSearchUrl },
+            { title: `Kent.ca Search for "${searchQuery}"`, url: kentDirectSearchUrl },
+            { title: `HomeDepot.ca Search for "${searchQuery}"`, url: hdDirectSearchUrl }
+          ]
         }
       };
     }
   };
 
-  // Run search on a single row
-  const handleSearchSingleItem = async (itemId: string) => {
+  // Run search on single row (optionally with custom web search criteria)
+  const handleSearchSingleItem = async (itemId: string, customQuery?: string) => {
     const target = shoppingList.find(s => s.id === itemId);
     if (!target) return;
 
@@ -499,13 +826,162 @@ export function ShoppingListSubModule({
       competitorData: { ...p.competitorData, status: 'searching' }
     } : p));
 
-    toast.loading(`Searching Kent & Home Depot for ${target.sku}...`, { id: `search-${itemId}` });
-    const updated = await searchCompetitorForItem(target);
+    const displayQ = customQuery || getItemSearchQuery(target);
+    toast.loading(`Searching web for "${displayQ}"...`, { id: `search-${itemId}` });
+    const updated = await searchCompetitorForItem(target, customQuery);
+    
     setShoppingList(prev => prev.map(p => p.id === itemId ? updated : p));
+    if (selectedDetailItem?.id === itemId) {
+      setSelectedDetailItem(updated);
+    }
     toast.success(`Competitor pricing updated for ${target.sku}`, { id: `search-${itemId}` });
+    return updated;
   };
 
-  // Batch search all items in the shopping list
+  // Automatically fetch competitor pricing in background for items with no price populated yet
+  const autoEnrichingSetRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const unpricedItems = shoppingList.filter(item => {
+      if (autoEnrichingSetRef.current.has(item.id)) return false;
+      const status = item.competitorData?.status;
+      const hasPrices = (item.competitorData?.kent?.price || 0) > 0 || (item.competitorData?.homeDepot?.price || 0) > 0;
+      return !status || status === 'idle' || (!hasPrices && status !== 'searching');
+    });
+
+    if (unpricedItems.length === 0) return;
+
+    let isMounted = true;
+    unpricedItems.forEach(item => autoEnrichingSetRef.current.add(item.id));
+
+    async function autoFetchPrices() {
+      for (const item of unpricedItems) {
+        if (!isMounted) break;
+        try {
+          const enriched = await searchCompetitorForItem(item);
+          if (isMounted) {
+            setShoppingList(prev => prev.map(p => p.id === item.id ? enriched : p));
+          }
+        } catch (e) {
+          console.warn('Auto competitor pricing failed for', item.sku, e);
+        }
+      }
+    }
+
+    // Short timeout to allow immediate render first
+    const timer = setTimeout(() => {
+      autoFetchPrices();
+    }, 100);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [shoppingList]);
+
+  // Manual price override / entry for competitor data
+  const handleManualPriceUpdate = (
+    itemId: string,
+    competitor: 'kent' | 'homeDepot',
+    newPriceRaw: number | string,
+    customTitle?: string,
+    customNotes?: string
+  ) => {
+    const numPrice = typeof newPriceRaw === 'number' ? newPriceRaw : parseFloat(String(newPriceRaw).replace(/[^0-9.]/g, ''));
+    if (isNaN(numPrice) || numPrice < 0) {
+      toast.error('Please enter a valid price amount');
+      return;
+    }
+
+    setShoppingList(prev => prev.map(item => {
+      if (item.id !== itemId) return item;
+      const currentComp = item.competitorData || {
+        lastChecked: new Date().toISOString(),
+        activeSearchQuery: getItemSearchQuery(item),
+        status: 'found'
+      };
+      const ourPrice = Number(item.unitPrice || 0);
+      const kentPrice = competitor === 'kent' ? numPrice : Number(currentComp.kent?.price || 0);
+      const hdPrice = competitor === 'homeDepot' ? numPrice : Number(currentComp.homeDepot?.price || 0);
+
+      const kentDiff = kentPrice > 0 ? Number((kentPrice - ourPrice).toFixed(2)) : 0;
+      const kentVar = ourPrice > 0 && kentPrice > 0 ? Number(((kentDiff / ourPrice) * 100).toFixed(1)) : 0;
+
+      const hdDiff = hdPrice > 0 ? Number((hdPrice - ourPrice).toFixed(2)) : 0;
+      const hdVar = ourPrice > 0 && hdPrice > 0 ? Number(((hdDiff / ourPrice) * 100).toFixed(1)) : 0;
+
+      let bestDeal: 'prospaces' | 'kent' | 'home_depot' | 'tie' = 'prospaces';
+      if (kentPrice > 0 && hdPrice > 0) {
+        const minPrice = Math.min(ourPrice > 0 ? ourPrice : Infinity, kentPrice, hdPrice);
+        if (ourPrice > 0 && ourPrice <= minPrice) bestDeal = 'prospaces';
+        else if (kentPrice < hdPrice) bestDeal = 'kent';
+        else if (hdPrice < kentPrice) bestDeal = 'home_depot';
+        else bestDeal = 'tie';
+      } else if (kentPrice > 0 && ourPrice > 0) {
+        bestDeal = ourPrice <= kentPrice ? 'prospaces' : 'kent';
+      } else if (hdPrice > 0 && ourPrice > 0) {
+        bestDeal = ourPrice <= hdPrice ? 'prospaces' : 'home_depot';
+      }
+
+      const q = getItemSearchQuery(item);
+      const kentSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`kent price ${q}`)}`;
+      const hdSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`the home depot canada price ${q}`)}`;
+
+      const updatedItem: ShoppingListItem = {
+        ...item,
+        competitorData: {
+          ...currentComp,
+          lastChecked: new Date().toISOString(),
+          status: 'found',
+          bestDeal,
+          kent: {
+            storeName: currentComp.kent?.storeName || 'Kent Building Supplies (Halifax Bayers Lake / Dartmouth, NS)',
+            price: kentPrice,
+            sku: currentComp.kent?.sku || item.mfgPartNumber || '',
+            productTitle: competitor === 'kent' && customTitle ? customTitle : (currentComp.kent?.productTitle || item.description || item.name),
+            inStock: kentPrice > 0,
+            url: currentComp.kent?.url || `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(q)}`,
+            googleSearchUrl: kentSearchUrl,
+            bingSearchUrl: `https://www.bing.com/search?q=${encodeURIComponent(`kent price ${q}`)}`,
+            storeLocation: currentComp.kent?.storeLocation || 'Halifax Bayers Lake / Dartmouth, NS',
+            priceDifference: kentDiff,
+            variancePct: kentVar,
+            unit: currentComp.kent?.unit || item.unitOfMeasure,
+            notes: competitor === 'kent' ? (customNotes || (kentPrice > 0 ? 'Verified in store / search result' : 'Not listed on site')) : currentComp.kent?.notes,
+            matchConfidence: kentPrice > 0 ? 'exact' : 'not_found'
+          },
+          homeDepot: {
+            storeName: currentComp.homeDepot?.storeName || 'The Home Depot (Halifax Lacewood / Dartmouth Crossing, NS)',
+            price: hdPrice,
+            sku: currentComp.homeDepot?.sku || item.mfgPartNumber || '',
+            productTitle: competitor === 'homeDepot' && customTitle ? customTitle : (currentComp.homeDepot?.productTitle || item.description || item.name),
+            inStock: hdPrice > 0,
+            url: currentComp.homeDepot?.url || `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(q)}`,
+            googleSearchUrl: hdSearchUrl,
+            storeLocation: currentComp.homeDepot?.storeLocation || 'Halifax Lacewood / Dartmouth Crossing, NS',
+            priceDifference: hdDiff,
+            variancePct: hdVar,
+            unit: currentComp.homeDepot?.unit || item.unitOfMeasure,
+            notes: competitor === 'homeDepot' ? (customNotes || (hdPrice > 0 ? 'Verified in store / search result' : 'Not listed on site')) : currentComp.homeDepot?.notes,
+            matchConfidence: hdPrice > 0 ? 'exact' : 'not_found'
+          },
+          marketRecommendation: `Market comparison updated: ProSpaces $${ourPrice.toFixed(2)} vs Kent $${kentPrice > 0 ? kentPrice.toFixed(2) : '--'} & HD $${hdPrice > 0 ? hdPrice.toFixed(2) : '--'}.`
+        }
+      };
+
+      if (selectedDetailItem?.id === itemId) {
+        setSelectedDetailItem(updatedItem);
+      }
+
+      return updatedItem;
+    }));
+
+    setEditingCell(null);
+    setTempEditPrice('');
+    toast.success(`${competitor === 'kent' ? 'Kent Building Supplies' : 'The Home Depot'} price updated to $${numPrice.toFixed(2)} CAD`);
+  };
+
+  // Batch search all items
   const handleSearchAllCompetitors = async () => {
     if (shoppingList.length === 0) {
       toast.error('Add items to the shopping list first');
@@ -550,7 +1026,8 @@ export function ShoppingListSubModule({
     shoppingList.forEach(item => {
       const qty = item.quantity || 1;
       totalUnits += qty;
-      ourCostTotal += (item.cost || 0) * qty;
+      const costToUse = costViewMode === "replacement_cost" ? (item.replacementCost || item.cost || 0) : (item.cost || 0);
+      ourCostTotal += costToUse * qty;
       ourRetailTotal += (item.unitPrice || 0) * qty;
 
       const comp = item.competitorData;
@@ -617,6 +1094,7 @@ export function ShoppingListSubModule({
       `"${item.unitOfMeasure}"`,
       item.quantity,
       item.cost.toFixed(2),
+      (item.replacementCost || item.cost || 0).toFixed(2),
       item.unitPrice.toFixed(2),
       (item.unitPrice * item.quantity).toFixed(2),
       item.competitorData?.kent?.price?.toFixed(2) || '',
@@ -643,6 +1121,7 @@ export function ShoppingListSubModule({
     window.print();
   };
 
+  // Filter shopping list items in table
   const filteredShoppingList = useMemo(() => {
     if (!searchQuery.trim()) return shoppingList;
     const q = searchQuery.toLowerCase().trim();
@@ -655,6 +1134,9 @@ export function ShoppingListSubModule({
       );
     });
   }, [shoppingList, searchQuery]);
+
+  const selectedCount = Object.keys(selectedItemsMap).length;
+  const totalPickerPages = Math.ceil(dbPickerTotalCount / pickerItemsPerPage) || 1;
 
   return (
     <div className="space-y-6">
@@ -712,6 +1194,21 @@ export function ShoppingListSubModule({
             )}
           </Button>
 
+          <div className="flex bg-muted p-1 rounded-md ml-2 border">
+            <button
+              onClick={() => setCostViewMode('avg_cost')}
+              className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${costViewMode === 'avg_cost' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Avg Cost
+            </button>
+            <button
+              onClick={() => setCostViewMode('replacement_cost')}
+              className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${costViewMode === 'replacement_cost' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Rep. Cost
+            </button>
+          </div>
+
           <div className="flex items-center gap-1 border-l pl-2">
             <Button
               variant="ghost"
@@ -732,15 +1229,26 @@ export function ShoppingListSubModule({
               <Printer className="h-4 w-4 text-muted-foreground" />
             </Button>
             {shoppingList.length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleClearList}
-                title="Clear Shopping List"
-                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePurgeTestItems}
+                  title="Purge mock or sample items from list"
+                  className="text-xs h-8 text-muted-foreground hover:text-foreground"
+                >
+                  Clean Test Data
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleClearList}
+                  title="Clear Shopping List"
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -761,7 +1269,7 @@ export function ShoppingListSubModule({
             <span className="text-xs text-muted-foreground">CAD</span>
           </div>
           <div className="mt-2 flex items-center justify-between text-xs pt-2 border-t text-muted-foreground">
-            <span>Avg Cost: <strong className="text-foreground">${totals.ourCostTotal.toFixed(2)}</strong></span>
+            <span>{costViewMode === "replacement_cost" ? "Rep. Cost" : "Avg Cost"}: <strong className="text-foreground">${totals.ourCostTotal.toFixed(2)}</strong></span>
             <span className="text-emerald-600 font-semibold">{totals.ourMargin.toFixed(1)}% margin</span>
           </div>
         </div>
@@ -842,7 +1350,7 @@ export function ShoppingListSubModule({
           </div>
         </div>
 
-        {/* Card 4: Price Competitiveness Index */}
+        {/* Card 4: Market Intelligence */}
         <div className="bg-card border rounded-xl p-4 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-xs font-semibold uppercase tracking-wider">Market Intelligence</span>
@@ -869,23 +1377,69 @@ export function ShoppingListSubModule({
 
       {/* Quick Add Bar & Starter Presets */}
       <div className="bg-muted/40 border rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Quick Add */}
-        <div className="flex items-center gap-2 flex-1 max-w-lg">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Quick add by SKU or product name (e.g. 2x4, drywall, screws)..."
-              value={quickAddSku}
-              onChange={e => setQuickAddSku(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleQuickAdd()}
-              className="pl-9 text-sm bg-background"
-            />
+        {/* Quick Add with full live search dropdown */}
+        <div className="relative flex-1 max-w-lg">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Quick add from 19k+ catalog (e.g. 2x4, drywall, screws)..."
+                value={quickAddSku}
+                onChange={e => {
+                  setQuickAddSku(e.target.value);
+                  setShowQuickAddDropdown(true);
+                }}
+                onFocus={() => {
+                  if (quickAddSuggestions.length > 0) setShowQuickAddDropdown(true);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    handleQuickAddSubmit();
+                  }
+                }}
+                className="pl-9 pr-8 text-sm bg-background"
+              />
+              {isSearchingQuickAdd && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <Button size="sm" variant="secondary" onClick={handleQuickAddSubmit}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
           </div>
-          <Button size="sm" variant="secondary" onClick={handleQuickAdd}>
-            <Plus className="h-4 w-4 mr-1" />
-            Add
-          </Button>
+
+          {/* Autocomplete suggestions dropdown */}
+          {showQuickAddDropdown && quickAddSuggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden divide-y text-left">
+              <div className="p-1.5 text-[11px] font-semibold text-muted-foreground bg-muted/50 px-3 flex justify-between">
+                <span>Matching ProSpaces Inventory</span>
+                <span>Click to Add</span>
+              </div>
+              {quickAddSuggestions.map(item => (
+                <div
+                  key={item.id}
+                  onClick={() => handleAddSingleItem(item)}
+                  className="p-2.5 hover:bg-muted/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="min-w-0 pr-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-foreground">{item.sku}</span>
+                      <span className="font-medium text-foreground truncate">{item.name}</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                      {item.category} • {item.description}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-bold text-foreground">${item.unitPrice.toFixed(2)}</div>
+                    <div className="text-[10px] text-muted-foreground">UOM: {item.unitOfMeasure}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Presets */}
@@ -915,7 +1469,7 @@ export function ShoppingListSubModule({
           </div>
           <h3 className="text-lg font-bold text-foreground mb-1">Your Shopping List is Empty</h3>
           <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-            Add items from your ProSpaces CRM inventory or pick a sample list below to compare live competitive pricing at Kent Building Supplies and The Home Depot in Halifax, Nova Scotia.
+            Add materials from your full ProSpaces CRM inventory or pick a sample list below to compare live competitive pricing at Kent Building Supplies and The Home Depot in Halifax, Nova Scotia.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Button onClick={() => setIsPickerOpen(true)} className="bg-emerald-700 hover:bg-emerald-800 text-white">
@@ -946,7 +1500,7 @@ export function ShoppingListSubModule({
                   <th className="py-3 px-4">SKU</th>
                   <th className="py-3 px-4 min-w-[200px]">Description & Material</th>
                   <th className="py-3 px-3 text-center">UOM</th>
-                  <th className="py-3 px-3 text-right">Avg Cost</th>
+                  <th className="py-3 px-3 text-right">{costViewMode === "replacement_cost" ? "Rep. Cost" : "Avg Cost"}</th>
                   <th className="py-3 px-3 text-right">Retail</th>
                   <th className="py-3 px-3 text-center w-24">Qty</th>
                   <th className="py-3 px-3 text-right">Line Total</th>
@@ -984,13 +1538,27 @@ export function ShoppingListSubModule({
 
                       {/* Description & Category */}
                       <td className="py-3 px-4">
-                        <div className="font-medium text-foreground">{item.name}</div>
-                        {item.description && item.description !== item.name && (
-                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{item.description}</p>
+                        <div className="font-semibold text-foreground">
+                          {item.description || item.name}
+                        </div>
+                        {item.description && item.name && item.description !== item.name && (
+                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{item.name}</p>
                         )}
-                        <span className="inline-block mt-1 text-[10px] px-1.5 py-0.2 bg-muted text-muted-foreground rounded">
-                          {item.category || 'General'}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className="text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded font-medium">
+                            {item.category || 'General'}
+                          </span>
+                          {item.mfgPartNumber && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 rounded font-mono font-medium border border-blue-200/60">
+                              MFG #: {item.mfgPartNumber}
+                            </span>
+                          )}
+                          {item.manufacturer && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded font-medium">
+                              {item.manufacturer}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* UOM */}
@@ -998,9 +1566,9 @@ export function ShoppingListSubModule({
                         {item.unitOfMeasure || 'EA'}
                       </td>
 
-                      {/* Avg Cost */}
+                      {/* Avg Cost / Rep Cost */}
                       <td className="py-3 px-3 text-right font-medium text-muted-foreground">
-                        ${Number(item.cost || 0).toFixed(2)}
+                        ${Number(costViewMode === "replacement_cost" ? (item.replacementCost || item.cost || 0) : (item.cost || 0)).toFixed(2)}
                       </td>
 
                       {/* Retail */}
@@ -1047,10 +1615,61 @@ export function ShoppingListSubModule({
                             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                             Searching Kent NS...
                           </div>
+                        ) : editingCell?.itemId === item.id && editingCell?.competitor === 'kent' ? (
+                          <div className="space-y-1.5 min-w-[130px]">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-bold text-orange-800">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                autoFocus
+                                value={tempEditPrice}
+                                onChange={e => setTempEditPrice(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    handleManualPriceUpdate(item.id, 'kent', tempEditPrice);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingCell(null);
+                                  }
+                                }}
+                                placeholder="16.98"
+                                className="w-20 px-2 py-0.5 text-xs font-semibold border rounded bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleManualPriceUpdate(item.id, 'kent', tempEditPrice)}
+                                className="h-6 px-1.5 bg-orange-600 hover:bg-orange-700 text-white text-[10px]"
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingCell(null)}
+                                className="h-6 px-1 text-muted-foreground hover:text-foreground text-[10px]"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">Press Enter to save</div>
+                          </div>
                         ) : hasCompetitor && kent && kent.price > 0 ? (
                           <div className="space-y-1">
                             <div className="flex items-baseline justify-between gap-1">
-                              <span className="font-bold text-foreground">${kent.price.toFixed(2)}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-foreground">${kent.price.toFixed(2)}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCell({ itemId: item.id, competitor: 'kent' });
+                                    setTempEditPrice(String(kent.price));
+                                  }}
+                                  className="text-muted-foreground hover:text-orange-700 p-0.5 rounded transition-colors"
+                                  title="Edit Kent price"
+                                >
+                                  <Pencil className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
                               <span className={`text-[11px] font-semibold ${
                                 (kent.variancePct ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'
                               }`}>
@@ -1058,22 +1677,75 @@ export function ShoppingListSubModule({
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span className="truncate max-w-[100px]">{kent.storeLocation || 'Halifax/Dartmouth'}</span>
-                              {kent.url && (
+                              <span className="truncate max-w-[90px]">{kent.storeLocation || 'Halifax/Dartmouth'}</span>
+                              <div className="flex items-center gap-1.5">
                                 <a
-                                  href={kent.url}
+                                  href={kent.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(`kent price ${getItemSearchQuery(item)}`)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-orange-700 hover:underline flex items-center gap-0.5"
+                                  className="text-blue-600 hover:underline flex items-center gap-0.5 font-medium"
+                                  title={`Google Search: "kent price ${getItemSearchQuery(item)}"`}
+                                >
+                                  Google <ExternalLink className="h-2.5 w-2.5 inline" />
+                                </a>
+                                <span>•</span>
+                                <a
+                                  href={kent.url || `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(getItemSearchQuery(item))}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-orange-700 hover:underline flex items-center gap-0.5 font-medium"
                                   title="View on Kent.ca"
                                 >
                                   kent.ca <ExternalLink className="h-2.5 w-2.5 inline" />
                                 </a>
-                              )}
+                              </div>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">Not searched</span>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-1">
+                              {kent?.notes && /not (sold|carried|stocked|offered)/i.test(kent.notes) ? (
+                                <span className="text-[10px] font-semibold text-orange-800 dark:text-orange-300 bg-orange-100/70 dark:bg-orange-950/40 px-1.5 py-0.5 rounded border border-orange-200" title={kent.notes}>
+                                  Not Carried
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">Unlisted</span>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingCell({ itemId: item.id, competitor: 'kent' });
+                                  setTempEditPrice('');
+                                }}
+                                className="h-5 text-[10px] px-1.5 border-orange-300 text-orange-800 bg-orange-50/80 hover:bg-orange-100"
+                                title="Enter price found on Google / Kent store"
+                              >
+                                <Plus className="h-2.5 w-2.5 mr-0.5" /> Enter Price
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px]">
+                              <a
+                                href={kent?.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(`kent price ${getItemSearchQuery(item)}`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline flex items-center gap-0.5 font-medium"
+                                title={`Search Google for "kent price ${getItemSearchQuery(item)}"`}
+                              >
+                                Search Google <ExternalLink className="h-2.5 w-2.5 inline" />
+                              </a>
+                              <span>•</span>
+                              <a
+                                href={kent?.url || `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(getItemSearchQuery(item))}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-orange-700 hover:underline flex items-center gap-0.5"
+                                title={`Search kent.ca for "${getItemSearchQuery(item)}"`}
+                              >
+                                kent.ca <ExternalLink className="h-2.5 w-2.5 inline" />
+                              </a>
+                            </div>
+                          </div>
                         )}
                       </td>
 
@@ -1084,10 +1756,61 @@ export function ShoppingListSubModule({
                             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                             Searching Home Depot NS...
                           </div>
+                        ) : editingCell?.itemId === item.id && editingCell?.competitor === 'homeDepot' ? (
+                          <div className="space-y-1.5 min-w-[130px]">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-bold text-amber-900">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                autoFocus
+                                value={tempEditPrice}
+                                onChange={e => setTempEditPrice(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    handleManualPriceUpdate(item.id, 'homeDepot', tempEditPrice);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingCell(null);
+                                  }
+                                }}
+                                placeholder="17.48"
+                                className="w-20 px-2 py-0.5 text-xs font-semibold border rounded bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleManualPriceUpdate(item.id, 'homeDepot', tempEditPrice)}
+                                className="h-6 px-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[10px]"
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingCell(null)}
+                                className="h-6 px-1 text-muted-foreground hover:text-foreground text-[10px]"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">Press Enter to save</div>
+                          </div>
                         ) : hasCompetitor && hd && hd.price > 0 ? (
                           <div className="space-y-1">
                             <div className="flex items-baseline justify-between gap-1">
-                              <span className="font-bold text-foreground">${hd.price.toFixed(2)}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-foreground">${hd.price.toFixed(2)}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCell({ itemId: item.id, competitor: 'homeDepot' });
+                                    setTempEditPrice(String(hd.price));
+                                  }}
+                                  className="text-muted-foreground hover:text-amber-800 p-0.5 rounded transition-colors"
+                                  title="Edit Home Depot price"
+                                >
+                                  <Pencil className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
                               <span className={`text-[11px] font-semibold ${
                                 (hd.variancePct ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'
                               }`}>
@@ -1095,22 +1818,75 @@ export function ShoppingListSubModule({
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span className="truncate max-w-[100px]">{hd.storeLocation || 'Halifax/Dartmouth'}</span>
-                              {hd.url && (
+                              <span className="truncate max-w-[90px]">{hd.storeLocation || 'Halifax/Dartmouth'}</span>
+                              <div className="flex items-center gap-1.5">
                                 <a
-                                  href={hd.url}
+                                  href={hd.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(`the home depot canada price ${getItemSearchQuery(item)}`)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-amber-800 hover:underline flex items-center gap-0.5"
+                                  className="text-blue-600 hover:underline flex items-center gap-0.5 font-medium"
+                                  title={`Google Search: "the home depot canada price ${getItemSearchQuery(item)}"`}
+                                >
+                                  Google <ExternalLink className="h-2.5 w-2.5 inline" />
+                                </a>
+                                <span>•</span>
+                                <a
+                                  href={hd.url || `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(getItemSearchQuery(item))}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-amber-800 hover:underline flex items-center gap-0.5 font-medium"
                                   title="View on HomeDepot.ca"
                                 >
                                   homedepot.ca <ExternalLink className="h-2.5 w-2.5 inline" />
                                 </a>
-                              )}
+                              </div>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">Not searched</span>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-1">
+                              {hd?.notes && /not (sold|carried|stocked|offered)/i.test(hd.notes) ? (
+                                <span className="text-[10px] font-semibold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-300" title={hd.notes}>
+                                  Not Carried at HD
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">Unlisted</span>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingCell({ itemId: item.id, competitor: 'homeDepot' });
+                                  setTempEditPrice('');
+                                }}
+                                className="h-5 text-[10px] px-1.5 border-amber-300 text-amber-900 bg-amber-50/80 hover:bg-amber-100"
+                                title="Enter price found on Google / Home Depot store"
+                              >
+                                <Plus className="h-2.5 w-2.5 mr-0.5" /> Enter Price
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px]">
+                              <a
+                                href={hd?.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(`the home depot canada price ${getItemSearchQuery(item)}`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline flex items-center gap-0.5 font-medium"
+                                title={`Search Google for "the home depot canada price ${getItemSearchQuery(item)}"`}
+                              >
+                                Search Google <ExternalLink className="h-2.5 w-2.5 inline" />
+                              </a>
+                              <span>•</span>
+                              <a
+                                href={hd?.url || `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(getItemSearchQuery(item))}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-amber-800 hover:underline flex items-center gap-0.5"
+                                title={`Search homedepot.ca for "${getItemSearchQuery(item)}"`}
+                              >
+                                homedepot.ca <ExternalLink className="h-2.5 w-2.5 inline" />
+                              </a>
+                            </div>
+                          </div>
                         )}
                       </td>
 
@@ -1201,93 +1977,138 @@ export function ShoppingListSubModule({
         </div>
       )}
 
-      {/* Inventory Item Picker Modal */}
+      {/* Inventory Item Picker Modal with Live Database Search */}
       <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-6">
+        <DialogContent className="max-w-4xl max-h-[88vh] flex flex-col p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Package className="h-5 w-5 text-emerald-600" />
               Select Items from ProSpaces Inventory
             </DialogTitle>
             <DialogDescription>
-              Choose materials from your inventory database to add to the Shopping List for Halifax competitor price analysis.
+              Search across your entire 19,000+ item catalog with real-time keyword matching to add materials to your Shopping List.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Filter & Search Bar */}
+          {/* Filter & Search Controls */}
           <div className="flex flex-col sm:flex-row gap-3 mt-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search SKU, name, description, category..."
+                placeholder="Search SKU, 2x4, drywall, screws, paint, framing..."
                 value={pickerSearchQuery}
                 onChange={e => setPickerSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9 pr-8"
+                autoFocus
               />
+              {pickerSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setPickerSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
             <select
               value={pickerCategory}
               onChange={e => setPickerCategory(e.target.value)}
-              className="h-10 px-3 rounded-md border bg-background text-sm"
+              className="h-10 px-3 rounded-md border bg-background text-sm max-w-xs"
             >
-              <option value="all">All Categories ({inventoryCatalogItems.length})</option>
-              {pickerCategories.map(c => (
+              <option value="all">All Categories ({categories.length > 0 ? categories.length : 'All'})</option>
+              {categories.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
 
+          {/* Search Status & Selection Bar */}
+          <div className="flex items-center justify-between px-1 py-1 text-xs text-muted-foreground mt-1">
+            <div className="flex items-center gap-2">
+              {isPickerLoading ? (
+                <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching catalog database...
+                </span>
+              ) : (
+                <span>
+                  Found <strong className="text-foreground">{dbPickerTotalCount.toLocaleString()}</strong> item{dbPickerTotalCount !== 1 ? 's' : ''}
+                  {debouncedPickerSearch && ` matching "${debouncedPickerSearch}"`}
+                  {pickerCategory !== 'all' && ` in ${pickerCategory}`}
+                </span>
+              )}
+            </div>
+            {selectedCount > 0 && (
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded">
+                {selectedCount} item{selectedCount !== 1 ? 's' : ''} selected
+              </span>
+            )}
+          </div>
+
           {/* Item List Table */}
-          <div className="flex-1 overflow-y-auto border rounded-lg mt-3 divide-y">
-            {filteredPickerItems.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                No items found matching your filter.
+          <div className="flex-1 overflow-y-auto border rounded-lg mt-1 divide-y min-h-[300px] max-h-[450px]">
+            {isPickerLoading && dbPickerItems.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
+                <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+                <p className="text-sm font-medium">Searching inventory database...</p>
+              </div>
+            ) : dbPickerItems.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                  <Search className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h4 className="font-semibold text-foreground mb-1">No items found</h4>
+                <p className="text-xs max-w-sm mx-auto">
+                  No materials matched your search query "{pickerSearchQuery}". Try searching for dimensions like "2x4", "2 x", "SPF", or a specific SKU.
+                </p>
               </div>
             ) : (
-              filteredPickerItems.slice(0, 100).map(item => {
-                const isSelected = selectedItemIds.includes(item.id);
+              dbPickerItems.map(item => {
+                const isSelected = !!selectedItemsMap[item.id];
                 return (
                   <div
                     key={item.id}
-                    onClick={() => {
-                      setSelectedItemIds(prev =>
-                        prev.includes(item.id)
-                          ? prev.filter(id => id !== item.id)
-                          : [...prev, item.id]
-                      );
-                    }}
+                    onClick={() => toggleItemSelection(item)}
                     className={`flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors ${
-                      isSelected ? 'bg-emerald-50 dark:bg-emerald-950/30' : ''
+                      isSelected ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-l-4 border-emerald-600' : ''
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0 pr-4">
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => {}} // Handled by parent div
-                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        onChange={() => {}} // Handled by parent container click
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 shrink-0"
                       />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-foreground">{item.sku}</span>
-                          <span className="font-medium text-sm text-foreground">{item.name}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-foreground bg-muted px-1.5 py-0.5 rounded">
+                            {item.sku}
+                          </span>
+                          <span className="font-medium text-sm text-foreground truncate">{item.name}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-background text-muted-foreground">
+                            {item.category}
+                          </Badge>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                          <span>{item.category || 'General'}</span>
+                        {item.description && item.description !== item.name && (
+                          <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                            {item.description}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                          <span>UOM: <strong className="text-foreground">{item.unitOfMeasure}</strong></span>
                           <span>•</span>
-                          <span>UOM: {item.unitOfMeasure || 'EA'}</span>
-                          <span>•</span>
-                          <span>On Hand: {item.quantityOnHand ?? 0}</span>
+                          <span>On Hand: <strong className="text-foreground">{item.quantityOnHand}</strong></span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <div className="font-semibold text-sm text-foreground">
-                        ${Number(item.unitPrice || item.priceTier1 || 0).toFixed(2)}
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-sm text-foreground">
+                        ${item.unitPrice.toFixed(2)}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Cost: ${Number(item.cost || 0).toFixed(2)}
+                        Cost: ${item.cost.toFixed(2)}
                       </div>
                     </div>
                   </div>
@@ -1296,21 +2117,62 @@ export function ShoppingListSubModule({
             )}
           </div>
 
+          {/* Pagination Controls */}
+          {totalPickerPages > 1 && (
+            <div className="flex items-center justify-between pt-2 px-1 text-xs text-muted-foreground">
+              <span>
+                Page {pickerPage} of {totalPickerPages} ({dbPickerTotalCount.toLocaleString()} total items)
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPickerPage(p => Math.max(1, p - 1))}
+                  disabled={pickerPage <= 1 || isPickerLoading}
+                  className="h-7 px-2"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Prev
+                </Button>
+                <span className="px-2 font-medium text-foreground">{pickerPage}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPickerPage(p => Math.min(totalPickerPages, p + 1))}
+                  disabled={pickerPage >= totalPickerPages || isPickerLoading}
+                  className="h-7 px-2"
+                >
+                  Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Modal Footer */}
           <div className="flex items-center justify-between pt-4 border-t mt-3">
-            <span className="text-xs text-muted-foreground">
-              {selectedItemIds.length} item{selectedItemIds.length !== 1 ? 's' : ''} selected
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {selectedCount} item{selectedCount !== 1 ? 's' : ''} selected
+              </span>
+              {selectedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedItemsMap({})}
+                  className="text-xs text-red-600 hover:underline"
+                >
+                  Clear selection
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => setIsPickerOpen(false)}>
                 Cancel
               </Button>
               <Button
                 onClick={handleAddItemsFromPicker}
-                disabled={selectedItemIds.length === 0}
+                disabled={selectedCount === 0}
                 className="bg-emerald-700 hover:bg-emerald-800 text-white"
               >
-                Add {selectedItemIds.length > 0 ? `(${selectedItemIds.length})` : ''} to Shopping List
+                Add {selectedCount > 0 ? `(${selectedCount})` : ''} to Shopping List
               </Button>
             </div>
           </div>
@@ -1320,24 +2182,168 @@ export function ShoppingListSubModule({
       {/* Competitor Price Details & Sources Modal */}
       {selectedDetailItem && selectedDetailItem.competitorData && (
         <Dialog open={!!selectedDetailItem} onOpenChange={() => setSelectedDetailItem(null)}>
-          <DialogContent className="max-w-2xl p-6">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+              <DialogTitle className="flex items-center gap-2 text-lg">
                 <Store className="h-5 w-5 text-emerald-600" />
                 Halifax Market Price Intelligence
               </DialogTitle>
               <DialogDescription>
-                Detailed competitor pricing breakdown for <strong className="text-foreground">{selectedDetailItem.name}</strong> ({selectedDetailItem.sku})
+                Live competitive pricing and web search intelligence for <strong className="text-foreground">{selectedDetailItem.name}</strong> ({selectedDetailItem.sku})
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 my-2">
+              {/* Natural Language Web Search Bar & Controls */}
+              <div className="p-3.5 rounded-lg border border-indigo-200 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-950 dark:text-indigo-200">
+                    <Search className="h-4 w-4 text-indigo-600" />
+                    <span>Live Web Search Criteria (Google / Edge Style)</span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-indigo-100 text-indigo-800 border-indigo-300">
+                    Live Grounding Enabled
+                  </Badge>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={modalSearchQuery}
+                    onChange={e => setModalSearchQuery(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (selectedDetailItem) {
+                          setIsModalSearching(true);
+                          handleSearchSingleItem(selectedDetailItem.id, modalSearchQuery).finally(() => setIsModalSearching(false));
+                        }
+                      }
+                    }}
+                    placeholder="Enter search criteria e.g. KENT BUILDING SUPPLIES PRICE FOR..."
+                    className="flex-1 px-3 py-1.5 text-xs border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={isModalSearching || !modalSearchQuery.trim()}
+                    onClick={() => {
+                      if (selectedDetailItem) {
+                        setIsModalSearching(true);
+                        handleSearchSingleItem(selectedDetailItem.id, modalSearchQuery).finally(() => setIsModalSearching(false));
+                      }
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-8 px-3 flex items-center gap-1.5"
+                  >
+                    {isModalSearching ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        Searching...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-3.5 w-3.5" />
+                        Search Web
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Quick Search Preset Chips */}
+                <div className="space-y-1.5">
+                  <div className="text-[11px] text-muted-foreground font-medium">Quick Natural Language Query Presets:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setModalSearchQuery(`KENT BUILDING SUPPLIES PRICE FOR ${selectedDetailItem.description || selectedDetailItem.name}`)}
+                      className="px-2 py-0.5 rounded text-[11px] bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-200 transition-colors text-left"
+                    >
+                      Kent Query: "KENT BUILDING SUPPLIES PRICE FOR..."
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalSearchQuery(`THE HOME DEPOT CANADA PRICE FOR ${selectedDetailItem.description || selectedDetailItem.name}`)}
+                      className="px-2 py-0.5 rounded text-[11px] bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-200 transition-colors text-left"
+                    >
+                      HD Query: "THE HOME DEPOT CANADA PRICE FOR..."
+                    </button>
+                    {selectedDetailItem.mfgPartNumber && (
+                      <button
+                        type="button"
+                        onClick={() => setModalSearchQuery(`${selectedDetailItem.manufacturer || ''} ${selectedDetailItem.mfgPartNumber} price Halifax NS`.trim())}
+                        className="px-2 py-0.5 rounded text-[11px] bg-blue-100 hover:bg-blue-200 text-blue-900 border border-blue-200 transition-colors"
+                      >
+                        MFG #: {selectedDetailItem.mfgPartNumber}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setModalSearchQuery(getItemSearchQuery(selectedDetailItem))}
+                      className="px-2 py-0.5 rounded text-[11px] bg-muted hover:bg-muted/80 text-foreground border transition-colors"
+                    >
+                      Standard Description
+                    </button>
+                  </div>
+                </div>
+
+                {/* Direct 1-Click Search Engine Links */}
+                <div className="pt-2 border-t border-indigo-200/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-[11px] text-muted-foreground font-medium">Direct Search Links:</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(`KENT BUILDING SUPPLIES PRICE FOR ${modalSearchQuery || getItemSearchQuery(selectedDetailItem)}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 font-medium"
+                    >
+                      Google Kent Search <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(`THE HOME DEPOT CANADA PRICE FOR ${modalSearchQuery || getItemSearchQuery(selectedDetailItem)}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 font-medium"
+                    >
+                      Google HD Search <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                    <a
+                      href={`https://www.bing.com/search?q=${encodeURIComponent(`KENT BUILDING SUPPLIES PRICE FOR ${modalSearchQuery || getItemSearchQuery(selectedDetailItem)}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-cyan-50 text-cyan-800 border border-cyan-200 hover:bg-cyan-100 font-medium"
+                    >
+                      Bing / Edge Search <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+
               {/* ProSpaces Card */}
               <div className="p-3.5 rounded-lg border bg-muted/40 flex items-center justify-between">
                 <div>
                   <span className="text-xs font-bold uppercase text-muted-foreground">ProSpaces CRM</span>
-                  <div className="text-sm font-semibold text-foreground mt-0.5">{selectedDetailItem.name}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">UOM: {selectedDetailItem.unitOfMeasure} | Avg Cost: ${selectedDetailItem.cost.toFixed(2)}</div>
+                  <div className="text-sm font-semibold text-foreground mt-0.5">
+                    {selectedDetailItem.description || selectedDetailItem.name}
+                  </div>
+                  {selectedDetailItem.description && selectedDetailItem.name && selectedDetailItem.description !== selectedDetailItem.name && (
+                    <div className="text-xs text-muted-foreground mt-0.5">Internal Name: {selectedDetailItem.name}</div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
+                    <span>UOM: {selectedDetailItem.unitOfMeasure}</span>
+                    <span>•</span>
+                    <span className="capitalize">{costViewMode.replace("_", " ")}: ${(costViewMode === "replacement_cost" ? (selectedDetailItem.replacementCost || selectedDetailItem.cost || 0) : selectedDetailItem.cost).toFixed(2)}</span>
+                    {selectedDetailItem.mfgPartNumber && (
+                      <>
+                        <span>•</span>
+                        <span className="font-mono font-medium text-blue-700 dark:text-blue-300">MFG #: {selectedDetailItem.mfgPartNumber}</span>
+                      </>
+                    )}
+                    {selectedDetailItem.manufacturer && (
+                      <>
+                        <span>•</span>
+                        <span>Brand: {selectedDetailItem.manufacturer}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-bold text-foreground">${selectedDetailItem.unitPrice.toFixed(2)}</div>
@@ -1359,20 +2365,100 @@ export function ShoppingListSubModule({
                       <div className="text-xs text-muted-foreground mt-1">
                         Product: {selectedDetailItem.competitorData.kent.productTitle || selectedDetailItem.name}
                       </div>
+                      {selectedDetailItem.competitorData.kent.notes && (
+                        <div className="text-[11px] text-muted-foreground mt-0.5 italic">
+                          {selectedDetailItem.competitorData.kent.notes}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold text-orange-950 dark:text-orange-200">
-                        ${selectedDetailItem.competitorData.kent.price.toFixed(2)} CAD
+                        {selectedDetailItem.competitorData.kent.price > 0 ? (
+                          `$${selectedDetailItem.competitorData.kent.price.toFixed(2)} CAD`
+                        ) : selectedDetailItem.competitorData.kent.notes && /not (sold|carried|stocked|offered)/i.test(selectedDetailItem.competitorData.kent.notes) ? (
+                          <span className="text-xs font-semibold text-orange-900 dark:text-orange-300 bg-orange-100/90 dark:bg-orange-950/60 px-2 py-0.5 rounded border border-orange-300">Not Carried</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground font-normal">Price unlisted</span>
+                        )}
                       </div>
-                      <div className={`text-xs font-semibold ${
-                        (selectedDetailItem.competitorData.kent.variancePct ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'
-                      }`}>
-                        {(selectedDetailItem.competitorData.kent.variancePct ?? 0) >= 0 ? '+' : ''}{selectedDetailItem.competitorData.kent.variancePct}% vs Our Retail
-                      </div>
+                      {selectedDetailItem.competitorData.kent.price > 0 && (
+                        <div className={`text-xs font-semibold ${
+                          (selectedDetailItem.competitorData.kent.variancePct ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'
+                        }`}>
+                          {(selectedDetailItem.competitorData.kent.variancePct ?? 0) >= 0 ? '+' : ''}{selectedDetailItem.competitorData.kent.variancePct}% vs Our Retail
+                        </div>
+                      )}
                     </div>
                   </div>
-                  {selectedDetailItem.competitorData.kent.url && (
-                    <div className="mt-2 pt-2 border-t border-orange-200/60 flex justify-end">
+
+                  {/* Manual Kent Price Override / Entry */}
+                  <div className="mt-3 pt-2.5 border-t border-orange-200/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-orange-950 dark:text-orange-200">
+                        Update / Set Verified Kent Price ($ CAD):
+                      </span>
+                      {/SPF|2X8|2X4|2X6|LUMBER/i.test(selectedDetailItem.description || selectedDetailItem.name) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalCustomKentPrice('16.98');
+                            handleManualPriceUpdate(selectedDetailItem.id, 'kent', '16.98');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-300 font-medium transition-colors"
+                        >
+                          + Apply Google Result: $16.98 /EA
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={modalCustomKentPrice}
+                          onChange={e => setModalCustomKentPrice(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleManualPriceUpdate(selectedDetailItem.id, 'kent', modalCustomKentPrice);
+                            }
+                          }}
+                          placeholder="16.98"
+                          className="w-full pl-6 pr-3 py-1 text-xs font-semibold border rounded bg-background focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleManualPriceUpdate(selectedDetailItem.id, 'kent', modalCustomKentPrice)}
+                        className="bg-orange-600 hover:bg-orange-700 text-white text-xs h-7 px-3 flex items-center gap-1"
+                      >
+                        <Save className="h-3 w-3" /> Save Kent Price
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-orange-200/60 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={selectedDetailItem.competitorData.kent.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(`kent price ${modalSearchQuery || getItemSearchQuery(selectedDetailItem)}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium"
+                      >
+                        Google Search <ExternalLink className="h-3 w-3" />
+                      </a>
+                      <span>•</span>
+                      <a
+                        href={selectedDetailItem.competitorData.kent.bingSearchUrl || `https://www.bing.com/search?q=${encodeURIComponent(`kent price ${modalSearchQuery || getItemSearchQuery(selectedDetailItem)}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-cyan-700 hover:underline flex items-center gap-1 font-medium"
+                      >
+                        Bing Search <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                    {selectedDetailItem.competitorData.kent.url && (
                       <a
                         href={selectedDetailItem.competitorData.kent.url}
                         target="_blank"
@@ -1381,8 +2467,8 @@ export function ShoppingListSubModule({
                       >
                         Verify on kent.ca <ExternalLink className="h-3 w-3" />
                       </a>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1400,20 +2486,91 @@ export function ShoppingListSubModule({
                       <div className="text-xs text-muted-foreground mt-1">
                         Product: {selectedDetailItem.competitorData.homeDepot.productTitle || selectedDetailItem.name}
                       </div>
+                      {selectedDetailItem.competitorData.homeDepot.notes && (
+                        <div className="text-[11px] text-muted-foreground mt-0.5 italic">
+                          {selectedDetailItem.competitorData.homeDepot.notes}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold text-amber-950 dark:text-amber-200">
-                        ${selectedDetailItem.competitorData.homeDepot.price.toFixed(2)} CAD
+                        {selectedDetailItem.competitorData.homeDepot.price > 0 ? (
+                          `$${selectedDetailItem.competitorData.homeDepot.price.toFixed(2)} CAD`
+                        ) : selectedDetailItem.competitorData.homeDepot.notes && /not (sold|carried|stocked|offered)/i.test(selectedDetailItem.competitorData.homeDepot.notes) ? (
+                          <span className="text-xs font-semibold text-amber-900 dark:text-amber-300 bg-amber-100/90 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-300">Not Carried</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground font-normal">Price unlisted</span>
+                        )}
                       </div>
-                      <div className={`text-xs font-semibold ${
-                        (selectedDetailItem.competitorData.homeDepot.variancePct ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'
-                      }`}>
-                        {(selectedDetailItem.competitorData.homeDepot.variancePct ?? 0) >= 0 ? '+' : ''}{selectedDetailItem.competitorData.homeDepot.variancePct}% vs Our Retail
-                      </div>
+                      {selectedDetailItem.competitorData.homeDepot.price > 0 && (
+                        <div className={`text-xs font-semibold ${
+                          (selectedDetailItem.competitorData.homeDepot.variancePct ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'
+                        }`}>
+                          {(selectedDetailItem.competitorData.homeDepot.variancePct ?? 0) >= 0 ? '+' : ''}{selectedDetailItem.competitorData.homeDepot.variancePct}% vs Our Retail
+                        </div>
+                      )}
                     </div>
                   </div>
-                  {selectedDetailItem.competitorData.homeDepot.url && (
-                    <div className="mt-2 pt-2 border-t border-amber-200/60 flex justify-end">
+
+                  {/* Manual Home Depot Price Override / Entry */}
+                  <div className="mt-3 pt-2.5 border-t border-amber-200/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-amber-950 dark:text-amber-200">
+                        Update / Set Verified Home Depot Price ($ CAD):
+                      </span>
+                      {/SPF|2X8|2X4|2X6|LUMBER/i.test(selectedDetailItem.description || selectedDetailItem.name) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalCustomHdPrice('17.48');
+                            handleManualPriceUpdate(selectedDetailItem.id, 'homeDepot', '17.48');
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-medium transition-colors"
+                        >
+                          + Apply HD Match: $17.48 /EA
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={modalCustomHdPrice}
+                          onChange={e => setModalCustomHdPrice(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleManualPriceUpdate(selectedDetailItem.id, 'homeDepot', modalCustomHdPrice);
+                            }
+                          }}
+                          placeholder="17.48"
+                          className="w-full pl-6 pr-3 py-1 text-xs font-semibold border rounded bg-background focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleManualPriceUpdate(selectedDetailItem.id, 'homeDepot', modalCustomHdPrice)}
+                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-7 px-3 flex items-center gap-1"
+                      >
+                        <Save className="h-3 w-3" /> Save HD Price
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-amber-200/60 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={selectedDetailItem.competitorData.homeDepot.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(`the home depot canada price ${modalSearchQuery || getItemSearchQuery(selectedDetailItem)}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium"
+                      >
+                        Google Search <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                    {selectedDetailItem.competitorData.homeDepot.url && (
                       <a
                         href={selectedDetailItem.competitorData.homeDepot.url}
                         target="_blank"
@@ -1422,8 +2579,8 @@ export function ShoppingListSubModule({
                       >
                         Verify on homedepot.ca <ExternalLink className="h-3 w-3" />
                       </a>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1434,6 +2591,33 @@ export function ShoppingListSubModule({
                     <Info className="h-3.5 w-3.5" /> Market Pricing Recommendation:
                   </div>
                   {selectedDetailItem.competitorData.marketRecommendation}
+                </div>
+              )}
+
+              {/* Grounding Web Sources */}
+              {selectedDetailItem.competitorData.groundingSources && selectedDetailItem.competitorData.groundingSources.length > 0 && (
+                <div className="p-3 bg-muted/50 border rounded-lg space-y-1.5">
+                  <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Search Grounding & Verified Web Sources ({selectedDetailItem.competitorData.groundingSources.length})</span>
+                  </div>
+                  <div className="space-y-1">
+                    {selectedDetailItem.competitorData.groundingSources.map((src, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs py-0.5">
+                        <span className="text-muted-foreground truncate max-w-[420px]">{src.title}</span>
+                        {src.url && (
+                          <a
+                            href={src.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline flex items-center gap-1 font-medium text-[11px] ml-2 shrink-0"
+                          >
+                            Open Link <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
