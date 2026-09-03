@@ -93,7 +93,17 @@ function similarity(item: ShoppingItem, candidate: { title?: string; description
   return Math.round(Math.min(100, score));
 }
 
-function extractPrice(text: string): number | null {
+function extractStructuredPrice(html: string): number | null {
+  const priceMatches = html.match(/"price"\s*:\s*"?([0-9]+(?:\.[0-9]{2})?)"?/gi) || [];
+  const values = priceMatches
+    .map((match) => Number(match.match(/[0-9]+(?:\.[0-9]{2})?/)?.[0]))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return values.length ? values[0] : null;
+}
+
+function extractPrice(text: string, html = ''): number | null {
+  const structuredPrice = extractStructuredPrice(html);
+  if (structuredPrice) return structuredPrice;
   const matches = text.match(/(?:CA\$|CAD\s*\$?|\$)\s*([0-9]{1,5}(?:[,.][0-9]{2}))/gi) || [];
   const values = matches
     .map((match) => Number(match.replace(/[^0-9.,]/g, '').replace(',', '.')))
@@ -170,10 +180,11 @@ async function searchCompetitor(item: ShoppingItem, competitor: CompetitorKey) {
 
   const scraped = await firecrawl('scrape', {
     url: best.url,
-    formats: ['markdown'],
+    formats: ['markdown', 'html'],
   });
   const pageText = scraped.data?.markdown || scraped.markdown || '';
-  const price = extractPrice(pageText);
+  const pageHtml = scraped.data?.html || scraped.html || '';
+  const price = extractPrice(pageText, pageHtml);
   const inStock = extractAvailability(pageText);
   return {
     ...base,
