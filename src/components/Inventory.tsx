@@ -81,6 +81,7 @@ interface InventoryItem {
   minStock?: number;
   maxStock?: number;
   cost: number;
+  replacementCost?: number;
   unitPrice: number;
   priceTier1: number;
   priceTier2: number;
@@ -205,6 +206,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
           category: item.category || 'General Building Supply',
           unitOfMeasure: (item.unitOfMeasure || 'ea').toUpperCase(),
           cost: Number(item.cost || 0),
+          replacementCost: Number(item.replacementCost !== undefined && item.replacementCost !== null ? item.replacementCost : item.cost || 0),
           unitPrice: Number(item.unitPrice || item.priceTier1 || 0),
           quantity: 1,
           quantityOnHand: item.quantityOnHand ?? 0,
@@ -385,8 +387,12 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   const mapInventoryItem = (dbItem: any): InventoryItem => {
     const rawUnitPrice = getCaseInsensitive(dbItem, 'unit_price', 0);
     const rawCost = getCaseInsensitive(dbItem, 'cost', 0);
+    const rawReplacementCost = getCaseInsensitive(dbItem, 'replacement_cost', null) ?? getCaseInsensitive(dbItem, 'replacementCost', null);
     const unitPriceInDollars = rawUnitPrice ? rawUnitPrice / 100 : 0;
     const costInDollars = rawCost ? rawCost / 100 : 0;
+    const replacementCostInDollars = rawReplacementCost !== null && rawReplacementCost !== undefined && rawReplacementCost !== ''
+      ? (typeof rawReplacementCost === 'number' && rawReplacementCost > 0 && Number.isInteger(rawReplacementCost) ? rawReplacementCost / 100 : Number(rawReplacementCost || 0))
+      : costInDollars;
     
     const t5Inactive = !isTierActive(5);
     const t5Value = getCaseInsensitive(dbItem, 'price_tier_5');
@@ -571,6 +577,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       minStock: dbMinStock,
       maxStock: dbMaxStock,
       cost: costInDollars,
+      replacementCost: replacementCostInDollars,
       unitPrice: unitPriceInDollars,
       priceTier1,
       priceTier2,

@@ -1428,8 +1428,12 @@ function mapInventoryItem(dbItem: any): any {
 
   const rawUnitPrice = getCaseInsensitive(dbItem, 'unit_price', 0);
   const rawCost = getCaseInsensitive(dbItem, 'cost', 0);
+  const rawReplacementCost = getCaseInsensitive(dbItem, 'replacement_cost', null) ?? getCaseInsensitive(dbItem, 'replacementCost', null);
   const unitPriceInDollars = rawUnitPrice ? rawUnitPrice / 100 : 0;
   const costInDollars = rawCost ? rawCost / 100 : 0;
+  const replacementCostInDollars = rawReplacementCost !== null && rawReplacementCost !== undefined && rawReplacementCost !== ''
+    ? (typeof rawReplacementCost === 'number' && rawReplacementCost > 0 && Number.isInteger(rawReplacementCost) ? rawReplacementCost / 100 : Number(rawReplacementCost || 0))
+    : costInDollars;
   
   // ✅ FIX: Use != null check instead of truthiness to properly handle $0.00 prices
   // A value of 0 is a legitimate price ($0.00) and should NOT trigger fallback
@@ -1626,6 +1630,7 @@ function mapInventoryItem(dbItem: any): any {
     quantityOnOrder: dbQuantityOnOrder,
     unitPrice: unitPriceInDollars,
     cost: costInDollars,
+    replacementCost: replacementCostInDollars,
     priceTier1,
     priceTier2,
     priceTier3,
