@@ -45,6 +45,13 @@ function normalize(value: unknown): string {
     .trim();
 }
 
+function comparable(value: unknown): string {
+  return normalize(value)
+    .replace(/\b(?:in|inch|inches|ft|feet|foot|mm|cm)\b/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
 function tokens(value: unknown): Set<string> {
   const ignored = new Set(['and', 'the', 'for', 'with', 'from', 'standard', 'frame', 'materials', 'building', 'supply', 'supplies']);
   return new Set(normalize(value).split(' ').filter((token) => token.length > 1 && !ignored.has(token)));
@@ -54,6 +61,13 @@ function similarity(item: ShoppingItem, candidate: { title?: string; description
   const identifier = normalize(item.sku || item.mfgPartNumber);
   const candidateText = normalize(`${candidate.title || ''} ${candidate.description || ''} ${candidate.url || ''}`);
   if (identifier && candidateText.includes(identifier)) return 100;
+
+  const productDescription = comparable(`${item.description || ''} ${item.name || ''}`);
+  const candidateDescription = comparable(`${candidate.title || ''} ${candidate.description || ''}`);
+  if (productDescription.length >= 12 && candidateDescription.length >= 12
+    && (candidateDescription.includes(productDescription) || productDescription.includes(candidateDescription))) {
+    return 100;
+  }
 
   const sourceText = `${item.description || ''} ${item.name || ''} ${item.manufacturer || ''} ${item.mfgPartNumber || ''}`;
   const sourceTokens = tokens(sourceText);
@@ -112,9 +126,14 @@ async function firecrawl(path: string, body: Record<string, unknown>) {
 
 async function searchCompetitor(item: ShoppingItem, competitor: CompetitorKey) {
   const config = COMPETITORS[competitor];
-  const query = `site:${config.domain} ${item.mfgPartNumber || item.sku || ''} ${item.description || ''} ${item.name || ''} ${item.manufacturer || ''} Halifax Nova Scotia`;
-  const result = await firecrawl('search', { query, limit: 5 });
-  const results = Array.isArray(result.data) ? result.data : [];
+  const productText = `${item.description || ''} ${item.name || ''}`.trim();
+  const identifier = item.mfgPartNumber || item.sku || '';
+  const query = `site:${config.domain} ${identifier} ${productText} Halifax Nova Scotia`;
+  const exactQuery = `site:${config.domain} "${productText}"`;
+  const firstSearch = await firecrawl('search', { query, limit: 5 });
+  const firstResults = Array.isArray(firstSearch.data) ? firstSearch.data : [];
+  const exactSearch = await firecrawl('search', { query: exactQuery, limit: 5 });
+  const results = [...firstResults, ...(Array.isArray(exactSearch.data) ? exactSearch.data : [])];
   const candidates = results
     .filter((result: any) => {
       if (typeof result?.url !== 'string') return false;
