@@ -19,6 +19,7 @@ import { modelsAPI } from './models-api.ts';
 import { customerPortalAPI } from './customer-portal-api.ts';
 import { fixContactOwnership } from './fix-contact-ownership.ts';
 import { fixProfileMismatch } from './fix-profile-mismatch.ts';
+import { competitorPricing } from './competitor-pricing.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ProSpaces CRM — Consolidated Edge Function (v5 — 2025-02-21)
@@ -298,6 +299,7 @@ contactsAPI(app);
 // ── FIX CONTACT OWNERSHIP AND PROFILE MISMATCH ──
 fixContactOwnership(app);
 fixProfileMismatch(app);
+competitorPricing(app, authenticateUser);
 
 // ── TENANTS (server-side CRUD bypassing RLS for super_admin) ──
 tenantsAPIRoutes(app);

@@ -385,6 +385,20 @@ export const inventoryAPI = {
   search: (filters?: { search?: string; category?: string; status?: string; organizationId?: string }) => searchInventoryClient(filters),
 };
 
+export const competitorPricingAPI = {
+  search: async (data: { listId: string; itemId: string; competitors?: Array<'kent' | 'homeDepot'> }) => {
+    const headers = await getServerHeaders();
+    const response = await fetch(`${BASE}/competitor-pricing/search`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Competitor pricing search failed');
+    return payload;
+  },
+};
+
 // Email APIs - route through consolidated server (email_accounts has RLS)
 export const emailAPI = {
   // Email accounts - via server endpoint to bypass RLS
