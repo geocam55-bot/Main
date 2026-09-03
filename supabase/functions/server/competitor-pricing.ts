@@ -94,11 +94,28 @@ function similarity(item: ShoppingItem, candidate: { title?: string; description
 }
 
 function extractStructuredPrice(html: string): number | null {
-  const priceMatches = html.match(/"price"\s*:\s*"?([0-9]+(?:\.[0-9]{2})?)"?/gi) || [];
-  const values = priceMatches
-    .map((match) => Number(match.match(/[0-9]+(?:\.[0-9]{2})?/)?.[0]))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  return values.length ? values[0] : null;
+  const scripts = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
+  const prices: number[] = [];
+
+  const collectOffers = (value: any) => {
+    if (!value || typeof value !== 'object') return;
+    if (value['@type'] === 'Product' && value.offers) {
+      const offers = Array.isArray(value.offers) ? value.offers : [value.offers];
+      for (const offer of offers) {
+        const price = Number(offer?.price);
+        if (Number.isFinite(price) && price > 0) prices.push(price);
+      }
+    }
+    for (const child of Object.values(value)) {
+      if (child && typeof child === 'object') collectOffers(child);
+    }
+  };
+
+  for (const script of scripts) {
+    const json = script.replace(/^[\s\S]*?>|<\/script>$/gi, '').trim();
+    try { collectOffers(JSON.parse(json)); } catch { /* malformed JSON-LD is ignored */ }
+  }
+  return prices.length ? Math.min(...prices) : null;
 }
 
 function extractPrice(text: string, html = ''): number | null {

@@ -1074,18 +1074,18 @@ export function ShoppingListSubModule({
             matchConfidencePct: 0
           },
           homeDepot: {
-            storeName: 'The Home Depot (Halifax Lacewood)',
+            storeName: 'The Home Depot (Bayers Lake)',
             price: 0,
             sku: item.mfgPartNumber || '',
             productTitle: '',
             inStock: false,
             url: hdDirectSearchUrl,
             googleSearchUrl: googleHdSearchUrl,
-            storeLocation: 'Halifax Lacewood',
+            storeLocation: 'Halifax - Bayers Lake',
             priceDifference: 0,
             variancePct: 0,
             unit: item.unitOfMeasure,
-            notes: `Unlisted. Live query failed. Click to search directly on Google for "the home depot, halifax lacewood, price on ${searchQuery}".`,
+            notes: `Unlisted. Live query failed. Click to search directly on Google for "the home depot, bayers lake, price on ${searchQuery}".`,
             matchConfidence: 'not_found',
             matchConfidencePct: 0
           },
@@ -2033,10 +2033,10 @@ export function ShoppingListSubModule({
                   const hd = comp?.homeDepot;
                   const lineRetail = (item.unitPrice || 0) * (item.quantity || 1);
 
-                  const kentConfidence = Number(kent?.matchConfidencePct ?? (kent?.price && kent.price > 0 ? 90 : 0));
+                  const kentConfidence = Number(kent?.matchConfidencePct ?? 0);
                   const isKentListed = hasCompetitor && kent && kent.price > 0 && kentConfidence >= 80;
 
-                  const hdConfidence = Number(hd?.matchConfidencePct ?? (hd?.price && hd.price > 0 ? 90 : 0));
+                  const hdConfidence = Number(hd?.matchConfidencePct ?? 0);
                   const isHdListed = hasCompetitor && hd && hd.price > 0 && hdConfidence >= 80;
 
                   return (

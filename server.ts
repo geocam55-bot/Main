@@ -2708,6 +2708,10 @@ Result:
 
   // --- COMPETITOR PRICE INTELLIGENCE ENDPOINT (HALIFAX / NS MARKET: KENT & ${comp2}) ---
   app.post('/api/inventory/competitor-pricing', async (req, res) => {
+    return res.status(410).json({
+      error: 'This legacy pricing endpoint is disabled. Use the Supabase Firecrawl competitor-pricing function.',
+    });
+
     const {
       sku,
       name,
