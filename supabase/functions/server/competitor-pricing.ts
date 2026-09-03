@@ -161,22 +161,28 @@ export function competitorPricing(app: Hono, authenticateUser: (c: any) => Promi
       const listId = String(body.listId || '');
       const itemId = String(body.itemId || '');
       const requestedCompetitors = Array.isArray(body.competitors) ? body.competitors : ['kent', 'homeDepot'];
-      if (!listId || !itemId) return c.json({ error: 'listId and itemId are required' }, 400);
+      if (!itemId && !body.item) return c.json({ error: 'itemId or item is required' }, 400);
 
-      const { data: list, error: listError } = await auth.supabase
-        .from('saved_shopping_lists')
-        .select('id, organization_id, items')
-        .eq('id', listId)
-        .eq('organization_id', auth.profile.organization_id)
-        .maybeSingle();
-      if (listError) return c.json({ error: listError.message }, 500);
-      if (!list) return c.json({ error: 'Shopping List not found' }, 404);
+      let list: any = null;
+      let items: ShoppingItem[] = [];
+      let itemIndex = -1;
+      if (listId) {
+        const { data, error: listError } = await auth.supabase
+          .from('saved_shopping_lists')
+          .select('id, organization_id, items')
+          .eq('id', listId)
+          .eq('organization_id', auth.profile.organization_id)
+          .maybeSingle();
+        if (listError) return c.json({ error: listError.message }, 500);
+        if (!data) return c.json({ error: 'Shopping List not found' }, 404);
+        list = data;
+        items = Array.isArray(list.items) ? list.items as ShoppingItem[] : [];
+        itemIndex = items.findIndex((item) => String(item.id) === itemId);
+        if (itemIndex < 0) return c.json({ error: 'Shopping List item not found' }, 404);
+      }
 
-      const items = Array.isArray(list.items) ? list.items as ShoppingItem[] : [];
-      const itemIndex = items.findIndex((item) => String(item.id) === itemId);
-      if (itemIndex < 0) return c.json({ error: 'Shopping List item not found' }, 404);
-
-      const item = items[itemIndex];
+      const item = list ? items[itemIndex] : body.item as ShoppingItem;
+      if (!item || typeof item !== 'object') return c.json({ error: 'A valid Shopping List item is required' }, 400);
       const competitorData = { ...(item.competitorData || {}) } as Record<string, unknown>;
       const results: Record<string, unknown> = {};
       for (const competitor of requestedCompetitors) {
@@ -200,13 +206,15 @@ export function competitorPricing(app: Hono, authenticateUser: (c: any) => Promi
         }
       }
 
-      items[itemIndex] = { ...item, competitorData };
-      const { error: updateError } = await auth.supabase
-        .from('saved_shopping_lists')
-        .update({ items })
-        .eq('id', listId)
-        .eq('organization_id', auth.profile.organization_id);
-      if (updateError) return c.json({ error: updateError.message }, 500);
+      if (list) {
+        items[itemIndex] = { ...item, competitorData };
+        const { error: updateError } = await auth.supabase
+          .from('saved_shopping_lists')
+          .update({ items })
+          .eq('id', listId)
+          .eq('organization_id', auth.profile.organization_id);
+        if (updateError) return c.json({ error: updateError.message }, 500);
+      }
       return c.json({ success: true, listId, itemId, results });
     } catch (error: any) {
       return c.json({ error: error.message || 'Competitor pricing search failed' }, 500);

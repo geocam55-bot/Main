@@ -947,17 +947,14 @@ export function ShoppingListSubModule({
     const bingKentSearchUrl = `https://www.bing.com/search?q=${encodeURIComponent(`kent building supplies price on ${searchQuery}`)}`;
 
     try {
-      if (!currentSavedListId) {
-        throw new Error('Save this Shopping List before searching competitor prices.');
-      }
-
       const headers = await getServerHeaders();
       const response = await fetch(`${supabaseUrl}/functions/v1/make-server-8405be07/competitor-pricing/search`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          listId: currentSavedListId,
+          listId: currentSavedListId || undefined,
           itemId: item.id,
+          item,
           competitors: ['kent', 'homeDepot']
         })
       });
