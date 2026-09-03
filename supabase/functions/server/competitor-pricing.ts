@@ -46,7 +46,8 @@ function normalize(value: unknown): string {
 }
 
 function tokens(value: unknown): Set<string> {
-  return new Set(normalize(value).split(' ').filter((token) => token.length > 1));
+  const ignored = new Set(['and', 'the', 'for', 'with', 'from', 'standard', 'frame', 'materials', 'building', 'supply', 'supplies']);
+  return new Set(normalize(value).split(' ').filter((token) => token.length > 1 && !ignored.has(token)));
 }
 
 function similarity(item: ShoppingItem, candidate: { title?: string; description?: string; url?: string }): number {
@@ -54,17 +55,28 @@ function similarity(item: ShoppingItem, candidate: { title?: string; description
   const candidateText = normalize(`${candidate.title || ''} ${candidate.description || ''} ${candidate.url || ''}`);
   if (identifier && candidateText.includes(identifier)) return 100;
 
-  const sourceTokens = tokens(`${item.name || ''} ${item.description || ''} ${item.manufacturer || ''} ${item.mfgPartNumber || ''}`);
+  const sourceText = `${item.description || ''} ${item.name || ''} ${item.manufacturer || ''} ${item.mfgPartNumber || ''}`;
+  const sourceTokens = tokens(sourceText);
   const candidateTokens = tokens(`${candidate.title || ''} ${candidate.description || ''}`);
   if (sourceTokens.size === 0 || candidateTokens.size === 0) return 0;
 
   let matches = 0;
+  let numericMatches = 0;
   for (const token of sourceTokens) {
-    if (candidateTokens.has(token)) matches++;
+    if (candidateTokens.has(token)) {
+      matches++;
+      if (/^\d+(?:\.\d+)?$/.test(token)) numericMatches++;
+    }
   }
   const overlap = matches / sourceTokens.size;
   const coverage = matches / candidateTokens.size;
-  return Math.round(Math.min(100, overlap * 75 + coverage * 25));
+  let score = overlap * 85 + coverage * 15;
+
+  // Retail pages commonly spell dimensions as decimals and add unit words.
+  // Three meaningful matches plus two shared dimension numbers is a strong
+  // product match even when the retailer title is formatted differently.
+  if (matches >= 3 && numericMatches >= 2 && overlap >= 0.55) score = Math.max(score, 82);
+  return Math.round(Math.min(100, score));
 }
 
 function extractPrice(text: string): number | null {
@@ -100,7 +112,7 @@ async function firecrawl(path: string, body: Record<string, unknown>) {
 
 async function searchCompetitor(item: ShoppingItem, competitor: CompetitorKey) {
   const config = COMPETITORS[competitor];
-  const query = `site:${config.domain} ${item.manufacturer || ''} ${item.mfgPartNumber || item.sku || ''} ${item.name || ''} ${item.description || ''} Bayers Lake Halifax`;
+  const query = `site:${config.domain} ${item.mfgPartNumber || item.sku || ''} ${item.description || ''} ${item.name || ''} ${item.manufacturer || ''} Halifax Nova Scotia`;
   const result = await firecrawl('search', { query, limit: 5 });
   const results = Array.isArray(result.data) ? result.data : [];
   const candidates = results
