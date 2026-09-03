@@ -43,10 +43,13 @@ import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { toast } from 'sonner';
 import { createClient } from '../../utils/supabase/client';
+import { getSupabaseUrl } from '../../utils/supabase/client';
+import { getServerHeaders } from '../../utils/server-headers';
 import { loadInventoryPage } from '../../utils/inventory-loader';
 import { useDebounce } from '../../utils/useDebounce';
 
 const supabase = createClient();
+const supabaseUrl = getSupabaseUrl();
 
 export interface ShoppingListItem {
   id: string;
@@ -400,6 +403,7 @@ export function ShoppingListSubModule({
   const [isLoadListModalOpen, setIsLoadListModalOpen] = useState(false);
   const [savedLists, setSavedLists] = useState<any[]>([]);
   const [isLoadingLists, setIsLoadingLists] = useState(false);
+  const [currentSavedListId, setCurrentSavedListId] = useState<string | null>(null);
 
   // Helper to lookup cost and replacement cost from Supabase cache or item properties
   const getItemCostDetails = useCallback((item: ShoppingListItem) => {
@@ -939,26 +943,22 @@ export function ShoppingListSubModule({
     const kentDirectSearchUrl = `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(searchQuery)}`;
     const hdDirectSearchUrl = `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(searchQuery)}`;
     const googleKentSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`kent building supplies, bayers lake, price on ${searchQuery}`)}`;
-    const googleHdSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`the home depot, halifax lacewood, price on ${searchQuery}`)}`;
+    const googleHdSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`the home depot, bayers lake, price on ${searchQuery}`)}`;
     const bingKentSearchUrl = `https://www.bing.com/search?q=${encodeURIComponent(`kent building supplies price on ${searchQuery}`)}`;
 
     try {
-      const response = await fetch('/api/inventory/competitor-pricing', {
+      if (!currentSavedListId) {
+        throw new Error('Save this Shopping List before searching competitor prices.');
+      }
+
+      const headers = await getServerHeaders();
+      const response = await fetch(`${supabaseUrl}/functions/v1/make-server-8405be07/competitor-pricing/search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sku: item.sku,
-          name: item.name,
-          description: item.description,
-          mfgPartNumber: item.mfgPartNumber,
-          manufacturer: item.manufacturer,
-          searchQuery,
-          category: item.category,
-          unitOfMeasure: item.unitOfMeasure,
-          cost: item.cost,
-          unitPrice: item.unitPrice,
-          market: 'Halifax, Nova Scotia, Canada',
-          competitors: ['Kent Building Supplies', 'The Home Depot']
+          listId: currentSavedListId,
+          itemId: item.id,
+          competitors: ['kent', 'homeDepot']
         })
       });
 
@@ -967,10 +967,10 @@ export function ShoppingListSubModule({
       }
 
       const data = await response.json();
-      if (data.success && data.pricing) {
-        const p = data.pricing;
-        const kentConf = Number(p.kent?.matchConfidencePct ?? p.kent?.confidenceScore ?? (Number(p.kent?.price || 0) > 0 ? 90 : 0));
-        const hdConf = Number(p.homeDepot?.matchConfidencePct ?? p.homeDepot?.confidenceScore ?? (Number(p.homeDepot?.price || 0) > 0 ? 90 : 0));
+      if (data.success && data.results) {
+        const p = data.results;
+        const kentConf = Number(p.kent?.matchConfidencePct ?? 0);
+        const hdConf = Number(p.homeDepot?.matchConfidencePct ?? 0);
 
         // STRICT USER RULE: If Confidence is under 80%, Retail Price is Unlisted ($0)
         const kentPrice = kentConf >= 80 ? Number(p.kent?.price || 0) : 0;
@@ -1003,7 +1003,7 @@ export function ShoppingListSubModule({
             activeSearchQuery: searchQuery,
             status: 'found',
             kent: {
-              storeName: p.kent?.storeName || 'Kent Building Supplies (Halifax/Dartmouth, NS)',
+              storeName: p.kent?.storeName || 'KENT Building Supplies (Bayers Lake)',
               price: kentPrice,
               sku: p.kent?.sku || item.mfgPartNumber || '',
               productTitle: p.kent?.productTitle || (kentPrice > 0 ? (item.description || item.name) : ''),
@@ -1020,14 +1020,14 @@ export function ShoppingListSubModule({
               matchConfidencePct: kentConf
             },
             homeDepot: {
-              storeName: p.homeDepot?.storeName || 'The Home Depot (Halifax Lacewood / Dartmouth Crossing, NS)',
+              storeName: p.homeDepot?.storeName || 'The Home Depot (Bayers Lake)',
               price: hdPrice,
               sku: p.homeDepot?.sku || item.mfgPartNumber || '',
               productTitle: p.homeDepot?.productTitle || (hdPrice > 0 ? (item.description || item.name) : ''),
               inStock: hdPrice > 0 ? (p.homeDepot?.inStock ?? true) : false,
               url: p.homeDepot?.url || hdDirectSearchUrl,
               googleSearchUrl: p.homeDepot?.googleSearchUrl || googleHdSearchUrl,
-              storeLocation: p.homeDepot?.storeLocation || 'Halifax Lacewood',
+              storeLocation: p.homeDepot?.storeLocation || 'Halifax - Bayers Lake',
               priceDifference: hdDiff,
               variancePct: hdVar,
               unit: p.homeDepot?.unit || item.unitOfMeasure,
@@ -1041,7 +1041,7 @@ export function ShoppingListSubModule({
             bestDeal,
             groundingSources: p.groundingSources || [
               { title: `Google Search: "kent building supplies, bayers lake, price on ${searchQuery}"`, url: googleKentSearchUrl },
-              { title: `Google Search: "the home depot, halifax lacewood, price on ${searchQuery}"`, url: googleHdSearchUrl },
+              { title: `Google Search: "the home depot, bayers lake, price on ${searchQuery}"`, url: googleHdSearchUrl },
               { title: `Kent.ca Search for "${searchQuery}"`, url: kentDirectSearchUrl },
               { title: `HomeDepot.ca Search for "${searchQuery}"`, url: hdDirectSearchUrl }
             ]
@@ -1546,13 +1546,16 @@ export function ShoppingListSubModule({
         totals: totals, // Save current totals snapshot
       };
 
-      const { error } = await supabase
+      const { data: savedList, error } = await supabase
         .from('saved_shopping_lists')
-        .insert(newSavedList);
+        .insert(newSavedList)
+        .select('id')
+        .single();
 
       if (error) throw error;
 
       toast.success("Shopping list saved successfully");
+      setCurrentSavedListId(savedList.id);
       setIsSaveListModalOpen(false);
       setSaveListName('');
       setSaveListDescription('');
@@ -1567,6 +1570,7 @@ export function ShoppingListSubModule({
   const handleLoadSavedList = (list: any) => {
     if (!list.items || !Array.isArray(list.items)) return;
     setShoppingList(list.items);
+    setCurrentSavedListId(list.id);
     setIsLoadListModalOpen(false);
     toast.success(`Loaded list: ${list.name}`);
   };
