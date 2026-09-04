@@ -220,6 +220,7 @@ function LogisticsEntryApp() {
           id: profile.id,
           email: profile.email,
           role: profile.role as UserRole,
+          name: profile.name || (profile.email ? profile.email.split('@')[0] : 'User'),
           full_name: profile.name,
           avatar_url: profile.avatar_url,
           organization_id: profile.organization_id,

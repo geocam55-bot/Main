@@ -750,7 +750,7 @@ export default function FleetSetup({
                                 <div className="w-full aspect-[4/3] bg-white rounded border border-slate-200 overflow-hidden p-0.5 flex items-center justify-center">
                                   <img src={preset.svgDataUri} alt={preset.name} className="w-full h-full object-contain scale-110" />
                                 </div>
-                                <span className="text-[9px] font-bold text-slate-800 truncate w-full text-center">{preset.name.split(' ')[0]}</span>
+                                <span className="text-[9px] font-bold text-slate-800 truncate w-full text-center">{preset.name?.split(' ')[0]}</span>
                               </button>
                             );
                           })}

@@ -1175,7 +1175,7 @@ export default function DriverMobileApp({
                       title="Switch Vehicle"
                     >
                       <TruckIcon className="h-3 w-3 mr-0.5" />
-                      <span>{assignedTruck ? assignedTruck.name.split(' ')[0] : 'Truck 101'}</span>
+                      <span>{assignedTruck ? assignedTruck.name?.split(' ')[0] : 'Truck 101'}</span>
                       <ChevronRight className="h-2.5 w-2.5 opacity-70" />
                     </button>
                     <span className="flex items-center text-[10px] font-semibold text-emerald-300">
@@ -1634,7 +1634,7 @@ export default function DriverMobileApp({
               >
                 {liveStops.map((st, i) => (
                   <option key={st.id} value={i}>
-                    Stop {i + 1}: {st.customerName.split(' ')[0]}
+                    Stop {i + 1}: {st.customerName?.split(' ')[0]}
                   </option>
                 ))}
               </select>

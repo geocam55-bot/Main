@@ -303,6 +303,9 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           if (u.email === 'superadmin@prospaces.com' || u.email === 'george.campbell@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin', 'super_admin'].includes(String(u.role).toLowerCase())) {
             u.role = 'SUPER_ADMIN';
           }
+          if (!u.name) {
+            u.name = u.full_name || (u.email ? u.email.split('@')[0] : "User");
+          }
           return u;
         }
       }
@@ -2765,7 +2768,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                   </span>
                 </div>
                 <div className="sm:hidden flex flex-col text-right pr-1 font-sans">
-                  <span className="text-[10px] font-bold leading-none text-slate-800 dark:text-slate-100 truncate max-w-[80px]">{currentUser.name.split(' ')[0]}</span>
+                  <span className="text-[10px] font-bold leading-none text-slate-800 dark:text-slate-100 truncate max-w-[80px]">{currentUser.name?.split(' ')[0]}</span>
                   <span className="text-[8px] font-mono text-slate-400 leading-none mt-0.5 uppercase tracking-wider">
                     {currentUser.role}
                   </span>
@@ -3063,7 +3066,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                               <span>Change Assigned Truck</span>
                             </div>
                             <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 text-blue-900 truncate max-w-[85px]">
-                              {driverAssignedTruck ? driverAssignedTruck.name.split(' ')[0] : 'None'}
+                              {driverAssignedTruck ? driverAssignedTruck.name?.split(' ')[0] : 'None'}
                             </span>
                           </button>
 
@@ -3311,7 +3314,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                           <span>Change Assigned Truck</span>
                         </div>
                         <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-200 truncate max-w-[75px]">
-                          {driverAssignedTruck ? driverAssignedTruck.name.split(' ')[0] : 'None'}
+                          {driverAssignedTruck ? driverAssignedTruck.name?.split(' ')[0] : 'None'}
                         </span>
                       </button>
 
