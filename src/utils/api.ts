@@ -15,6 +15,14 @@ import { getUserPreferencesClient, upsertUserPreferencesClient, getOrganizationS
 import { getJourneys, createJourney, updateJourney, deleteJourney, getLandingPages, createLandingPage, updateLandingPage, deleteLandingPage, getLeadScores, updateLeadScore, getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, getLeadScoreStats } from './marketing-client';
 import { getServerHeaders } from './server-headers';
 import { getSupabaseUrl } from './supabase/client';
+import type {
+  ProductCompetitivePricing,
+  PricingJobResponse,
+  PriceHistoryRecord,
+  PricingDashboardMetrics,
+  PricingDashboardItem,
+  CompetitorConfig,
+} from '../types/competitive-pricing';
 
 const supabase = createClient();
 
@@ -385,20 +393,6 @@ export const inventoryAPI = {
   search: (filters?: { search?: string; category?: string; status?: string; organizationId?: string }) => searchInventoryClient(filters),
 };
 
-export const competitorPricingAPI = {
-  search: async (data: { listId: string; itemId: string; competitors?: Array<'kent' | 'homeDepot'> }) => {
-    const headers = await getServerHeaders();
-    const response = await fetch(`${BASE}/competitor-pricing/search`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Competitor pricing search failed');
-    return payload;
-  },
-};
-
 // Email APIs - route through consolidated server (email_accounts has RLS)
 export const emailAPI = {
   // Email accounts - via server endpoint to bypass RLS
@@ -634,6 +628,122 @@ export const landingPagesAPI = {
   create: (data: any, organizationId: string) => createLandingPage(data, organizationId),
   update: (id: string, data: any) => updateLandingPage(id, data),
   delete: (id: string) => deleteLandingPage(id),
+};
+
+// Competitive Pricing API - REST Interface to ProSpaces Pricing Engine & Workers
+export const competitivePricingAPI = {
+  getPricing: async (productId: string | number): Promise<ProductCompetitivePricing> => {
+    const headers = await getServerHeaders();
+    const res = await fetch(`/api/products/${productId}/competitive-pricing`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to fetch competitive pricing (${res.status})`);
+    }
+    return res.json();
+  },
+
+  requestRefresh: async (productId: string | number): Promise<{ jobId: string; status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch(`/api/products/${productId}/competitive-pricing/refresh`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Refresh request failed (${res.status})`);
+    }
+    return res.json();
+  },
+
+  getJobStatus: async (jobId: string): Promise<PricingJobResponse> => {
+    const headers = await getServerHeaders();
+    const res = await fetch(`/api/pricing-jobs/${jobId}`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to fetch job status (${res.status})`);
+    }
+    return res.json();
+  },
+
+  getPriceHistory: async (productId: string | number): Promise<PriceHistoryRecord[]> => {
+    const headers = await getServerHeaders();
+    const res = await fetch(`/api/products/${productId}/competitive-pricing/history`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to fetch price history (${res.status})`);
+    }
+    return res.json();
+  },
+
+  getDashboard: async (filters?: {
+    competitorId?: string;
+    category?: string;
+    varianceFilter?: string;
+    confidenceFilter?: string;
+    search?: string;
+  }): Promise<{ metrics: PricingDashboardMetrics; items: PricingDashboardItem[] }> => {
+    const headers = await getServerHeaders();
+    const query = new URLSearchParams();
+    if (filters?.competitorId) query.set('competitorId', filters.competitorId);
+    if (filters?.category) query.set('category', filters.category);
+    if (filters?.varianceFilter && filters.varianceFilter !== 'all') query.set('varianceFilter', filters.varianceFilter);
+    if (filters?.confidenceFilter && filters.confidenceFilter !== 'all') query.set('confidenceFilter', filters.confidenceFilter);
+    if (filters?.search) query.set('search', filters.search);
+
+    const qs = query.toString();
+    const res = await fetch(`/api/competitive-pricing/dashboard${qs ? `?${qs}` : ''}`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to fetch pricing dashboard (${res.status})`);
+    }
+    return res.json();
+  },
+
+  getCompetitors: async (): Promise<CompetitorConfig[]> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/competitive-pricing/admin/competitors', { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to fetch competitors (${res.status})`);
+    }
+    return res.json();
+  },
+
+  updateCompetitor: async (id: string | number, data: Partial<CompetitorConfig>): Promise<CompetitorConfig> => {
+    const headers = await getServerHeaders();
+    const res = await fetch(`/api/competitive-pricing/admin/competitors/${id}`, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to update competitor (${res.status})`);
+    }
+    return res.json();
+  },
+
+  // Resilient Polling helper
+  pollJobUntilComplete: async (
+    jobId: string,
+    onUpdate?: (job: PricingJobResponse) => void,
+    maxWaitMs: number = 45000
+  ): Promise<PricingJobResponse> => {
+    const startTime = Date.now();
+    const pollInterval = 1500;
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const job = await competitivePricingAPI.getJobStatus(jobId);
+      if (onUpdate) onUpdate(job);
+
+      if (job.status === 'COMPLETED' || job.status === 'FAILED') {
+        return job;
+      }
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+
+    throw new Error('Background pricing refresh timed out.');
+  },
 };
 
 // Lead Scoring APIs

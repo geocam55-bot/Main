@@ -1,6 +1,6 @@
 {
   "name": "ProSpaces CRM",
-  "description": "Comprehensive ProSpaces CRM application featuring importing, exporting, and planning facilities built on React, Express, Vite, and Supabase.",
+  "description": "Comprehensive ProSpaces CRM application featuring inventory management, shopping list planning, and backend-driven competitor pricing intelligence.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

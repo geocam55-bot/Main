@@ -56,6 +56,9 @@ import { getPriceTierLabel, isTierActive, getActiveTierNumbers } from '../lib/gl
 import { settingsAPI } from '../utils/api';
 import { InventoryDiagnostic } from './InventoryDiagnostic';
 import { ShoppingListSubModule } from './inventory/ShoppingListSubModule';
+import { CompetitivePricingDashboard } from './inventory/CompetitivePricingDashboard';
+import { CompetitivePricingAdmin } from './inventory/CompetitivePricingAdmin';
+import { CompetitivePricingPanel } from './inventory/CompetitivePricingPanel';
 // import { ImportExport } from './ImportExport';
 
 // Module-level singleton — avoids re-creation per render
@@ -1594,6 +1597,9 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                 <Badge className="ml-2 bg-emerald-100 text-emerald-700 border-emerald-200">{shoppingListCount.toLocaleString()}</Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="competitive-pricing" className="whitespace-nowrap">
+              Competitive Pricing
+            </TabsTrigger>
 
             {isAdminOrSuperAdmin && (
               <TabsTrigger value="diagnostic" className="whitespace-nowrap">
@@ -2452,6 +2458,25 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
           />
         </TabsContent>
 
+        <TabsContent value="competitive-pricing" className="space-y-6 mt-6">
+          <div className="space-y-6">
+            <CompetitivePricingDashboard
+              onSelectProduct={(productId) => {
+                const item = items.find((i) => i.id === productId || i.sku === productId);
+                if (item) {
+                  handleOpenDialog(item);
+                }
+              }}
+            />
+
+            {(user.role === 'admin' || user.role === 'super_admin') && (
+              <div className="pt-6 border-t">
+                <CompetitivePricingAdmin />
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
 
 
         {(user.role === 'admin' || user.role === 'super_admin') && (
@@ -2657,6 +2682,22 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                 })}
               </div>
             </div>
+
+            {/* Competitive Pricing Panel (for existing items) */}
+            {editingItem && (
+              <div className="pt-2">
+                <CompetitivePricingPanel
+                  productId={editingItem.id}
+                  sku={editingItem.sku}
+                  productName={editingItem.name}
+                  description={editingItem.description}
+                  currentPrice={editingItem.unitPrice || editingItem.priceTier1 || 0}
+                  unitOfMeasure={editingItem.unitOfMeasure || 'EA'}
+                  manufacturerPartNumber={editingItem.mfgPartNumber}
+                  category={editingItem.category}
+                />
+              </div>
+            )}
 
             {/* Supplier Information */}
             <div className="space-y-4">

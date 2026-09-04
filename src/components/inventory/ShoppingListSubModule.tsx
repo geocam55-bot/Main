@@ -47,6 +47,8 @@ import { getSupabaseUrl } from '../../utils/supabase/client';
 import { getServerHeaders } from '../../utils/server-headers';
 import { loadInventoryPage } from '../../utils/inventory-loader';
 import { useDebounce } from '../../utils/useDebounce';
+import { competitivePricingAPI } from '../../utils/api';
+import { CompetitivePricingPanel } from './CompetitivePricingPanel';
 
 const supabase = createClient();
 const supabaseUrl = getSupabaseUrl();
@@ -947,38 +949,44 @@ export function ShoppingListSubModule({
     const bingKentSearchUrl = `https://www.bing.com/search?q=${encodeURIComponent(`kent building supplies price on ${searchQuery}`)}`;
 
     try {
-      const headers = await getServerHeaders();
-      const response = await fetch(`${supabaseUrl}/functions/v1/make-server-8405be07/competitor-pricing/search`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          listId: currentSavedListId || undefined,
-          itemId: item.id,
-          item,
-          competitors: ['kent', 'homeDepot']
-        })
-      });
+      const lookupId = item.sku || item.id;
+      const data = await competitivePricingAPI.getPricing(lookupId);
 
-      if (!response.ok) {
-        throw new Error(`Server returned HTTP ${response.status}`);
-      }
+      if (data && data.competitors) {
+        const kentComp = data.competitors.find((c) =>
+          c.competitorName.toLowerCase().includes('kent')
+        );
+        const hdComp = data.competitors.find(
+          (c) =>
+            c.competitorName.toLowerCase().includes('depot') ||
+            c.competitorName.toLowerCase().includes('home')
+        );
 
-      const data = await response.json();
-      if (data.success && data.results) {
-        const p = data.results;
-        const kentConf = Number(p.kent?.matchConfidencePct ?? 0);
-        const hdConf = Number(p.homeDepot?.matchConfidencePct ?? 0);
+        const getConfidencePct = (conf?: string) => {
+          if (conf === 'EXACT') return 98;
+          if (conf === 'HIGH') return 88;
+          if (conf === 'MEDIUM') return 65;
+          if (conf === 'LOW') return 45;
+          return 0;
+        };
+
+        const kentConf = getConfidencePct(kentComp?.matchConfidence);
+        const hdConf = getConfidencePct(hdComp?.matchConfidence);
 
         // STRICT USER RULE: If Confidence is under 80%, Retail Price is Unlisted ($0)
-        const kentPrice = kentConf >= 80 ? Number(p.kent?.price || 0) : 0;
-        const hdPrice = hdConf >= 80 ? Number(p.homeDepot?.price || 0) : 0;
-        const ourPrice = Number(item.unitPrice || 0);
+        const kentPrice =
+          kentConf >= 80 ? Number(kentComp?.normalizedUnitPrice || kentComp?.price || 0) : 0;
+        const hdPrice =
+          hdConf >= 80 ? Number(hdComp?.normalizedUnitPrice || hdComp?.price || 0) : 0;
+        const ourPrice = Number(item.unitPrice || data.yourPrice || 0);
 
         const kentDiff = kentPrice > 0 ? Number((kentPrice - ourPrice).toFixed(2)) : 0;
-        const kentVar = ourPrice > 0 && kentPrice > 0 ? Number(((kentDiff / ourPrice) * 100).toFixed(1)) : 0;
+        const kentVar =
+          ourPrice > 0 && kentPrice > 0 ? Number(((kentDiff / ourPrice) * 100).toFixed(1)) : 0;
 
         const hdDiff = hdPrice > 0 ? Number((hdPrice - ourPrice).toFixed(2)) : 0;
-        const hdVar = ourPrice > 0 && hdPrice > 0 ? Number(((hdDiff / ourPrice) * 100).toFixed(1)) : 0;
+        const hdVar =
+          ourPrice > 0 && hdPrice > 0 ? Number(((hdDiff / ourPrice) * 100).toFixed(1)) : 0;
 
         let bestDeal: 'prospaces' | 'kent' | 'home_depot' | 'tie' = 'prospaces';
         if (kentPrice > 0 && hdPrice > 0) {
@@ -1000,52 +1008,59 @@ export function ShoppingListSubModule({
             activeSearchQuery: searchQuery,
             status: 'found',
             kent: {
-              storeName: p.kent?.storeName || 'KENT Building Supplies (Bayers Lake)',
+              storeName: kentComp?.competitorName || 'KENT Building Supplies (Bayers Lake)',
               price: kentPrice,
-              sku: p.kent?.sku || item.mfgPartNumber || '',
-              productTitle: p.kent?.productTitle || (kentPrice > 0 ? (item.description || item.name) : ''),
-              inStock: kentPrice > 0 ? (p.kent?.inStock ?? true) : false,
-              url: p.kent?.url || kentDirectSearchUrl,
-              googleSearchUrl: p.kent?.googleSearchUrl || googleKentSearchUrl,
-              bingSearchUrl: p.kent?.bingSearchUrl || bingKentSearchUrl,
-              storeLocation: p.kent?.storeLocation || 'Halifax - Bayers Lake',
+              sku: kentComp?.sku || item.mfgPartNumber || '',
+              productTitle: kentComp?.productName || (kentPrice > 0 ? (item.description || item.name) : ''),
+              inStock: kentPrice > 0 ? (kentComp?.availability === 'IN_STOCK') : false,
+              url: kentComp?.productUrl || kentDirectSearchUrl,
+              googleSearchUrl: googleKentSearchUrl,
+              bingSearchUrl: bingKentSearchUrl,
+              storeLocation: 'Halifax - Bayers Lake',
               priceDifference: kentDiff,
               variancePct: kentVar,
-              unit: p.kent?.unit || item.unitOfMeasure,
-              notes: p.kent?.notes || (kentPrice > 0 ? `Verified retail price at Kent: $${kentPrice.toFixed(2)} CAD (${kentConf}% conf)` : `Unlisted (Match confidence ${kentConf}% is under 80% threshold)`),
+              unit: kentComp?.unitOfMeasure || item.unitOfMeasure,
+              notes:
+                kentPrice > 0
+                  ? `Verified market price at Kent: $${kentPrice.toFixed(2)} CAD (${kentConf}% conf)`
+                  : `Unlisted (Match confidence ${kentConf}% is under 80% threshold)`,
               matchConfidence: kentConf >= 95 ? 'exact' : (kentConf >= 80 ? 'high' : 'not_found'),
-              matchConfidencePct: kentConf
+              matchConfidencePct: kentConf,
             },
             homeDepot: {
-              storeName: p.homeDepot?.storeName || 'The Home Depot (Bayers Lake)',
+              storeName: hdComp?.competitorName || 'The Home Depot (Bayers Lake)',
               price: hdPrice,
-              sku: p.homeDepot?.sku || item.mfgPartNumber || '',
-              productTitle: p.homeDepot?.productTitle || (hdPrice > 0 ? (item.description || item.name) : ''),
-              inStock: hdPrice > 0 ? (p.homeDepot?.inStock ?? true) : false,
-              url: p.homeDepot?.url || hdDirectSearchUrl,
-              googleSearchUrl: p.homeDepot?.googleSearchUrl || googleHdSearchUrl,
-              storeLocation: p.homeDepot?.storeLocation || 'Halifax - Bayers Lake',
+              sku: hdComp?.sku || item.mfgPartNumber || '',
+              productTitle: hdComp?.productName || (hdPrice > 0 ? (item.description || item.name) : ''),
+              inStock: hdPrice > 0 ? (hdComp?.availability === 'IN_STOCK') : false,
+              url: hdComp?.productUrl || hdDirectSearchUrl,
+              googleSearchUrl: googleHdSearchUrl,
+              storeLocation: 'Halifax - Bayers Lake',
               priceDifference: hdDiff,
               variancePct: hdVar,
-              unit: p.homeDepot?.unit || item.unitOfMeasure,
-              notes: p.homeDepot?.notes || (hdPrice > 0 ? `Verified retail price at Home Depot: $${hdPrice.toFixed(2)} CAD (${hdConf}% conf)` : `Unlisted (Match confidence ${hdConf}% is under 80% threshold)`),
+              unit: hdComp?.unitOfMeasure || item.unitOfMeasure,
+              notes:
+                hdPrice > 0
+                  ? `Verified market price at Home Depot: $${hdPrice.toFixed(2)} CAD (${hdConf}% conf)`
+                  : `Unlisted (Match confidence ${hdConf}% is under 80% threshold)`,
               matchConfidence: hdConf >= 95 ? 'exact' : (hdConf >= 80 ? 'high' : 'not_found'),
-              matchConfidencePct: hdConf
+              matchConfidencePct: hdConf,
             },
-            marketRecommendation: p.recommendation || (kentPrice > 0 || hdPrice > 0 
-              ? `Live search retrieved current competitive pricing for ${item.description || item.name}.`
-              : `Pricing search completed for "${searchQuery}".`),
+            marketRecommendation:
+              kentPrice > 0 || hdPrice > 0
+                ? `Competitive pricing retrieved via ProSpaces pricing engine for ${item.description || item.name}.`
+                : `Pricing check completed for "${searchQuery}".`,
             bestDeal,
-            groundingSources: p.groundingSources || [
-              { title: `Google Search: "kent building supplies, bayers lake, price on ${searchQuery}"`, url: googleKentSearchUrl },
-              { title: `Google Search: "the home depot, bayers lake, price on ${searchQuery}"`, url: googleHdSearchUrl },
+            groundingSources: [
               { title: `Kent.ca Search for "${searchQuery}"`, url: kentDirectSearchUrl },
-              { title: `HomeDepot.ca Search for "${searchQuery}"`, url: hdDirectSearchUrl }
-            ]
-          }
+              { title: `HomeDepot.ca Search for "${searchQuery}"`, url: hdDirectSearchUrl },
+              { title: `Google Search: "kent building supplies, price on ${searchQuery}"`, url: googleKentSearchUrl },
+              { title: `Google Search: "the home depot, price on ${searchQuery}"`, url: googleHdSearchUrl },
+            ],
+          },
         };
       } else {
-        throw new Error(data.message || 'No pricing returned');
+        throw new Error('No pricing records found');
       }
     } catch (err: any) {
       console.warn(`Competitor search failed for ${item.sku}:`, err);
@@ -2920,6 +2935,18 @@ export function ShoppingListSubModule({
             </DialogHeader>
 
             <div className="space-y-4 my-2">
+              {/* ProSpaces Competitive Pricing Intelligence Module */}
+              <CompetitivePricingPanel
+                productId={selectedDetailItem.sku || selectedDetailItem.id}
+                sku={selectedDetailItem.sku}
+                productName={selectedDetailItem.name || selectedDetailItem.description}
+                description={selectedDetailItem.description}
+                currentPrice={selectedDetailItem.unitPrice || 0}
+                unitOfMeasure={selectedDetailItem.unitOfMeasure || 'EA'}
+                manufacturerPartNumber={selectedDetailItem.mfgPartNumber}
+                category={selectedDetailItem.category}
+              />
+
               {/* Natural Language Web Search Bar & Controls */}
               <div className="p-3.5 rounded-lg border border-indigo-200 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
                 <div className="flex items-center justify-between">
