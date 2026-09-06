@@ -2706,6 +2706,94 @@ Result:
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // INVENTORY REST API (PAGINATION, FILTERING & LOOKUPS)
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get('/api/inventory', async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '10'), 10) || 10));
+      const offset = (page - 1) * limit;
+
+      const searchQuery = String(req.query.search || req.query.searchQuery || req.query.q || '').trim();
+      const category = String(req.query.category || '').trim();
+      const sku = String(req.query.sku || '').trim();
+      const orgId = String(req.query.organizationId || req.query.organization_id || '').trim();
+
+      let query = supabase
+        .from('inventory')
+        .select('*', { count: 'exact' });
+
+      if (orgId) {
+        query = query.eq('organization_id', orgId);
+      }
+
+      if (category && category.toLowerCase() !== 'all') {
+        query = query.ilike('category', `%${category}%`);
+      }
+
+      if (sku) {
+        query = query.ilike('sku', `%${sku}%`);
+      }
+
+      if (searchQuery) {
+        // Multi-field search
+        query = query.or(`sku.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,upc.ilike.%${searchQuery}%,supplier_sku.ilike.%${searchQuery}%,search_keywords.ilike.%${searchQuery}%`);
+      }
+
+      query = query
+        .order('name', { ascending: true })
+        .range(offset, offset + limit - 1);
+
+      const { data, count, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      const total = count || 0;
+      res.json({
+        success: true,
+        items: data || [],
+        data: data || [],
+        totalCount: total,
+        total: total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1
+      });
+    } catch (err: any) {
+      console.error('[API /api/inventory] Error:', err);
+      res.status(500).json({
+        success: false,
+        error: err.message || 'Failed to fetch inventory items',
+        items: [],
+        totalCount: 0
+      });
+    }
+  });
+
+  app.get('/api/inventory/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .or(`id.eq.${id},sku.eq.${id}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        return res.status(404).json({ success: false, error: 'Inventory item not found' });
+      }
+
+      res.json({ success: true, item: data, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Failed to get inventory item' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // COMPETITIVE PRICING MODULE REST API (RONA ATLANTIC vs REGIONAL COMPETITORS)
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2736,6 +2824,7 @@ Result:
 
   // In-memory price history store fallback
   const inMemoryHistory: any[] = [];
+  const latestCompetitorResultsByProduct = new Map<string, any[]>();
 
   // Helper: extract cleaned product title and secondary description mirroring Inventory.tsx logic
   function resolveInventoryTitles(rawName: string = '', rawDescription: string = '', category: string = '') {
@@ -2850,12 +2939,12 @@ Result:
           productId: invItem.id,
           sku: invItem.sku || String(productId),
           productName: title,
-          description: description,
+          description: description || invItem.description || '',
           yourPrice: unitPriceInDollars,
           category: invItem.category || 'General',
           unitOfMeasure: invItem.unit_of_measure || invItem.unitOfMeasure || 'EA',
-          mfgPartNumber: invItem.supplier_sku || invItem.supplierSku || '',
-          upc: invItem.upc || invItem.barcode || '',
+          mfgPartNumber: (invItem.supplier_sku || invItem.supplierSku || invItem.mfg_part_number || '').trim(),
+          upc: (invItem.upc || invItem.barcode || '').trim(),
         };
       }
     } catch (e) {
@@ -2867,12 +2956,246 @@ Result:
       sku: String(productId),
       productName: `Product ${productId}`,
       description: '',
-      yourPrice: 5.99,
-      category: 'Tools',
+      yourPrice: 0,
+      category: 'General',
       unitOfMeasure: 'EA',
-      mfgPartNumber: 'MFR-100',
-      upc: '012345678901',
+      mfgPartNumber: '',
+      upc: '',
     };
+  }
+
+  // Dynamic helper to execute live competitor web search using ONLY the item information from the list
+  async function executeDynamicCompetitorSearch(
+    product: {
+      productId: string;
+      sku: string;
+      productName: string;
+      description: string;
+      yourPrice?: number;
+      category?: string;
+      unitOfMeasure?: string;
+      mfgPartNumber?: string;
+      upc?: string;
+    },
+    bodyCriteria: {
+      upc?: string;
+      mfgPartNumber?: string;
+      supplierSku?: string;
+      description?: string;
+      name?: string;
+      productName?: string;
+      category?: string;
+      searchQuery?: string;
+    } = {}
+  ) {
+    // Merge product and criteria from the list
+    const effectiveUpc = String(bodyCriteria.upc || product.upc || '').trim();
+    const effectiveMfg = String(bodyCriteria.mfgPartNumber || bodyCriteria.supplierSku || product.mfgPartNumber || '').trim();
+    const effectiveDesc = String(bodyCriteria.description || product.description || '').trim();
+    const effectiveName = String(bodyCriteria.name || bodyCriteria.productName || product.productName || '').trim();
+    const effectiveCategory = String(bodyCriteria.category || product.category || '').trim();
+    const customQuery = String(bodyCriteria.searchQuery || '').trim();
+
+    // Determine clean search query strictly from the item details (excluding MFG #)
+    let cleanSearchQuery = customQuery;
+    if (!cleanSearchQuery) {
+      const cleanDesc = effectiveDesc.replace(/\*.*?\*/g, '').trim();
+      if (cleanDesc && cleanDesc.length > 3) {
+        cleanSearchQuery = cleanDesc;
+      } else if (effectiveName) {
+        cleanSearchQuery = effectiveName;
+      } else {
+        cleanSearchQuery = effectiveUpc || product.sku || '';
+      }
+    }
+
+    console.log(`[Competitive Pricing Search] Searching for SKU "${product.sku}" using query: "${cleanSearchQuery}"`);
+
+    let freshKent = 0;
+    let freshHd = 0;
+    let kentConf = 'NOT_FOUND';
+    let hdConf = 'NOT_FOUND';
+    let kentMethod = effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION');
+    let hdMethod = effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION');
+    let kentTitle = effectiveDesc || effectiveName;
+    let hdTitle = effectiveDesc || effectiveName;
+    let kentSku = effectiveMfg || '';
+    let hdSku = effectiveMfg || '';
+    let kentUrl = `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(cleanSearchQuery)}`;
+    let hdUrl = `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(cleanSearchQuery)}`;
+
+    try {
+      const ai = getGeminiClient();
+      if (ai) {
+        const prompt = `You are a pricing engine. Find the current retail price (in CAD) at "KENT Building Supplies" and "The Home Depot Canada" for this product.
+Product: "${cleanSearchQuery || effectiveDesc || effectiveName}"
+Description: ${effectiveDesc || 'None'}
+Model: ${effectiveMfg || 'None'}
+
+1. Use googleSearch to find "kent building supplies ${cleanSearchQuery || effectiveDesc}"
+2. Use googleSearch to find "home depot canada ${cleanSearchQuery || effectiveDesc}"
+3. Reply ONLY with valid JSON matching this schema:
+{
+  "kentPrice": number,
+  "kentConfidence": "EXACT" | "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND",
+  "kentUrl": string,
+  "homeDepotPrice": number,
+  "homeDepotConfidence": "EXACT" | "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND",
+  "homeDepotUrl": string
+}`;
+
+        // Wrap the Gemini call in a Promise.race to enforce a timeout
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini search timed out')), 12000));
+        const aiPromise = ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          tools: [{ googleSearch: {} }],
+          config: { responseMimeType: "application/json" }
+        });
+
+        const response = await Promise.race([aiPromise, timeoutPromise]);
+        const text = response.text || "{}";
+        const parsed = JSON.parse(text);
+
+        if (parsed.kentPrice > 0) {
+          freshKent = Number(parsed.kentPrice);
+          kentConf = parsed.kentConfidence || 'HIGH';
+          if (parsed.kentUrl) kentUrl = parsed.kentUrl;
+        }
+        if (parsed.homeDepotPrice > 0) {
+          freshHd = Number(parsed.homeDepotPrice);
+          hdConf = parsed.homeDepotConfidence || 'HIGH';
+          if (parsed.homeDepotUrl) hdUrl = parsed.homeDepotUrl;
+        }
+      }
+    } catch (e) {
+      console.error("[Competitive Pricing Search] Real search error or timeout:", e.message);
+    }
+
+    const checkTime = new Date().toISOString();
+    const competitorsData: any[] = [
+      {
+        competitorId: 1,
+        competitorName: 'KENT Building Supplies',
+        websiteUrl: 'https://kent.ca',
+        productUrl: kentUrl,
+        productName: kentTitle,
+        price: freshKent,
+        regularPrice: freshKent,
+        salePrice: null,
+        currency: 'CAD',
+        unitOfMeasure: product.unitOfMeasure,
+        packQuantity: 1,
+        normalizedUnitPrice: freshKent,
+        matchConfidence: kentConf,
+        matchMethod: kentMethod,
+        sku: kentSku,
+        availability: freshKent > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+        checkedAt: checkTime,
+      },
+      {
+        competitorId: 2,
+        competitorName: 'The Home Depot',
+        websiteUrl: 'https://www.homedepot.ca',
+        productUrl: hdUrl,
+        productName: hdTitle,
+        price: freshHd,
+        regularPrice: freshHd,
+        salePrice: null,
+        currency: 'CAD',
+        unitOfMeasure: product.unitOfMeasure,
+        packQuantity: 1,
+        normalizedUnitPrice: freshHd,
+        matchConfidence: hdConf,
+        matchMethod: hdMethod,
+        sku: hdSku,
+        availability: freshHd > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+        checkedAt: checkTime,
+      }
+    ];
+
+    // Save to in-memory cache
+    latestCompetitorResultsByProduct.set(String(product.productId), competitorsData);
+
+    // Sync to Supabase DB tables if available
+    try {
+      for (const entry of competitorsData) {
+        const compId = entry.competitorId;
+        const price = entry.price;
+
+        const { data: existingMatch } = await supabase
+          .from('product_matches')
+          .select('*, competitor_products(*)')
+          .eq('product_id', String(product.productId))
+          .eq('competitor_products.competitor_id', compId)
+          .maybeSingle();
+
+        if (existingMatch) {
+          await supabase
+            .from('product_matches')
+            .update({
+              match_confidence: entry.matchConfidence,
+              match_method: entry.matchMethod,
+            })
+            .eq('id', existingMatch.id);
+
+          if (price > 0) {
+            await supabase
+              .from('competitor_prices')
+              .update({
+                current_price: price,
+                normalized_unit_price: price,
+                checked_at: checkTime,
+                availability: 'IN_STOCK',
+              })
+              .eq('competitor_product_id', existingMatch.competitor_product_id);
+          }
+        } else {
+          const { data: newCompProd } = await supabase
+            .from('competitor_products')
+            .insert({
+              competitor_id: compId,
+              product_name: entry.productName,
+              manufacturer_part_number: effectiveMfg || null,
+              upc: effectiveUpc || null,
+              description: effectiveDesc || null,
+              product_url: entry.productUrl,
+              external_product_id: entry.sku || null,
+              unit_of_measure: product.unitOfMeasure,
+              pack_quantity: 1,
+              availability: price > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+            })
+            .select()
+            .single();
+
+          if (newCompProd) {
+            await supabase.from('product_matches').insert({
+              product_id: String(product.productId),
+              competitor_product_id: newCompProd.id,
+              match_confidence: entry.matchConfidence,
+              match_method: entry.matchMethod,
+              approved: true,
+            });
+
+            if (price > 0) {
+              await supabase.from('competitor_prices').insert({
+                competitor_product_id: newCompProd.id,
+                current_price: price,
+                normalized_unit_price: price,
+                currency: 'CAD',
+                unitOfMeasure: product.unitOfMeasure,
+                availability: 'IN_STOCK',
+                checked_at: checkTime,
+              });
+            }
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.error('[Competitive Pricing Refresh] DB Sync Error:', dbErr);
+    }
+
+    return competitorsData;
   }
 
   // 1. GET /api/products/:productId/competitive-pricing
@@ -2894,11 +3217,12 @@ Result:
             const cp = m.competitor_products || {};
             const comp = cp.competitors || {};
             const priceRecord = Array.isArray(cp.competitor_prices) ? cp.competitor_prices[0] : (cp.competitor_prices || {});
+            const compId = comp.id || (m.competitor_product_id === 1 ? 1 : 2);
             return {
-              competitorId: comp.id || 1,
-              competitorName: comp.name || 'Competitor',
-              websiteUrl: comp.website_url,
-              productUrl: cp.product_url,
+              competitorId: compId,
+              competitorName: comp.name || (compId === 1 ? 'KENT Building Supplies' : 'The Home Depot'),
+              websiteUrl: comp.website_url || (compId === 1 ? 'https://kent.ca' : 'https://www.homedepot.ca'),
+              productUrl: cp.product_url || '',
               productName: cp.product_name || product.productName,
               price: Number(priceRecord.current_price || 0),
               regularPrice: priceRecord.regular_price ? Number(priceRecord.regular_price) : null,
@@ -2908,7 +3232,7 @@ Result:
               packQuantity: cp.pack_quantity || 1,
               normalizedUnitPrice: Number(priceRecord.normalized_unit_price || priceRecord.current_price || 0),
               matchConfidence: m.match_confidence || 'HIGH',
-              matchMethod: m.match_method || 'MANUFACTURER_PART_NUMBER',
+              matchMethod: m.match_method || (product.upc ? 'UPC' : (product.mfgPartNumber ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION')),
               availability: priceRecord.availability || 'IN_STOCK',
               checkedAt: priceRecord.checked_at || new Date().toISOString(),
             };
@@ -2918,50 +3242,14 @@ Result:
         // Table may not exist yet, fallback gracefully
       }
 
-      // Default realistic regional fallback matches if no records yet
-      if (competitorsData.length === 0) {
-        const base = product.yourPrice > 0 ? product.yourPrice : 5.99;
-        const kentPrice = Number((base * 1.06).toFixed(2));
-        const hdPrice = Number((base * 0.96).toFixed(2));
+      // If database returned no matches yet, check in-memory cache
+      if (competitorsData.length === 0 && latestCompetitorResultsByProduct.has(String(productId))) {
+        competitorsData = latestCompetitorResultsByProduct.get(String(productId)) || [];
+      }
 
-        competitorsData = [
-          {
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            websiteUrl: 'https://kent.ca',
-            productUrl: `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(product.sku || product.productName)}`,
-            productName: `${product.productName}`,
-            price: kentPrice,
-            regularPrice: kentPrice,
-            salePrice: null,
-            currency: 'CAD',
-            unitOfMeasure: product.unitOfMeasure,
-            packQuantity: 1,
-            normalizedUnitPrice: kentPrice,
-            matchConfidence: 'HIGH',
-            matchMethod: 'MANUFACTURER_PART_NUMBER',
-            availability: 'IN_STOCK',
-            checkedAt: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-          },
-          {
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            websiteUrl: 'https://www.homedepot.ca',
-            productUrl: `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(product.sku || product.productName)}`,
-            productName: `${product.productName}`,
-            price: hdPrice,
-            regularPrice: Number((hdPrice * 1.05).toFixed(2)),
-            salePrice: hdPrice,
-            currency: 'CAD',
-            unitOfMeasure: product.unitOfMeasure,
-            packQuantity: 1,
-            normalizedUnitPrice: hdPrice,
-            matchConfidence: 'EXACT',
-            matchMethod: 'UPC_BARCODE',
-            availability: 'IN_STOCK',
-            checkedAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-          },
-        ];
+      // If still no competitor results and product has descriptive information, execute dynamic search
+      if (competitorsData.length === 0 && (product.description || product.productName || product.mfgPartNumber || product.upc)) {
+        competitorsData = await executeDynamicCompetitorSearch(product, req.query);
       }
 
       res.json({
@@ -2973,6 +3261,13 @@ Result:
         yourPrice: product.yourPrice,
         currency: 'CAD',
         unitOfMeasure: product.unitOfMeasure,
+        mfgPartNumber: product.mfgPartNumber,
+        upc: product.upc,
+        matchingCriteria: {
+          upc: product.upc,
+          mfgPartNumber: product.mfgPartNumber,
+          description: product.description,
+        },
         competitors: competitorsData,
       });
     } catch (err: any) {
@@ -3009,61 +3304,66 @@ Result:
         // Fallback
       }
 
+      // Capture request body criteria (UPC, Supplier SKU / MFG #, Description)
+      const bodyCriteria = { ...(req.body?.criteria || {}), ...(req.body || {}) };
+
       // Trigger background worker process asynchronously
       setTimeout(async () => {
         try {
           jobRecord.status = 'RUNNING';
           inMemoryJobs.set(jobId, { ...jobRecord });
 
-          // Background Playwright check simulation / worker processing
-          await new Promise((r) => setTimeout(r, 2500));
-
           const product = await resolveProductRecord(productId);
-          const base = product.yourPrice > 0 ? product.yourPrice : 5.99;
-          const freshKent = Number((base * (0.95 + Math.random() * 0.15)).toFixed(2));
-          const freshHd = Number((base * (0.93 + Math.random() * 0.14)).toFixed(2));
-
-          // Record in history
-          const checkTime = new Date().toISOString();
-          inMemoryHistory.push(
-            {
-              id: `hist_${Date.now()}_1`,
-              productId: String(productId),
-              competitorId: 1,
-              competitorName: 'KENT Building Supplies',
-              price: freshKent,
-              normalizedUnitPrice: freshKent,
-              currency: 'CAD',
-              checkedAt: checkTime,
-              availability: 'IN_STOCK',
-            },
-            {
-              id: `hist_${Date.now()}_2`,
-              productId: String(productId),
-              competitorId: 2,
-              competitorName: 'The Home Depot',
-              price: freshHd,
-              normalizedUnitPrice: freshHd,
-              currency: 'CAD',
-              checkedAt: checkTime,
-              availability: 'IN_STOCK',
-            }
-          );
+          await executeDynamicCompetitorSearch(product, bodyCriteria);
 
           jobRecord.status = 'COMPLETED';
           jobRecord.completedAt = new Date().toISOString();
           inMemoryJobs.set(jobId, { ...jobRecord });
         } catch (workerErr: any) {
+          console.error('[Competitive Pricing Refresh] Worker exception:', workerErr);
           jobRecord.status = 'FAILED';
           jobRecord.errorMessage = workerErr.message || 'Scraping timeout';
           inMemoryJobs.set(jobId, { ...jobRecord });
         }
-      }, 500);
+      }, 100);
 
       res.json({ jobId, status: 'QUEUED' });
     } catch (err: any) {
       console.error('[Competitive Pricing Refresh] Error:', err);
       res.status(500).json({ error: err.message || 'Failed to start refresh job' });
+    }
+  });
+
+  // PUT /api/products/:productId/competitive-pricing
+  app.put('/api/products/:productId/competitive-pricing', async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const { competitorId, price, productName, productUrl, notes, matchConfidence, matchMethod } = req.body || {};
+      const numPrice = Number(price || 0);
+
+      // Update in-memory cache
+      const cached = latestCompetitorResultsByProduct.get(String(productId)) || [];
+      const updated = cached.map((c: any) => {
+        if (c.competitorId === Number(competitorId)) {
+          return {
+            ...c,
+            price: numPrice,
+            normalizedUnitPrice: numPrice,
+            productName: productName || c.productName,
+            productUrl: productUrl || c.productUrl,
+            matchConfidence: matchConfidence || 'EXACT',
+            matchMethod: matchMethod || 'MANUAL_OVERRIDE',
+            availability: numPrice > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+            checkedAt: new Date().toISOString(),
+          };
+        }
+        return c;
+      });
+      latestCompetitorResultsByProduct.set(String(productId), updated);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update competitive price' });
     }
   });
 
@@ -3207,20 +3507,13 @@ Result:
         const rawUnitPrice = Number(p.unit_price || 0);
         const yourPrice = rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : rawUnitPrice;
 
-        // Realistic market variation
-        const ratio = 0.94 + ((p.id.charCodeAt(0) || 10) % 15) * 0.01;
-        const lowestCompPrice = Number((yourPrice * ratio).toFixed(2));
-        const compName = ratio > 1 ? 'The Home Depot' : 'KENT Building Supplies';
-        const diff = lowestCompPrice !== null ? Number((yourPrice - lowestCompPrice).toFixed(2)) : null;
-        const varPct = lowestCompPrice !== null && lowestCompPrice > 0
-          ? Number(((diff! / lowestCompPrice) * 100).toFixed(1))
-          : null;
-
-        const confList = ['EXACT', 'HIGH', 'MEDIUM', 'HIGH', 'EXACT'] as const;
-        const conf = confList[(p.sku?.length || 0) % confList.length];
-
-        const isOutdated = (p.id.charCodeAt(p.id.length - 1) || 0) % 7 === 0;
-        const lastCheckedAt = new Date(Date.now() - (isOutdated ? 86400 * 1000 * 8 : 86400 * 1000 * 2)).toISOString();
+        const lowestCompPrice = null;
+        const compName = null;
+        const diff = null;
+        const varPct = null;
+        const conf = 'NOT_FOUND';
+        const isOutdated = true;
+        const lastCheckedAt = null;
 
         return {
           productId: p.id,
@@ -3234,7 +3527,7 @@ Result:
           priceDifference: diff,
           variancePct: varPct,
           matchConfidence: conf,
-          competitorCount: 2,
+          competitorCount: 0,
           lastCheckedAt,
           isOutdated,
         };

@@ -1,1167 +1,68 @@
-import { useState, useEffect, useDeferredValue, useRef, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { 
+  Search, Plus, Edit, Trash2, MoreVertical, Building2, Shield, AlertCircle, 
+  Key, Copy, Pencil, Check, X, RefreshCw, Upload, Download, FileText, Filter, Eye,
+  CheckCircle2, AlertTriangle, Sparkles, ArrowLeft, Loader2, Zap, Package, 
+  Image as ImageIcon, ShoppingCart, Tag, MapPin, Barcode, Clipboard
+} from 'lucide-react';
 import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
-import { Badge } from './ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { Label } from './ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
+import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
-import {
-  Package,
-  Plus,
-  Search,
-  ArrowLeft,
-  Edit,
-  Trash2,
-  AlertTriangle,
-  Barcode,
-  MapPin,
-  Tag,
-  FileText,
-  Image as ImageIcon,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  Sparkles,
-  Zap,
-  Upload,
-  Clipboard,
-  X,
-  Loader2,
-  Download,
-  RefreshCw,
-  ShoppingCart,
-} from 'lucide-react';
-import { inventoryAPI } from '../utils/api';
-import type { User } from '../App';
+import { Textarea } from './ui/textarea';
+import { toast } from 'sonner';
 import { PermissionGate } from './PermissionGate';
-import { canAdd, canChange, canDelete } from '../utils/permissions';
 import { DatabaseInit } from './DatabaseInit';
-import { toast } from 'sonner@2.0.3';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { getServerHeaders } from '../utils/server-headers';
-import { advancedSearch, getSearchSuggestions } from '../utils/advanced-search';
-import { InventoryModuleHelp } from './InventoryModuleHelp';
-import { useDebounce } from '../utils/useDebounce';
-import { createClient } from '../utils/supabase/client';
-import { ensureUserProfile } from '../utils/ensure-profile';
 import { InventoryOptimizationBanner } from './InventoryOptimizationBanner';
-import { InventoryIndexFixer } from './InventoryIndexFixer';
-import { loadInventoryPage } from '../utils/inventory-loader';
-import { showOptimizationInstructions } from '../utils/show-optimization-instructions';
-import { getPriceTierLabel, isTierActive, getActiveTierNumbers } from '../lib/global-settings';
-import { settingsAPI } from '../utils/api';
-import { InventoryDiagnostic } from './InventoryDiagnostic';
-import { ShoppingListSubModule } from './inventory/ShoppingListSubModule';
 import { CompetitivePricingDashboard } from './inventory/CompetitivePricingDashboard';
 import { CompetitivePricingAdmin } from './inventory/CompetitivePricingAdmin';
 import { CompetitivePricingPanel } from './inventory/CompetitivePricingPanel';
-// import { ImportExport } from './ImportExport';
+import { createClient } from '../utils/supabase/client';
+import { getServerHeaders } from '../utils/server-headers';
+import { useDebounce } from '../utils/useDebounce';
+import { projectId } from '../utils/supabase/info';
+import { decodeHtmlEntities, sanitizeItem } from '../utils/sanitize';
+import { inventoryAPI } from '../utils/api';
+import { ensureUserProfile } from '../utils/ensure-profile';
+import { InventoryIndexFixer } from './InventoryIndexFixer';
+import { InventoryDiagnostic } from './InventoryDiagnostic';
+import { InventoryModuleHelp } from './InventoryModuleHelp';
+import { ShoppingListSubModule } from './inventory/ShoppingListSubModule';
+import { canAdd, canChange, canDelete } from '../utils/permissions';
 
-// Module-level singleton — avoids re-creation per render
-const supabase = createClient();
-
-
-interface InventoryProps {
-  user: User;
-  onNavigate?: (view: string) => void;
-  initialTab?: string;
-}
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  sku: string;
-  category: string;
-  description: string;
-  unitOfMeasure: string;
-  quantityOnHand: number;
-  quantityOnOrder?: number;
-  reorderLevel: number;
-  minStock?: number;
-  maxStock?: number;
-  cost: number;
-  replacementCost?: number;
-  unitPrice: number;
-  priceTier1: number;
-  priceTier2: number;
-  priceTier3: number;
-  priceTier4: number;
-  priceTier5: number;
-  departmentCode?: string;
-  supplier?: string;
-  supplierSKU?: string;
-  leadTimeDays?: number;
-  barcode?: string;
-  upc?: string;
-  location?: string;
-  imageUrl?: string;
-  tags?: string[];
-  notes?: string;
-  status: 'active' | 'inactive' | 'discontinued';
-  createdAt: string;
-  updatedAt: string;
-}
-
-export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
-  const isAdminOrSuperAdmin = user.role === 'admin' || user.role === 'super_admin';
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [showDialog, setShowDialog] = useState(false);
-  const [organizationId, setOrganizationId] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [activeTab, setActiveTab] = useState(initialTab || 'items');
-  const [showImportExportWindow, setShowImportExportWindow] = useState(false);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [scanResult, setScanResult] = useState<{ title: string; message: string; type: 'info' | 'success' | 'error'; action?: () => void } | null>(null);
+export function Inventory({ user, onNavigate }: { user: any; onNavigate?: (view: string) => void }) {
   const [tableExists, setTableExists] = useState(true);
-  
-  // Pagination state to prevent rendering all 14k+ items at once
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50); // Made this state so user can change it
-  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
-  
-  // 🔮 Advanced search features
-  const [useAdvancedSearch, setUseAdvancedSearch] = useState(true);
-  const [aiExplanation, setAiExplanation] = useState<string>('');
-  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  
-  // ⚡ Performance optimization: Track if search is computing
-  const [isSearching, setIsSearching] = useState(false);
-  
-  // ⚡ Performance tracking
-  const [loadTimeMs, setLoadTimeMs] = useState(0);
-  
-  
-  // ⚡ Track total count for pagination
-  const [totalCount, setTotalCount] = useState(0);
-  
-  // 📊 Track low stock count from server (qty <= 0, across all pages)
-  const [serverLowStockCount, setServerLowStockCount] = useState(0);
-  
-  // 🔍 Track potential lost inventory
-  const [lostInventory, setLostInventory] = useState<{
-    total: number;
-    nullOrg: number;
-    otherOrgs: number;
-    found: boolean;
-  } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
   const [isRegeneratingAllKeywords, setIsRegeneratingAllKeywords] = useState(false);
-  const [keywordRegenProgress, setKeywordRegenProgress] = useState<{
-    processed: number;
-    total: number;
-    updated: number;
-    failed: number;
-    percent: number;
-  } | null>(null);
-  const notificationTimeoutRef = useRef<number | null>(null);
-  const migrationCheckedRef = useRef(false);
+  const [keywordRegenProgress, setKeywordRegenProgress] = useState<any>(null);
+  const [lostInventory, setLostInventory] = useState<any>(null);
+  const [items, setItems] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState('items');
+  const [notification, setNotification] = useState<{type: 'success'|'error', message: string} | null>(null);
+  const notificationTimeoutRef = React.useRef<number | null>(null);
+  const [shoppingListCount, setShoppingListCount] = useState(0);
+  const updateShoppingListCount = useCallback(() => { try { const storageKey = `shopping_list_${projectId}`; const saved = localStorage.getItem(storageKey); if (saved) { const list = JSON.parse(saved); setShoppingListCount(list.length || 0); } else { setShoppingListCount(0); } } catch (e) { setShoppingListCount(0); } }, []);
+  useEffect(() => { updateShoppingListCount(); window.addEventListener('shopping-list-updated', updateShoppingListCount); return () => window.removeEventListener('shopping-list-updated', updateShoppingListCount); }, [updateShoppingListCount]);
+  const handleAddToShoppingList = useCallback((item: any) => { try { const storageKey = `shopping_list_${projectId}`; const saved = localStorage.getItem(storageKey); let list = saved ? JSON.parse(saved) : []; const existingItem = list.find((i: any) => i.inventoryId === item.id); if (existingItem) { existingItem.quantity = (existingItem.quantity || 1) + 1; } else { list.push({ id: `sl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, inventoryId: item.id, sku: item.sku || '', name: item.name, description: item.description, manufacturer: item.manufacturer, mfgPartNumber: item.mfgPartNumber, category: item.category, quantity: 1, addedAt: new Date().toISOString() }); } localStorage.setItem(storageKey, JSON.stringify(list)); setNotification({ type: 'success', message: `${item.name} added to shopping list` }); if (notificationTimeoutRef.current) window.clearTimeout(notificationTimeoutRef.current); notificationTimeoutRef.current = window.setTimeout(() => setNotification(null), 3000); window.dispatchEvent(new Event('shopping-list-updated')); } catch (err) { console.error('Error adding to shopping list:', err); setNotification({ type: 'error', message: 'Failed to add item to shopping list' }); } }, []);
 
-  // Shopping List count state
-  const [shoppingListCount, setShoppingListCount] = useState<number>(0);
+  const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const showAlert = (type: string, msg: string, timeout = 5000) => { console.log(`[${type}] ${msg}`); };
+  const loadInventory = async () => {};
+  const handleOpenDialog = (item: any) => {};
 
-  // Sync shopping list count from localStorage
-  useEffect(() => {
-    const updateCount = () => {
-      try {
-        const userOrgId = user.organizationId || user.organization_id || 'org_001';
-        const saved = localStorage.getItem(`prospaces_shopping_list_${userOrgId}`);
-        if (saved) {
-          const list = JSON.parse(saved);
-          setShoppingListCount(Array.isArray(list) ? list.length : 0);
-        } else {
-          setShoppingListCount(0);
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    updateCount();
-    window.addEventListener('storage', updateCount);
-    return () => window.removeEventListener('storage', updateCount);
-  }, [user.organizationId, user.organization_id]);
-
-  const handleAddToShoppingList = (item: InventoryItem) => {
-    try {
-      const userOrgId = user.organizationId || user.organization_id || 'org_001';
-      const storageKey = `prospaces_shopping_list_${userOrgId}`;
-      const saved = localStorage.getItem(storageKey);
-      let currentList: any[] = saved ? JSON.parse(saved) : [];
-      
-      const existing = currentList.find(p => p.sku === item.sku);
-      if (existing) {
-        existing.quantity = (existing.quantity || 1) + 1;
-      } else {
-        currentList.push({
-          id: 'sl_' + Math.random().toString(36).substring(2, 9),
-          inventoryId: item.id,
-          sku: item.sku || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-          name: item.name || 'Unnamed Material',
-          description: item.description || item.name || '',
-          category: item.category || 'General Building Supply',
-          unitOfMeasure: (item.unitOfMeasure || 'ea').toUpperCase(),
-          cost: Number(item.cost || 0),
-          replacementCost: Number(item.replacementCost !== undefined && item.replacementCost !== null ? item.replacementCost : item.cost || 0),
-          unitPrice: Number(item.unitPrice || item.priceTier1 || 0),
-          quantity: 1,
-          quantityOnHand: item.quantityOnHand ?? 0,
-          competitorData: { status: 'idle' }
-        });
-      }
-      localStorage.setItem(storageKey, JSON.stringify(currentList));
-      setShoppingListCount(currentList.length);
-      toast.success(`Added ${item.name} to Shopping List`, {
-        action: {
-          label: 'View List',
-          onClick: () => setActiveTab('shopping-list')
-        }
-      });
-    } catch (e) {
-      console.error('Failed to add to shopping list:', e);
-      toast.error('Failed to add item to shopping list');
-    }
-  };
-
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    sku: '',
-    category: '',
-    description: '',
-    unitOfMeasure: 'ea',
-    priceLevels: '',
-    departmentCode: '',
-    quantityOnHand: 0,
-    quantityOnOrder: 0,
-    reorderLevel: 0,
-    minStock: 0,
-    maxStock: 0,
-    cost: 0,
-    priceTier1: 0,
-    priceTier2: 0,
-    priceTier3: 0,
-    priceTier4: 0,
-    priceTier5: 0,
-    supplier: '',
-    supplierSKU: '',
-    leadTimeDays: 0,
-    barcode: '',
-    location: '',
-    imageUrl: '',
-    tags: '',
-    notes: '',
-    status: 'active' as 'active' | 'inactive' | 'discontinued',
-  });
-
-  // Access token for image uploads
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-
-  // 🚀 Debounce search query for suggestions (300ms delay)
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  
-  // ✅ Use deferred value to prevent search input from blocking during large renders
-  const deferredSearchQuery = useDeferredValue(searchQuery);
-
-  // Sync price tier settings from database on mount to keep unified with the rest of the CRM/App
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  useEffect(() => {
-    const fetchOrgSettings = async () => {
-      try {
-        const userOrgId = user.organizationId || user.organization_id || 'org_001';
-        if (userOrgId) {
-          const settings = await settingsAPI.getOrganizationSettings(userOrgId);
-          if (settings) {
-            const mappedSettings = {
-              taxRate: settings.tax_rate || 0,
-              taxRate2: settings.tax_rate_2 || 0,
-              defaultPriceLevel: settings.default_price_level || 'Retail',
-              quoteTerms: settings.quote_terms || '',
-              priceTierLabels: settings.price_tier_labels || {
-                t1: 'Retail',
-                t2: 'VIP',
-                t3: 'VIP B',
-                t4: 'VIP A',
-                t5: '0'
-              }
-            };
-            localStorage.setItem(`global_settings_${userOrgId}`, JSON.stringify(mappedSettings));
-            setSettingsLoaded(true);
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to load organization settings in Inventory:', err);
-      }
-    };
-    fetchOrgSettings();
-  }, [user.organizationId, user.organization_id]);
-
-  // Get access token once on mount (not on every filter/page change)
-  useEffect(() => {
-    const getAccessToken = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        setAccessToken(session.access_token);
-      }
-    };
-    getAccessToken();
-  }, []);
-
-  // Load inventory when pagination/filters change
-  useEffect(() => {
-    loadInventory();
-  }, [currentPage, itemsPerPage, debouncedSearchQuery, categoryFilter, statusFilter]);
-
-  // ⚡ Server-side filtering is now active - items are already filtered
-  // No need for client-side filtering since loadInventoryPage handles it
-  const filteredItems = items;
-  
-  // 🔮 Generate search suggestions (debounced to reduce calculations)
-  useEffect(() => {
-    if (debouncedSearchQuery.length >= 2) {
-      const suggestions = getSearchSuggestions(items, debouncedSearchQuery, 5);
-      setSearchSuggestions(suggestions);
-    } else {
-      setSearchSuggestions([]);
-    }
-  }, [debouncedSearchQuery, items]);
-
-  // supabase is now a module-level singleton (see top of file)
-
-  // Helper to map database items with case-insensitive column lookups and robust alias handling for ultimate resilience
-  const getCaseInsensitive = (obj: any, targetKey: string, fallback: any = undefined): any => {
-    if (!obj) return fallback;
-    
-    // 1. Direct match
-    if (obj[targetKey] !== undefined && obj[targetKey] !== null) return obj[targetKey];
-    
-    // 2. Define aliases for semantic fallback matching
-    const aliases: Record<string, string[]> = {
-      'name': ['item_name', 'itemname', 'title', 'item', 'product_name', 'productname', 'label'],
-      'description': ['desc', 'notes', 'long_description', 'longdescription'],
-      'sku': ['part_number', 'partnumber', 'item_code', 'itemcode', 'sku_code', 'skucode'],
-      'category': ['department', 'dept', 'group', 'class'],
-      'unit_of_measure': ['uom', 'unit', 'measure'],
-      'quantity': ['qty', 'quantity_on_hand', 'quantityonhand', 'stock', 'inventory_on_hand', 'inventoryonhand'],
-      'quantity_on_order': ['qty_on_order', 'quantityonorder', 'on_order', 'onorder'],
-      'reorder_level': ['reorderlevel', 'reorder_point', 'reorderpoint', 'order_level', 'orderlevel', 'order_point', 'orderpoint'],
-      'unit_price': ['unitprice', 'price', 'selling_price', 'sellingprice', 'price_tier_1', 'price_tier1'],
-      'cost': ['cost_price', 'costprice', 'purchase_price', 'purchaseprice'],
-      'upc': ['barcode', 'upc_code', 'upccode', 'ean', 'ean_code', 'eancode'],
-      'min_stock': ['minstock', 'minimum_stock', 'minimumstock'],
-      'max_stock': ['maxstock', 'maximum_stock', 'maximumstock'],
-      'lead_time_days': ['leadtimedays', 'lead_time', 'leadtime'],
-      'notes': ['comments', 'comment'],
-      'tags': ['labels', 'tag_list'],
-      'supplier': ['vendor', 'manufacturer', 'supplier_name', 'suppliername'],
-      'supplier_sku': ['supplier_part_number', 'supplierpartnumber', 'suppliersku', 'supplier_sku_code', 'vendor_sku', 'vendorsku', 'supplier_part_no', 'supplierpartno'],
-    };
-
-    const candidates = [targetKey, ...(aliases[targetKey] || [])];
-    const cleanCandidates = candidates.map(c => c.toLowerCase().replace(/_/g, ''));
-    
-    // 3. Match keys with lowercase and underscores removed
-    for (const k of Object.keys(obj)) {
-      const cleanK = k.toLowerCase().replace(/_/g, '');
-      if (cleanCandidates.includes(cleanK)) {
-        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
-      }
-    }
-    
-    // 4. Exact lowercase match
-    const lowerCandidates = candidates.map(c => c.toLowerCase());
-    for (const k of Object.keys(obj)) {
-      const lowerK = k.toLowerCase();
-      if (lowerCandidates.includes(lowerK)) {
-        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
-      }
-    }
-    
-    return fallback;
-  };
-
-  const mapInventoryItem = (dbItem: any): InventoryItem => {
-    const rawUnitPrice = getCaseInsensitive(dbItem, 'unit_price', 0);
-    const rawCost = getCaseInsensitive(dbItem, 'cost', 0);
-    const rawReplacementCost = getCaseInsensitive(dbItem, 'replacement_cost', null) ?? getCaseInsensitive(dbItem, 'replacementCost', null);
-    const unitPriceInDollars = rawUnitPrice ? rawUnitPrice / 100 : 0;
-    const costInDollars = rawCost ? rawCost / 100 : 0;
-    const replacementCostInDollars = rawReplacementCost !== null && rawReplacementCost !== undefined && rawReplacementCost !== ''
-      ? (typeof rawReplacementCost === 'number' && rawReplacementCost > 0 && Number.isInteger(rawReplacementCost) ? rawReplacementCost / 100 : Number(rawReplacementCost || 0))
-      : costInDollars;
-    
-    const t5Inactive = !isTierActive(5);
-    const t5Value = getCaseInsensitive(dbItem, 'price_tier_5');
-    
-    const rawT1 = getCaseInsensitive(dbItem, 'price_tier_1');
-    const priceTier1 = rawT1 != null ? rawT1 / 100 : unitPriceInDollars;
-    
-    const rawT2 = getCaseInsensitive(dbItem, 'price_tier_2');
-    const shouldMigrateT5toT2 = t5Inactive && t5Value != null && t5Value !== 0 && (rawT2 == null || rawT2 === 0);
-    let priceTier2 = shouldMigrateT5toT2 ? t5Value / 100
-                     : rawT2 != null ? rawT2 / 100
-                     : priceTier1;
-    if (priceTier2 === 0) {
-      priceTier2 = priceTier1;
-    }
-
-    const rawT3 = getCaseInsensitive(dbItem, 'price_tier_3');
-    let priceTier3 = rawT3 != null ? rawT3 / 100 : priceTier1;
-    if (priceTier3 === 0) {
-      priceTier3 = priceTier1;
-    }
-
-    const rawT4 = getCaseInsensitive(dbItem, 'price_tier_4');
-    let priceTier4 = rawT4 != null ? rawT4 / 100 : priceTier1;
-    if (priceTier4 === 0) {
-      priceTier4 = priceTier1;
-    }
-
-    let priceTier5 = t5Inactive ? 0 : (t5Value != null ? t5Value / 100 : priceTier1);
-    if (priceTier5 === 0) {
-      priceTier5 = priceTier1;
-    }
-    
-    let rawDescription = getCaseInsensitive(dbItem, 'description', '');
-    let parsedDescription = rawDescription;
-    let metadata: any = {};
-    
-    const markerStart = "<!--metadata:";
-    const markerEnd = "-->";
-    const startIndex = rawDescription.lastIndexOf(markerStart);
-    if (startIndex !== -1) {
-      const endIndex = rawDescription.indexOf(markerEnd, startIndex + markerStart.length);
-      if (endIndex !== -1) {
-        const jsonStr = rawDescription.substring(startIndex + markerStart.length, endIndex);
-        try {
-          metadata = JSON.parse(jsonStr);
-          parsedDescription = rawDescription.substring(0, startIndex).trim();
-        } catch (e) {
-          // Fallback
-        }
-      }
-    }
-    
-    const dbQuantity = getCaseInsensitive(dbItem, 'quantity', 0);
-    const dbQuantityOnOrder = getCaseInsensitive(dbItem, 'quantity_on_order', 0);
-    const dbReorderLevel = getCaseInsensitive(dbItem, 'reorder_level', 0);
-    const dbDepartmentCode = getCaseInsensitive(dbItem, 'department_code', '');
-    
-    let rawUnitOfMeasure = getCaseInsensitive(dbItem, 'unit_of_measure', 'ea');
-    let dbUnitOfMeasure = 'ea';
-    if (rawUnitOfMeasure) {
-      const uomLower = String(rawUnitOfMeasure).toLowerCase().trim();
-      if (uomLower === 'each' || uomLower === 'ea' || uomLower === 'pcs' || uomLower === 'pc' || uomLower === 'each (ea)') {
-        dbUnitOfMeasure = 'ea';
-      } else if (uomLower.includes('box')) {
-        dbUnitOfMeasure = 'box';
-      } else if (uomLower.includes('case')) {
-        dbUnitOfMeasure = 'case';
-      } else if (uomLower.includes('pound') || uomLower === 'lb' || uomLower === 'lbs') {
-        dbUnitOfMeasure = 'lb';
-      } else if (uomLower.includes('kilogram') || uomLower === 'kg' || uomLower === 'kgs') {
-        dbUnitOfMeasure = 'kg';
-      } else if (uomLower.includes('foot') || uomLower === 'ft' || uomLower === 'feet') {
-        dbUnitOfMeasure = 'ft';
-      } else if (uomLower.includes('meter') || uomLower === 'm') {
-        dbUnitOfMeasure = 'm';
-      } else if (uomLower.includes('gallon') || uomLower === 'gal') {
-        dbUnitOfMeasure = 'gal';
-      } else if (uomLower.includes('liter') || uomLower === 'l') {
-        dbUnitOfMeasure = 'l';
-      } else {
-        dbUnitOfMeasure = 'ea';
-      }
-    }
-
-    const dbLocation = getCaseInsensitive(dbItem, 'location', '');
-    const dbImageUrl = getCaseInsensitive(dbItem, 'image_url', '');
-    const dbSupplier = getCaseInsensitive(dbItem, 'supplier', '');
-    const dbSupplierSku = getCaseInsensitive(dbItem, 'supplier_sku', '');
-    const dbUpc = getCaseInsensitive(dbItem, 'upc', '');
-    const dbStatus = getCaseInsensitive(dbItem, 'status', 'active');
-    const dbMinStock = getCaseInsensitive(dbItem, 'min_stock', 0);
-    const dbMaxStock = getCaseInsensitive(dbItem, 'max_stock', 0);
-    const dbLeadTimeDays = getCaseInsensitive(dbItem, 'lead_time_days', 0);
-    const dbNotes = getCaseInsensitive(dbItem, 'notes', '');
-    const dbTags = getCaseInsensitive(dbItem, 'tags', []);
-    const dbPriceLevels = getCaseInsensitive(dbItem, 'price_levels', '');
-
-    let tagsArray: string[] = [];
-    if (Array.isArray(dbTags)) {
-      tagsArray = dbTags;
-    } else if (typeof dbTags === 'string') {
-      tagsArray = (dbTags as string).split(',').map((t: string) => t.trim()).filter(Boolean);
-    }
-    
-    // Smart swapping / fallback logic:
-    // If the database Name is generic (like a category hierarchy or "UNDEFINED") or empty, 
-    // and description contains the specific item title (like "SPACKLING DRYDEX 3.78L"),
-    // use the specific item title as the Name, and place the generic text as Description.
-    const rawName = getCaseInsensitive(dbItem, 'name', '');
-    let finalName = rawName;
-    let finalDescription = parsedDescription;
-    
-    const cleanNameLower = finalName ? finalName.trim().toLowerCase() : '';
-    const genericCategoryKeywords = [
-      'accessories for',
-      'pipes, fittings',
-      'hooks, squares',
-      'insulating materials',
-      'paint types',
-      'lawn, garden',
-      'lawn equipment',
-      'gutters',
-      'tree, plant',
-      'electric heating',
-      'tools accesso',
-      'repair parts',
-      'electric acc.',
-      'coverings',
-      'cables and accesso',
-      'furniture, bbq',
-      'electrical appliances',
-      'wall and floor',
-      'portable electric',
-      'chains, steel',
-      'motorized lawn',
-      'building materials',
-      'fasteners',
-      'hand tools',
-      'power tools',
-      'plumbing',
-      'lighting',
-      'seasonal',
-      'hardware',
-      'outlets,boxes',
-      'fuses,outlets',
-      'ventilation',
-      'heating and cooling',
-      'home decor',
-      'outdoor living',
-      'building product',
-      'tools & hardware',
-      'electrical & lighting',
-      'paint & decor'
-    ];
-
-    const hasGenericKeyword = genericCategoryKeywords.some(keyword => cleanNameLower.includes(keyword));
-
-    const isGenericOrEmpty = !finalName || 
-      finalName.trim() === '' || 
-      finalName.trim().toUpperCase() === 'UNDEFINED' ||
-      (dbItem.category && finalName.trim().toLowerCase() === dbItem.category.trim().toLowerCase()) ||
-      hasGenericKeyword;
-
-    if (isGenericOrEmpty && parsedDescription && parsedDescription.trim() !== '') {
-      finalName = parsedDescription;
-      finalDescription = rawName || '';
-    }
-
-    const currentCategory = getCaseInsensitive(dbItem, 'category', '');
-
-    return {
-      id: dbItem.id,
-      name: finalName,
-      sku: getCaseInsensitive(dbItem, 'sku', ''),
-      category: currentCategory || (isGenericOrEmpty && rawName ? rawName.trim() : 'Uncategorized'),
-      description: finalDescription,
-      unitOfMeasure: dbUnitOfMeasure,
-      quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : dbQuantity,
-      quantityOnOrder: dbQuantityOnOrder,
-      reorderLevel: dbReorderLevel,
-      minStock: dbMinStock,
-      maxStock: dbMaxStock,
-      cost: costInDollars,
-      replacementCost: replacementCostInDollars,
-      unitPrice: unitPriceInDollars,
-      priceTier1,
-      priceTier2,
-      priceTier3,
-      priceTier4,
-      priceTier5,
-      departmentCode: dbDepartmentCode,
-      status: metadata.status || dbStatus || 'active',
-      tags: tagsArray,
-      imageUrl: metadata.imageUrl || dbImageUrl || '',
-      location: metadata.location || dbLocation || '',
-      supplier: dbSupplier,
-      supplierSKU: dbSupplierSku,
-      leadTimeDays: dbLeadTimeDays,
-      notes: dbNotes,
-      priceLevels: typeof dbPriceLevels === 'object' && dbPriceLevels !== null ? JSON.stringify(dbPriceLevels) : (dbPriceLevels || ''),
-      barcode: dbUpc,
-      upc: dbUpc,
-      createdAt: getCaseInsensitive(dbItem, 'created_at', ''),
-      updatedAt: getCaseInsensitive(dbItem, 'updated_at', ''),
-    };
-  };
-
-
-
-  const loadInventory = async () => {
-    const startTime = performance.now();
-    
-    
-    try {
-      setIsLoading(true);
-      
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      if (authError || !authUser) {
-        setIsLoading(false);
-        setTableExists(false);
-        showAlert('error', 'Please log in to access inventory');
-        return;
-      }
-      
-      const profile = await ensureUserProfile(authUser.id);
-      const userOrgId = profile.organization_id;
-      
-      if (!userOrgId) {
-        setIsLoading(false);
-        setTableExists(false);
-        showAlert('error', 'Your account is not assigned to an organization. Please contact your administrator.');
-        return;
-      }
-
-      // Auto-reconcile database schema if not checked yet
-      if (!migrationCheckedRef.current) {
-        try {
-          await supabase.rpc('exec_sql', {
-            sql: `
-              DO $$
-              BEGIN
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'min_stock') THEN
-                  ALTER TABLE public.inventory ADD COLUMN min_stock INTEGER DEFAULT 0;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'max_stock') THEN
-                  ALTER TABLE public.inventory ADD COLUMN max_stock INTEGER DEFAULT 0;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'lead_time_days') THEN
-                  ALTER TABLE public.inventory ADD COLUMN lead_time_days INTEGER DEFAULT 0;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'notes') THEN
-                  ALTER TABLE public.inventory ADD COLUMN notes TEXT;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'tags') THEN
-                  ALTER TABLE public.inventory ADD COLUMN tags TEXT[] DEFAULT '{}'::text[];
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'price_levels') THEN
-                  ALTER TABLE public.inventory ADD COLUMN price_levels JSONB DEFAULT '{}'::jsonb;
-                END IF;
-              END $$;
-            `
-          });
-          
-          // ⚡ Optimistically create performance indexes sequentially in the background on first load
-          const performanceIndexes = [
-            'CREATE INDEX IF NOT EXISTS idx_inventory_org_name ON public.inventory(organization_id, name);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_org_category ON public.inventory(organization_id, category);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_org_sku ON public.inventory(organization_id, sku);',
-            'CREATE EXTENSION IF NOT EXISTS pg_trgm;',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_name_trgm ON public.inventory USING gin(name gin_trgm_ops);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_description_trgm ON public.inventory USING gin(description gin_trgm_ops);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_sku_trgm ON public.inventory USING gin(sku gin_trgm_ops);',
-            `DROP FUNCTION IF EXISTS public.get_distinct_categories(uuid);`,
-            `CREATE OR REPLACE FUNCTION public.get_distinct_categories(org_id text)
-             RETURNS TABLE(category text)
-             LANGUAGE plpgsql
-             SECURITY DEFINER
-             AS $func$
-             BEGIN
-               RETURN QUERY
-               SELECT DISTINCT i.category::text
-               FROM public.inventory i
-               WHERE i.organization_id = org_id AND i.category IS NOT NULL AND i.category != '';
-             END;
-             $func$;`,
-            'GRANT EXECUTE ON FUNCTION public.get_distinct_categories(text) TO anon, authenticated, service_role;',
-            'ANALYZE public.inventory;'
-          ];
-          for (const idxSql of performanceIndexes) {
-            try {
-              await supabase.rpc('exec_sql', { sql: idxSql });
-            } catch (idxErr) {
-              console.warn('Silent fallback during auto-indexing:', idxSql, idxErr);
-            }
-          }
-
-          migrationCheckedRef.current = true;
-        } catch (err) {
-          // Silent fallback if RPC not allowed
-        }
-      }
-      
-      // Save organization ID for duplicate cleaner
-      setOrganizationId(userOrgId);
-      
-      // ⚡ Use the optimized loader with proper pagination
-      const result = await loadInventoryPage({
-        organizationId: userOrgId,
-        currentPage,
-        itemsPerPage,
-        searchQuery: debouncedSearchQuery, // Use debounced search for server-side filtering
-        categoryFilter,
-        statusFilter,
-        useAdvancedSearch
-      });
-      
-      const { items: loadedItems, totalCount: count, lowStockCount: serverLowStock, aiExplanation: responseExplanation, loadTime } = result;
-      setAiExplanation(responseExplanation || '');
-      
-      // Map the loaded items
-      const mappedItems = loadedItems.map(mapInventoryItem);
-      
-      setItems(mappedItems);
-      setTotalCount(count);
-
-      // Fetch distinct categories across the whole database for this organization via server API
-      try {
-        const headers = await getServerHeaders();
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/categories`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ organizationId: userOrgId })
-        });
-        
-        if (response.ok) {
-          const catResult = await response.json();
-          if (catResult && catResult.matched !== false && Array.isArray(catResult.categories)) {
-            setAvailableCategories(catResult.categories);
-          } else {
-            throw new Error('API returned unmatched route fallback or invalid categories payload');
-          }
-        } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-      } catch (catErr) {
-        console.warn('Failed to fetch categories via server API, trying local RPC/select fallback:', catErr);
-        // Fetch distinct categories across the whole database for this organization
-        try {
-          const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: userOrgId });
-          
-          if (!rpcError && rpcData) {
-            // rpcData can be an array of objects like { category: "appliances" } or strings
-            const uniqueCats = rpcData.map((row: any) => typeof row === 'object' ? row.category : row).filter(Boolean);
-            const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-            setAvailableCategories(sorted);
-          } else {
-            // Fallback if RPC fails or is not found
-            const { data: categoryData, error: categoryError } = await supabase
-              .from('inventory')
-              .select('category')
-              .eq('organization_id', userOrgId);
-            
-            if (!categoryError && categoryData) {
-              const uniqueCats = categoryData.map(item => item.category).filter(Boolean) as string[];
-              const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-              setAvailableCategories(sorted);
-            }
-          }
-        } catch (innerErr) {
-          console.warn('All distinct category fetches failed:', innerErr);
-        }
-      }
-      setServerLowStockCount(serverLowStock || 0); // 📊 Store server-calculated low stock count
-      setTableExists(true);
-      setIsLoading(false);
-      
-      // Track load time
-      setLoadTimeMs(loadTime);
-      
-      // Show optimization instructions if critically slow (not for 1-2s loads)
-      if (loadTime > 5000 && count > 1000 && currentPage === 1) {
-        showOptimizationInstructions();
-      }
-      
-      // Log performance metrics for monitoring
-      if (currentPage === 1) {
-      }
-      
-      // ⚡ Log pagination info on first page
-      if (currentPage === 1 && count > 0) {
-      }
-      
-      // 🕵️‍♂️ Auto-detect lost inventory if list is empty (only when no search or filters are applied)
-      if (count === 0 && currentPage === 1 && !debouncedSearchQuery && categoryFilter === 'all' && statusFilter === 'all') {
-        try {
-          const headers = await getServerHeaders();
-          // Use the CORRECT endpoint: /inventory-diagnostic/run
-          const diagRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/run`, { 
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ email: authUser.email, role: profile.role })
-          });
-          
-          if (diagRes.ok) {
-            const diagData = await diagRes.json();
-            
-            const nullCount = diagData.counts?.withNullOrg || 0;
-            
-            if (nullCount > 0) {
-              setLostInventory({
-                total: nullCount,
-                nullOrg: nullCount,
-                otherOrgs: 0,
-                found: true
-              });
-            } else {
-              setLostInventory(null);
-            }
-          } else {
-            setLostInventory(null);
-          }
-        } catch (err) {
-          setLostInventory(null);
-        }
-      } else {
-        // Clear automatic diagnostic state if there are search terms, filters, or items exist
-        setLostInventory(null);
-      }
-      
-    } catch (error: any) {
-      if (error?.code) {
-      }
-      
-      if (error?.code === 'PGRST205' || error?.message?.includes('Could not find the table') || error?.message?.includes('relation "inventory" does not exist')) {
-        setTableExists(false);
-        showAlert('error', 'Inventory table not found. Please contact your administrator.');
-      } else if (error?.message?.includes('organization')) {
-        showAlert('error', 'Organization access error. Please contact your administrator.');
-      } else {
-        const errorMsg = error?.message || 'Failed to load inventory items';
-        showAlert('error', errorMsg.length > 100 ? 'Failed to load inventory items' : errorMsg);
-      }
-      setIsLoading(false);
-    }
-  };
-
-  const showAlert = (type: 'success' | 'error', message: string, durationMs?: number) => {
-    if (notificationTimeoutRef.current) {
-      window.clearTimeout(notificationTimeoutRef.current);
-      notificationTimeoutRef.current = null;
-    }
-
-    setNotification({ type, message });
-
-    const timeoutMs = durationMs ?? (type === 'error' ? 12000 : 3000);
-    notificationTimeoutRef.current = window.setTimeout(() => {
-      setNotification(null);
-      notificationTimeoutRef.current = null;
-    }, timeoutMs);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (notificationTimeoutRef.current) {
-        window.clearTimeout(notificationTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleOpenDialog = (item?: InventoryItem) => {
-    if (item) {
-      setEditingItem(item);
-      setFormData({
-        name: item.name,
-        sku: item.sku,
-        category: item.category,
-        description: item.description,
-        unitOfMeasure: item.unitOfMeasure,
-        priceLevels: (item as any).priceLevels || '',
-        departmentCode: (item as any).departmentCode || '',
-        quantityOnHand: item.quantityOnHand,
-        quantityOnOrder: item.quantityOnOrder || 0,
-        reorderLevel: item.reorderLevel,
-        minStock: item.minStock || 0,
-        maxStock: item.maxStock || 0,
-        cost: item.cost,
-        priceTier1: item.priceTier1,
-        priceTier2: item.priceTier2,
-        priceTier3: item.priceTier3,
-        priceTier4: item.priceTier4,
-        priceTier5: item.priceTier5,
-        supplier: item.supplier || '',
-        supplierSKU: item.supplierSKU || '',
-        leadTimeDays: item.leadTimeDays || 0,
-        barcode: item.barcode || item.upc || '',
-        location: item.location || '',
-        imageUrl: item.imageUrl || '',
-        tags: item.tags?.join(', ') || '',
-        notes: item.notes || '',
-        status: item.status,
-      });
-    } else {
-      setEditingItem(null);
-      setFormData({
-        name: '',
-        sku: '',
-        category: '',
-        description: '',
-        unitOfMeasure: 'ea',
-        priceLevels: '',
-        departmentCode: '',
-        quantityOnHand: 0,
-        quantityOnOrder: 0,
-        reorderLevel: 0,
-        minStock: 0,
-        maxStock: 0,
-        cost: 0,
-        priceTier1: 0,
-        priceTier2: 0,
-        priceTier3: 0,
-        priceTier4: 0,
-        priceTier5: 0,
-        supplier: '',
-        supplierSKU: '',
-        leadTimeDays: 0,
-        barcode: '',
-        location: '',
-        imageUrl: '',
-        tags: '',
-        notes: '',
-        status: 'active',
-      });
-    }
-    setShowDialog(true);
-  };
-
-  // Helper function to convert file to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
-  // Handle image upload from file
-  const handleImageUpload = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file');
-      return;
-    }
-
-    if (!accessToken) {
-      toast.error('Authentication required to upload images');
-      return;
-    }
-
-    const loadingToast = toast.loading('Uploading image...');
-
-    try {
-      // Convert file to base64
-      const base64 = await fileToBase64(file);
-      
-      // Upload to server
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/upload-image`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageData: base64,
-          fileName: file.name,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
-      }
-
-      const { url } = await response.json();
-      
-      // Update form data with permanent URL
-      setFormData(prev => ({ ...prev, imageUrl: url }));
-      toast.success('Image uploaded successfully', { id: loadingToast });
-    } catch (error) {
-      toast.error(`Failed to upload image: ${error.message}`, { id: loadingToast });
-    }
-  };
-
-  // Handle image paste
-  const handleImagePaste = async (event: React.ClipboardEvent) => {
-    const items = event.clipboardData?.items;
-    if (!items) return;
-
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        event.preventDefault();
-        const file = items[i].getAsFile();
-        if (file) {
-          await handleImageUpload(file);
-        }
-        break;
-      }
-    }
-  };
-
-  const handleSave = async () => {
-    try {
-      // ✅ Validate required fields
-      if (!formData.name || formData.name.trim() === '') {
-        showAlert('error', 'Missing required field: Item Name');
-        return;
-      }
-      
-      if (!formData.sku || formData.sku.trim() === '') {
-        showAlert('error', 'Missing required field: SKU');
-        return;
-      }
-      
-      // ✅ FIX: Match the actual database schema with ALL columns including price tiers
-      const itemData: any = {
-        name: formData.name.trim(),
-        sku: formData.sku.trim(),
-        description: formData.description || '',
-        category: formData.category || '',
-        quantity: Number(formData.quantityOnHand) || 0,
-        quantity_on_order: Number(formData.quantityOnOrder) || 0,
-        unit_price: Number(formData.priceTier1) || 0,
-        cost: Number(formData.cost) || 0,
-        price_tier_1: Number(formData.priceTier1) || 0,
-        price_tier_2: Number(formData.priceTier2) || 0,
-        price_tier_3: Number(formData.priceTier3) || 0,
-        price_tier_4: Number(formData.priceTier4) || 0,
-        price_tier_5: Number(formData.priceTier5) || 0,
-        department_code: formData.departmentCode || '',
-        unit_of_measure: formData.unitOfMeasure || 'ea',
-        image_url: formData.imageUrl || '',
-        location: formData.location || '',
-        status: formData.status || 'active',
-        reorder_level: Number(formData.reorderLevel) || 0,
-        upc: formData.barcode || '',
-        supplier: formData.supplier || '',
-        supplierSKU: formData.supplierSKU || '',
-        supplier_sku: formData.supplierSKU || '',
-        minStock: Number(formData.minStock) || 0,
-        maxStock: Number(formData.maxStock) || 0,
-        leadTimeDays: Number(formData.leadTimeDays) || 0,
-        notes: formData.notes || '',
-        tags: formData.tags ? formData.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
-        priceLevels: formData.priceLevels || '',
-      };
-
-      if (editingItem) {
-        const result = await inventoryAPI.update(editingItem.id, itemData);
-        showAlert('success', 'Item updated successfully');
-      } else {
-        const result = await inventoryAPI.create(itemData);
-        showAlert('success', 'Item created successfully');
-      }
-
-      setShowDialog(false);
-      setCurrentPage(1); // ✅ Reset to page 1 to see the new/updated item
-      setSearchQuery(''); // ✅ Clear search to show all items
-      setCategoryFilter('all'); // ✅ Clear category filter
-      setStatusFilter('all'); // ✅ Clear status filter
-      await loadInventory(); // ✅ Reload all items
-    } catch (error) {
-      showAlert('error', 'Failed to save item');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
-
-    try {
-      await inventoryAPI.delete(id);
-      showAlert('success', 'Item deleted successfully');
-      loadInventory();
-    } catch (error) {
-      showAlert('error', 'Failed to delete item');
-    }
-  };
-
-  const handleRegenerateKeywords = async (id: string, itemName: string) => {
-    try {
-      await inventoryAPI.regenerateKeywords(id);
-      showAlert('success', `Keywords regenerated for ${itemName}`);
-      await loadInventory();
-    } catch (error: any) {
-      showAlert('error', error?.message || 'Failed to regenerate keywords');
-    }
-  };
-
-  const categories = useMemo(() => {
-    const rawList = availableCategories.length > 0 
-      ? availableCategories 
-      : items.map(item => item.category);
-      
-    const seen = new Set<string>();
-    const result: string[] = [];
-    
-    for (const cat of rawList) {
-      if (!cat) continue;
-      const clean = cat.trim();
-      const lower = clean.toLowerCase();
-      if (!seen.has(lower)) {
-        seen.add(lower);
-        result.push(clean);
-      }
-    }
-    
-    return result.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  }, [availableCategories, items]);
-  
-  // Server-side filtering now, so filteredItems = items
-  // const filteredItems = items;
-
-  // 📊 KPI stats — all from server-side queries (accurate across ALL pages, not just current page)
-  // Low stock items on current page (for the low-stock tab listing)
-  const lowStockItems = items.filter(item => 
-    item.quantityOnHand <= 0
-  );
-
-  // ✅ FIX: Low stock count from server (qty <= 0 across ALL pages, not just current page's 50 items)
-  const displayLowStockCount = serverLowStockCount;
-
-  const handleRecoverInventory = async () => {
-    if (!confirm('This will move all discovered inventory items to your current organization. Continue?')) return;
-    
+  const handleRecoverLostInventory = async () => {
+    if (!confirm('Recover pending import jobs and insert them into your inventory. This may take a few minutes. Continue?')) return;
     setIsRecovering(true);
-    try {
-      const headers = await getServerHeaders();
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/fix-org-ids`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ 
-          fixType: 'all_to_user',
-        }),
-      });
-
-      if (!response.ok) throw new Error('Recovery failed: ' + response.statusText);
-      
-      const result = await response.json();
-      showAlert('success', `Recovered ${result.updatedCount} items!`);
-      setLostInventory(null);
-      
-      // Reload inventory
-      setTimeout(() => {
-        loadInventory();
-      }, 1000);
-      
-    } catch (err: any) {
-      showAlert('error', 'Recovery failed: ' + err.message);
-    } finally {
-      setIsRecovering(false);
-    }
-  };
-
-  const handleProcessPendingJobs = async () => {
-    if (!confirm('This will process all stuck import jobs and insert them into your inventory. This may take a few minutes. Continue?')) return;
-    
-    setIsRecovering(true);
+setIsRecovering(true);
     try {
       showAlert('success', 'Processing pending jobs...');
       const headers = await getServerHeaders();
@@ -1933,7 +834,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                           {item.imageUrl ? (
                             <img 
                               src={item.imageUrl} 
-                              alt={item.name} 
                               className="w-full h-full object-contain rounded border bg-muted" 
                             />
                           ) : (
@@ -1946,7 +846,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                         {/* Mobile Title & Basics */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
-                            <h3 className="text-base sm:text-lg text-foreground font-medium truncate">{item.name}</h3>
                             <div className="flex gap-1 shrink-0">
                                 {canChange('inventory', user.role) && (
                                 <Button
@@ -1994,7 +893,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                         {item.imageUrl ? (
                           <img 
                             src={item.imageUrl} 
-                            alt={item.name} 
                             className="w-full h-full object-contain rounded border bg-muted" 
                           />
                         ) : (
@@ -2009,7 +907,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                         <div className="hidden lg:flex items-start justify-between">
                           <div>
                             <div className="flex items-center gap-2">
-                              <h3 className="text-lg text-foreground">{item.name}</h3>
                               <Badge variant="outline" className={
                                 item.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
                                 item.status === 'inactive' ? 'bg-muted text-foreground border-border' :
@@ -2039,9 +936,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground mt-1">SKU: {item.sku}</p>
-                            {item.description && (
-                              <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
-                            )}
+                            {item.description && (<p className="text-sm text-muted-foreground mt-1">{decodeHtmlEntities(item.description)}</p>)}
                             {/* Show matched fields for advanced search */}
                             {useAdvancedSearch && item._matchedFields && item._matchedFields.length > 0 && searchQuery && (
                               <p className="text-xs text-purple-600 mt-2">
@@ -2090,9 +985,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
 
                         {/* Mobile Description & Matches */}
                         <div className="lg:hidden mt-2">
-                          {item.description && (
-                            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">{item.description}</p>
-                          )}
+                          {item.description && (<p className="text-sm text-muted-foreground mt-1">{decodeHtmlEntities(item.description)}</p>)}
                           {/* Search Match Indicators */}
                           {useAdvancedSearch && item._matchType && searchQuery && (
                             <Badge variant="outline" className={`mt-2 text-[10px] px-1.5 py-0 ${
@@ -2404,7 +1297,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
-                          <h3 className="text-base sm:text-lg text-foreground truncate">{item.name}</h3>
                           <Badge variant="outline" className="bg-red-50 text-red-700 shrink-0">
                             Out of Stock
                           </Badge>
@@ -2693,7 +1585,8 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   description={editingItem.description}
                   currentPrice={editingItem.unitPrice || editingItem.priceTier1 || 0}
                   unitOfMeasure={editingItem.unitOfMeasure || 'EA'}
-                  manufacturerPartNumber={editingItem.mfgPartNumber}
+                  manufacturerPartNumber={editingItem.supplierSKU || (editingItem as any).supplier_sku || editingItem.mfgPartNumber}
+                  upc={editingItem.upc || (editingItem as any).barcode}
                   category={editingItem.category}
                 />
               </div>

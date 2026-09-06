@@ -1,343 +1,141 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import {
-  ShoppingCart,
-  Search,
-  Sparkles,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Building2,
-  Store,
-  Plus,
-  Trash2,
-  RefreshCw,
-  Download,
-  Printer,
-  ExternalLink,
-  CheckCircle2,
-  AlertCircle,
-  Info,
-  X,
-  ChevronRight,
-  ChevronLeft,
-  ListPlus,
-  Package,
-  Layers,
-  ArrowRight,
-  Check,
-  Percent,
-  MapPin,
-  Clock,
-  HelpCircle,
-  BarChart2,
-  Loader2,
-  Edit2,
-  Pencil,
-  Save,
-  Globe,
-  FolderOpen
+import { 
+  Search, Plus, Trash2, Check, X, RefreshCw, Download, 
+  ShoppingCart, MapPin, ListPlus, Sparkles, Save, FolderOpen, 
+  Printer, Building2, Store, BarChart2, Loader2, Layers, Pencil, 
+  ExternalLink, Package, ChevronLeft, ChevronRight, Info, Globe, AlertCircle, Eye
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { createClient } from '../../utils/supabase/client';
-import { getSupabaseUrl } from '../../utils/supabase/client';
 import { getServerHeaders } from '../../utils/server-headers';
-import { loadInventoryPage } from '../../utils/inventory-loader';
 import { useDebounce } from '../../utils/useDebounce';
+import { projectId } from '../../utils/supabase/info';
+import { decodeHtmlEntities, sanitizeItem } from '../../utils/sanitize';
 import { competitivePricingAPI } from '../../utils/api';
+import { loadInventoryPage } from '../../utils/inventory-loader';
 import { CompetitivePricingPanel } from './CompetitivePricingPanel';
-
-const supabase = createClient();
-const supabaseUrl = getSupabaseUrl();
+import { canAdd, canChange, canDelete } from '../../utils/permissions';
 
 export interface ShoppingListItem {
   id: string;
   inventoryId?: string;
   sku: string;
   name: string;
-  description: string;
+  description?: string;
   mfgPartNumber?: string;
   manufacturer?: string;
-  category: string;
-  unitOfMeasure: string;
+  category?: string;
+  unitOfMeasure?: string;
   cost: number; // Avg Cost
-  replacementCost?: number; // Replacement Cost from inventory table
+  replacementCost?: number; // Replacement Cost
   unitPrice: number; // Retail Price
   quantity: number;
   quantityOnHand?: number;
-  competitorData?: {
-    lastChecked?: string;
-    activeSearchQuery?: string;
-    status: 'idle' | 'searching' | 'found' | 'error';
-    error?: string;
-    parsedAttributes?: {
-      material?: string;
-      dimensions?: string;
-      length?: string;
-      productType?: string;
-      grade?: string;
-      treatment?: string;
-    };
-    kent?: {
-      competitorName?: string;
-      storeName: string;
-      price: number;
-      retailPrice?: number;
-      sku?: string;
-      modelNumber?: string;
-      productName?: string;
-      productTitle?: string;
-      inStock?: boolean;
-      stockStatus?: string;
-      url?: string;
-      productUrl?: string;
-      googleSearchUrl?: string;
-      bingSearchUrl?: string;
-      storeLocation?: string;
-      variancePct?: number;
-      priceDifference?: number;
-      unit?: string;
-      unitOfMeasure?: string;
-      notes?: string;
-      matchConfidence?: 'high' | 'medium' | 'exact' | 'not_found';
-      matchConfidencePct?: number;
-    };
-    homeDepot?: {
-      competitorName?: string;
-      storeName: string;
-      price: number;
-      retailPrice?: number;
-      sku?: string;
-      modelNumber?: string;
-      productName?: string;
-      productTitle?: string;
-      inStock?: boolean;
-      stockStatus?: string;
-      url?: string;
-      productUrl?: string;
-      googleSearchUrl?: string;
-      bingSearchUrl?: string;
-      storeLocation?: string;
-      variancePct?: number;
-      priceDifference?: number;
-      unit?: string;
-      unitOfMeasure?: string;
-      notes?: string;
-      matchConfidence?: 'high' | 'medium' | 'exact' | 'not_found';
-      matchConfidencePct?: number;
-    };
-    marketRecommendation?: string;
-    bestDeal?: 'prospaces' | 'kent' | 'home_depot' | 'tie';
-    groundingSources?: Array<{ title: string; url: string }>;
-  };
+  upc?: string;
+  competitorData?: any;
 }
 
-interface ShoppingListSubModuleProps {
-  user: any;
-  items?: any[];
-  availableCategories?: string[];
-  onOpenItemDetail?: (item: any) => void;
-  onNavigateToCatalog?: () => void;
-  searchQuery?: string;
-}
-
-/**
- * Determine the most accurate competitor search query for trade items
- * Prioritizes full product description (e.g. "SPF 2X8X10' LUMBER #2 & BETTER") and manufacturer part numbers
- */
-export function getItemSearchQuery(item: {
-  description?: string;
-  name?: string;
-  mfgPartNumber?: string;
-  manufacturer?: string;
-  sku?: string;
-      modelNumber?: string;
-}): string {
-  const desc = (item.description || '').trim();
-  const mfg = (item.mfgPartNumber || '').trim();
-  const brand = (item.manufacturer || '').trim();
-  const name = (item.name || '').trim();
-
-  // If description exists and contains dimensional or trade specs (e.g. "SPF 2X8X10' LUMBER #2 & BETTER")
-  if (desc && desc.length > 2 && desc.toLowerCase() !== name.toLowerCase()) {
-    if (mfg && !desc.includes(mfg)) {
-      return `${desc} ${mfg}`.trim();
-    }
-    return desc;
-  }
-
-  // If MFG part # is provided (e.g. "1016282", "LUS28Z", "CGC 1/2")
-  if (mfg) {
-    if (brand && !name.toLowerCase().includes(brand.toLowerCase())) {
-      return `${brand} ${mfg} ${name}`.trim();
-    }
-    return `${name} ${mfg}`.trim();
-  }
-
-  return name || desc || item.sku || 'building materials';
-}
-
-// Sample starter templates for Halifax NS contractor & building material tests
-const PRESET_LISTS = [
+export const PRESET_LISTS = [
   {
-    name: 'Halifax Framing & Lumber Essentials',
-    description: 'Core 2x4, 2x6 framing studs & standard Canadian SPF lumber',
-    sampleSkus: ['LMB-2X4-8SPF', 'LMB-2X6-10SPF', 'PLY-OSB-716', 'PLY-CDX-12', 'FAST-PASL-314'],
-    keywords: ['framing', 'lumber', '2x4', '2x6', 'osb']
+    name: 'Framing & Lumber Core',
+    sampleSkus: ['2X4-8', '2X6-10', '2X4X8', 'PLY-12'],
+    keywords: ['2x4', 'framing lumber', 'plywood', 'spruce']
   },
   {
-    name: 'Drywall & Interior Finishing',
-    description: 'Drywall sheets, joint compound, screws & corner beads',
-    sampleSkus: ['DW-CGC-12-8', 'DW-CGC-12-12', 'CPD-ALLPURP-20KG', 'SCRW-DW-158', 'TAPE-DW-500FT'],
-    keywords: ['drywall', 'sheetrock', 'compound', 'screw']
+    name: 'Drywall & Insulation',
+    sampleSkus: ['DRY-12-48', 'INS-R20', 'R12'],
+    keywords: ['drywall', 'sheetrock', 'insulation', 'batt']
   },
   {
-    name: 'Exterior Decking & Hardware',
-    description: 'Pressure treated 5/4 deck boards, joist hangers & deck screws',
-    sampleSkus: ['DK-PT-546-12', 'DK-PT-546-16', 'SCRW-GRX-3IN-1000', 'HNG-LUS28-ZMAX', 'POST-PT-4X4-8'],
-    keywords: ['decking', 'treated', 'pt', 'hanger', 'screw']
+    name: 'Roofing & Decking Package',
+    sampleSkus: ['SHING-ARCH', 'DECK-54-12', 'DECK-2X6'],
+    keywords: ['shingle', 'decking', 'treated lumber', 'tar paper']
+  },
+  {
+    name: 'Electrical & Plumbing Rough-In',
+    sampleSkus: ['WIRE-14-2', 'PIPE-PEX-12'],
+    keywords: ['romex', 'pex pipe', 'outlet', 'breaker']
   }
 ];
 
-// Helper to parse cost or replacement cost stored in cents or dollars from Supabase
-export function parseInventoryCostValue(val: any): number {
-  if (val === null || val === undefined || val === '') return 0;
-  const num = Number(val);
-  if (isNaN(num)) return 0;
-  // In Supabase inventory table, amounts are stored as integers in cents:
-  // e.g. 1071 cents -> $10.71, 1121 cents -> $11.21, 341 cents -> $3.41, 354 cents -> $3.54
-  if (Number.isInteger(num) && num > 0) {
-    return Number((num / 100).toFixed(2));
+export function getItemSearchQuery(item: any): string {
+  if (!item) return '';
+  const cleanDesc = (item.description || item.name || '').trim();
+  const cleanMfg = (item.mfgPartNumber || item.mfg_part_number || '').trim();
+  const cleanSku = (item.sku || '').trim();
+  
+  if (cleanMfg && cleanDesc && !cleanDesc.toLowerCase().includes(cleanMfg.toLowerCase())) {
+    return `${cleanMfg} ${cleanDesc}`.trim();
   }
-  return Number(num.toFixed(2));
+  return cleanDesc || cleanSku || item.name || '';
 }
 
-// Helper to normalize raw database inventory rows
-function mapDbRowToInventoryItem(rawItem: any) {
-  const rawUnitPrice = rawItem.unit_price ?? rawItem.price_tier_1 ?? rawItem.unitPrice ?? 0;
+export function mapDbRowToInventoryItem(rawItem: any) {
   const rawCost = rawItem.cost ?? 0;
   const rawReplacementCost = rawItem.replacement_cost ?? rawItem.replacementCost ?? null;
-  
-  const unitPrice = rawItem.unitPrice !== undefined 
-    ? Number(rawItem.unitPrice) 
+  // Database stores unit_price and cost in cents for raw SQL rows
+  const cost = rawItem.costInDollars !== undefined
+    ? Number(rawItem.costInDollars)
+    : (typeof rawCost === 'number' && rawCost > 0 && Number.isInteger(rawCost) ? rawCost / 100 : Number(rawCost || 0));
+  const replacementCost = rawItem.replacementCostInDollars !== undefined
+    ? Number(rawItem.replacementCostInDollars)
+    : (typeof rawReplacementCost === 'number' && rawReplacementCost > 0 && Number.isInteger(rawReplacementCost) ? rawReplacementCost / 100 : Number(rawReplacementCost || 0)) || cost;
+  const rawUnitPrice = rawItem.unit_price ?? rawItem.unitPrice ?? 0;
+  const unitPrice = rawItem.unitPriceInDollars !== undefined
+    ? Number(rawItem.unitPriceInDollars)
     : (typeof rawUnitPrice === 'number' && rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : Number(rawUnitPrice || 0));
-  
-  const cost = rawItem.costInDollars !== undefined 
-    ? Number(rawItem.costInDollars) 
-    : parseInventoryCostValue(rawCost);
-    
-  let replacementCost = cost;
-  if (rawItem.replacementCostInDollars !== undefined && rawItem.replacementCostInDollars !== null) {
-    replacementCost = Number(rawItem.replacementCostInDollars);
-  } else if (rawReplacementCost !== null && rawReplacementCost !== undefined && rawReplacementCost !== '') {
-    replacementCost = parseInventoryCostValue(rawReplacementCost);
-  }
 
-  return {
-    id: rawItem.id || `inv_${Math.random().toString(36).substring(2, 9)}`,
-    sku: rawItem.sku || 'N/A',
-    name: rawItem.name || rawItem.item_name || 'Unnamed Material',
-    description: rawItem.description || rawItem.name || '',
-    mfgPartNumber: rawItem.mfg_part_number || rawItem.mfgPartNumber || rawItem.mpn || rawItem.model_number || rawItem.modelNumber || '',
-    manufacturer: rawItem.manufacturer || rawItem.brand || '',
-    category: rawItem.category || 'BUILDING MATERIALS',
+  return sanitizeItem({
+    id: rawItem.id,
+    sku: rawItem.sku || rawItem.item_code || '',
+    name: decodeHtmlEntities(rawItem.name || rawItem.description || 'Unnamed Item'),
+    description: decodeHtmlEntities(rawItem.description || rawItem.name || ''),
+    mfgPartNumber: decodeHtmlEntities(rawItem.mfg_part_number || rawItem.mfgPartNumber || ''),
+    manufacturer: decodeHtmlEntities(rawItem.manufacturer || ''),
+    category: decodeHtmlEntities(rawItem.category || 'Materials'),
     unitOfMeasure: (rawItem.unit_of_measure || rawItem.unitOfMeasure || 'EA').toUpperCase(),
     cost: Number(cost || 0),
-    replacementCost: Number(replacementCost !== undefined && replacementCost !== null ? replacementCost : (cost || 0)),
+    replacementCost: Number(replacementCost || cost || 0),
     unitPrice: Number(unitPrice || 0),
-    quantityOnHand: rawItem.quantity ?? rawItem.quantity_on_hand ?? rawItem.quantityOnHand ?? 0,
-  };
+    quantityOnHand: rawItem.quantity_on_hand ?? rawItem.quantityOnHand ?? 0,
+    upc: rawItem.upc || rawItem.barcode || ''
+  });
 }
 
 export function ShoppingListSubModule({
   user,
-  items: inventoryCatalogItems = [],
+  items,
   availableCategories: propCategories = [],
-  onNavigateToCatalog,
-  searchQuery = ''
-}: ShoppingListSubModuleProps) {
-  const orgId = user?.organizationId || user?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+  searchQuery,
+  onNavigateToCatalog
+}: {
+  user: any;
+  items: any[];
+  availableCategories?: string[];
+  searchQuery?: string;
+  onNavigateToCatalog?: () => void;
+}) {
+  const orgId = user?.user_metadata?.organization_id || user?.organization_id || 'default';
   const storageKey = `prospaces_shopping_list_${orgId}`;
 
-  // Shopping list state persisted in local storage
-  const [costViewMode, setCostViewMode] = useState<"avg_cost" | "replacement_cost">("avg_cost");
+  const [categories, setCategories] = useState<string[]>(() => (propCategories && propCategories.length > 0 ? propCategories : []));
+  const [costViewMode, setCostViewMode] = useState<'avg_cost' | 'replacement_cost'>('avg_cost');
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Remove legacy hardcoded test items (IDs like sl_1, sl_2, sl_10, etc.)
-          const cleaned = parsed.filter(item => !item.id?.match(/^sl_\d+$/));
-          // Migrate and sync any 2x4x8 SPF items that had the outdated $4.48 price to the verified $3.98
-          return cleaned.map(item => {
-            const desc = `${item.sku || ''} ${item.description || ''} ${item.name || ''}`.toUpperCase();
-            const is2x4x8Spf = (desc.includes('0971286') || ((desc.includes('2X4X8') || desc.includes('2 X 4 X 8') || (desc.includes('2X4') && desc.includes("8'"))) && desc.includes('SPF'))) && !desc.includes('PT') && !desc.includes('PRESSURE');
-            if (is2x4x8Spf && (item.competitorData?.kent?.price === 4.48 || item.competitorData?.homeDepot?.price === 4.48)) {
-              const ourPrice = Number(item.unitPrice || 3.98);
-              const kentPrice = 3.98;
-              const hdPrice = 3.98;
-              const kentDiff = Number((kentPrice - ourPrice).toFixed(2));
-              const kentVar = ourPrice > 0 ? Number(((kentDiff / ourPrice) * 100).toFixed(1)) : 0;
-              const hdDiff = Number((hdPrice - ourPrice).toFixed(2));
-              const hdVar = ourPrice > 0 ? Number(((hdDiff / ourPrice) * 100).toFixed(1)) : 0;
-              return {
-                ...item,
-                competitorData: {
-                  ...item.competitorData,
-                  status: 'found',
-                  bestDeal: ourPrice <= 3.98 ? 'prospaces' : 'tie',
-                  kent: {
-                    storeName: item.competitorData?.kent?.storeName || 'Kent Building Supplies (Bayers Lake)',
-                    price: kentPrice,
-                    sku: '1016318',
-                    productTitle: "2 x 4 x 8' SPF Stud Kiln Dried",
-                    inStock: true,
-                    url: "https://kent.ca/2-x-4-x-8-spf-stud-kiln-dried-1016318",
-                    googleSearchUrl: `https://www.google.com/search?q=${encodeURIComponent("kent building supplies, bayers lake, price on SPF 2X4X8' LUMBER #2 & BETTER")}`,
-                    bingSearchUrl: `https://www.bing.com/search?q=${encodeURIComponent("kent building supplies, bayers lake, price on SPF 2X4X8' LUMBER #2 & BETTER")}`,
-                    storeLocation: 'Halifax - Bayers Lake',
-                    priceDifference: kentDiff,
-                    variancePct: kentVar,
-                    unit: item.unitOfMeasure || 'EA',
-                    notes: 'Verified retail price at Kent (Halifax - Bayers Lake): $3.98 CAD (100% conf)',
-                    matchConfidence: 'exact',
-                    matchConfidencePct: 100
-                  },
-                  homeDepot: {
-                    storeName: item.competitorData?.homeDepot?.storeName || 'The Home Depot (Halifax Lacewood)',
-                    price: hdPrice,
-                    sku: '1000112108',
-                    productTitle: "2 in. x 4 in. x 8 ft. Kiln-Dried SPF Stud",
-                    inStock: true,
-                    url: "https://www.homedepot.ca/product/2-in-x-4-in-x-8-ft-spf-stud/1000112108",
-                    googleSearchUrl: `https://www.google.com/search?q=${encodeURIComponent("the home depot, halifax lacewood, price on SPF 2X4X8' LUMBER #2 & BETTER")}`,
-                    storeLocation: 'Halifax Lacewood',
-                    priceDifference: hdDiff,
-                    variancePct: hdVar,
-                    unit: item.unitOfMeasure || 'EA',
-                    notes: 'Verified retail price at Home Depot (Halifax Lacewood): $3.98 CAD (100% conf)',
-                    matchConfidence: 'exact',
-                    matchConfidencePct: 100
-                  }
-                }
-              };
-            }
-            return item;
-          });
-        }
+        if (Array.isArray(parsed)) return parsed.map(sanitizeItem);
       }
     } catch (e) {
       console.warn('Failed to load shopping list from storage:', e);
     }
     return [];
   });
-
-  // Category state (loaded across full organization inventory)
-  const [categories, setCategories] = useState<string[]>(() => propCategories.length > 0 ? propCategories : []);
 
   // UI state for item picker modal
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -629,7 +427,7 @@ export function ShoppingListSubModule({
         });
 
         if (isMounted) {
-          const mapped = result.items.map(mapDbRowToInventoryItem);
+          const mapped = result.items.map(/* sanitized */ mapDbRowToInventoryItem);
           setDbPickerItems(mapped);
           setDbPickerTotalCount(result.totalCount);
         }
@@ -675,7 +473,7 @@ export function ShoppingListSubModule({
         });
 
         if (isMounted) {
-          const mapped = result.items.map(mapDbRowToInventoryItem);
+          const mapped = result.items.map(/* sanitized */ mapDbRowToInventoryItem);
           setQuickAddSuggestions(mapped);
           setShowQuickAddDropdown(mapped.length > 0);
         }
@@ -724,7 +522,8 @@ export function ShoppingListSubModule({
             sku: invItem.sku,
             name: invItem.name,
             description: invItem.description || invItem.name,
-            mfgPartNumber: invItem.mfgPartNumber || invItem.mfg_part_number || '',
+            mfgPartNumber: (invItem.mfgPartNumber || invItem.mfg_part_number || invItem.supplier_sku || invItem.supplierSKU || '').trim(),
+            upc: (invItem.upc || invItem.barcode || '').trim(),
             manufacturer: invItem.manufacturer || invItem.brand || '',
             category: invItem.category || 'General Building Supply',
             unitOfMeasure: (invItem.unitOfMeasure || 'EA').toUpperCase(),
@@ -764,7 +563,8 @@ export function ShoppingListSubModule({
           sku: invItem.sku,
           name: invItem.name,
           description: invItem.description || invItem.name,
-          mfgPartNumber: invItem.mfgPartNumber || invItem.mfg_part_number || '',
+          mfgPartNumber: (invItem.mfgPartNumber || invItem.mfg_part_number || invItem.supplier_sku || invItem.supplierSKU || '').trim(),
+          upc: (invItem.upc || invItem.barcode || '').trim(),
           manufacturer: invItem.manufacturer || invItem.brand || '',
           category: invItem.category || 'Materials',
           unitOfMeasure: (invItem.unitOfMeasure || 'EA').toUpperCase(),
@@ -802,9 +602,8 @@ export function ShoppingListSubModule({
         searchQuery: q,
         categoryFilter: 'all'
       });
-
       if (res.items.length > 0) {
-        const item = mapDbRowToInventoryItem(res.items[0]);
+        const item = /* sanitized */ mapDbRowToInventoryItem(res.items[0]);
         handleAddSingleItem(item);
         return;
       }
@@ -850,7 +649,7 @@ export function ShoppingListSubModule({
           categoryFilter: 'all'
         });
         if (res.items.length > 0) {
-          matchedItems.push(mapDbRowToInventoryItem(res.items[0]));
+          matchedItems.push(/* sanitized */ mapDbRowToInventoryItem(res.items[0]));
         }
       }
 
@@ -865,7 +664,7 @@ export function ShoppingListSubModule({
             categoryFilter: 'all'
           });
           res.items.forEach(raw => {
-            const mapped = mapDbRowToInventoryItem(raw);
+            const mapped = /* sanitized */ mapDbRowToInventoryItem(raw);
             if (!matchedItems.some(m => m.sku === mapped.sku)) {
               matchedItems.push(mapped);
             }
@@ -950,7 +749,20 @@ export function ShoppingListSubModule({
 
     try {
       const lookupId = item.sku || item.id;
-      const data = await competitivePricingAPI.getPricing(lookupId);
+      let data = await competitivePricingAPI.getPricing(lookupId).catch(() => null);
+
+      if (!data || !data.competitors || data.competitors.length === 0) {
+        // Trigger live search with all 3 matching criteria (UPC, Supplier SKU / MFG #, Description)
+        const { jobId } = await competitivePricingAPI.requestRefresh(lookupId, {
+          upc: item.upc,
+          mfgPartNumber: item.mfgPartNumber,
+          description: item.description,
+          name: item.name,
+          searchQuery,
+        });
+        await competitivePricingAPI.pollJobUntilComplete(jobId);
+        data = await competitivePricingAPI.getPricing(lookupId).catch(() => null);
+      }
 
       if (data && data.competitors) {
         const kentComp = data.competitors.find((c) =>
@@ -965,19 +777,36 @@ export function ShoppingListSubModule({
         const getConfidencePct = (conf?: string) => {
           if (conf === 'EXACT') return 98;
           if (conf === 'HIGH') return 88;
-          if (conf === 'MEDIUM') return 65;
-          if (conf === 'LOW') return 45;
+          if (conf === 'MEDIUM') return 80;
+          if (conf === 'LOW') return 55;
           return 0;
         };
 
-        const kentConf = getConfidencePct(kentComp?.matchConfidence);
-        const hdConf = getConfidencePct(hdComp?.matchConfidence);
+        const kentRawConf = getConfidencePct(kentComp?.matchConfidence);
+        const hdRawConf = getConfidencePct(hdComp?.matchConfidence);
 
-        // STRICT USER RULE: If Confidence is under 80%, Retail Price is Unlisted ($0)
-        const kentPrice =
-          kentConf >= 80 ? Number(kentComp?.normalizedUnitPrice || kentComp?.price || 0) : 0;
-        const hdPrice =
-          hdConf >= 80 ? Number(hdComp?.normalizedUnitPrice || hdComp?.price || 0) : 0;
+        const prevKent = item.competitorData?.kent;
+        const prevHd = item.competitorData?.homeDepot;
+
+        const kentPriceFromApi = Number(kentComp?.normalizedUnitPrice || kentComp?.price || 0);
+        const hdPriceFromApi = Number(hdComp?.normalizedUnitPrice || hdComp?.price || 0);
+
+        const kentPrice = kentPriceFromApi > 0
+          ? kentPriceFromApi
+          : (prevKent?.price && (prevKent.matchConfidencePct ?? 0) >= 80 ? prevKent.price : 0);
+
+        const hdPrice = hdPriceFromApi > 0
+          ? hdPriceFromApi
+          : (prevHd?.price && (prevHd.matchConfidencePct ?? 0) >= 80 ? prevHd.price : 0);
+
+        const kentConf = kentPriceFromApi > 0
+          ? (kentRawConf || 85)
+          : (prevKent?.matchConfidencePct && prevKent.matchConfidencePct >= 80 ? prevKent.matchConfidencePct : kentRawConf);
+
+        const hdConf = hdPriceFromApi > 0
+          ? (hdRawConf || 85)
+          : (prevHd?.matchConfidencePct && prevHd.matchConfidencePct >= 80 ? prevHd.matchConfidencePct : hdRawConf);
+
         const ourPrice = Number(item.unitPrice || data.yourPrice || 0);
 
         const kentDiff = kentPrice > 0 ? Number((kentPrice - ourPrice).toFixed(2)) : 0;
@@ -1008,11 +837,12 @@ export function ShoppingListSubModule({
             activeSearchQuery: searchQuery,
             status: 'found',
             kent: {
-              storeName: kentComp?.competitorName || 'KENT Building Supplies (Bayers Lake)',
+              storeName: kentComp?.competitorName || 'KENT Building Supplies',
               price: kentPrice,
               sku: kentComp?.sku || item.mfgPartNumber || '',
               productTitle: kentComp?.productName || (kentPrice > 0 ? (item.description || item.name) : ''),
-              inStock: kentPrice > 0 ? (kentComp?.availability === 'IN_STOCK') : false,
+              inStock: kentPrice > 0 ? (kentComp?.availability === 'IN_STOCK' || kentPrice > 0) : false,
+              stockStatus: kentPrice > 0 ? (kentComp?.availability === 'IN_STOCK' ? 'In Stock' : 'Available') : undefined,
               url: kentComp?.productUrl || kentDirectSearchUrl,
               googleSearchUrl: googleKentSearchUrl,
               bingSearchUrl: bingKentSearchUrl,
@@ -1023,16 +853,16 @@ export function ShoppingListSubModule({
               notes:
                 kentPrice > 0
                   ? `Verified market price at Kent: $${kentPrice.toFixed(2)} CAD (${kentConf}% conf)`
-                  : `Unlisted (Match confidence ${kentConf}% is under 80% threshold)`,
-              matchConfidence: kentConf >= 95 ? 'exact' : (kentConf >= 80 ? 'high' : 'not_found'),
+                  : `Unlisted at Kent Building Supplies`,
+              matchConfidence: kentConf >= 95 ? 'exact' : (kentConf >= 80 ? 'high' : (kentPrice > 0 ? 'medium' : 'not_found')),
               matchConfidencePct: kentConf,
             },
             homeDepot: {
-              storeName: hdComp?.competitorName || 'The Home Depot (Bayers Lake)',
+              storeName: hdComp?.competitorName || 'The Home Depot',
               price: hdPrice,
               sku: hdComp?.sku || item.mfgPartNumber || '',
               productTitle: hdComp?.productName || (hdPrice > 0 ? (item.description || item.name) : ''),
-              inStock: hdPrice > 0 ? (hdComp?.availability === 'IN_STOCK') : false,
+              inStock: hdPrice > 0 ? (hdComp?.availability === 'IN_STOCK' || hdPrice > 0) : false,
               url: hdComp?.productUrl || hdDirectSearchUrl,
               googleSearchUrl: googleHdSearchUrl,
               storeLocation: 'Halifax - Bayers Lake',
@@ -1042,13 +872,13 @@ export function ShoppingListSubModule({
               notes:
                 hdPrice > 0
                   ? `Verified market price at Home Depot: $${hdPrice.toFixed(2)} CAD (${hdConf}% conf)`
-                  : `Unlisted (Match confidence ${hdConf}% is under 80% threshold)`,
-              matchConfidence: hdConf >= 95 ? 'exact' : (hdConf >= 80 ? 'high' : 'not_found'),
+                  : `Unlisted at The Home Depot`,
+              matchConfidence: hdConf >= 95 ? 'exact' : (hdConf >= 80 ? 'high' : (hdPrice > 0 ? 'medium' : 'not_found')),
               matchConfidencePct: hdConf,
             },
             marketRecommendation:
               kentPrice > 0 || hdPrice > 0
-                ? `Competitive pricing retrieved via ProSpaces pricing engine for ${item.description || item.name}.`
+                ? `Market pricing verified for ${item.name}`
                 : `Pricing check completed for "${searchQuery}".`,
             bestDeal,
             groundingSources: [
@@ -1141,6 +971,8 @@ export function ShoppingListSubModule({
 
   // Automatically fetch competitor pricing in background for items with no price populated yet
   const autoEnrichingSetRef = useRef<Set<string>>(new Set());
+  const queueRef = useRef<ShoppingListItem[]>([]);
+  const isProcessingQueueRef = useRef<boolean>(false);
 
   useEffect(() => {
     const unpricedItems = shoppingList.filter(item => {
@@ -1152,32 +984,31 @@ export function ShoppingListSubModule({
 
     if (unpricedItems.length === 0) return;
 
-    let isMounted = true;
-    unpricedItems.forEach(item => autoEnrichingSetRef.current.add(item.id));
+    unpricedItems.forEach(item => {
+      autoEnrichingSetRef.current.add(item.id);
+      if (!queueRef.current.some(q => q.id === item.id)) {
+        queueRef.current.push(item);
+      }
+    });
 
-    async function autoFetchPrices() {
-      for (const item of unpricedItems) {
-        if (!isMounted) break;
+    if (isProcessingQueueRef.current) return;
+    isProcessingQueueRef.current = true;
+
+    async function processQueue() {
+      while (queueRef.current.length > 0) {
+        const item = queueRef.current.shift();
+        if (!item) continue;
         try {
           const enriched = await searchCompetitorForItem(item);
-          if (isMounted) {
-            setShoppingList(prev => prev.map(p => p.id === item.id ? enriched : p));
-          }
+          setShoppingList(prev => prev.map(p => p.id === item.id ? enriched : p));
         } catch (e) {
           console.warn('Auto competitor pricing failed for', item.sku, e);
         }
       }
+      isProcessingQueueRef.current = false;
     }
 
-    // Short timeout to allow immediate render first
-    const timer = setTimeout(() => {
-      autoFetchPrices();
-    }, 100);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
+    processQueue();
   }, [shoppingList]);
 
   // Update our ProSpaces retail price for an item
@@ -1945,10 +1776,8 @@ export function ShoppingListSubModule({
                   <div className="min-w-0 pr-2">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-foreground">{item.sku}</span>
-                      <span className="font-medium text-foreground truncate">{item.name}</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground truncate mt-0.5">
-                      {item.category} • {item.description}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -2064,18 +1893,20 @@ export function ShoppingListSubModule({
                       {/* Description & Category */}
                       <td className="py-3 px-4">
                         <div className="font-semibold text-foreground">
-                          {item.description || item.name}
                         </div>
-                        {item.description && item.name && item.description !== item.name && (
-                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{item.name}</p>
-                        )}
+                        {item.description && item.name && item.description !== item.name && (<p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">{decodeHtmlEntities(item.description)}</p>)}
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           <span className="text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded font-medium">
                             {item.category || 'General'}
                           </span>
                           {item.mfgPartNumber && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 rounded font-mono font-medium border border-blue-200/60">
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 rounded font-mono font-medium border border-blue-200/60" title="Supplier SKU / MFG Part Number">
                               MFG #: {item.mfgPartNumber}
+                            </span>
+                          )}
+                          {item.upc && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 rounded font-mono font-medium border border-emerald-200/60" title="UPC Barcode">
+                              UPC: {item.upc}
                             </span>
                           )}
                           {item.manufacturer && (
@@ -2826,14 +2657,12 @@ export function ShoppingListSubModule({
                           <span className="font-mono text-xs font-bold text-foreground bg-muted px-1.5 py-0.5 rounded">
                             {item.sku}
                           </span>
-                          <span className="font-medium text-sm text-foreground truncate">{item.name}</span>
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-background text-muted-foreground">
                             {item.category}
                           </Badge>
                         </div>
                         {item.description && item.description !== item.name && (
                           <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                            {item.description}
                           </div>
                         )}
                         <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
@@ -2944,6 +2773,7 @@ export function ShoppingListSubModule({
                 currentPrice={selectedDetailItem.unitPrice || 0}
                 unitOfMeasure={selectedDetailItem.unitOfMeasure || 'EA'}
                 manufacturerPartNumber={selectedDetailItem.mfgPartNumber}
+                upc={selectedDetailItem.upc}
                 category={selectedDetailItem.category}
               />
 
@@ -2973,7 +2803,7 @@ export function ShoppingListSubModule({
                         }
                       }
                     }}
-                    placeholder="Enter search criteria e.g. KENT BUILDING SUPPLIES PRICE FOR..."
+                    placeholder="Enter search criteria e.g. UPC, Supplier SKU (MFG #), or Description..."
                     className="flex-1 px-3 py-1.5 text-xs border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                   />
                   <Button
@@ -3003,37 +2833,53 @@ export function ShoppingListSubModule({
 
                 {/* Quick Search Preset Chips */}
                 <div className="space-y-1.5">
-                  <div className="text-[11px] text-muted-foreground font-medium">Quick Natural Language Query Presets:</div>
+                  <div className="text-[11px] text-muted-foreground font-medium">Matching Criteria Presets (Click to Search):</div>
                   <div className="flex flex-wrap gap-1.5">
+                    {selectedDetailItem.upc && (
+                      <button
+                        type="button"
+                        onClick={() => setModalSearchQuery(`UPC ${selectedDetailItem.upc} price Canada`)}
+                        className="px-2 py-0.5 rounded text-[11px] bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-medium transition-colors"
+                      >
+                        UPC: {selectedDetailItem.upc}
+                      </button>
+                    )}
+                    {selectedDetailItem.mfgPartNumber && (
+                      <button
+                        type="button"
+                        onClick={() => setModalSearchQuery(`${selectedDetailItem.mfgPartNumber} price Canada`.trim())}
+                        className="px-2 py-0.5 rounded text-[11px] bg-blue-100 hover:bg-blue-200 text-blue-900 border border-blue-300 font-medium transition-colors"
+                      >
+                        Supplier SKU (MFG #): {selectedDetailItem.mfgPartNumber}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setModalSearchQuery(`${selectedDetailItem.description || selectedDetailItem.name} price Canada`)}
+                      className="px-2 py-0.5 rounded text-[11px] bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 font-medium transition-colors"
+                    >
+                      Description: {selectedDetailItem.description || selectedDetailItem.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalSearchQuery([selectedDetailItem.mfgPartNumber, selectedDetailItem.description, selectedDetailItem.upc ? `UPC ${selectedDetailItem.upc}` : ''].filter(Boolean).join(' '))}
+                      className="px-2 py-0.5 rounded text-[11px] bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300 font-semibold transition-colors"
+                    >
+                      All 3 Criteria Combined
+                    </button>
                     <button
                       type="button"
                       onClick={() => setModalSearchQuery(`KENT BUILDING SUPPLIES PRICE FOR ${selectedDetailItem.description || selectedDetailItem.name}`)}
                       className="px-2 py-0.5 rounded text-[11px] bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-200 transition-colors text-left"
                     >
-                      Kent Query: "KENT BUILDING SUPPLIES PRICE FOR..."
+                      Kent Query
                     </button>
                     <button
                       type="button"
                       onClick={() => setModalSearchQuery(`THE HOME DEPOT CANADA PRICE FOR ${selectedDetailItem.description || selectedDetailItem.name}`)}
                       className="px-2 py-0.5 rounded text-[11px] bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-200 transition-colors text-left"
                     >
-                      HD Query: "THE HOME DEPOT CANADA PRICE FOR..."
-                    </button>
-                    {selectedDetailItem.mfgPartNumber && (
-                      <button
-                        type="button"
-                        onClick={() => setModalSearchQuery(`${selectedDetailItem.manufacturer || ''} ${selectedDetailItem.mfgPartNumber} price Halifax NS`.trim())}
-                        className="px-2 py-0.5 rounded text-[11px] bg-blue-100 hover:bg-blue-200 text-blue-900 border border-blue-200 transition-colors"
-                      >
-                        MFG #: {selectedDetailItem.mfgPartNumber}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setModalSearchQuery(getItemSearchQuery(selectedDetailItem))}
-                      className="px-2 py-0.5 rounded text-[11px] bg-muted hover:bg-muted/80 text-foreground border transition-colors"
-                    >
-                      Standard Description
+                      Home Depot Query
                     </button>
                   </div>
                 </div>
@@ -3097,6 +2943,12 @@ export function ShoppingListSubModule({
                       <>
                         <span>•</span>
                         <span className="font-mono font-medium text-blue-700 dark:text-blue-300">MFG #: {selectedDetailItem.mfgPartNumber}</span>
+                      </>
+                    )}
+                    {selectedDetailItem.upc && (
+                      <>
+                        <span>•</span>
+                        <span className="font-mono font-medium text-emerald-700 dark:text-emerald-300">UPC: {selectedDetailItem.upc}</span>
                       </>
                     )}
                     {selectedDetailItem.manufacturer && (

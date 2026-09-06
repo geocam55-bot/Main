@@ -642,15 +642,50 @@ export const competitivePricingAPI = {
     return res.json();
   },
 
-  requestRefresh: async (productId: string | number): Promise<{ jobId: string; status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' }> => {
+  requestRefresh: async (
+    productId: string | number,
+    criteria?: {
+      upc?: string;
+      mfgPartNumber?: string;
+      description?: string;
+      name?: string;
+      searchQuery?: string;
+    }
+  ): Promise<{ jobId: string; status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' }> => {
     const headers = await getServerHeaders();
     const res = await fetch(`/api/products/${productId}/competitive-pricing/refresh`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(criteria || {}),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Refresh request failed (${res.status})`);
+    }
+    return res.json();
+  },
+
+  saveCompetitorPrice: async (
+    productId: string | number,
+    data: {
+      competitorId: number;
+      price: number;
+      productName?: string;
+      productUrl?: string;
+      notes?: string;
+      matchConfidence?: string;
+      matchMethod?: string;
+    }
+  ): Promise<{ success: boolean }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch(`/api/products/${productId}/competitive-pricing`, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to save price (${res.status})`);
     }
     return res.json();
   },

@@ -100,7 +100,12 @@ export function CompetitivePricingPanel({
       setJobStatus('QUEUED');
       toast.info('Queuing background pricing check across competitor websites...');
 
-      const { jobId } = await competitivePricingAPI.requestRefresh(productId);
+      const { jobId } = await competitivePricingAPI.requestRefresh(productId, {
+        upc: upc || (data as any)?.upc,
+        mfgPartNumber: manufacturerPartNumber || (data as any)?.mfgPartNumber,
+        description: description || data?.description,
+        name: productName || data?.productName,
+      });
 
       // Poll background worker until completed
       await competitivePricingAPI.pollJobUntilComplete(
@@ -273,8 +278,8 @@ export function CompetitivePricingPanel({
           </Alert>
         ) : (
           <>
-            {/* Active Product Identity Header */}
-            <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200/80 flex flex-col gap-1">
+            {/* Active Product Identity Header & Matching Criteria Verification */}
+            <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200/80 flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-slate-900 tracking-tight">
                   {data?.productName || productName}
@@ -288,6 +293,19 @@ export function CompetitivePricingPanel({
                   {data?.description || description}
                 </p>
               )}
+              {/* Active Matching Criteria Badges */}
+              <div className="mt-1 pt-1.5 border-t border-slate-200/60 flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span className="font-semibold text-slate-500 uppercase tracking-wider">Matching Criteria:</span>
+                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono font-medium">
+                  UPC: {upc || (data as any)?.upc || 'N/A'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-mono font-medium">
+                  Supplier SKU (MFG #): {manufacturerPartNumber || (data as any)?.mfgPartNumber || 'N/A'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-medium truncate max-w-[240px]">
+                  Description: {data?.description || description || productName}
+                </span>
+              </div>
             </div>
 
             {/* Top Pricing Summary Banner */}
