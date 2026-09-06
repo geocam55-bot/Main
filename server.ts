@@ -3025,51 +3025,56 @@ Result:
     let hdUrl = `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(cleanSearchQuery)}`;
 
     try {
-      const ai = getGeminiClient();
-      if (ai) {
-        const prompt = `You are a pricing engine. Find the current retail price (in CAD) at "KENT Building Supplies" and "The Home Depot Canada" for this product.
-Product: "${cleanSearchQuery || effectiveDesc || effectiveName}"
-Description: ${effectiveDesc || 'None'}
-Model: ${effectiveMfg || 'None'}
-
-1. Use googleSearch to find "kent building supplies ${cleanSearchQuery || effectiveDesc}"
-2. Use googleSearch to find "home depot canada ${cleanSearchQuery || effectiveDesc}"
-3. Reply ONLY with valid JSON matching this schema:
-{
-  "kentPrice": number,
-  "kentConfidence": "EXACT" | "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND",
-  "kentUrl": string,
-  "homeDepotPrice": number,
-  "homeDepotConfidence": "EXACT" | "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND",
-  "homeDepotUrl": string
-}`;
-
-        // Wrap the Gemini call in a Promise.race to enforce a timeout
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini search timed out')), 12000));
-        const aiPromise = ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          tools: [{ googleSearch: {} }],
-          config: { responseMimeType: "application/json" }
-        });
-
-        const response = await Promise.race([aiPromise, timeoutPromise]);
-        const text = response.text || "{}";
-        const parsed = JSON.parse(text);
-
-        if (parsed.kentPrice > 0) {
-          freshKent = Number(parsed.kentPrice);
-          kentConf = parsed.kentConfidence || 'HIGH';
-          if (parsed.kentUrl) kentUrl = parsed.kentUrl;
-        }
-        if (parsed.homeDepotPrice > 0) {
-          freshHd = Number(parsed.homeDepotPrice);
-          hdConf = parsed.homeDepotConfidence || 'HIGH';
-          if (parsed.homeDepotUrl) hdUrl = parsed.homeDepotUrl;
-        }
+      const { chromium } = await import('playwright');
+      const browser = await chromium.launch({ headless: true });
+      const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      });
+      
+      // Use the DESCRIPTION from our SKU List for scraping, fallback to cleanSearchQuery
+      const searchTerms = effectiveDesc || cleanSearchQuery;
+      
+      // Kent Scrape
+      try {
+         const page = await context.newPage();
+         const kentSearch = `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(searchTerms)}`;
+         console.log(`[Playwright] Scraping Kent: ${kentSearch}`);
+         await page.goto(kentSearch, { waitUntil: 'domcontentloaded', timeout: 15000 });
+         
+         const priceText = await page.locator('.price-wrapper .price, .price-box .price').first().innerText({ timeout: 5000 }).catch(() => null);
+         if (priceText) {
+            freshKent = Number(priceText.replace(/[^0-9.]/g, ''));
+            kentConf = 'HIGH';
+            kentUrl = kentSearch;
+            console.log(`[Playwright] Found Kent Price: ${freshKent}`);
+         }
+         await page.close();
+      } catch (e: any) {
+         console.error('[Playwright] Kent scrape failed', e.message);
       }
-    } catch (e) {
-      console.error("[Competitive Pricing Search] Real search error or timeout:", e.message);
+      
+      // Home Depot Scrape
+      try {
+         const page = await context.newPage();
+         const hdSearch = `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(searchTerms)}`;
+         console.log(`[Playwright] Scraping HD: ${hdSearch}`);
+         await page.goto(hdSearch, { waitUntil: 'domcontentloaded', timeout: 15000 });
+         
+         const priceText = await page.locator('.acl-price__value, span[itemprop="price"], .price__format').first().innerText({ timeout: 5000 }).catch(() => null);
+         if (priceText) {
+            freshHd = Number(priceText.replace(/[^0-9.]/g, ''));
+            hdConf = 'HIGH';
+            hdUrl = hdSearch;
+            console.log(`[Playwright] Found HD Price: ${freshHd}`);
+         }
+         await page.close();
+      } catch (e: any) {
+         console.error('[Playwright] HD scrape failed', e.message);
+      }
+      
+      await browser.close();
+    } catch (e: any) {
+      console.error("[Competitive Pricing Search] Playwright error:", e.message);
     }
 
     const checkTime = new Date().toISOString();

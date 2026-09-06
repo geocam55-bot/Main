@@ -1,141 +1,302 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { 
-  Search, Plus, Trash2, Check, X, RefreshCw, Download, 
-  ShoppingCart, MapPin, ListPlus, Sparkles, Save, FolderOpen, 
-  Printer, Building2, Store, BarChart2, Loader2, Layers, Pencil, 
-  ExternalLink, Package, ChevronLeft, ChevronRight, Info, Globe, AlertCircle, Eye
+import {
+  ShoppingCart,
+  Search,
+  Sparkles,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Building2,
+  Store,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Download,
+  Printer,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+  X,
+  ChevronRight,
+  ChevronLeft,
+  ListPlus,
+  Package,
+  Layers,
+  ArrowRight,
+  Check,
+  Percent,
+  MapPin,
+  Clock,
+  HelpCircle,
+  BarChart2,
+  Loader2,
+  Edit2,
+  Pencil,
+  Save,
+  Globe,
+  FolderOpen
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { toast } from 'sonner';
 import { createClient } from '../../utils/supabase/client';
+import { getSupabaseUrl } from '../../utils/supabase/client';
 import { getServerHeaders } from '../../utils/server-headers';
-import { useDebounce } from '../../utils/useDebounce';
-import { projectId } from '../../utils/supabase/info';
-import { decodeHtmlEntities, sanitizeItem } from '../../utils/sanitize';
-import { competitivePricingAPI } from '../../utils/api';
 import { loadInventoryPage } from '../../utils/inventory-loader';
+import { useDebounce } from '../../utils/useDebounce';
+import { competitivePricingAPI } from '../../utils/api';
 import { CompetitivePricingPanel } from './CompetitivePricingPanel';
-import { canAdd, canChange, canDelete } from '../../utils/permissions';
+
+const supabase = createClient();
+const supabaseUrl = getSupabaseUrl();
 
 export interface ShoppingListItem {
   id: string;
   inventoryId?: string;
   sku: string;
   name: string;
-  description?: string;
+  description: string;
   mfgPartNumber?: string;
+  upc?: string;
   manufacturer?: string;
-  category?: string;
-  unitOfMeasure?: string;
+  category: string;
+  unitOfMeasure: string;
   cost: number; // Avg Cost
-  replacementCost?: number; // Replacement Cost
+  replacementCost?: number; // Replacement Cost from inventory table
   unitPrice: number; // Retail Price
   quantity: number;
   quantityOnHand?: number;
-  upc?: string;
-  competitorData?: any;
+  competitorData?: {
+    lastChecked?: string;
+    activeSearchQuery?: string;
+    status: 'idle' | 'searching' | 'found' | 'error';
+    error?: string;
+    parsedAttributes?: {
+      material?: string;
+      dimensions?: string;
+      length?: string;
+      productType?: string;
+      grade?: string;
+      treatment?: string;
+    };
+    kent?: {
+      competitorName?: string;
+      storeName: string;
+      price: number;
+      retailPrice?: number;
+      sku?: string;
+      modelNumber?: string;
+      productName?: string;
+      productTitle?: string;
+      inStock?: boolean;
+      stockStatus?: string;
+      url?: string;
+      productUrl?: string;
+      googleSearchUrl?: string;
+      bingSearchUrl?: string;
+      storeLocation?: string;
+      variancePct?: number;
+      priceDifference?: number;
+      unit?: string;
+      unitOfMeasure?: string;
+      notes?: string;
+      matchConfidence?: 'high' | 'medium' | 'exact' | 'not_found';
+      matchConfidencePct?: number;
+    };
+    homeDepot?: {
+      competitorName?: string;
+      storeName: string;
+      price: number;
+      retailPrice?: number;
+      sku?: string;
+      modelNumber?: string;
+      productName?: string;
+      productTitle?: string;
+      inStock?: boolean;
+      stockStatus?: string;
+      url?: string;
+      productUrl?: string;
+      googleSearchUrl?: string;
+      bingSearchUrl?: string;
+      storeLocation?: string;
+      variancePct?: number;
+      priceDifference?: number;
+      unit?: string;
+      unitOfMeasure?: string;
+      notes?: string;
+      matchConfidence?: 'high' | 'medium' | 'exact' | 'not_found';
+      matchConfidencePct?: number;
+    };
+    marketRecommendation?: string;
+    bestDeal?: 'prospaces' | 'kent' | 'home_depot' | 'tie';
+    groundingSources?: Array<{ title: string; url: string }>;
+  };
 }
 
-export const PRESET_LISTS = [
+interface ShoppingListSubModuleProps {
+  user: any;
+  items?: any[];
+  availableCategories?: string[];
+  onOpenItemDetail?: (item: any) => void;
+  onNavigateToCatalog?: () => void;
+  searchQuery?: string;
+}
+
+/**
+ * Determine the most accurate competitor search query for trade items
+ * Prioritizes full product description (e.g. "SPF 2X8X10' LUMBER #2 & BETTER") and manufacturer part numbers
+ */
+export function getItemSearchQuery(item: {
+  description?: string;
+  name?: string;
+  mfgPartNumber?: string;
+  manufacturer?: string;
+  sku?: string;
+  modelNumber?: string;
+  upc?: string;
+}): string {
+  const rawDesc = (item.description || '').trim();
+  // Strip internal tags like *RED*, *GRN*, etc.
+  const cleanDesc = rawDesc.replace(/\*.*?\*/g, '').replace(/\s+/g, ' ').trim();
+  const mfg = (item.mfgPartNumber || item.modelNumber || '').trim();
+  const brand = (item.manufacturer || '').trim();
+  const name = (item.name || '').trim();
+  const upc = (item.upc || '').trim();
+
+  // If UPC is available and standard length
+  if (upc && upc.length >= 8 && /^\d+$/.test(upc)) {
+    return cleanDesc ? `${cleanDesc} ${upc}`.trim() : (name ? `${name} ${upc}`.trim() : upc);
+  }
+
+  // If we have a descriptive text (e.g. "5/8" 4X8 SPRUCE PLYWOOD", "2X4X8' SPF STUD")
+  if (cleanDesc && cleanDesc.length > 3) {
+    // If mfg is an alphanumeric model number (like DCD771, LUS28Z, DW-CGC) and not already in cleanDesc
+    if (mfg && /[a-zA-Z]/.test(mfg) && !cleanDesc.toLowerCase().includes(mfg.toLowerCase())) {
+      return `${cleanDesc} ${mfg}`.trim();
+    }
+    return cleanDesc;
+  }
+
+  // If name is present
+  if (name) {
+    if (mfg && !name.toLowerCase().includes(mfg.toLowerCase())) {
+      return `${name} ${mfg}`.trim();
+    }
+    if (brand && !name.toLowerCase().includes(brand.toLowerCase())) {
+      return `${brand} ${name}`.trim();
+    }
+    return name;
+  }
+
+  return cleanDesc || mfg || item.sku || 'building materials';
+}
+
+// Sample starter templates for Halifax NS contractor & building material tests
+const PRESET_LISTS = [
   {
-    name: 'Framing & Lumber Core',
-    sampleSkus: ['2X4-8', '2X6-10', '2X4X8', 'PLY-12'],
-    keywords: ['2x4', 'framing lumber', 'plywood', 'spruce']
+    name: 'Halifax Framing & Lumber Essentials',
+    description: 'Core 2x4, 2x6 framing studs & standard Canadian SPF lumber',
+    sampleSkus: ['LMB-2X4-8SPF', 'LMB-2X6-10SPF', 'PLY-OSB-716', 'PLY-CDX-12', 'FAST-PASL-314'],
+    keywords: ['framing', 'lumber', '2x4', '2x6', 'osb']
   },
   {
-    name: 'Drywall & Insulation',
-    sampleSkus: ['DRY-12-48', 'INS-R20', 'R12'],
-    keywords: ['drywall', 'sheetrock', 'insulation', 'batt']
+    name: 'Drywall & Interior Finishing',
+    description: 'Drywall sheets, joint compound, screws & corner beads',
+    sampleSkus: ['DW-CGC-12-8', 'DW-CGC-12-12', 'CPD-ALLPURP-20KG', 'SCRW-DW-158', 'TAPE-DW-500FT'],
+    keywords: ['drywall', 'sheetrock', 'compound', 'screw']
   },
   {
-    name: 'Roofing & Decking Package',
-    sampleSkus: ['SHING-ARCH', 'DECK-54-12', 'DECK-2X6'],
-    keywords: ['shingle', 'decking', 'treated lumber', 'tar paper']
-  },
-  {
-    name: 'Electrical & Plumbing Rough-In',
-    sampleSkus: ['WIRE-14-2', 'PIPE-PEX-12'],
-    keywords: ['romex', 'pex pipe', 'outlet', 'breaker']
+    name: 'Exterior Decking & Hardware',
+    description: 'Pressure treated 5/4 deck boards, joist hangers & deck screws',
+    sampleSkus: ['DK-PT-546-12', 'DK-PT-546-16', 'SCRW-GRX-3IN-1000', 'HNG-LUS28-ZMAX', 'POST-PT-4X4-8'],
+    keywords: ['decking', 'treated', 'pt', 'hanger', 'screw']
   }
 ];
 
-export function getItemSearchQuery(item: any): string {
-  if (!item) return '';
-  const cleanDesc = (item.description || item.name || '').trim();
-  const cleanMfg = (item.mfgPartNumber || item.mfg_part_number || '').trim();
-  const cleanSku = (item.sku || '').trim();
-  
-  if (cleanMfg && cleanDesc && !cleanDesc.toLowerCase().includes(cleanMfg.toLowerCase())) {
-    return `${cleanMfg} ${cleanDesc}`.trim();
+// Helper to parse cost or replacement cost stored in cents or dollars from Supabase
+export function parseInventoryCostValue(val: any): number {
+  if (val === null || val === undefined || val === '') return 0;
+  const num = Number(val);
+  if (isNaN(num)) return 0;
+  // In Supabase inventory table, amounts are stored as integers in cents:
+  // e.g. 1071 cents -> $10.71, 1121 cents -> $11.21, 341 cents -> $3.41, 354 cents -> $3.54
+  if (Number.isInteger(num) && num > 0) {
+    return Number((num / 100).toFixed(2));
   }
-  return cleanDesc || cleanSku || item.name || '';
+  return Number(num.toFixed(2));
 }
 
-export function mapDbRowToInventoryItem(rawItem: any) {
+// Helper to normalize raw database inventory rows
+function mapDbRowToInventoryItem(rawItem: any) {
+  const rawUnitPrice = rawItem.unit_price ?? rawItem.price_tier_1 ?? rawItem.unitPrice ?? 0;
   const rawCost = rawItem.cost ?? 0;
   const rawReplacementCost = rawItem.replacement_cost ?? rawItem.replacementCost ?? null;
-  // Database stores unit_price and cost in cents for raw SQL rows
-  const cost = rawItem.costInDollars !== undefined
-    ? Number(rawItem.costInDollars)
-    : (typeof rawCost === 'number' && rawCost > 0 && Number.isInteger(rawCost) ? rawCost / 100 : Number(rawCost || 0));
-  const replacementCost = rawItem.replacementCostInDollars !== undefined
-    ? Number(rawItem.replacementCostInDollars)
-    : (typeof rawReplacementCost === 'number' && rawReplacementCost > 0 && Number.isInteger(rawReplacementCost) ? rawReplacementCost / 100 : Number(rawReplacementCost || 0)) || cost;
-  const rawUnitPrice = rawItem.unit_price ?? rawItem.unitPrice ?? 0;
-  const unitPrice = rawItem.unitPriceInDollars !== undefined
-    ? Number(rawItem.unitPriceInDollars)
+  
+  const unitPrice = rawItem.unitPrice !== undefined 
+    ? Number(rawItem.unitPrice) 
     : (typeof rawUnitPrice === 'number' && rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : Number(rawUnitPrice || 0));
+  
+  const cost = rawItem.costInDollars !== undefined 
+    ? Number(rawItem.costInDollars) 
+    : parseInventoryCostValue(rawCost);
+    
+  let replacementCost = cost;
+  if (rawItem.replacementCostInDollars !== undefined && rawItem.replacementCostInDollars !== null) {
+    replacementCost = Number(rawItem.replacementCostInDollars);
+  } else if (rawReplacementCost !== null && rawReplacementCost !== undefined && rawReplacementCost !== '') {
+    replacementCost = parseInventoryCostValue(rawReplacementCost);
+  }
 
-  return sanitizeItem({
-    id: rawItem.id,
-    sku: rawItem.sku || rawItem.item_code || '',
-    name: decodeHtmlEntities(rawItem.name || rawItem.description || 'Unnamed Item'),
-    description: decodeHtmlEntities(rawItem.description || rawItem.name || ''),
-    mfgPartNumber: decodeHtmlEntities(rawItem.mfg_part_number || rawItem.mfgPartNumber || ''),
-    manufacturer: decodeHtmlEntities(rawItem.manufacturer || ''),
-    category: decodeHtmlEntities(rawItem.category || 'Materials'),
+  return {
+    id: rawItem.id || `inv_${Math.random().toString(36).substring(2, 9)}`,
+    sku: rawItem.sku || 'N/A',
+    name: rawItem.name || rawItem.item_name || 'Unnamed Material',
+    description: rawItem.description || rawItem.name || '',
+    mfgPartNumber: (rawItem.supplier_sku || rawItem.supplierSKU || rawItem.supplierSku || rawItem.mfg_part_number || rawItem.mfgPartNumber || rawItem.mpn || rawItem.model_number || rawItem.modelNumber || '').trim(),
+    upc: (rawItem.upc || rawItem.barcode || rawItem.upc_code || '').trim(),
+    manufacturer: rawItem.manufacturer || rawItem.brand || '',
+    category: rawItem.category || 'BUILDING MATERIALS',
     unitOfMeasure: (rawItem.unit_of_measure || rawItem.unitOfMeasure || 'EA').toUpperCase(),
     cost: Number(cost || 0),
-    replacementCost: Number(replacementCost || cost || 0),
+    replacementCost: Number(replacementCost !== undefined && replacementCost !== null ? replacementCost : (cost || 0)),
     unitPrice: Number(unitPrice || 0),
-    quantityOnHand: rawItem.quantity_on_hand ?? rawItem.quantityOnHand ?? 0,
-    upc: rawItem.upc || rawItem.barcode || ''
-  });
+    quantityOnHand: rawItem.quantity ?? rawItem.quantity_on_hand ?? rawItem.quantityOnHand ?? 0,
+  };
 }
 
 export function ShoppingListSubModule({
   user,
-  items,
+  items: inventoryCatalogItems = [],
   availableCategories: propCategories = [],
-  searchQuery,
-  onNavigateToCatalog
-}: {
-  user: any;
-  items: any[];
-  availableCategories?: string[];
-  searchQuery?: string;
-  onNavigateToCatalog?: () => void;
-}) {
-  const orgId = user?.user_metadata?.organization_id || user?.organization_id || 'default';
+  onNavigateToCatalog,
+  searchQuery = ''
+}: ShoppingListSubModuleProps) {
+  const orgId = user?.organizationId || user?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a';
   const storageKey = `prospaces_shopping_list_${orgId}`;
 
-  const [categories, setCategories] = useState<string[]>(() => (propCategories && propCategories.length > 0 ? propCategories : []));
-  const [costViewMode, setCostViewMode] = useState<'avg_cost' | 'replacement_cost'>('avg_cost');
+  // Shopping list state persisted in local storage
+  const [costViewMode, setCostViewMode] = useState<"avg_cost" | "replacement_cost">("avg_cost");
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.map(sanitizeItem);
+        if (Array.isArray(parsed)) {
+          // Remove legacy test items (IDs like sl_1, sl_2, etc.)
+          return parsed.filter(item => !item.id?.match(/^sl_\d+$/));
+        }
       }
     } catch (e) {
       console.warn('Failed to load shopping list from storage:', e);
     }
     return [];
   });
+
+  // Category state (loaded across full organization inventory)
+  const [categories, setCategories] = useState<string[]>(() => propCategories.length > 0 ? propCategories : []);
 
   // UI state for item picker modal
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -427,7 +588,7 @@ export function ShoppingListSubModule({
         });
 
         if (isMounted) {
-          const mapped = result.items.map(/* sanitized */ mapDbRowToInventoryItem);
+          const mapped = result.items.map(mapDbRowToInventoryItem);
           setDbPickerItems(mapped);
           setDbPickerTotalCount(result.totalCount);
         }
@@ -473,7 +634,7 @@ export function ShoppingListSubModule({
         });
 
         if (isMounted) {
-          const mapped = result.items.map(/* sanitized */ mapDbRowToInventoryItem);
+          const mapped = result.items.map(mapDbRowToInventoryItem);
           setQuickAddSuggestions(mapped);
           setShowQuickAddDropdown(mapped.length > 0);
         }
@@ -602,8 +763,9 @@ export function ShoppingListSubModule({
         searchQuery: q,
         categoryFilter: 'all'
       });
+
       if (res.items.length > 0) {
-        const item = /* sanitized */ mapDbRowToInventoryItem(res.items[0]);
+        const item = mapDbRowToInventoryItem(res.items[0]);
         handleAddSingleItem(item);
         return;
       }
@@ -649,7 +811,7 @@ export function ShoppingListSubModule({
           categoryFilter: 'all'
         });
         if (res.items.length > 0) {
-          matchedItems.push(/* sanitized */ mapDbRowToInventoryItem(res.items[0]));
+          matchedItems.push(mapDbRowToInventoryItem(res.items[0]));
         }
       }
 
@@ -664,7 +826,7 @@ export function ShoppingListSubModule({
             categoryFilter: 'all'
           });
           res.items.forEach(raw => {
-            const mapped = /* sanitized */ mapDbRowToInventoryItem(raw);
+            const mapped = mapDbRowToInventoryItem(raw);
             if (!matchedItems.some(m => m.sku === mapped.sku)) {
               matchedItems.push(mapped);
             }
@@ -878,7 +1040,7 @@ export function ShoppingListSubModule({
             },
             marketRecommendation:
               kentPrice > 0 || hdPrice > 0
-                ? `Market pricing verified for ${item.name}`
+                ? `Competitive pricing retrieved via ProSpaces pricing engine for ${item.description || item.name}.`
                 : `Pricing check completed for "${searchQuery}".`,
             bestDeal,
             groundingSources: [
@@ -1776,8 +1938,10 @@ export function ShoppingListSubModule({
                   <div className="min-w-0 pr-2">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-foreground">{item.sku}</span>
+                      <span className="font-medium text-foreground truncate">{item.name}</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                      {item.category} • {item.description}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -1893,8 +2057,11 @@ export function ShoppingListSubModule({
                       {/* Description & Category */}
                       <td className="py-3 px-4">
                         <div className="font-semibold text-foreground">
+                          {item.description || item.name}
                         </div>
-                        {item.description && item.name && item.description !== item.name && (<p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">{decodeHtmlEntities(item.description)}</p>)}
+                        {item.description && item.name && item.description !== item.name && (
+                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{item.name}</p>
+                        )}
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           <span className="text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded font-medium">
                             {item.category || 'General'}
@@ -2657,12 +2824,14 @@ export function ShoppingListSubModule({
                           <span className="font-mono text-xs font-bold text-foreground bg-muted px-1.5 py-0.5 rounded">
                             {item.sku}
                           </span>
+                          <span className="font-medium text-sm text-foreground truncate">{item.name}</span>
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-background text-muted-foreground">
                             {item.category}
                           </Badge>
                         </div>
                         {item.description && item.description !== item.name && (
                           <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                            {item.description}
                           </div>
                         )}
                         <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
