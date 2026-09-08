@@ -219,7 +219,7 @@ export default function LandingPage({
                 className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center space-x-1.5"
               >
                 <span>&larr;</span>
-                <span>{typeof window !== 'undefined' && window.location.pathname.includes('logistics.html') ? 'Exit App' : 'ProSpaces CRM Hero'}</span>
+                <span>{typeof window !== 'undefined' && window.location.pathname.includes('logistics') ? 'Exit App' : 'ProSpaces CRM Hero'}</span>
               </button>
             </div>
 
@@ -280,7 +280,7 @@ export default function LandingPage({
                     }}
                     className="w-full py-2.5 bg-slate-100 text-slate-800 font-bold text-sm rounded-xl text-center cursor-pointer"
                   >
-                    {typeof window !== 'undefined' && window.location.pathname.includes('logistics.html') ? 'Exit App' : '← Return to ProSpaces CRM Hero'}
+                    {typeof window !== 'undefined' && window.location.pathname.includes('logistics') ? 'Exit App' : '← Return to ProSpaces CRM Hero'}
                   </button>
                 </div>
               </div>

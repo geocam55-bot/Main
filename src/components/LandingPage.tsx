@@ -275,7 +275,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       <InventorySpaceInfo
         onBack={() => setSelectedSpaceInfo(null)}
         onEnterSpace={() => {
-          window.location.href = '/inventory.html';
+          window.location.href = '/inventory';
         }}
       />
     );
@@ -285,7 +285,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       <InsightsSpaceInfo
         onBack={() => setSelectedSpaceInfo(null)}
         onEnterSpace={() => {
-          window.location.href = '/insights.html';
+          window.location.href = '/insights';
         }}
       />
     );
@@ -295,7 +295,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       <MarketingSpaceInfo
         onBack={() => setSelectedSpaceInfo(null)}
         onEnterSpace={() => {
-          window.location.href = '/marketing.html';
+          window.location.href = '/marketing';
         }}
       />
     );
@@ -305,7 +305,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       <ITSpaceInfo
         onBack={() => setSelectedSpaceInfo(null)}
         onEnterSpace={() => {
-          window.location.href = '/it.html';
+          window.location.href = '/it';
         }}
       />
     );
@@ -323,7 +323,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
         }}
         onEnterSpace={() => {
           sessionStorage.setItem('accessed_from_crm', 'true');
-          window.location.href = '/logistics.html?from=crm';
+          window.location.href = '/logistics?from=crm';
         }}
       />
     );
@@ -341,7 +341,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
         }}
         onEnterApp={() => {
           sessionStorage.setItem('accessed_from_crm', 'true');
-          window.location.href = '/logistics.html?from=crm&view=driver-mobile';
+          window.location.href = '/logistics?from=crm&view=driver-mobile';
         }}
       />
     );
@@ -351,7 +351,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       <DesignSpaceInfo
         onBack={() => setSelectedSpaceInfo(null)}
         onEnterSpace={() => {
-          window.location.href = '/project-wizards.html';
+          window.location.href = '/project-wizards';
         }}
       />
     );

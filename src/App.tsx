@@ -977,11 +977,11 @@ export function AppContent() {
         <SpaceChooser
           userRole={user.role}
           onSelectSalesSpace={() => setCurrentView('main-panels')}
-          onSelectDesignSpace={() => { window.location.href = '/project-wizards.html'; }}
-          onSelectMarketingSpace={() => { window.location.href = '/marketing.html'; }}
-          onSelectInsightsSpace={() => { window.location.href = '/insights.html'; }}
-          onSelectInventorySpace={() => { window.location.href = '/inventory.html'; }}
-          onSelectITSpace={() => { window.location.href = '/it.html'; }}
+          onSelectDesignSpace={() => { window.location.href = '/project-wizards'; }}
+          onSelectMarketingSpace={() => { window.location.href = '/marketing'; }}
+          onSelectInsightsSpace={() => { window.location.href = '/insights'; }}
+          onSelectInventorySpace={() => { window.location.href = '/inventory'; }}
+          onSelectITSpace={() => { window.location.href = '/it'; }}
           onSelectMessagingSpace={() => { setCurrentView('messages'); }}
           onSelectLogisticsSpace={() => {
             if (user) {
@@ -1015,7 +1015,7 @@ export function AppContent() {
                 console.error('Failed setting logistics user in localStorage:', e);
               }
             }
-            window.location.href = '/logistics.html?from=crm';
+            window.location.href = '/logistics?from=crm';
           }}
           onBack={async () => {
             await handleLogout();

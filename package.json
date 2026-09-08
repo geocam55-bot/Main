@@ -44,6 +44,7 @@
     "cmdk": "^1.0.4",
     "cors": "^2.8.5",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.4.2",
     "embla-carousel-react": "^8.5.2",
     "express": "^5.2.1",
     "hono": "^4.7.2",
@@ -97,8 +98,9 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && (cp -r dist build 2>/dev/null || true)",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
-    "lint": "echo 'No lint script defined'"
+    "preview": "vite preview",
+    "agent:pricing": "tsx src/scripts/pricing-agent.ts"
   }
 }
