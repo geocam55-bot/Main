@@ -3521,16 +3521,33 @@ Use the googleSearch tool.`;
   // 5. GET /api/competitive-pricing/dashboard
   app.get('/api/competitive-pricing/dashboard', async (req, res) => {
     try {
-      const { category, varianceFilter, confidenceFilter, search } = req.query;
+      const { category, varianceFilter, confidenceFilter, search, page = '1', limit = '150' } = req.query;
+      const pageNum = parseInt(page as string, 10) || 1;
+      const limitNum = parseInt(limit as string, 10) || 150;
+      const start = (pageNum - 1) * limitNum;
+      const end = start + limitNum - 1;
+
+      // Fetch total count for metrics first
+      const { count: totalItems } = await supabase
+        .from('inventory')
+        .select('id', { count: 'exact', head: true });
 
       // Fetch inventory products with columns that actually exist in the table
       let itemsQuery = supabase
         .from('inventory')
         .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
-        .order('name', { ascending: true })
-        .limit(150);
+        .order('name', { ascending: true });
 
-      const { data: invRows, error: invErr } = await itemsQuery;
+      if (search && typeof search === 'string') {
+        const s = search.toLowerCase();
+        itemsQuery = itemsQuery.or(`sku.ilike.%${s}%,name.ilike.%${s}%,description.ilike.%${s}%`);
+      }
+      
+      if (category && category !== 'all') {
+        itemsQuery = itemsQuery.eq('category', category);
+      }
+
+      const { data: invRows, error: invErr } = await itemsQuery.range(start, end);
       if (invErr) {
         console.warn('[Competitive Pricing] Supabase inventory fetch error:', invErr);
       }
@@ -3538,18 +3555,77 @@ Use the googleSearch tool.`;
       const products = (invRows && invRows.length > 0) ? invRows : [];
 
       // Map to dashboard items using the exact title & description logic as the Inventory table
-      let dashboardItems = products.map((p: any) => {
+            // Fetch product matches and prices for these products
+      const productIds = products.map((p: any) => String(p.id));
+      let matchesMap = new Map();
+      let pricesMap = new Map();
+      let competitorsMap = new Map();
+
+      if (productIds.length > 0) {
+        const { data: comps } = await supabase.from('competitors').select('*');
+        if (comps) {
+          comps.forEach((c) => competitorsMap.set(c.id, c.name));
+        }
+
+        const { data: matches } = await supabase
+          .from('product_matches')
+          .select('*, competitor_products(*)')
+          .in('product_id', productIds);
+
+        if (matches) {
+          for (const m of matches) {
+            const prodId = String(m.product_id);
+            if (!matchesMap.has(prodId)) {
+              matchesMap.set(prodId, []);
+            }
+            matchesMap.get(prodId).push(m);
+          }
+        }
+
+        const compProductIds = matches ? matches.map((m) => m.competitor_product_id).filter(Boolean) : [];
+        if (compProductIds.length > 0) {
+          const { data: cpList } = await supabase
+            .from('competitor_prices')
+            .select('*')
+            .in('competitor_product_id', compProductIds);
+
+          if (cpList) {
+            for (const cp of cpList) {
+              pricesMap.set(cp.competitor_product_id, cp);
+            }
+          }
+        }
+      }
+
+      let dashboardItems = products.map((p) => {
         const { title, description } = resolveInventoryTitles(p.name, p.description, p.category);
         const rawUnitPrice = Number(p.unit_price || 0);
         const yourPrice = rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : rawUnitPrice;
+        
+        const prodMatches = matchesMap.get(String(p.id)) || [];
+        let lowestCompPrice = null;
+        let compName = undefined;
+        let conf = prodMatches.length > 0 ? (prodMatches[0].match_confidence || 'HIGH') : 'NOT_FOUND';
+        let lastCheckedAt = null;
+        let competitorCount = prodMatches.length;
 
-        const lowestCompPrice = null;
-        const compName = null;
-        const diff = null;
-        const varPct = null;
-        const conf = 'NOT_FOUND';
-        const isOutdated = true;
-        const lastCheckedAt = null;
+        for (const m of prodMatches) {
+          const cpId = m.competitor_product_id;
+          const priceRec = pricesMap.get(cpId);
+          if (priceRec && priceRec.current_price) {
+            const pVal = Number(priceRec.current_price);
+            if (lowestCompPrice === null || pVal < lowestCompPrice) {
+              lowestCompPrice = pVal;
+              const compId = m.competitor_products?.competitor_id;
+              compName = competitorsMap.get(compId) || 'Competitor';
+              lastCheckedAt = priceRec.checked_at || priceRec.created_at || null;
+            }
+          }
+        }
+
+        const diff = lowestCompPrice !== null ? yourPrice - lowestCompPrice : null;
+        const varPct = (diff !== null && lowestCompPrice && lowestCompPrice > 0) ? Number(((diff / lowestCompPrice) * 100).toFixed(1)) : null;
+        const isOutdated = lastCheckedAt ? (Date.now() - new Date(lastCheckedAt).getTime() > 1000 * 60 * 60 * 24) : (lowestCompPrice !== null);
 
         return {
           productId: p.id,
@@ -3563,12 +3639,12 @@ Use the googleSearch tool.`;
           priceDifference: diff,
           variancePct: varPct,
           matchConfidence: conf,
-          competitorCount: 0,
+          competitorCount,
           lastCheckedAt,
           isOutdated,
         };
       });
-
+      
       // Filter by category
       if (category && category !== 'all') {
         dashboardItems = dashboardItems.filter((i) => i.category === category);
@@ -3603,12 +3679,17 @@ Use the googleSearch tool.`;
       }
 
       // Calculate aggregate metrics
-      const totalMonitored = dashboardItems.length;
+      const totalMonitored = totalItems || 0;
       const withCompetitivePricing = dashboardItems.filter((i) => i.lowestCompetitorPrice !== null).length;
       const noMatch = dashboardItems.filter((i) => i.lowestCompetitorPrice === null).length;
       const ronaHigher = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
       const ronaLower = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
       const outdatedPrices = dashboardItems.filter((i) => i.isOutdated).length;
+
+      const lastSuccessfulUpdate = dashboardItems.reduce((latest, i) => {
+        if (!i.lastCheckedAt) return latest;
+        return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;
+      }, null as string | null);
 
       res.json({
         metrics: {
@@ -3618,13 +3699,34 @@ Use the googleSearch tool.`;
           ronaHigher,
           ronaLower,
           outdatedPrices,
-          lastSuccessfulUpdate: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+          lastSuccessfulUpdate,
         },
         items: dashboardItems,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: totalItems || 0,
+          totalPages: Math.ceil((totalItems || 0) / limitNum)
+        }
       });
     } catch (err: any) {
       console.error('[Competitive Pricing Dashboard] Error:', err);
       res.status(500).json({ error: err.message || 'Failed to generate dashboard' });
+    }
+  });
+
+  // 5.5. POST /api/competitive-pricing/agent/start
+  app.post('/api/competitive-pricing/agent/start', async (req, res) => {
+    try {
+      const { spawn } = await import('child_process');
+      const child = spawn('npm', ['run', 'agent:pricing'], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      res.json({ success: true, message: 'Pricing agent started in background.' });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 

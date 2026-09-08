@@ -115,6 +115,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     }
   };
 
+  const [pagination, setPagination] = useState({ page: 1, limit: 150, total: 0, totalPages: 1 });
+
   const loadDashboard = async () => {
     try {
       setIsLoading(true);
@@ -124,10 +126,15 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         varianceFilter: varianceFilter !== 'all' ? varianceFilter : undefined,
         confidenceFilter: confidenceFilter !== 'all' ? confidenceFilter : undefined,
         search: searchQuery.trim() || undefined,
+        page: pagination.page,
+        limit: pagination.limit
       });
 
       setMetrics(res.metrics);
       setItems(res.items || []);
+      if (res.pagination) {
+        setPagination(res.pagination);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load pricing dashboard');
     } finally {
@@ -137,7 +144,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
   useEffect(() => {
     loadDashboard();
-  }, [categoryFilter, varianceFilter, confidenceFilter]);
+  }, [categoryFilter, varianceFilter, confidenceFilter, pagination.page, pagination.limit]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -202,12 +209,29 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           <Button
             variant="outline"
             size="sm"
+            onClick={async () => {
+              try {
+                await competitivePricingAPI.runPricingAgent();
+                toast.success('Background pricing agent started successfully! This may take several minutes to process all items.');
+              } catch (e: any) {
+                toast.error(e.message || 'Failed to start pricing agent.');
+              }
+            }}
+            className="h-8 gap-1.5 text-xs text-slate-700"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Run Background Agent
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
             onClick={loadDashboard}
             disabled={isLoading}
             className="h-8 gap-1.5 text-xs text-slate-700"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh Data
+            Reload View
           </Button>
         </div>
       </div>
@@ -544,6 +568,38 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           </div>
         )}
       </Card>
+
+      {/* Pagination Controls */}
+      {pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+          <div className="text-sm text-slate-500">
+            Showing <span className="font-medium">{(pagination.page - 1) * pagination.limit + 1}</span> to <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> of <span className="font-medium">{pagination.total}</span> items
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPagination(p => ({ ...p, page: Math.max(1, p.page - 1) }))}
+              disabled={pagination.page <= 1}
+              className="text-xs h-8"
+            >
+              Previous
+            </Button>
+            <span className="text-xs font-medium text-slate-700 px-2">
+              Page {pagination.page} of {pagination.totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPagination(p => ({ ...p, page: Math.min(p.totalPages, p.page + 1) }))}
+              disabled={pagination.page >= pagination.totalPages}
+              className="text-xs h-8"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* History modal */}
       {historyTarget && (

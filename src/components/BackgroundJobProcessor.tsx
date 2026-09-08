@@ -429,6 +429,30 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
     };
     healSchema();
 
+    const notifChannel = supabase
+      .channel('global-notifications-alert')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'Notifications' },
+        (payload) => {
+          const newNotification = payload.new as any;
+          if (newNotification.Type === 'Scraper Alert' || newNotification.Type === 'System Alert') {
+            import('../utils/notifications').then(({ sendSystemNotification }) => {
+              sendSystemNotification(newNotification.Type, {
+                body: newNotification.Message,
+                icon: '/favicon.svg',
+                badge: '/favicon.svg'
+              });
+            });
+            import('sonner@2.0.3').then(({ toast }) => {
+               toast.info(newNotification.Message);
+            });
+          }
+        }
+      )
+      .subscribe();
+
+
     // Check immediately on mount
     checkAndProcessDueJobs();
 

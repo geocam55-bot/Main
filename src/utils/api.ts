@@ -716,7 +716,9 @@ export const competitivePricingAPI = {
     varianceFilter?: string;
     confidenceFilter?: string;
     search?: string;
-  }): Promise<{ metrics: PricingDashboardMetrics; items: PricingDashboardItem[] }> => {
+    page?: number;
+    limit?: number;
+  }): Promise<{ metrics: PricingDashboardMetrics; items: PricingDashboardItem[]; pagination: any }> => {
     const headers = await getServerHeaders();
     const query = new URLSearchParams();
     if (filters?.competitorId) query.set('competitorId', filters.competitorId);
@@ -724,12 +726,27 @@ export const competitivePricingAPI = {
     if (filters?.varianceFilter && filters.varianceFilter !== 'all') query.set('varianceFilter', filters.varianceFilter);
     if (filters?.confidenceFilter && filters.confidenceFilter !== 'all') query.set('confidenceFilter', filters.confidenceFilter);
     if (filters?.search) query.set('search', filters.search);
+    if (filters?.page) query.set('page', filters.page.toString());
+    if (filters?.limit) query.set('limit', filters.limit.toString());
 
     const qs = query.toString();
     const res = await fetch(`/api/competitive-pricing/dashboard${qs ? `?${qs}` : ''}`, { headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Failed to fetch pricing dashboard (${res.status})`);
+    }
+    return res.json();
+  },
+
+  runPricingAgent: async (): Promise<{ success: boolean; message: string }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/competitive-pricing/agent/start', {
+      method: 'POST',
+      headers,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to start pricing agent (${res.status})`);
     }
     return res.json();
   },
