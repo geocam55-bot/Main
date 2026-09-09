@@ -634,7 +634,7 @@ export const landingPagesAPI = {
 export const competitivePricingAPI = {
   getPricing: async (productId: string | number): Promise<ProductCompetitivePricing> => {
     const headers = await getServerHeaders();
-    const res = await fetch(`/api/products/${productId}/competitive-pricing`, { headers });
+    const res = await fetch(`/api/products/${encodeURIComponent(String(productId))}/competitive-pricing`, { headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Failed to fetch competitive pricing (${res.status})`);
@@ -653,7 +653,7 @@ export const competitivePricingAPI = {
     }
   ): Promise<{ jobId: string; status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' }> => {
     const headers = await getServerHeaders();
-    const res = await fetch(`/api/products/${productId}/competitive-pricing/refresh`, {
+    const res = await fetch(`/api/products/${encodeURIComponent(String(productId))}/competitive-pricing/refresh`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(criteria || {}),
@@ -678,7 +678,7 @@ export const competitivePricingAPI = {
     }
   ): Promise<{ success: boolean }> => {
     const headers = await getServerHeaders();
-    const res = await fetch(`/api/products/${productId}/competitive-pricing`, {
+    const res = await fetch(`/api/products/${encodeURIComponent(String(productId))}/competitive-pricing`, {
       method: 'PUT',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -702,7 +702,7 @@ export const competitivePricingAPI = {
 
   getPriceHistory: async (productId: string | number): Promise<PriceHistoryRecord[]> => {
     const headers = await getServerHeaders();
-    const res = await fetch(`/api/products/${productId}/competitive-pricing/history`, { headers });
+    const res = await fetch(`/api/products/${encodeURIComponent(String(productId))}/competitive-pricing/history`, { headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Failed to fetch price history (${res.status})`);

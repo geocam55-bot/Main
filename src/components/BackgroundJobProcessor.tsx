@@ -459,7 +459,7 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
     // Then poll every 45 seconds (reduced frequency to lower background DB load)
     const interval = setInterval(checkAndProcessDueJobs, 45_000);
 
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); if (notifChannel) { supabase.removeChannel(notifChannel); } };
   }, [checkAndProcessDueJobs]);
 
   // This component renders nothing — it's purely a background worker
