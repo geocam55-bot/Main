@@ -2970,24 +2970,36 @@ Result:
     };
   }
 
-  // Smart dimension and lumber grading scoring helper to pick the exact matching product from search results
+  // Smart dimension and building material scoring helper to pick the exact matching product from search results
   function scoreAndPickBestProduct(items: any[], queryText: string) {
     if (!items || items.length === 0) return null;
     if (items.length === 1) return items[0];
 
-    const q = String(queryText || '').toLowerCase();
-    
-    // Extract 3D or 2D dimensions, e.g. 2x10x10 or 2x10
-    const dim3Match = q.match(/\b(\d+)\s*x\s*(\d+)\s*x\s*(\d{1,2})\b/i);
-    const dim2Match = q.match(/\b(\d+)\s*x\s*(\d+)\b/i);
+    const q = String(queryText || '')
+      .replace(/["“”'’]/g, ' ')
+      .replace(/\b(D4S|S4S|S2S|D2S)\b/gi, ' ')
+      .toLowerCase();
+
+    // Fraction thickness for sheet goods: e.g. 1/2, 5/8, 3/4, 3/8, 1/4, 7/16
+    const sheetThicknessMatch = q.match(/\b(1\/2|5\/8|3\/4|3\/8|1\/4|7\/16)\b/i);
+    const sheetThickness = sheetThicknessMatch ? sheetThicknessMatch[1] : null;
+
+    // Sheet 3D: fraction x width x length (e.g. 1/2 x 4 x 8, 1/2 x 4 x 12, 5/8 x 4 x 8)
+    const sheet3DMatch = q.match(/(1\/2|5\/8|3\/4|3\/8|1\/4|7\/16)\s*(?:in|inch|"|'')?\s*x\s*(\d+)\s*(?:ft|foot|'|'')?\s*x\s*(\d+)/i);
+    const sheetWidth = sheet3DMatch ? sheet3DMatch[2] : null;
+    const sheetLength = sheet3DMatch ? sheet3DMatch[3] : null;
+
+    // 3D lumber dimensions: (not preceded by /): e.g. 2x10x10, 2x4x8, 6x6x12
+    const dim3Match = !sheet3DMatch ? q.match(/(?<!\/)\b(\d+)\s*x\s*(\d+)\s*x\s*(\d{1,2})\b/i) : null;
+    const dim2Match = !sheet3DMatch ? q.match(/(?<!\/)\b(\d+)\s*x\s*(\d+)\b/i) : null;
 
     const dim1 = dim3Match ? dim3Match[1] : (dim2Match ? dim2Match[1] : null);
     const dim2 = dim3Match ? dim3Match[2] : (dim2Match ? dim2Match[2] : null);
-    const targetLength = dim3Match ? dim3Match[3] : (q.match(/(?:x|\s)(\d{1,2})\s*['’"”ft]\b/i)?.[1] || q.match(/\b(\d{1,2})\s*['’"”ft]\b/i)?.[1] || null);
+    const targetLength = sheetLength || (dim3Match ? dim3Match[3] : (q.match(/(?:x|\s)(\d{1,2})\s*['’"”ft]\b/i)?.[1] || q.match(/\b(\d{1,2})\s*['’"”ft]\b/i)?.[1] || null));
 
-    // Extract thickness for sheet goods, e.g. 1/2, 3/4, 5/8, 3/8, 1/4, 7/16
-    const sheetThicknessMatch = q.match(/\b(1\/2|3\/4|5\/8|3\/8|1\/4|7\/16)\b/i);
-    const sheetThickness = sheetThicknessMatch ? sheetThicknessMatch[1] : null;
+    const isDrywall = q.includes('drywall') || q.includes('sheetrock') || q.includes('gypsum');
+    const isPlywood = q.includes('plywood') || q.includes('ply');
+    const isOsb = q.includes('osb') || q.includes('strand');
 
     let bestScore = -9999;
     let bestItem = items[0];
@@ -2996,49 +3008,93 @@ Result:
       const title = String(item.title || item.name || '').toLowerCase();
       let score = 0;
 
-      // 1. Length Matching & Penalization (handles 10', 10ft, 10-ft, 10 ft)
+      // 1. Material Category Consistency (Drywall vs Plywood vs OSB vs Lumber)
+      if (isDrywall) {
+        if (title.includes('drywall') || title.includes('sheetrock') || title.includes('gypsum')) {
+          score += 120;
+        }
+        if (title.includes('plywood') || title.includes('osb') || title.includes('strand') || title.includes('stud') || title.includes('lumber') || title.includes('spf')) {
+          score -= 150;
+        }
+      } else if (isPlywood) {
+        if (title.includes('plywood') || title.includes('ply')) score += 100;
+        if (title.includes('drywall') || title.includes('gypsum')) score -= 150;
+      } else if (isOsb) {
+        if (title.includes('osb') || title.includes('strand')) score += 100;
+        if (title.includes('drywall') || title.includes('gypsum')) score -= 150;
+      }
+
+      // 2. Sheet thickness matching (e.g. 1/2 vs 5/8)
+      if (sheetThickness) {
+        if (title.includes(sheetThickness)) {
+          score += 60;
+        } else {
+          const otherThick = title.match(/\b(1\/2|5\/8|3\/4|3\/8|1\/4|7\/16)\b/i);
+          if (otherThick && otherThick[1] !== sheetThickness) {
+            score -= 70;
+          }
+        }
+      }
+
+      // 3. Sheet width matching (e.g. 4 ft or 54 in)
+      if (sheetWidth) {
+        const widthRegex = new RegExp(`(?:x\\s*|\\b)${sheetWidth}\\s*(?:ft|foot|'|in|inch)`, 'i');
+        if (widthRegex.test(title)) {
+          score += 40;
+        }
+      }
+
+      // 4. Length Matching & Penalization (handles 8', 10', 12', 14', 16')
       if (targetLength) {
         const exactLenRegex = new RegExp(`(?:x\\s*|\\b)${targetLength}[\\s-]*['’"”ft]`, 'i');
         if (exactLenRegex.test(title)) {
-          score += 60; // Strong match for exact length!
+          score += 60;
         } else {
-          // If it specifies another length like 8', 12', 14', 16', heavily penalize
           const otherLength = title.match(/(?:x\s*|\b)(\d{1,2})[\s-]*['’"”ft]/i);
           if (otherLength && otherLength[1] !== targetLength) {
-            score -= 50; // Penalize wrong board length!
+            score -= 50;
           }
         }
       }
 
-      // 2. Cross-section (e.g. 2x10, 2-inch x 10-inch, 2 in. x 10 in.)
+      // 5. Cross-section for dimensional lumber (e.g. 2x10, 6x6, not matching 1/2 as 2)
       if (dim1 && dim2) {
-        const crossRegex = new RegExp(`\\b${dim1}[\\s-]*(?:in|inch|"|'')?\\s*x\\s*${dim2}[\\s-]*(?:in|inch|"|'')?\\b`, 'i');
+        const crossRegex = new RegExp(`(?<!/)\\b${dim1}[\\s-]*(?:in|inch|"|'')?\\s*x\\s*${dim2}[\\s-]*(?:in|inch|"|'')?\\b`, 'i');
         if (crossRegex.test(title)) {
-          score += 50;
+          score += 60;
         } else {
-          // If it specifies another width like 2x4, 2x6, 2x8, 2x12, penalize
-          const otherCross = title.match(new RegExp(`\\b${dim1}[\\s-]*(?:in|inch|"|'')?\\s*x\\s*(\\d+)[\\s-]*(?:in|inch|"|'')?\\b`, 'i'));
-          if (otherCross && otherCross[1] !== dim2) {
-            score -= 40;
+          const anyCross = title.match(/(?<!\/)\b(\d+)[\s-]*(?:in|inch|"|'')?\s*x\s*(\d+)[\s-]*(?:in|inch|"|'')?\b/i);
+          if (anyCross && (anyCross[1] !== dim1 || anyCross[2] !== dim2)) {
+            score -= 50;
           }
         }
       }
 
-      // 3. Sheet thickness (e.g. 1/2)
-      if (sheetThickness) {
-        if (title.includes(sheetThickness)) {
-          score += 50;
-        }
+      // 6. Attributes (Ultralight, Mold Tough, Firecode)
+      if ((q.includes('lightweight') || q.includes('ultralight') || q.includes('ultra light')) && (title.includes('ultralight') || title.includes('lightweight') || title.includes('ultra light'))) {
+        score += 40;
+      }
+      if ((q.includes('mold') || q.includes('moisture')) && (title.includes('mold') || title.includes('tough'))) {
+        score += 40;
+      } else if (!q.includes('mold') && !q.includes('tough') && (title.includes('mold') || title.includes('tough'))) {
+        score -= 20;
       }
 
-      // 4. Species / Grade / Material Matching
+      if ((q.includes('firecode') || q.includes('type x') || q.includes('fire')) && (title.includes('firecode') || title.includes('type x'))) {
+        score += 40;
+      } else if (!q.includes('firecode') && !q.includes('type x') && (title.includes('firecode') || title.includes('type x'))) {
+        score -= 20;
+      }
+
+      // 7. Species / Grade / Material / Treatment Matching for Lumber
       if (q.includes('spf') && title.includes('spf')) score += 20;
       if (q.includes('spruce') && title.includes('spruce')) score += 20;
       if ((q.includes('#2') || q.includes('standard') || q.includes('better')) && title.includes('standard')) score += 30;
       if ((q.includes('#2') || q.includes('2 & better')) && (title.includes('#2') || title.includes('2 & better'))) score += 30;
       if (q.includes('select') && title.includes('select')) score += 25;
-      if (q.includes('plywood') && (title.includes('plywood') || title.includes('ply'))) score += 20;
-      if (q.includes('treated') && (title.includes('treated') || title.includes('pt'))) score += 20;
+      if ((q.includes('pt') || q.includes('treated') || q.includes('pressure')) && (title.includes('treated') || title.includes('pt') || title.includes('pressure'))) score += 30;
+      if (q.includes('brown') && title.includes('brown')) score += 25;
+      if ((q.includes('post') || (dim1 === '6' && dim2 === '6')) && (title.includes('post') || title.includes('timber') || title.includes('lumber'))) score += 20;
 
       if (score > bestScore) {
         bestScore = score;
@@ -3079,23 +3135,31 @@ Result:
     const effectiveName = String(bodyCriteria.name || bodyCriteria.productName || product.productName || '').trim();
     const customQuery = String(bodyCriteria.searchQuery || '').trim();
 
-    // Sanitize search terms for e-commerce search engines (strip #, &, ', *, etc.)
-    const cleanDesc = effectiveDesc.replace(/[#&'*]/g, ' ').replace(/\s+/g, ' ').trim();
-    const cleanQuery = customQuery.replace(/[#&'*]/g, ' ').replace(/\s+/g, ' ').trim();
+    // Sanitize search terms for e-commerce search engines (strip quotes, #, &, *, mill dressing like D4S/S4S)
+    const cleanDesc = effectiveDesc
+      .replace(/["“”'’#&*]/g, ' ')
+      .replace(/\b(D4S|S4S|S2S|D2S)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const cleanQuery = customQuery
+      .replace(/["“”'’#&*]/g, ' ')
+      .replace(/\b(D4S|S4S|S2S|D2S)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-        // DEEP DIVE: Less stringent / relaxed search parameters to ensure competitors match correctly
+    // DEEP DIVE: Less stringent / relaxed search parameters to ensure competitors match correctly
     const rawText = `${effectiveName} ${effectiveDesc}`.toLowerCase();
     const cleanWords = rawText
       .replace(/[*#&'()\/]/g, ' ')
-      .replace(/\b(red|blue|green|ea|pcs|item|material|materials)\b/gi, ' ')
+      .replace(/\b(red|blue|green|ea|pcs|item|material|materials|d4s|s4s)\b/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     const broadSearchQuery = cleanWords.split(' ').slice(0, 4).join(' ') || product.sku;
 
     const kentSearchQuery = cleanDesc || effectiveDesc || effectiveName || cleanQuery || customQuery || effectiveUpc || effectiveMfg || broadSearchQuery || product.sku;
-    const hdSearchQuery = effectiveDesc || cleanDesc || effectiveName || cleanQuery || customQuery || effectiveMfg || effectiveUpc || broadSearchQuery || product.sku;
+    const hdSearchQuery = cleanDesc || effectiveDesc || effectiveName || cleanQuery || customQuery || effectiveMfg || effectiveUpc || broadSearchQuery || product.sku;
 
-    console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Name: "${effectiveName}" | Desc: "${effectiveDesc}" | UPC: "${effectiveUpc}" | MFG: "${effectiveMfg}" | Broad Query: "${broadSearchQuery}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
+    console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Name: "${effectiveName}" | Desc: "${effectiveDesc}" | Clean: "${cleanDesc}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
     let freshKent = 0;
     let freshHd = 0;
     let kentConf = 'HIGH';
@@ -3117,7 +3181,7 @@ Result:
         .replace(/\s+/g, ' ')
         .trim();
 
-      const queriesToTry = [kentSearchQuery, lumberNormalized].filter(Boolean);
+      const queriesToTry = [cleanDesc, kentSearchQuery, lumberNormalized, effectiveDesc].filter(Boolean);
       for (const query of queriesToTry) {
         if (freshKent > 0) break;
         const suggestUrl = `https://kent.ca/search/ajax/suggest?q=${encodeURIComponent(query)}`;
@@ -3198,7 +3262,7 @@ Result:
         .replace(/\s+/g, ' ')
         .trim();
 
-      const hdQueriesToTry = [effectiveDesc, hdSearchQuery, lumberNormalizedHd, cleanDesc].filter(Boolean);
+      const hdQueriesToTry = [cleanDesc, hdSearchQuery, lumberNormalizedHd, effectiveDesc].filter(Boolean);
       // Support store localization: default to local Halifax Bayers Lake store #7126 (368 Lacewood Dr) or user specified store
       const preferredStore = String((bodyCriteria as any).store || (bodyCriteria as any).storeId || process.env.HOMEDEPOT_STORE_ID || '7126').trim();
       const storeOptions = [preferredStore, '']; // Try localized store first, then fallback to national/unlocalized
@@ -3361,6 +3425,18 @@ Use the googleSearch tool.`;
             })
             .eq('id', existingMatch.id);
 
+          if (existingMatch.competitor_product_id) {
+            await supabase
+              .from('competitor_products')
+              .update({
+                product_name: entry.productName,
+                product_url: entry.productUrl,
+                external_product_id: entry.sku || null,
+                availability: price > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+              })
+              .eq('id', existingMatch.competitor_product_id);
+          }
+
           if (price > 0) {
             await supabase
               .from('competitor_prices')
@@ -3465,9 +3541,27 @@ Use the googleSearch tool.`;
         // Table may not exist yet, fallback gracefully
       }
 
-      // If database returned no matches yet, check in-memory cache
-      if (competitorsData.length === 0 && latestCompetitorResultsByProduct.has(actualProductId)) {
-        competitorsData = latestCompetitorResultsByProduct.get(actualProductId) || [];
+      // Check in-memory fresh cache (populated by recent live search or background refresh jobs)
+      const cached = latestCompetitorResultsByProduct.get(actualProductId);
+      if (cached && cached.length > 0) {
+        if (competitorsData.length === 0) {
+          competitorsData = cached;
+        } else {
+          // Merge: if in-memory cache has freshly refreshed competitor pricing, prefer it over older db records
+          competitorsData = competitorsData.map((dbEntry: any) => {
+            const freshEntry = cached.find((c: any) => c.competitorId === dbEntry.competitorId);
+            if (freshEntry && (freshEntry.price > 0 || !dbEntry.price || (freshEntry.checkedAt && dbEntry.checkedAt && new Date(freshEntry.checkedAt) >= new Date(dbEntry.checkedAt)))) {
+              return freshEntry;
+            }
+            return dbEntry;
+          });
+          // Also include any competitor in cache not present in db
+          for (const c of cached) {
+            if (!competitorsData.some((dbEntry: any) => dbEntry.competitorId === c.competitorId)) {
+              competitorsData.push(c);
+            }
+          }
+        }
       }
 
       // If still no competitor results and product has descriptive information, execute dynamic search
