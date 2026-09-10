@@ -751,6 +751,19 @@ export const competitivePricingAPI = {
     return res.json();
   },
 
+  getPricingAgentLogs: async (): Promise<{ logs: string }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/competitive-pricing/agent/logs', {
+      method: 'GET',
+      headers,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to fetch logs (${res.status})`);
+    }
+    return res.json();
+  },
+
   getCompetitors: async (): Promise<CompetitorConfig[]> => {
     const headers = await getServerHeaders();
     const res = await fetch('/api/competitive-pricing/admin/competitors', { headers });

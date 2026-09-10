@@ -27,6 +27,7 @@ import {
   Loader2,
   Calendar,
   Plus,
+  Terminal,
 } from 'lucide-react';
 import {
   Dialog,
@@ -75,6 +76,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
   // Quick SKU check modal state
   const [isQuickCheckOpen, setIsQuickCheckOpen] = useState(false);
   const [quickCheckSku, setQuickCheckSku] = useState('');
+  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
+  const [diagnosticLogs, setDiagnosticLogs] = useState('');
   const [activeCheckedItem, setActiveCheckedItem] = useState<{
     productId: string;
     sku: string;
@@ -221,6 +224,24 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Run Background Agent
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                const data = await competitivePricingAPI.getPricingAgentLogs();
+                setDiagnosticLogs(data.logs);
+                setIsDiagnosticOpen(true);
+              } catch (e: any) {
+                toast.error(e.message || 'Failed to fetch diagnostic logs.');
+              }
+            }}
+            className="h-8 gap-1.5 text-xs text-slate-700"
+          >
+            <Terminal className="h-3.5 w-3.5" />
+            Agent Diagnostics
           </Button>
 
           <Button
@@ -657,6 +678,44 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                 />
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDiagnosticOpen} onOpenChange={setIsDiagnosticOpen}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-4 bg-slate-950 text-slate-50 border-slate-800">
+          <DialogHeader>
+            <DialogTitle className="text-slate-100 flex items-center gap-2">
+              <Terminal className="h-5 w-5" />
+              Agent Diagnostic Logs
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Live output from the background pricing agent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 mt-4 rounded-md bg-slate-900 border border-slate-800 overflow-hidden relative">
+            <pre className="p-4 text-xs font-mono text-green-400 h-full overflow-y-auto overflow-x-auto whitespace-pre-wrap">
+              {diagnosticLogs}
+            </pre>
+          </div>
+          <div className="flex justify-end mt-4">
+            <Button variant="outline" size="sm" onClick={() => setIsDiagnosticOpen(false)} className="bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700">
+              Close
+            </Button>
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="ml-2 bg-blue-600 text-white hover:bg-blue-700"
+              onClick={async () => {
+                try {
+                  const data = await competitivePricingAPI.getPricingAgentLogs();
+                  setDiagnosticLogs(data.logs);
+                } catch(e) {}
+              }}
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              Refresh Logs
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

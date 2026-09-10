@@ -2799,7 +2799,7 @@ Result:
       id: 1,
       name: 'KENT Building Supplies',
       websiteUrl: 'https://www.kent.ca',
-      searchUrlTemplate: 'https://www.kent.ca/catalogsearch/result/?q={query}',
+      searchUrlTemplate: 'https://www.kent.ca/en/search?q={query}',
       active: true,
       scrapingMethod: 'playwright_browser',
       lastSuccessfulCheck: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
@@ -2970,6 +2970,85 @@ Result:
     };
   }
 
+  // Smart dimension and lumber grading scoring helper to pick the exact matching product from search results
+  function scoreAndPickBestProduct(items: any[], queryText: string) {
+    if (!items || items.length === 0) return null;
+    if (items.length === 1) return items[0];
+
+    const q = String(queryText || '').toLowerCase();
+    
+    // Extract 3D or 2D dimensions, e.g. 2x10x10 or 2x10
+    const dim3Match = q.match(/\b(\d+)\s*x\s*(\d+)\s*x\s*(\d{1,2})\b/i);
+    const dim2Match = q.match(/\b(\d+)\s*x\s*(\d+)\b/i);
+
+    const dim1 = dim3Match ? dim3Match[1] : (dim2Match ? dim2Match[1] : null);
+    const dim2 = dim3Match ? dim3Match[2] : (dim2Match ? dim2Match[2] : null);
+    const targetLength = dim3Match ? dim3Match[3] : (q.match(/(?:x|\s)(\d{1,2})\s*['’"”ft]\b/i)?.[1] || q.match(/\b(\d{1,2})\s*['’"”ft]\b/i)?.[1] || null);
+
+    // Extract thickness for sheet goods, e.g. 1/2, 3/4, 5/8, 3/8, 1/4, 7/16
+    const sheetThicknessMatch = q.match(/\b(1\/2|3\/4|5\/8|3\/8|1\/4|7\/16)\b/i);
+    const sheetThickness = sheetThicknessMatch ? sheetThicknessMatch[1] : null;
+
+    let bestScore = -9999;
+    let bestItem = items[0];
+
+    for (const item of items) {
+      const title = String(item.title || item.name || '').toLowerCase();
+      let score = 0;
+
+      // 1. Length Matching & Penalization (handles 10', 10ft, 10-ft, 10 ft)
+      if (targetLength) {
+        const exactLenRegex = new RegExp(`(?:x\\s*|\\b)${targetLength}[\\s-]*['’"”ft]`, 'i');
+        if (exactLenRegex.test(title)) {
+          score += 60; // Strong match for exact length!
+        } else {
+          // If it specifies another length like 8', 12', 14', 16', heavily penalize
+          const otherLength = title.match(/(?:x\s*|\b)(\d{1,2})[\s-]*['’"”ft]/i);
+          if (otherLength && otherLength[1] !== targetLength) {
+            score -= 50; // Penalize wrong board length!
+          }
+        }
+      }
+
+      // 2. Cross-section (e.g. 2x10, 2-inch x 10-inch, 2 in. x 10 in.)
+      if (dim1 && dim2) {
+        const crossRegex = new RegExp(`\\b${dim1}[\\s-]*(?:in|inch|"|'')?\\s*x\\s*${dim2}[\\s-]*(?:in|inch|"|'')?\\b`, 'i');
+        if (crossRegex.test(title)) {
+          score += 50;
+        } else {
+          // If it specifies another width like 2x4, 2x6, 2x8, 2x12, penalize
+          const otherCross = title.match(new RegExp(`\\b${dim1}[\\s-]*(?:in|inch|"|'')?\\s*x\\s*(\\d+)[\\s-]*(?:in|inch|"|'')?\\b`, 'i'));
+          if (otherCross && otherCross[1] !== dim2) {
+            score -= 40;
+          }
+        }
+      }
+
+      // 3. Sheet thickness (e.g. 1/2)
+      if (sheetThickness) {
+        if (title.includes(sheetThickness)) {
+          score += 50;
+        }
+      }
+
+      // 4. Species / Grade / Material Matching
+      if (q.includes('spf') && title.includes('spf')) score += 20;
+      if (q.includes('spruce') && title.includes('spruce')) score += 20;
+      if ((q.includes('#2') || q.includes('standard') || q.includes('better')) && title.includes('standard')) score += 30;
+      if ((q.includes('#2') || q.includes('2 & better')) && (title.includes('#2') || title.includes('2 & better'))) score += 30;
+      if (q.includes('select') && title.includes('select')) score += 25;
+      if (q.includes('plywood') && (title.includes('plywood') || title.includes('ply'))) score += 20;
+      if (q.includes('treated') && (title.includes('treated') || title.includes('pt'))) score += 20;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestItem = item;
+      }
+    }
+
+    return bestItem;
+  }
+
   // Dynamic helper to execute live competitor web search using ONLY the item information from the list
   async function executeDynamicCompetitorSearch(
     product: {
@@ -3013,60 +3092,160 @@ Result:
       .trim();
     const broadSearchQuery = cleanWords.split(' ').slice(0, 4).join(' ') || product.sku;
 
-    const kentSearchQuery = customQuery || effectiveUpc || effectiveMfg || broadSearchQuery || cleanDesc || product.sku;
-    const hdSearchQuery = customQuery || effectiveMfg || effectiveUpc || broadSearchQuery || cleanDesc || product.sku;
+    const kentSearchQuery = cleanDesc || effectiveDesc || effectiveName || cleanQuery || customQuery || effectiveUpc || effectiveMfg || broadSearchQuery || product.sku;
+    const hdSearchQuery = effectiveDesc || cleanDesc || effectiveName || cleanQuery || customQuery || effectiveMfg || effectiveUpc || broadSearchQuery || product.sku;
 
     console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Name: "${effectiveName}" | Desc: "${effectiveDesc}" | UPC: "${effectiveUpc}" | MFG: "${effectiveMfg}" | Broad Query: "${broadSearchQuery}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
     let freshKent = 0;
     let freshHd = 0;
     let kentConf = 'HIGH';
     let hdConf = 'HIGH';
-    let kentMethod = effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION');
-    let hdMethod = effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION');
+    let kentMethod = (effectiveDesc || cleanDesc) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
+    let hdMethod = (effectiveDesc || cleanDesc) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
     let kentTitle = effectiveDesc || effectiveName;
     let hdTitle = effectiveDesc || effectiveName;
     let kentSku = effectiveMfg || '';
     let hdSku = effectiveMfg || '';
-    let kentUrl = `https://kent.ca/catalogsearch/result/?q=${encodeURIComponent(kentSearchQuery)}`;
+    let kentUrl = `https://kent.ca/en/search?q=${encodeURIComponent(kentSearchQuery)}`;
 
-    // Direct Cheerio Scraping for Kent Building Supplies (Halifax - Bayers Lake store)
+    // Direct Scraping for Kent Building Supplies (Halifax - Bayers Lake store)
     try {
-      const kentRes = await fetch(kentUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
-        },
-        timeout: 8000
-      } as any);
+      // Build lumber-normalized queries (e.g. PLY -> PLYWOOD, strip *RED* or color codes)
+      const lumberNormalized = cleanDesc
+        .replace(/\bPLY\b/gi, 'PLYWOOD')
+        .replace(/\b(RED|BLUE|GREEN|YELLOW|BLACK)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-      if (kentRes.ok) {
-        const kentHtml = await kentRes.text();
-        const cheerio = await import('cheerio');
-        const $ = cheerio.load(kentHtml);
-        
-        // Find price elements on Kent
-        const priceEls = $('.price, [data-price-amount], .product-item-price, .special-price');
-        if (priceEls.length > 0) {
-          const priceText = $(priceEls[0]).attr('data-price-amount') || $(priceEls[0]).text();
-          const matchPrice = priceText.match(/\$?([0-9]+\.[0-9]{2})/);
-          if (matchPrice) {
-            freshKent = Number(matchPrice[1]);
-            console.log(`[Kent Direct Scraping] Successfully scraped Bayers Lake price for SKU ${product.sku}: ${freshKent}`);
+      const queriesToTry = [kentSearchQuery, lumberNormalized].filter(Boolean);
+      for (const query of queriesToTry) {
+        if (freshKent > 0) break;
+        const suggestUrl = `https://kent.ca/search/ajax/suggest?q=${encodeURIComponent(query)}`;
+        const suggestRes = await fetch(suggestUrl, {
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
+          },
+          timeout: 6000
+        } as any);
+
+        if (suggestRes.ok) {
+          const items: any = await suggestRes.json().catch(() => []);
+          const productItems = Array.isArray(items) ? items.filter((it: any) => it.type === 'product') : [];
+          if (productItems.length > 0) {
+            // Find best matching product item using dimensional and grading scoring
+            const matchedItem = scoreAndPickBestProduct(productItems, effectiveDesc || cleanDesc || kentSearchQuery) || productItems[0];
+
+            if (matchedItem.url) kentUrl = matchedItem.url;
+            if (matchedItem.title) kentTitle = matchedItem.title;
+            
+            const priceHtml = String(matchedItem.price || matchedItem.special_price || '');
+            const priceAmountMatch = priceHtml.match(/data-price-amount="([0-9.]+)"/) || priceHtml.match(/\$([0-9]+\.[0-9]{2})/);
+            if (priceAmountMatch) {
+              freshKent = Number(priceAmountMatch[1]);
+              kentConf = 'HIGH';
+              console.log(`[Kent AJAX Scraping] Matched "${query}" -> ${kentTitle}: $${freshKent} (Bayers Lake)`);
+              break;
+            }
           }
         }
-        
-        // Find product detail link if available
-        const productLink = $('.product-item-link').attr('href');
-        if (productLink) {
-          kentUrl = productLink;
+      }
+
+      // Fallback to standard Kent page search if AJAX returned no direct price
+      if (freshKent === 0) {
+        const kentRes = await fetch(kentUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
+          },
+          timeout: 8000
+        } as any);
+
+        if (kentRes.ok) {
+          const kentHtml = await kentRes.text();
+          const cheerio = await import('cheerio');
+          const $ = cheerio.load(kentHtml);
+          
+          const priceEls = $('.price, [data-price-amount], .product-item-price, .special-price');
+          if (priceEls.length > 0) {
+            const priceText = $(priceEls[0]).attr('data-price-amount') || $(priceEls[0]).text();
+            const matchPrice = priceText.match(/\$?([0-9]+\.[0-9]{2})/);
+            if (matchPrice) {
+              freshKent = Number(matchPrice[1]);
+              console.log(`[Kent Direct Scraping] Successfully scraped Bayers Lake price for SKU ${product.sku}: ${freshKent}`);
+            }
+          }
+          
+          const productLink = $('.product-item-link').attr('href');
+          if (productLink) {
+            kentUrl = productLink;
+          }
         }
       }
     } catch (scrapingErr: any) {
       console.warn('[Kent Direct Scraping] Direct fetch warning:', scrapingErr.message);
     }
-    let hdUrl = `https://www.homedepot.ca/en/home/search.html?q=${encodeURIComponent(hdSearchQuery)}`;
+    let hdUrl = `https://www.homedepot.ca/search?q=${encodeURIComponent(hdSearchQuery)}`;
+
+    // Direct Scraping for The Home Depot Canada (with store-level localization)
+    try {
+      const lumberNormalizedHd = cleanDesc
+        .replace(/\bPLY\b/gi, 'PLYWOOD')
+        .replace(/\b(RED|BLUE|GREEN|YELLOW|BLACK)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const hdQueriesToTry = [effectiveDesc, hdSearchQuery, lumberNormalizedHd, cleanDesc].filter(Boolean);
+      // Support store localization: default to local Halifax Bayers Lake store #7126 (368 Lacewood Dr) or user specified store
+      const preferredStore = String((bodyCriteria as any).store || (bodyCriteria as any).storeId || process.env.HOMEDEPOT_STORE_ID || '7126').trim();
+      const storeOptions = [preferredStore, '']; // Try localized store first, then fallback to national/unlocalized
+
+      for (const st of storeOptions) {
+        if (freshHd > 0) break;
+        for (const query of hdQueriesToTry) {
+          if (freshHd > 0) break;
+          const storeParam = st ? `&store=${encodeURIComponent(st)}` : '';
+          const hdApiUrl = `https://www.homedepot.ca/api/search/v1/search?q=${encodeURIComponent(query)}${storeParam}`;
+          const hdRes = await fetch(hdApiUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'application/json'
+            },
+            timeout: 6000
+          } as any);
+
+          if (hdRes.ok) {
+            const hdData: any = await hdRes.json().catch(() => ({}));
+            const products = Array.isArray(hdData.products) ? hdData.products : [];
+            if (products.length > 0) {
+              // Find best matching product item using dimensional and grading scoring
+              const matchedProd = scoreAndPickBestProduct(products, effectiveDesc || cleanDesc || hdSearchQuery) || products[0];
+
+              if (matchedProd.code) {
+                hdSku = matchedProd.code;
+                hdUrl = `https://www.homedepot.ca/product/${matchedProd.code}`;
+              }
+              if (matchedProd.name) {
+                hdTitle = matchedProd.name;
+              }
+
+              const displayPrice = matchedProd.pricing?.displayPrice?.value || matchedProd.price?.value;
+              if (displayPrice && Number(displayPrice) > 0) {
+                freshHd = Number(displayPrice);
+                hdConf = 'HIGH';
+                console.log(`[Home Depot Direct Scraping] Store ${st || 'national'} Matched "${query}" -> ${hdTitle}: $${freshHd} (SKU: ${hdSku})`);
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch (hdErr: any) {
+      console.warn('[Home Depot Direct Scraping] Warning:', hdErr.message);
+    }
 
     // Grounded price lookup / web search fallback for verified retail data
     try {
@@ -3292,7 +3471,7 @@ Use the googleSearch tool.`;
       }
 
       // If still no competitor results and product has descriptive information, execute dynamic search
-      if (competitorsData.length === 0 && (product.description || product.productName || product.mfgPartNumber || product.upc)) {
+      if (competitorsData.length === 0 && (product.description || product.productName || product.mfgPartNumber || product.upc || req.query.description || req.query.name || req.query.productName || req.query.searchQuery)) {
         competitorsData = await executeDynamicCompetitorSearch(product, req.query);
       }
 
@@ -3770,12 +3949,55 @@ Use the googleSearch tool.`;
   app.post('/api/competitive-pricing/agent/start', async (req, res) => {
     try {
       const { spawn } = await import('child_process');
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
+      
+      // Open sync so we have a raw file descriptor
+      const outFd = fs.openSync(logPath, 'a');
+      
+      // Write a separator for new runs
+      fs.writeSync(outFd, `\n\n--- AGENT STARTED AT ${new Date().toISOString()} ---\n`);
+
       const child = spawn('npm', ['run', 'agent:pricing'], {
         detached: true,
-        stdio: 'ignore'
+        stdio: ['ignore', outFd, outFd]
       });
       child.unref();
       res.json({ success: true, message: 'Pricing agent started in background.' });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/competitive-pricing/agent/logs
+  app.get('/api/competitive-pricing/agent/logs', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
+      
+      if (!fs.existsSync(logPath)) {
+        return res.json({ logs: 'No diagnostic logs found yet. Start the agent to generate logs.' });
+      }
+      
+      // Read the last 50KB of the file so it doesn't crash on huge files
+      const stats = fs.statSync(logPath);
+      const MAX_BYTES = 50 * 1024;
+      const startPos = Math.max(0, stats.size - MAX_BYTES);
+      
+      const stream = fs.createReadStream(logPath, { start: startPos, encoding: 'utf-8' });
+      let data = '';
+      for await (const chunk of stream) {
+        data += chunk;
+      }
+      
+      if (startPos > 0) {
+        data = '[...TRUNCATED - SHOWING LAST 50KB...]\n' + data;
+      }
+      
+      res.json({ logs: data });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

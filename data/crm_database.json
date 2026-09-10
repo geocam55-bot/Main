@@ -46,10 +46,10 @@
       "UnitPrice": 12.5,
       "Cost": 7.2,
       "PriceTier1": 12.5,
-      "PriceTier2": 12.00,
-      "PriceTier3": 11.50,
-      "PriceTier4": 11.00,
-      "PriceTier5": 10.50,
+      "PriceTier2": 12,
+      "PriceTier3": 11.5,
+      "PriceTier4": 11,
+      "PriceTier5": 10.5,
       "Unit": "ea"
     },
     {
@@ -62,11 +62,11 @@
       "Status": "In Stock",
       "UnitPrice": 1.8,
       "Cost": 0.9,
-      "PriceTier1": 1.80,
-      "PriceTier2": 1.70,
-      "PriceTier3": 1.60,
-      "PriceTier4": 1.50,
-      "PriceTier5": 1.40,
+      "PriceTier1": 1.8,
+      "PriceTier2": 1.7,
+      "PriceTier3": 1.6,
+      "PriceTier4": 1.5,
+      "PriceTier5": 1.4,
       "Unit": "ea"
     },
     {
@@ -79,12 +79,37 @@
       "Status": "Low Stock",
       "UnitPrice": 24,
       "Cost": 15,
-      "PriceTier1": 24.00,
-      "PriceTier2": 23.00,
-      "PriceTier3": 22.00,
-      "PriceTier4": 21.00,
-      "PriceTier5": 20.00,
+      "PriceTier1": 24,
+      "PriceTier2": 23,
+      "PriceTier3": 22,
+      "PriceTier4": 21,
+      "PriceTier5": 20,
       "Unit": "lf"
+    },
+    {
+      "id": "p_85895031",
+      "SKU": "85895031",
+      "Name": "1/2\" Galvanized Steel Plywood Panel Sheathing Clip",
+      "Category": "Building Materials",
+      "Quantity": 150,
+      "Location": "Warehouse A",
+      "Status": "In Stock",
+      "UnitPrice": 30.89,
+      "Cost": 9.74,
+      "SupplierCode": "1013144",
+      "SupplierName": "Kent Building Supply",
+      "ProductUrl": "https://kent.ca/en/search?q=1013144",
+      "LastCompetitorCheck": "2026-09-10T14:35:11.618Z",
+      "CompetitorPricing": {
+        "kent": {
+          "price": 30.89,
+          "url": "https://kent.ca/en/search?q=1013144",
+          "title": "1/2\" Galvanized Steel Plywood Panel Sheathing Clip (1013144)",
+          "inStock": true,
+          "matchConfidence": "HIGH",
+          "matchMethod": "SUPPLIER_CODE"
+        }
+      }
     }
   ],
   "deals": [
