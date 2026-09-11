@@ -104,7 +104,7 @@ export function PriceHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-blue-600" />
@@ -113,13 +113,13 @@ export function PriceHistoryModal({
             </DialogTitle>
           </div>
           <DialogDescription className="text-sm text-slate-600 space-y-0.5">
-            <div>
+            <span className="block">
               Historical pricing comparisons for <span className="font-semibold text-slate-800">{productName}</span> (SKU: {sku})
-            </div>
+            </span>
             {description && (
-              <div className="text-xs text-slate-500 font-medium">
+              <span className="block text-xs text-slate-500 font-medium">
                 {description}
-              </div>
+              </span>
             )}
           </DialogDescription>
         </DialogHeader>
@@ -202,7 +202,7 @@ export function PriceHistoryModal({
                   Check History Log ({history.length} checks)
                 </h4>
               </div>
-              <div className="max-h-56 overflow-y-auto">
+              <div className="max-h-56 overflow-y-auto overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-600">
                   <thead className="bg-slate-100 text-slate-700 sticky top-0">
                     <tr>

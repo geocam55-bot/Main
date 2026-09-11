@@ -69,7 +69,7 @@ export function CompetitivePricingPanel({
       setData(res);
     } catch (err: any) {
       // If 404 or not found, we provide a clean initial state with 0 matches
-      if (err.message?.includes('404') || err.message?.includes('not found')) {
+      if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('Unexpected token') || err.message?.includes('invalid JSON')) {
         setData({
           productId,
           sku,

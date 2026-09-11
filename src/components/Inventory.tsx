@@ -2435,7 +2435,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
 
       {/* Add/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-background p-4 sm:p-6" onPaste={handleImagePaste}>
+        <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-y-auto bg-background p-4 sm:p-6" onPaste={handleImagePaste}>
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
             <DialogDescription>
