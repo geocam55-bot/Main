@@ -3789,13 +3789,14 @@ Use the googleSearch tool.`;
 
   // 5. GET /api/competitive-pricing/dashboard
     // 5. GET /api/competitive-pricing/dashboard
+    // 5. GET /api/competitive-pricing/dashboard
   app.get('/api/competitive-pricing/dashboard', async (req, res) => {
     try {
       const { category, varianceFilter, confidenceFilter, search, page = '1', limit = '150' } = req.query;
       const pageNum = parseInt(page as string, 10) || 1;
       const limitNum = parseInt(limit as string, 10) || 150;
 
-      // Fetch all inventory products matching search & category for accurate global KPI metrics
+      // Fetch inventory products matching search & category
       let itemsQuery = supabase
         .from('inventory')
         .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
@@ -3816,7 +3817,11 @@ Use the googleSearch tool.`;
       const { data: invRows, error: invErr } = await itemsQuery.range(0, 999);
       if (invErr) {
         console.warn('[Competitive Pricing] Supabase inventory fetch error:', invErr);
-        return res.status(500).json({ error: 'Supabase Error', details: invErr });
+        return res.json({
+          metrics: { totalMonitored: 0, withCompetitivePricing: 0, noMatch: 0, ronaHigher: 0, ronaLower: 0, outdatedPrices: 0, lastSuccessfulUpdate: null },
+          items: [],
+          pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 1 }
+        });
       }
 
       const products = (invRows && invRows.length > 0) ? invRows : [];
@@ -3827,17 +3832,25 @@ Use the googleSearch tool.`;
       let competitorsMap = new Map();
 
       if (productIds.length > 0) {
-        const { data: comps } = await supabase.from('competitors').select('*');
-        if (comps) {
-          comps.forEach((c) => competitorsMap.set(c.id, c.name));
+        try {
+          const { data: comps } = await supabase.from('competitors').select('*');
+          if (comps) {
+            comps.forEach((c) => competitorsMap.set(c.id, c.name));
+          }
+        } catch (e) {
+          // Table may not exist yet
         }
 
-        const { data: matchesById } = await supabase
-          .from('product_matches')
-          .select('*, competitor_products(*)')
-          .in('product_id', productIds);
-
-        let matches = matchesById || [];
+        let matches = [];
+        try {
+          const { data: matchesById } = await supabase
+            .from('product_matches')
+            .select('*, competitor_products(*)')
+            .in('product_id', productIds);
+          matches = matchesById || [];
+        } catch (e) {
+          // Table may not exist yet
+        }
 
         // Merge in-memory cached results
         for (const p of products) {
@@ -3851,7 +3864,6 @@ Use the googleSearch tool.`;
 
           if (cached && cached.length > 0) {
             for (const c of cached) {
-              // Avoid duplicate matches for same competitor
               const exists = matches.some(m => String(m.product_id) === pid && m.competitor_products?.competitor_id === c.competitorId);
               if (!exists) {
                 matches.push({
@@ -3887,14 +3899,18 @@ Use the googleSearch tool.`;
 
         const compProductIds = matches ? matches.map((m) => m.competitor_product_id).filter(Boolean) : [];
         if (compProductIds.length > 0) {
-          const { data: cpList } = await supabase
-            .from('competitor_prices')
-            .select('*')
-            .in('competitor_product_id', compProductIds);
-          if (cpList) {
-            for (const cp of cpList) {
-              pricesMap.set(cp.competitor_product_id, cp);
+          try {
+            const { data: cpList } = await supabase
+              .from('competitor_prices')
+              .select('*')
+              .in('competitor_product_id', compProductIds);
+            if (cpList) {
+              for (const cp of cpList) {
+                pricesMap.set(cp.competitor_product_id, cp);
+              }
             }
+          } catch (e) {
+            // Table may not exist yet
           }
         }
       }
@@ -3948,7 +3964,6 @@ Use the googleSearch tool.`;
         };
       });
 
-      // Calculate global KPI metrics across ALL matched inventory items before pagination/table filtering
       const totalMonitored = allDashboardItems.length;
       const withCompetitivePricing = allDashboardItems.filter((i) => i.lowestCompetitorPrice !== null).length;
       const noMatch = allDashboardItems.filter((i) => i.lowestCompetitorPrice === null).length;
@@ -3960,7 +3975,6 @@ Use the googleSearch tool.`;
         return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;
       }, null as string | null);
 
-      // Apply table-specific filters (variance & confidence)
       let dashboardItems = allDashboardItems;
       if (varianceFilter === 'higher') {
         dashboardItems = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0);
