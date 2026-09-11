@@ -3822,7 +3822,7 @@ Use the googleSearch tool.`;
         }
       }
       if (category && category !== 'all') {
-        itemsQuery = itemsQuery.eq('category', category);
+        itemsQuery = itemsQuery.ilike('category', category as string);
       }
 
       const { data: invRows, error: invErr } = await itemsQuery.range(0, 999);

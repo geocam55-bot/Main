@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -47,6 +47,28 @@ import type {
 import { PriceHistoryModal } from './PriceHistoryModal';
 import { toast } from 'sonner@2.0.3';
 
+// Complete category set based on current inventory database
+const DEFAULT_INVENTORY_CATEGORIES = [
+  'APPLIANCES',
+  'AUTOMOBILE',
+  'BUILDING MATERIALS',
+  'DELIVERY',
+  'ECO FEES',
+  'ELECTRICITY',
+  'FARM',
+  'GIFT CARD',
+  'HARDWARE',
+  'HOUSEHOLD ITEMS, GIFTS, AUDIO, V',
+  'LIQUIDATION',
+  'PAINT & SUNDRIES',
+  'PEI - SKU IMPORT',
+  'PLUMBING',
+  'SEASONAL',
+  'SPORTS AND LEISURE',
+  'TOOLS',
+  'UNDEFINED',
+];
+
 interface CompetitivePricingDashboardProps {
   onSelectProduct?: (productOrId: any) => void;
 }
@@ -64,6 +86,9 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
   const [items, setItems] = useState<PricingDashboardItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Available categories across the entire catalog
+  const [availableCategories, setAvailableCategories] = useState<string[]>(DEFAULT_INVENTORY_CATEGORIES);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -173,8 +198,64 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     loadDashboard();
   };
 
-  // Extract unique categories from items
-  const categories = Array.from(new Set(items.map((i) => i.category).filter(Boolean)));
+  // Dynamically load all distinct categories across the database to supplement defaults
+  useEffect(() => {
+    let isMounted = true;
+    async function loadAllCategories() {
+      try {
+        const { createClient } = await import('../../utils/supabase/client');
+        const supabase = createClient();
+
+        // 1. Try RPC get_distinct_categories
+        try {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories');
+          if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0 && isMounted) {
+            const rawCats = rpcData
+              .map((r: any) => (typeof r === 'object' ? r.category : r))
+              .filter(Boolean)
+              .map((s: string) => String(s).trim());
+            const merged = Array.from(new Set([...DEFAULT_INVENTORY_CATEGORIES, ...rawCats])).sort((a, b) =>
+              a.localeCompare(b, undefined, { sensitivity: 'base' })
+            );
+            setAvailableCategories(merged);
+            return;
+          }
+        } catch (rpcErr) {
+          // RPC may not exist or fail, proceed to fallback
+        }
+
+        // 2. Query distinct category sample from inventory table
+        const { data: catRows, error: catError } = await supabase
+          .from('inventory')
+          .select('category')
+          .not('category', 'is', null)
+          .limit(1000);
+
+        if (!catError && Array.isArray(catRows) && catRows.length > 0 && isMounted) {
+          const fetched = catRows.map((r: any) => r.category).filter(Boolean).map((s: string) => String(s).trim());
+          const merged = Array.from(new Set([...DEFAULT_INVENTORY_CATEGORIES, ...fetched])).sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: 'base' })
+          );
+          setAvailableCategories(merged);
+        }
+      } catch (err) {
+        console.warn('Error loading dynamic inventory categories:', err);
+      }
+    }
+    loadAllCategories();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Extract unique categories across the entire inventory catalog plus loaded items
+  const categories = useMemo(() => {
+    const fromItems = items.map((i) => i.category).filter(Boolean).map((s: string) => String(s).trim());
+    const combined = Array.from(new Set([...availableCategories, ...fromItems])).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+    return combined;
+  }, [availableCategories, items]);
 
   const renderConfidenceBadge = (conf: MatchConfidence) => {
     switch (conf) {
@@ -380,13 +461,19 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
             </form>
 
             {/* Category Filter */}
-            <div className="w-full md:w-48">
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <div className="w-full md:w-56">
+              <Select
+                value={categoryFilter}
+                onValueChange={(val) => {
+                  setCategoryFilter(val);
+                  setPagination((prev) => ({ ...prev, page: 1 }));
+                }}
+              >
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
+                <SelectContent className="max-h-72 overflow-y-auto">
+                  <SelectItem value="all">All Categories ({categories.length})</SelectItem>
                   {categories.map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}

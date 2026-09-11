@@ -119,7 +119,7 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: {
   }
 
   if (filters?.category && filters.category !== 'all') {
-    itemsQuery = itemsQuery.eq('category', filters.category);
+    itemsQuery = itemsQuery.ilike('category', filters.category);
   }
 
   const { data: invRows, error: invErr } = await itemsQuery.range(0, 999);

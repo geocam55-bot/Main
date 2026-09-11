@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     }
 
     if (category && category !== 'all') {
-      itemsQuery = itemsQuery.eq('category', category);
+      itemsQuery = itemsQuery.ilike('category', category);
     }
 
     const { data: invRows, error: invErr } = await itemsQuery.range(0, 999);
