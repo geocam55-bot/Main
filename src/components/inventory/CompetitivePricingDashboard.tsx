@@ -47,7 +47,7 @@ import { PriceHistoryModal } from './PriceHistoryModal';
 import { toast } from 'sonner@2.0.3';
 
 interface CompetitivePricingDashboardProps {
-  onSelectProduct?: (productId: string | number) => void;
+  onSelectProduct?: (productOrId: any) => void;
 }
 
 export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePricingDashboardProps) {
@@ -573,7 +573,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => onSelectProduct(item.productId)}
+                              onClick={() => onSelectProduct(item)}
                               className="h-7 px-2 text-[11px] text-blue-600 hover:bg-blue-50"
                             >
                               Inspect

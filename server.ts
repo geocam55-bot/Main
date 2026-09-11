@@ -3156,8 +3156,8 @@ Result:
       .trim();
     const broadSearchQuery = cleanWords.split(' ').slice(0, 4).join(' ') || product.sku;
 
-    const kentSearchQuery = cleanDesc || effectiveDesc || effectiveName || cleanQuery || customQuery || effectiveUpc || effectiveMfg || broadSearchQuery || product.sku;
-    const hdSearchQuery = cleanDesc || effectiveDesc || effectiveName || cleanQuery || customQuery || effectiveMfg || effectiveUpc || broadSearchQuery || product.sku;
+    const kentSearchQuery = effectiveName || cleanQuery || customQuery || effectiveUpc || effectiveMfg || cleanDesc || effectiveDesc || broadSearchQuery || product.sku;
+    const hdSearchQuery = effectiveName || cleanQuery || customQuery || effectiveMfg || effectiveUpc || cleanDesc || effectiveDesc || broadSearchQuery || product.sku;
 
     console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Name: "${effectiveName}" | Desc: "${effectiveDesc}" | Clean: "${cleanDesc}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
     let freshKent = 0;
@@ -3181,7 +3181,7 @@ Result:
         .replace(/\s+/g, ' ')
         .trim();
 
-      const queriesToTry = [cleanDesc, kentSearchQuery, lumberNormalized, effectiveDesc, effectiveUpc, effectiveMfg].filter(Boolean);
+      const queriesToTry = [effectiveUpc, effectiveMfg, effectiveName, kentSearchQuery, lumberNormalized, cleanDesc, effectiveDesc].filter(Boolean);
       for (const query of queriesToTry) {
         if (freshKent > 0) break;
         const suggestUrl = `https://kent.ca/search/ajax/suggest?q=${encodeURIComponent(query)}`;
@@ -3199,7 +3199,7 @@ Result:
           const productItems = Array.isArray(items) ? items.filter((it: any) => it.type === 'product') : [];
           if (productItems.length > 0) {
             // Find best matching product item using dimensional and grading scoring
-            const matchedItem = scoreAndPickBestProduct(productItems, effectiveDesc || cleanDesc || kentSearchQuery) || productItems[0];
+            const matchedItem = scoreAndPickBestProduct(productItems, effectiveDesc || cleanDesc || kentSearchQuery);
 
             if (matchedItem.url) kentUrl = matchedItem.url;
             if (matchedItem.title) kentTitle = matchedItem.title;
@@ -3265,7 +3265,7 @@ Result:
         .replace(/\s+/g, ' ')
         .trim();
 
-      const hdQueriesToTry = [cleanDesc, hdSearchQuery, lumberNormalizedHd, effectiveDesc, effectiveUpc, effectiveMfg].filter(Boolean);
+      const hdQueriesToTry = [effectiveUpc, effectiveMfg, effectiveName, hdSearchQuery, lumberNormalizedHd, cleanDesc, effectiveDesc].filter(Boolean);
       // Support store localization: default to local Halifax Bayers Lake store #7126 (368 Lacewood Dr) or user specified store
       const preferredStore = String((bodyCriteria as any).store || (bodyCriteria as any).storeId || process.env.HOMEDEPOT_STORE_ID || '7126').trim();
       const storeOptions = [preferredStore, '']; // Try localized store first, then fallback to national/unlocalized
@@ -3289,7 +3289,7 @@ Result:
             const products = Array.isArray(hdData.products) ? hdData.products : [];
             if (products.length > 0) {
               // Find best matching product item using dimensional and grading scoring
-              const matchedProd = scoreAndPickBestProduct(products, effectiveDesc || cleanDesc || hdSearchQuery) || products[0];
+              const matchedProd = scoreAndPickBestProduct(products, effectiveDesc || cleanDesc || hdSearchQuery);
 
               if (matchedProd.code) {
                 hdSku = matchedProd.code;
@@ -3356,6 +3356,21 @@ Use the googleSearch tool.`;
       }
     } catch (e: any) {
       console.warn('[Grounded Pricing] Search warning:', e.message);
+    }
+
+    // Price Sanity Check: if competitor price deviates wildly (>4x or <0.2x of your price) without exact UPC match, reject as outlier/mismatch
+    const yourP = product.yourPrice || 0;
+    if (yourP > 0) {
+      if (freshKent > 0 && kentMethod !== 'UPC' && (freshKent > yourP * 4 || freshKent < yourP * 0.2)) {
+        console.log(`[Price Sanity] Rejecting Kent price ${freshKent} for SKU ${product.sku} (deviates too much from your price ${yourP})`);
+        freshKent = 0;
+        kentConf = 'NOT_FOUND';
+      }
+      if (freshHd > 0 && hdMethod !== 'UPC' && (freshHd > yourP * 4 || freshHd < yourP * 0.2)) {
+        console.log(`[Price Sanity] Rejecting Home Depot price ${freshHd} for SKU ${product.sku} (deviates too much from your price ${yourP})`);
+        freshHd = 0;
+        hdConf = 'NOT_FOUND';
+      }
     }
 
     if (freshKent === 0) {
@@ -3589,6 +3604,7 @@ Use the googleSearch tool.`;
         matchingCriteria: {
           upc: product.upc,
           mfgPartNumber: product.mfgPartNumber,
+          productName: product.productName,
           description: product.description,
         },
         competitors: competitorsData,
@@ -3764,41 +3780,7 @@ Use the googleSearch tool.`;
         return res.json(matchingMem);
       }
 
-      // Generate a realistic 5-point historical progression
-      const product = await resolveProductRecord(productId);
-      const base = product.yourPrice > 0 ? product.yourPrice : 5.99;
-      const now = Date.now();
-      const demoHistory: any[] = [];
-
-      for (let i = 4; i >= 0; i--) {
-        const checkTime = new Date(now - i * 86400 * 1000 * 3).toISOString();
-        demoHistory.push(
-          {
-            id: `gen_${i}_kent`,
-            productId: String(productId),
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            price: Number((base * (1.02 + i * 0.015)).toFixed(2)),
-            normalizedUnitPrice: Number((base * (1.02 + i * 0.015)).toFixed(2)),
-            currency: 'CAD',
-            checkedAt: checkTime,
-            availability: 'IN_STOCK',
-          },
-          {
-            id: `gen_${i}_hd`,
-            productId: String(productId),
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            price: Number((base * (0.98 - (i % 2) * 0.02)).toFixed(2)),
-            normalizedUnitPrice: Number((base * (0.98 - (i % 2) * 0.02)).toFixed(2)),
-            currency: 'CAD',
-            checkedAt: checkTime,
-            availability: 'IN_STOCK',
-          }
-        );
-      }
-
-      res.json(demoHistory);
+      res.json([]);
     } catch (err: any) {
       console.error('[Competitive Pricing History] Error:', err);
       res.status(500).json({ error: err.message || 'Failed to fetch history' });
@@ -3806,32 +3788,14 @@ Use the googleSearch tool.`;
   });
 
   // 5. GET /api/competitive-pricing/dashboard
+    // 5. GET /api/competitive-pricing/dashboard
   app.get('/api/competitive-pricing/dashboard', async (req, res) => {
     try {
       const { category, varianceFilter, confidenceFilter, search, page = '1', limit = '150' } = req.query;
       const pageNum = parseInt(page as string, 10) || 1;
       const limitNum = parseInt(limit as string, 10) || 150;
-      const start = (pageNum - 1) * limitNum;
-      const end = start + limitNum - 1;
 
-      // Fetch total count for metrics first
-      let countQuery = supabase
-        .from('inventory')
-        .select('id', { count: 'exact', head: true });
-      if (search && typeof search === 'string') {
-        const andClause = buildInventoryAndSearchClause(search);
-        if (andClause) {
-          countQuery = countQuery.or(andClause);
-        } else {
-          countQuery = countQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-        }
-      }
-      if (category && category !== 'all') {
-        countQuery = countQuery.eq('category', category);
-      }
-      const { count: totalItems } = await countQuery;
-
-      // Fetch inventory products with columns that actually exist in the table
+      // Fetch all inventory products matching search & category for accurate global KPI metrics
       let itemsQuery = supabase
         .from('inventory')
         .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
@@ -3845,27 +3809,22 @@ Use the googleSearch tool.`;
           itemsQuery = itemsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
         }
       }
-      
       if (category && category !== 'all') {
         itemsQuery = itemsQuery.eq('category', category);
       }
 
-
-                              const { data: invRows, error: invErr } = await itemsQuery.range(start, end);
-                  
-            
+      const { data: invRows, error: invErr } = await itemsQuery.range(0, 999);
       if (invErr) {
-        console.warn('[Competitive Pricing] Supabase inventory fetch error:', invErr); return res.status(500).json({ error: 'Supabase Error', details: invErr });
+        console.warn('[Competitive Pricing] Supabase inventory fetch error:', invErr);
+        return res.status(500).json({ error: 'Supabase Error', details: invErr });
       }
 
       const products = (invRows && invRows.length > 0) ? invRows : [];
-
-      // Map to dashboard items using the exact title & description logic as the Inventory table
-            // Fetch product matches and prices for these products
       const productIds = products.map((p: any) => String(p.id));
-    let matchesMap = new Map();
-    let pricesMap = new Map();
-    let competitorsMap = new Map();
+
+      let matchesMap = new Map();
+      let pricesMap = new Map();
+      let competitorsMap = new Map();
 
       if (productIds.length > 0) {
         const { data: comps } = await supabase.from('competitors').select('*');
@@ -3873,42 +3832,49 @@ Use the googleSearch tool.`;
           comps.forEach((c) => competitorsMap.set(c.id, c.name));
         }
 
-        const skus = products.map((p: any) => p.sku).filter(Boolean);
-        const supplierSkus = products.map((p: any) => p.supplier_sku).filter(Boolean);
-
-                // FIXED: Only query by valid inventory UUIDs (productIds) to avoid PostgreSQL UUID type errors
-        const { data: matchesById, error: matchErr } = await supabase
+        const { data: matchesById } = await supabase
           .from('product_matches')
           .select('*, competitor_products(*)')
           .in('product_id', productIds);
-        
-        console.log(`[Competitive Pricing Dashboard DB] Fetched ${matchesById?.length || 0} DB product matches for ${productIds.length} products (with intelligent market estimation fallback).`);
-    let matches = matchesById || [];
 
-        // Also ensure products with in-memory cached search results are represented in dashboard
-        for (const pid of productIds) {
-          if (!matches.some(m => String(m.product_id) === pid) && latestCompetitorResultsByProduct.has(pid)) {
-            const cached = latestCompetitorResultsByProduct.get(pid) || [];
+        let matches = matchesById || [];
+
+        // Merge in-memory cached results
+        for (const p of products) {
+          const pid = String(p.id);
+          const pSku = String(p.sku || '');
+          const pSuppSku = String(p.supplier_sku || '');
+          
+          let cached = latestCompetitorResultsByProduct.get(pid) || 
+                       latestCompetitorResultsByProduct.get(pSku) || 
+                       latestCompetitorResultsByProduct.get(pSuppSku) || [];
+
+          if (cached && cached.length > 0) {
             for (const c of cached) {
-              matches.push({
-                product_id: pid,
-                competitor_product_id: `mem_${pid}_${c.competitorId}`,
-                match_confidence: c.matchConfidence || 'HIGH',
-                match_method: c.matchMethod || 'CACHED',
-                competitor_products: {
-                  id: `mem_${pid}_${c.competitorId}`,
-                  competitor_id: c.competitorId,
-                  product_name: c.productName,
-                  product_url: c.productUrl,
-                  competitor_prices: [{
-                    current_price: c.price,
-                    checked_at: c.checkedAt || new Date().toISOString()
-                  }]
-                }
-              });
+              // Avoid duplicate matches for same competitor
+              const exists = matches.some(m => String(m.product_id) === pid && m.competitor_products?.competitor_id === c.competitorId);
+              if (!exists) {
+                matches.push({
+                  product_id: pid,
+                  competitor_product_id: `mem_${pid}_${c.competitorId}`,
+                  match_confidence: c.matchConfidence || 'HIGH',
+                  match_method: c.matchMethod || 'CACHED',
+                  competitor_products: {
+                    id: `mem_${pid}_${c.competitorId}`,
+                    competitor_id: c.competitorId,
+                    product_name: c.productName,
+                    product_url: c.productUrl,
+                    competitor_prices: [{
+                      current_price: c.price,
+                      checked_at: c.checkedAt || new Date().toISOString()
+                    }]
+                  }
+                });
+              }
             }
           }
         }
+
         if (matches) {
           for (const m of matches) {
             const prodId = String(m.product_id);
@@ -3925,7 +3891,6 @@ Use the googleSearch tool.`;
             .from('competitor_prices')
             .select('*')
             .in('competitor_product_id', compProductIds);
-
           if (cpList) {
             for (const cp of cpList) {
               pricesMap.set(cp.competitor_product_id, cp);
@@ -3934,17 +3899,18 @@ Use the googleSearch tool.`;
         }
       }
 
-      let dashboardItems = products.map((p) => {
+      // Map all products to dashboard items
+      let allDashboardItems = products.map((p) => {
         const { title, description } = resolveInventoryTitles(p.name, p.description, p.category);
         const rawUnitPrice = Number(p.unit_price || 0);
         const yourPrice = rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : rawUnitPrice;
-        
+
         const prodMatches = matchesMap.get(String(p.id)) || matchesMap.get(p.sku) || matchesMap.get(p.supplier_sku) || [];
-    let lowestCompPrice = null;
-    let compName = undefined;
-    let conf = prodMatches.length > 0 ? (prodMatches[0].match_confidence || 'HIGH') : 'NOT_FOUND';
-    let lastCheckedAt = null;
-    let competitorCount = prodMatches.length;
+        let lowestCompPrice = null;
+        let compName = undefined;
+        let conf = prodMatches.length > 0 ? (prodMatches[0].match_confidence || 'HIGH') : 'NOT_FOUND';
+        let lastCheckedAt = null;
+        let competitorCount = prodMatches.length;
 
         for (const m of prodMatches) {
           const cpId = m.competitor_product_id;
@@ -3959,9 +3925,6 @@ Use the googleSearch tool.`;
             }
           }
         }
-
-
-
 
         const diff = lowestCompPrice !== null ? yourPrice - lowestCompPrice : null;
         const varPct = (diff !== null && lowestCompPrice && lowestCompPrice > 0) ? Number(((diff / lowestCompPrice) * 100).toFixed(1)) : null;
@@ -3984,13 +3947,21 @@ Use the googleSearch tool.`;
           isOutdated,
         };
       });
-      
-      // Filter by category
-      if (category && category !== 'all') {
-        dashboardItems = dashboardItems.filter((i) => i.category === category);
-      }
 
-      // Filter by variance
+      // Calculate global KPI metrics across ALL matched inventory items before pagination/table filtering
+      const totalMonitored = allDashboardItems.length;
+      const withCompetitivePricing = allDashboardItems.filter((i) => i.lowestCompetitorPrice !== null).length;
+      const noMatch = allDashboardItems.filter((i) => i.lowestCompetitorPrice === null).length;
+      const ronaHigher = allDashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
+      const ronaLower = allDashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
+      const outdatedPrices = allDashboardItems.filter((i) => i.isOutdated).length;
+      const lastSuccessfulUpdate = allDashboardItems.reduce((latest, i) => {
+        if (!i.lastCheckedAt) return latest;
+        return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;
+      }, null as string | null);
+
+      // Apply table-specific filters (variance & confidence)
+      let dashboardItems = allDashboardItems;
       if (varianceFilter === 'higher') {
         dashboardItems = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0);
       } else if (varianceFilter === 'lower') {
@@ -4001,25 +3972,12 @@ Use the googleSearch tool.`;
         dashboardItems = dashboardItems.filter((i) => i.isOutdated);
       }
 
-      // Filter by confidence
       if (confidenceFilter && confidenceFilter !== 'all') {
         dashboardItems = dashboardItems.filter((i) => i.matchConfidence === confidenceFilter);
       }
 
-
-
-      // Calculate aggregate metrics
-      const totalMonitored = totalItems || 0;
-      const withCompetitivePricing = dashboardItems.filter((i) => i.lowestCompetitorPrice !== null).length;
-      const noMatch = dashboardItems.filter((i) => i.lowestCompetitorPrice === null).length;
-      const ronaHigher = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
-      const ronaLower = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
-      const outdatedPrices = dashboardItems.filter((i) => i.isOutdated).length;
-
-      const lastSuccessfulUpdate = dashboardItems.reduce((latest, i) => {
-        if (!i.lastCheckedAt) return latest;
-        return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;
-      }, null as string | null);
+      const totalFiltered = dashboardItems.length;
+      const paginatedItems = dashboardItems.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
       res.json({
         metrics: {
@@ -4031,21 +3989,20 @@ Use the googleSearch tool.`;
           outdatedPrices,
           lastSuccessfulUpdate,
         },
-        items: dashboardItems,
+        items: paginatedItems,
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total: totalItems || 0,
-          totalPages: Math.ceil((totalItems || 0) / limitNum)
+          total: totalFiltered,
+          totalPages: Math.ceil(totalFiltered / limitNum) || 1
         }
       });
     } catch (err: any) {
       console.error('[Competitive Pricing Dashboard] Error:', err);
-      res.status(500).json({ error: err.message || 'Failed to generate dashboard' });
+      res.status(500).json({ error: err.message || 'Failed to fetch competitive pricing dashboard' });
     }
   });
 
-  // 5.5. POST /api/competitive-pricing/agent/start
   app.post('/api/competitive-pricing/agent/start', async (req, res) => {
     try {
       const { spawn } = await import('child_process');

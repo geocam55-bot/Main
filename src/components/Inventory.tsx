@@ -2363,10 +2363,76 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
         <TabsContent value="competitive-pricing" className="space-y-6 mt-6">
           <div className="space-y-6">
             <CompetitivePricingDashboard
-              onSelectProduct={(productId) => {
-                const item = items.find((i) => i.id === productId || i.sku === productId);
+              onSelectProduct={async (productOrId) => {
+                let targetId = typeof productOrId === 'object' && productOrId !== null ? (productOrId.productId || productOrId.id || productOrId.sku) : productOrId;
+                let item = items.find((i) => i.id === targetId || i.sku === targetId || i.id === productOrId?.productId);
+                
+                if (!item && typeof productOrId === 'object' && productOrId !== null) {
+                  // Map directly from competitive pricing dashboard item
+                  item = {
+                    id: productOrId.productId || productOrId.id,
+                    sku: productOrId.sku,
+                    name: productOrId.productName || productOrId.name,
+                    description: productOrId.description,
+                    category: productOrId.category || 'General',
+                    unitOfMeasure: productOrId.unitOfMeasure || 'EA',
+                    quantityOnHand: productOrId.quantityOnHand || 0,
+                    quantityOnOrder: productOrId.quantityOnOrder || 0,
+                    reorderLevel: productOrId.reorderLevel || 0,
+                    unitPrice: productOrId.yourPrice || productOrId.unitPrice || 0,
+                    supplier: productOrId.supplier || '',
+                    supplierSKU: productOrId.supplierSKU || productOrId.mfgPartNumber || '',
+                    mfgPartNumber: productOrId.mfgPartNumber || '',
+                    upc: productOrId.upc || '',
+                  };
+                }
+
+                if (!item && targetId) {
+                  try {
+                    const res = await fetch(`/api/inventory/${targetId}`);
+                    if (res.ok) {
+                      const json = await res.json();
+                      const data = json.item || json.data || json;
+                      if (data) {
+                        item = {
+                          id: data.id,
+                          sku: data.sku,
+                          name: data.name,
+                          description: data.description,
+                          category: data.category,
+                          unitOfMeasure: data.unit_of_measure || data.unitOfMeasure || 'EA',
+                          quantityOnHand: data.quantity_on_hand || data.quantityOnHand || 0,
+                          quantityOnOrder: data.quantity_on_order || data.quantityOnOrder || 0,
+                          reorderLevel: data.reorder_level || data.reorderLevel || 0,
+                          unitPrice: data.unit_price || data.unitPrice || 0,
+                          supplier: data.supplier || '',
+                          supplierSKU: data.supplier_sku || data.supplierSKU || '',
+                          mfgPartNumber: data.mfg_part_number || data.mfgPartNumber || '',
+                          upc: data.upc || data.barcode || '',
+                        };
+                      }
+                    }
+                  } catch (e) {
+                    console.error('Failed to fetch product for inspection:', e);
+                  }
+                }
+
                 if (item) {
-                  handleOpenDialog(item);
+                  handleOpenDialog(item as any);
+                } else if (typeof productOrId === 'object' && productOrId !== null) {
+                  handleOpenDialog({
+                    id: productOrId.productId || productOrId.id || '1',
+                    sku: productOrId.sku || 'SKU',
+                    name: productOrId.productName || productOrId.name || 'Product',
+                    category: productOrId.category || 'General',
+                    quantityOnHand: productOrId.quantityOnHand || 0,
+                    reorderLevel: productOrId.reorderLevel || 0,
+                    unitPrice: productOrId.yourPrice || 0,
+                    description: productOrId.description || '',
+                    unitOfMeasure: productOrId.unitOfMeasure || 'EA',
+                    mfgPartNumber: productOrId.mfgPartNumber || '',
+                    upc: productOrId.upc || '',
+                  } as any);
                 }
               }}
             />

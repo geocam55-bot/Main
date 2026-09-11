@@ -303,7 +303,7 @@ export function CompetitivePricingPanel({
                   Supplier SKU (MFG #): {manufacturerPartNumber || (data as any)?.mfgPartNumber || 'N/A'}
                 </span>
                 <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-medium truncate max-w-[240px]">
-                  Description: {data?.description || description || productName}
+                  Item Name: {data?.productName || productName}
                 </span>
               </div>
             </div>
