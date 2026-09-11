@@ -1,4 +1,15 @@
-import { buildInventoryAndSearchClause } from './src/utils/inventory-keywords';
+
+// Inlined robust search clause builder
+function buildInventoryAndSearchClause(query: string): string {
+  const trimmed = String(query || '').trim();
+  if (!trimmed) return '';
+  const clean = trimmed.toLowerCase().replace(/[%,()]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  const fields = ['name', 'sku', 'description', 'category', 'supplier'];
+  return fields.map(f => `${f}.ilike.%${clean}%`).join(',');
+}
+
+// import buildInventoryAndSearchClause inlined
 // Deployment: Vercel redeploy with env vars active (2026-08-18)
 import express from 'express';
 import path from 'path';
