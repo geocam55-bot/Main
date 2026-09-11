@@ -38,6 +38,7 @@ import {
 } from '../ui/dialog';
 import { CompetitivePricingPanel } from './CompetitivePricingPanel';
 import { competitivePricingAPI } from '../../utils/api';
+import { fetchCompetitivePricingDashboardDirect } from '../../utils/competitive-pricing-client';
 import type {
   PricingDashboardMetrics,
   PricingDashboardItem,
@@ -139,7 +140,25 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         setPagination(res.pagination);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load pricing dashboard');
+      console.warn('[Dashboard] Primary fetch failed, attempting direct Supabase query:', err);
+      try {
+        const directRes = await fetchCompetitivePricingDashboardDirect({
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+          varianceFilter: varianceFilter !== 'all' ? varianceFilter : undefined,
+          confidenceFilter: confidenceFilter !== 'all' ? confidenceFilter : undefined,
+          search: searchQuery.trim() || undefined,
+          page: pagination.page,
+          limit: pagination.limit,
+        });
+        setMetrics(directRes.metrics);
+        setItems(directRes.items || []);
+        if (directRes.pagination) {
+          setPagination(directRes.pagination);
+        }
+        setError(null);
+      } catch (directErr: any) {
+        setError(directErr.message || 'Failed to load pricing dashboard');
+      }
     } finally {
       setIsLoading(false);
     }
