@@ -3181,7 +3181,7 @@ Result:
         .replace(/\s+/g, ' ')
         .trim();
 
-      const queriesToTry = [cleanDesc, kentSearchQuery, lumberNormalized, effectiveDesc].filter(Boolean);
+      const queriesToTry = [cleanDesc, kentSearchQuery, lumberNormalized, effectiveDesc, effectiveUpc, effectiveMfg].filter(Boolean);
       for (const query of queriesToTry) {
         if (freshKent > 0) break;
         const suggestUrl = `https://kent.ca/search/ajax/suggest?q=${encodeURIComponent(query)}`;
@@ -3209,7 +3209,10 @@ Result:
             if (priceAmountMatch) {
               freshKent = Number(priceAmountMatch[1]);
               kentConf = 'HIGH';
-              console.log(`[Kent AJAX Scraping] Matched "${query}" -> ${kentTitle}: $${freshKent} (Bayers Lake)`);
+              if (query === effectiveUpc && effectiveUpc) kentMethod = 'UPC';
+              else if (query === effectiveMfg && effectiveMfg) kentMethod = 'MANUFACTURER_PART_NUMBER';
+              else kentMethod = 'DESCRIPTION';
+              console.log(`[Kent AJAX Scraping] Matched "${query}" -> ${kentTitle}: ${freshKent} (Bayers Lake)`);
               break;
             }
           }
@@ -3262,7 +3265,7 @@ Result:
         .replace(/\s+/g, ' ')
         .trim();
 
-      const hdQueriesToTry = [cleanDesc, hdSearchQuery, lumberNormalizedHd, effectiveDesc].filter(Boolean);
+      const hdQueriesToTry = [cleanDesc, hdSearchQuery, lumberNormalizedHd, effectiveDesc, effectiveUpc, effectiveMfg].filter(Boolean);
       // Support store localization: default to local Halifax Bayers Lake store #7126 (368 Lacewood Dr) or user specified store
       const preferredStore = String((bodyCriteria as any).store || (bodyCriteria as any).storeId || process.env.HOMEDEPOT_STORE_ID || '7126').trim();
       const storeOptions = [preferredStore, '']; // Try localized store first, then fallback to national/unlocalized
@@ -3300,7 +3303,10 @@ Result:
               if (displayPrice && Number(displayPrice) > 0) {
                 freshHd = Number(displayPrice);
                 hdConf = 'HIGH';
-                console.log(`[Home Depot Direct Scraping] Store ${st || 'national'} Matched "${query}" -> ${hdTitle}: $${freshHd} (SKU: ${hdSku})`);
+                if (query === effectiveUpc && effectiveUpc) hdMethod = 'UPC';
+                else if (query === effectiveMfg && effectiveMfg) hdMethod = 'MANUFACTURER_PART_NUMBER';
+                else hdMethod = 'DESCRIPTION';
+                console.log(`[Home Depot Direct Scraping] Store ${st || 'national'} Matched "${query}" -> ${hdTitle}: ${freshHd} (SKU: ${hdSku})`);
                 break;
               }
             }
