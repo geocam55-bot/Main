@@ -1457,7 +1457,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
 
       {/* Scan Result Dialog */}
       <Dialog open={!!scanResult} onOpenChange={(open) => !open && setScanResult(null)}>
-        <DialogContent className="w-[95vw] max-w-2xl max-h-[80vh] flex flex-col p-4 sm:p-6">
+        <DialogContent className="w-full max-w-2xl max-h-[80vh] flex flex-col overflow-x-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {scanResult?.type === 'error' ? <AlertTriangle className="h-5 w-5 text-red-500" /> : <Sparkles className="h-5 w-5 text-blue-500" />}
@@ -2435,7 +2435,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
 
       {/* Add/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-y-auto bg-background p-4 sm:p-6" onPaste={handleImagePaste}>
+        <DialogContent className="w-full max-w-5xl sm:max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-background p-4 sm:p-6" onPaste={handleImagePaste}>
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
             <DialogDescription>
@@ -2449,7 +2449,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
               <h3 className="text-sm text-foreground">Basic Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-foreground font-medium">Item Name / Name *</label>
+                  <label className="text-sm text-foreground font-medium">Item Name *</label>
                   <Input
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -2473,7 +2473,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground font-medium">Unit of Measure / Unit_of_Measure</label>
+                  <label className="text-sm text-foreground font-medium">Unit of Measure</label>
                   <Select value={formData.unitOfMeasure} onValueChange={(value) => setFormData({ ...formData, unitOfMeasure: value })}>
                     <SelectTrigger>
                       <SelectValue />
@@ -2516,7 +2516,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground font-medium">Quantity On Order / Quantity_on_order</label>
+                  <label className="text-sm text-foreground font-medium">Quantity On Order</label>
                   <Input
                     type="number"
                     value={formData.quantityOnOrder}
@@ -2524,7 +2524,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground font-medium">Reorder Level / Reorder_level</label>
+                  <label className="text-sm text-foreground font-medium">Reorder Level</label>
                   <Input
                     type="number"
                     value={formData.reorderLevel}
@@ -2571,7 +2571,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   const tierKey = `priceTier${tier}` as keyof typeof formData;
                   return (
                     <div key={tier}>
-                      <label className="text-sm text-foreground">T{tier} — {getPriceTierLabel(tier)}</label>
+                      <label className="text-sm text-foreground truncate block" title={`T${tier} — ${getPriceTierLabel(tier)}`}>T{tier} — {getPriceTierLabel(tier)}</label>
                       <Input
                         type="number"
                         step="0.01"
@@ -2607,7 +2607,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
               <h3 className="text-sm text-foreground">Supplier Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm text-foreground font-medium">Supplier / Supplier</label>
+                  <label className="text-sm text-foreground font-medium">Supplier</label>
                   <Input
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
@@ -2615,7 +2615,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-foreground font-medium">Supplier SKU / Supplier_SKU</label>
+                  <label className="text-sm text-foreground font-medium">Supplier SKU</label>
                   <Input
                     value={formData.supplierSKU}
                     onChange={(e) => setFormData({ ...formData, supplierSKU: e.target.value })}

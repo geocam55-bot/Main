@@ -212,9 +212,9 @@ export function CompetitivePricingPanel({
   return (
     <Card className={`border-slate-200 shadow-xs ${className}`}>
       <CardHeader className="pb-3 border-b border-slate-100">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-wrap">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <CardTitle className="text-base font-semibold text-slate-900">
                 Competitive Pricing Intelligence
               </CardTitle>
@@ -227,7 +227,7 @@ export function CompetitivePricingPanel({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <Button
               variant="outline"
               size="sm"

@@ -2499,7 +2499,7 @@ export function ContactDetail({
 
       {/* Create Deal Dialog (copied from Bids.tsx / Deals module) */}
       <Dialog open={isAddBidDialogOpen} onOpenChange={setIsAddBidDialogOpen}>
-        <DialogContent className="max-w-[1400px] w-[95vw] h-[90vh] flex flex-col bg-background p-0 border-0 shadow-2xl">
+        <DialogContent className="max-w-[1400px] w-full h-[90vh] flex flex-col bg-background p-0 border-0 shadow-2xl overflow-x-hidden">
           <div className="p-6 border-b flex-shrink-0">
             <DialogHeader>
               <DialogTitle>Create New Deal</DialogTitle>
