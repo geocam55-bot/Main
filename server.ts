@@ -3801,7 +3801,7 @@ Use the googleSearch tool.`;
   // 5. GET /api/competitive-pricing/dashboard
     // 5. GET /api/competitive-pricing/dashboard
     // 5. GET /api/competitive-pricing/dashboard
-  app.get('/api/competitive-pricing/dashboard', async (req, res) => {
+  app.get(['/api/competitive-pricing/dashboard', '/api/competitive-pricing/dashboard/'], async (req, res) => {
     try {
       const { category, varianceFilter, confidenceFilter, search, page = '1', limit = '150' } = req.query;
       const pageNum = parseInt(page as string, 10) || 1;
@@ -4443,6 +4443,12 @@ self.addEventListener('activate', (event) => {
       }
     } catch (_) {}
     res.status(404).send('Favicon not found');
+  });
+
+
+  // Absolute safeguard: any unmatched /api/ request must return JSON 404, never HTML
+  app.use('/api', (req, res) => {
+    res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
   });
 
   const isProduction = process.env.NODE_ENV === "production" || process.env.USE_STATIC_BUILD === "true";
