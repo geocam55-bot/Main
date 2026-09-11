@@ -1,3 +1,20 @@
+
+async function safeParseJson(res: Response) {
+  const contentType = res.headers.get('content-type');
+  const text = await res.text();
+  if (!text || text.trim() === '') {
+    return {};
+  }
+  if (text.trim().startsWith('<') || (contentType && contentType.includes('text/html'))) {
+    throw new Error(`Server returned HTML instead of JSON (${res.status} ${res.statusText})`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Invalid JSON response (${res.status} ${res.statusText})`);
+  }
+}
+
 import { createClient, handleAuthError } from './supabase/client';
 import { getAllCampaignsClient, createCampaignClient, updateCampaignClient, deleteCampaignClient, sendCampaignClient } from './campaigns-client';
 import { getAllQuotesClient, getQuotesByOpportunityClient, createQuoteClient, updateQuoteClient, deleteQuoteClient, getQuoteTrackingStatusClient, fixQuoteOrganizationIds } from './quotes-client';
@@ -631,17 +648,23 @@ export const landingPagesAPI = {
 };
 
 // Competitive Pricing API - REST Interface to ProSpaces Pricing Engine & Workers
+// Competitive Pricing API - REST Interface to ProSpaces Pricing Engine & Workers
 export const competitivePricingAPI = {
   getPricing: async (productId: string | number): Promise<ProductCompetitivePricing> => {
     const headers = await getServerHeaders();
     const res = await fetch(`/api/products/${encodeURIComponent(String(productId))}/competitive-pricing`, { headers });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to fetch competitive pricing (${res.status})`);
+      let errorMsg = `Failed to fetch competitive pricing (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   requestRefresh: async (
     productId: string | number,
     criteria?: {
@@ -659,12 +682,17 @@ export const competitivePricingAPI = {
       body: JSON.stringify(criteria || {}),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Refresh request failed (${res.status})`);
+      let errorMsg = `Refresh request failed (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   saveCompetitorPrice: async (
     productId: string | number,
     data: {
@@ -684,32 +712,47 @@ export const competitivePricingAPI = {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to save price (${res.status})`);
+      let errorMsg = `Failed to save price (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   getJobStatus: async (jobId: string): Promise<PricingJobResponse> => {
     const headers = await getServerHeaders();
     const res = await fetch(`/api/pricing-jobs/${jobId}`, { headers });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to fetch job status (${res.status})`);
+      let errorMsg = `Failed to fetch job status (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   getPriceHistory: async (productId: string | number): Promise<PriceHistoryRecord[]> => {
     const headers = await getServerHeaders();
     const res = await fetch(`/api/products/${encodeURIComponent(String(productId))}/competitive-pricing/history`, { headers });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to fetch price history (${res.status})`);
+      let errorMsg = `Failed to fetch price history (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   getDashboard: async (filters?: {
     competitorId?: string;
     category?: string;
@@ -728,16 +771,20 @@ export const competitivePricingAPI = {
     if (filters?.search) query.set('search', filters.search);
     if (filters?.page) query.set('page', filters.page.toString());
     if (filters?.limit) query.set('limit', filters.limit.toString());
-
     const qs = query.toString();
     const res = await fetch(`/api/competitive-pricing/dashboard${qs ? `?${qs}` : ''}`, { headers });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to fetch pricing dashboard (${res.status})`);
+      let errorMsg = `Failed to fetch pricing dashboard (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   runPricingAgent: async (): Promise<{ success: boolean; message: string }> => {
     const headers = await getServerHeaders();
     const res = await fetch('/api/competitive-pricing/agent/start', {
@@ -745,12 +792,17 @@ export const competitivePricingAPI = {
       headers,
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to start pricing agent (${res.status})`);
+      let errorMsg = `Failed to start pricing agent (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   getPricingAgentLogs: async (): Promise<{ logs: string }> => {
     const headers = await getServerHeaders();
     const res = await fetch('/api/competitive-pricing/agent/logs', {
@@ -758,22 +810,32 @@ export const competitivePricingAPI = {
       headers,
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to fetch logs (${res.status})`);
+      let errorMsg = `Failed to fetch logs (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   getCompetitors: async (): Promise<CompetitorConfig[]> => {
     const headers = await getServerHeaders();
     const res = await fetch('/api/competitive-pricing/admin/competitors', { headers });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to fetch competitors (${res.status})`);
+      let errorMsg = `Failed to fetch competitors (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
   updateCompetitor: async (id: string | number, data: Partial<CompetitorConfig>): Promise<CompetitorConfig> => {
     const headers = await getServerHeaders();
     const res = await fetch(`/api/competitive-pricing/admin/competitors/${id}`, {
@@ -782,13 +844,17 @@ export const competitivePricingAPI = {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to update competitor (${res.status})`);
+      let errorMsg = `Failed to update competitor (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      }
+      throw new Error(errorMsg);
     }
-    return res.json();
+    return safeParseJson(res);
   },
-
-  // Resilient Polling helper
   pollJobUntilComplete: async (
     jobId: string,
     onUpdate?: (job: PricingJobResponse) => void,
