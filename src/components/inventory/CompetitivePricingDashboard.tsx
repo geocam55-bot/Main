@@ -28,6 +28,9 @@ import {
   Calendar,
   Plus,
   Terminal,
+  Zap,
+  StopCircle,
+  ShoppingCart,
 } from 'lucide-react';
 import {
   Dialog,
@@ -98,12 +101,28 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
   // History modal state
   const [historyTarget, setHistoryTarget] = useState<PricingDashboardItem | null>(null);
+  const [inspectTarget, setInspectTarget] = useState<PricingDashboardItem | null>(null);
 
   // Quick SKU check modal state
   const [isQuickCheckOpen, setIsQuickCheckOpen] = useState(false);
   const [quickCheckSku, setQuickCheckSku] = useState('');
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState('');
+  const [agentStatus, setAgentStatus] = useState<{
+    isRunning: boolean;
+    progress?: {
+      current: number;
+      total: number;
+      percent: number;
+      matchesFound: number;
+      currentSku: string;
+      currentName: string;
+      startedAt: string;
+      lastUpdated: string;
+      completedAt?: string;
+    } | null;
+  } | null>(null);
+  const [isAgentStopping, setIsAgentStopping] = useState(false);
   const [activeCheckedItem, setActiveCheckedItem] = useState<{
     productId: string;
     sku: string;
@@ -197,6 +216,66 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     e.preventDefault();
     loadDashboard();
   };
+
+  // Poll agent status & auto-refresh dashboard when matches increment or agent finishes
+  useEffect(() => {
+    let isMounted = true;
+    let pollInterval: any = null;
+
+    const checkStatus = async () => {
+      try {
+        const status = await competitivePricingAPI.getPricingAgentStatus();
+        if (!isMounted) return;
+
+        setAgentStatus((prev) => {
+          // If matches increased or run completed, trigger dashboard refresh
+          if (prev?.progress && status.progress) {
+            if (status.progress.matchesFound > prev.progress.matchesFound) {
+              loadDashboard();
+            }
+          }
+          if (prev?.isRunning && !status.isRunning) {
+            loadDashboard();
+            toast.success(`Pricing agent finished! ${status.progress?.matchesFound || 0} matches found.`);
+          }
+          return status;
+        });
+      } catch (err) {
+        // silent fail on poll
+      }
+    };
+
+    checkStatus();
+    pollInterval = setInterval(checkStatus, agentStatus?.isRunning ? 3000 : 10000);
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [agentStatus?.isRunning]);
+
+  // Auto-stream diagnostic logs while diagnostic modal is open
+  useEffect(() => {
+    if (!isDiagnosticOpen) return;
+    let isMounted = true;
+
+    const fetchLogs = async () => {
+      try {
+        const data = await competitivePricingAPI.getPricingAgentLogs();
+        if (isMounted && data.logs) {
+          setDiagnosticLogs(data.logs);
+        }
+      } catch (e) {}
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isDiagnosticOpen]);
 
   // Dynamically load all distinct categories across the database to supplement defaults
   useEffect(() => {
@@ -312,18 +391,34 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           <Button
             variant="outline"
             size="sm"
+            disabled={agentStatus?.isRunning}
             onClick={async () => {
               try {
                 await competitivePricingAPI.runPricingAgent();
-                toast.success('Background pricing agent started successfully! This may take several minutes to process all items.');
+                toast.success('High-speed background pricing agent started!');
+                const s = await competitivePricingAPI.getPricingAgentStatus();
+                setAgentStatus(s);
               } catch (e: any) {
                 toast.error(e.message || 'Failed to start pricing agent.');
               }
             }}
-            className="h-8 gap-1.5 text-xs text-slate-700"
+            className={`h-8 gap-1.5 text-xs ${
+              agentStatus?.isRunning
+                ? 'bg-blue-50 text-blue-700 border-blue-300'
+                : 'text-slate-700'
+            }`}
           >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Run Background Agent
+            {agentStatus?.isRunning ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                Agent Active ({agentStatus.progress?.percent || 0}%)
+              </>
+            ) : (
+              <>
+                <Zap className="h-3.5 w-3.5 text-amber-500" />
+                Run Background Agent
+              </>
+            )}
           </Button>
 
           <Button
@@ -347,6 +442,19 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           <Button
             variant="outline"
             size="sm"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('switch-inventory-tab', { detail: { tab: 'shopping-list' } }));
+            }}
+            className="h-8 gap-1.5 text-xs text-blue-700 border-blue-200 hover:bg-blue-50"
+            title="Open Shopping List"
+          >
+            <ShoppingCart className="h-3.5 w-3.5 text-blue-600" />
+            Shopping List
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
             onClick={loadDashboard}
             disabled={isLoading}
             className="h-8 gap-1.5 text-xs text-slate-700"
@@ -356,6 +464,127 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           </Button>
         </div>
       </div>
+
+      {/* Agent Progress Banner */}
+      {agentStatus?.isRunning && agentStatus.progress && (
+        <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-4 transition-all shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+                <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-sm text-blue-950">
+                    Competitive Pricing Agent Scanning
+                  </span>
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-[10px] font-medium border-blue-200">
+                    High-Speed Direct Engine
+                  </Badge>
+                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-[10px] font-medium border-emerald-200">
+                    {agentStatus.progress.matchesFound} Matches Captured
+                  </Badge>
+                </div>
+                <div className="text-xs text-blue-700 mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="font-mono bg-blue-100/80 px-1.5 py-0.5 rounded text-[11px] text-blue-900 font-semibold">
+                    {agentStatus.progress.currentSku || 'Scanning'}
+                  </span>
+                  <span className="text-slate-700 truncate max-w-md font-medium">
+                    {agentStatus.progress.currentName || 'Processing catalog...'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end md:self-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const data = await competitivePricingAPI.getPricingAgentLogs();
+                    setDiagnosticLogs(data.logs);
+                    setIsDiagnosticOpen(true);
+                  } catch (e) {}
+                }}
+                className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+              >
+                <Terminal className="h-3.5 w-3.5 mr-1" />
+                Live Logs
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isAgentStopping}
+                onClick={async () => {
+                  try {
+                    setIsAgentStopping(true);
+                    await competitivePricingAPI.stopPricingAgent();
+                    toast.success('Stopping pricing agent...');
+                    const s = await competitivePricingAPI.getPricingAgentStatus();
+                    setAgentStatus(s);
+                  } catch (e: any) {
+                    toast.error(e.message || 'Failed to stop agent');
+                  } finally {
+                    setIsAgentStopping(false);
+                  }
+                }}
+                className="h-8 text-xs bg-white text-rose-700 border-rose-200 hover:bg-rose-50"
+              >
+                <StopCircle className="h-3.5 w-3.5 mr-1" />
+                {isAgentStopping ? 'Stopping...' : 'Stop'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <div className="flex justify-between text-[11px] text-blue-800 font-medium mb-1">
+              <span>Progress: {agentStatus.progress.current} of {agentStatus.progress.total} items analyzed</span>
+              <span className="font-bold">{agentStatus.progress.percent}%</span>
+            </div>
+            <div className="w-full bg-blue-200/70 h-2.5 rounded-full overflow-hidden">
+              <div
+                className="bg-blue-600 h-full transition-all duration-300 rounded-full"
+                style={{ width: `${Math.min(Math.max(agentStatus.progress.percent, 2), 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agent Completed Banner */}
+      {!agentStatus?.isRunning && agentStatus?.progress?.completedAt && (
+        <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div>
+              <span className="font-semibold text-sm text-emerald-950">
+                Pricing Agent Run Complete
+              </span>
+              <p className="text-xs text-emerald-700">
+                Scanned {agentStatus.progress.total} catalog items • Captured {agentStatus.progress.matchesFound} competitor price matches.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                const data = await competitivePricingAPI.getPricingAgentLogs();
+                setDiagnosticLogs(data.logs);
+                setIsDiagnosticOpen(true);
+              } catch (e) {}
+            }}
+            className="h-7 text-xs text-emerald-800 hover:bg-emerald-100"
+          >
+            <Terminal className="h-3.5 w-3.5 mr-1" />
+            View Run Log
+          </Button>
+        </div>
+      )}
 
       {/* KPI Metric Summary Cards (Section 12.3) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -669,22 +898,55 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => {
+                              window.dispatchEvent(
+                                new CustomEvent('add-to-shopping-list', {
+                                  detail: {
+                                    item: {
+                                      id: item.productId,
+                                      name: item.name || item.productName || item.description || 'Product',
+                                      description: item.description || '',
+                                      sku: item.sku,
+                                      unit_price: item.yourPrice,
+                                      cost: item.cost,
+                                      replacement_cost: item.replacementCost,
+                                      category: item.category,
+                                      mfg_part_number: item.manufacturerPartNumber,
+                                      upc: item.upc,
+                                    },
+                                    quantity: 1,
+                                  },
+                                })
+                              );
+                            }}
+                            className="h-7 w-7 p-0 text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                            title="Add to Shopping List"
+                          >
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setHistoryTarget(item)}
                             className="h-7 px-2 text-[11px] text-slate-600 hover:text-blue-600"
                             title="View price history chart"
                           >
                             History
                           </Button>
-                          {onSelectProduct && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => onSelectProduct(item)}
-                              className="h-7 px-2 text-[11px] text-blue-600 hover:bg-blue-50"
-                            >
-                              Inspect
-                            </Button>
-                          )}
+                           <Button
+                             variant="outline"
+                             size="sm"
+                             onClick={() => {
+                               if (onSelectProduct) {
+                                 onSelectProduct(item);
+                               }
+                               setInspectTarget(item);
+                             }}
+                             className="h-7 px-2 text-[11px] text-blue-600 hover:bg-blue-50"
+                             title="Inspect product & competitor pricing"
+                           >
+                             Inspect
+                           </Button>
                         </div>
                       </td>
                     </tr>
@@ -825,6 +1087,80 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           </div>
         </DialogContent>
       </Dialog>
+      {/* Inspect Product Dialog */}
+      {inspectTarget && (
+        <Dialog open={!!inspectTarget} onOpenChange={() => setInspectTarget(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                Product & Competitor Pricing Inspection
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Detailed pricing and market comparison for SKU: {inspectTarget.sku}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 my-2 text-xs">
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">{inspectTarget.name}</h4>
+                <p className="text-slate-600 mt-1">{inspectTarget.description || 'No description provided.'}</p>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <Badge variant="secondary" className="font-mono text-[10px]">
+                    SKU: {inspectTarget.sku}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {inspectTarget.category}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Pricing Cards */}
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border">
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase">Your Price (RONA)</span>
+                  <span className="font-bold text-slate-800 text-sm">${inspectTarget.yourPrice.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase">Lowest Competitor Price</span>
+                  <span className="font-bold text-emerald-700 text-sm">
+                    {inspectTarget.lowestCompetitorPrice !== null ? `$${inspectTarget.lowestCompetitorPrice.toFixed(2)} (${inspectTarget.lowestCompetitorName || 'Competitor'})` : 'No competitor match'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Variance & Recommendation */}
+              <div className="p-3 rounded-lg bg-blue-50/70 border border-blue-200 text-blue-900 text-[11px]">
+                <span className="font-semibold block mb-0.5">Competitive Analysis:</span>
+                {inspectTarget.priceDifference !== null ? (
+                  <span>
+                    Price Variance: {inspectTarget.priceDifference > 0 ? `+$${inspectTarget.priceDifference.toFixed(2)}` : `-$${Math.abs(inspectTarget.priceDifference).toFixed(2)}`} ({inspectTarget.variancePct !== null ? `${inspectTarget.variancePct.toFixed(1)}%` : '0%'})
+                  </span>
+                ) : (
+                  <span>Awaiting competitor pricing match verification.</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setHistoryTarget(inspectTarget);
+                  setInspectTarget(null);
+                }}
+                className="text-xs"
+              >
+                View History
+              </Button>
+              <Button variant="default" size="sm" onClick={() => setInspectTarget(null)} className="text-xs bg-blue-600 text-white hover:bg-blue-700">
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

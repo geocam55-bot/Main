@@ -161,41 +161,45 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: {
   }
 
   // 3. Fetch Matches & Prices
-  if (productIds.length > 0) {
-    try {
-      const allQueryIds = Array.from(new Set([...productIds, ...productSkus]));
-      // Batch fetch product matches
-      const { data: matches } = await supabase
-        .from('product_matches')
-        .select('*, competitor_products(*)')
-        .in('product_id', allQueryIds.slice(0, 200));
+  try {
+    const { data: matches } = await supabase
+      .from('product_matches')
+      .select('*, competitor_products(*)')
+      .limit(5000);
 
-      if (matches && matches.length > 0) {
-        for (const m of matches) {
-          const prodId = String(m.product_id);
-          if (!matchesMap.has(prodId)) {
-            matchesMap.set(prodId, []);
-          }
-          matchesMap.get(prodId)!.push(m);
+    if (matches && matches.length > 0) {
+      for (const m of matches) {
+        const prodId = String(m.product_id);
+        if (!matchesMap.has(prodId)) {
+          matchesMap.set(prodId, []);
         }
+        matchesMap.get(prodId)!.push(m);
+      }
 
-        const compProductIds = matches.map((m: any) => m.competitor_product_id).filter(Boolean);
-        if (compProductIds.length > 0) {
+      const compProductIds = Array.from(new Set(matches.map((m: any) => m.competitor_product_id).filter(Boolean)));
+      if (compProductIds.length > 0) {
+        // Query in chunks of 200 to stay safely under Supabase query limits
+        for (let i = 0; i < compProductIds.length; i += 200) {
+          const chunk = compProductIds.slice(i, i + 200);
           const { data: cpList } = await supabase
             .from('competitor_prices')
             .select('*')
-            .in('competitor_product_id', compProductIds);
+            .in('competitor_product_id', chunk);
 
           if (cpList) {
             for (const cp of cpList) {
-              pricesMap.set(String(cp.competitor_product_id), cp);
+              const prev = pricesMap.get(String(cp.competitor_product_id));
+              // Keep the latest checked price
+              if (!prev || new Date(cp.checked_at || 0) > new Date(prev.checked_at || 0)) {
+                pricesMap.set(String(cp.competitor_product_id), cp);
+              }
             }
           }
         }
       }
-    } catch (e) {
-      console.warn('[Direct Pricing Client] Product matches lookup warning:', e);
     }
+  } catch (e) {
+    console.warn('[Direct Pricing Client] Product matches lookup warning:', e);
   }
 
   // 4. Map products to Dashboard items

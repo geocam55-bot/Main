@@ -712,6 +712,42 @@ export const competitivePricingAPI = {
       return { jobId: `direct_${Date.now()}`, status: 'COMPLETED' };
     }
   },
+  scrapeLiveItem: async (itemData: {
+    productId?: string;
+    sku?: string;
+    name?: string;
+    productName?: string;
+    description?: string;
+    category?: string;
+    yourPrice?: number;
+    unitPrice?: number;
+    upc?: string;
+    mfgPartNumber?: string;
+    searchQuery?: string;
+  }): Promise<{ success: boolean; competitors: any[] }> => {
+    try {
+      const headers = await getServerHeaders();
+      const res = await fetch('/api/competitive-pricing/scrape-live', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(itemData),
+      });
+      if (!res.ok) {
+        let errorMsg = `Live scrape request failed (${res.status})`;
+        try {
+          const err = await safeParseJson(res);
+          errorMsg = err.error || err.message || errorMsg;
+        } catch (e: any) {
+          if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+        }
+        throw new Error(errorMsg);
+      }
+      return await safeParseJson(res);
+    } catch (err: any) {
+      console.warn('[Competitive Pricing] Live scrape failed:', err.message);
+      return { success: false, competitors: [] };
+    }
+  },
   saveCompetitorPrice: async (
     productId: string | number,
     data: {
@@ -854,6 +890,46 @@ export const competitivePricingAPI = {
       return await safeParseJson(res);
     } catch (err: any) {
       return { success: true, message: 'Pricing sweep triggered via direct background process.' };
+    }
+  },
+  getPricingAgentStatus: async (): Promise<{
+    isRunning: boolean;
+    progress?: {
+      current: number;
+      total: number;
+      percent: number;
+      matchesFound: number;
+      currentSku: string;
+      currentName: string;
+      startedAt: string;
+      lastUpdated: string;
+      completedAt?: string;
+    } | null;
+  }> => {
+    try {
+      const headers = await getServerHeaders();
+      const res = await fetch('/api/competitive-pricing/agent/status', {
+        method: 'GET',
+        headers,
+      });
+      if (res.ok) {
+        return await safeParseJson(res);
+      }
+      return { isRunning: false, progress: null };
+    } catch (err: any) {
+      return { isRunning: false, progress: null };
+    }
+  },
+  stopPricingAgent: async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const headers = await getServerHeaders();
+      const res = await fetch('/api/competitive-pricing/agent/stop', {
+        method: 'POST',
+        headers,
+      });
+      return await safeParseJson(res);
+    } catch (err: any) {
+      return { success: false, message: err.message };
     }
   },
   getPricingAgentLogs: async (): Promise<{ logs: string }> => {

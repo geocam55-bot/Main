@@ -59,6 +59,7 @@ import { InventoryDiagnostic } from './InventoryDiagnostic';
 import { CompetitivePricingDashboard } from './inventory/CompetitivePricingDashboard';
 import { CompetitivePricingAdmin } from './inventory/CompetitivePricingAdmin';
 import { CompetitivePricingPanel } from './inventory/CompetitivePricingPanel';
+import { ShoppingListSubModule } from './inventory/ShoppingListSubModule';
 // import { ImportExport } from './ImportExport';
 
 // Module-level singleton — avoids re-creation per render
@@ -139,6 +140,63 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   // ⚡ Performance tracking
   const [loadTimeMs, setLoadTimeMs] = useState(0);
   
+  // 🛒 Shopping list item count tracking
+  const [shoppingListCount, setShoppingListCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('prospaces_active_shopping_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed.length : 0;
+      }
+    } catch {}
+    return 0;
+  });
+
+  useEffect(() => {
+    const handleCountUpdate = (e: any) => {
+      if (typeof e.detail?.count === 'number') {
+        setShoppingListCount(e.detail.count);
+      }
+    };
+    const handleTabSwitch = (e: any) => {
+      if (e.detail?.tab) {
+        setActiveTab(e.detail.tab);
+      }
+    };
+    window.addEventListener('shopping-list-updated', handleCountUpdate);
+    window.addEventListener('switch-inventory-tab', handleTabSwitch);
+    return () => {
+      window.removeEventListener('shopping-list-updated', handleCountUpdate);
+      window.removeEventListener('switch-inventory-tab', handleTabSwitch);
+    };
+  }, []);
+
+  const handleAddToShoppingList = (item: InventoryItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    window.dispatchEvent(
+      new CustomEvent('add-to-shopping-list', {
+        detail: {
+          item: {
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            description: item.description,
+            category: item.category,
+            unit_price: item.unit_price || item.unitPrice,
+            cost: item.cost,
+            replacement_cost: item.replacement_cost || item.replacementCost,
+            quantity_on_hand: item.quantity_on_hand || item.quantityOnHand || 0,
+            unit_of_measure: item.unit_of_measure || item.unitOfMeasure || 'EA',
+            supplier: item.supplier,
+            supplier_sku: item.supplier_sku || item.supplierSKU,
+            mfg_part_number: item.mfg_part_number || item.mfgPartNumber,
+            upc: item.upc,
+          },
+          quantity: 1,
+        },
+      })
+    );
+  };
   
   // ⚡ Track total count for pagination
   const [totalCount, setTotalCount] = useState(0);
@@ -1526,6 +1584,13 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                 <Badge className="ml-2 bg-red-100 text-red-700">{displayLowStockCount.toLocaleString()}</Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="shopping-list" className="whitespace-nowrap flex items-center gap-1.5">
+              <ShoppingCart className="h-4 w-4" />
+              Shopping List
+              {shoppingListCount > 0 && (
+                <Badge className="ml-1 bg-blue-100 text-blue-700 font-semibold">{shoppingListCount}</Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="competitive-pricing" className="whitespace-nowrap">
               Competitive Pricing
             </TabsTrigger>
@@ -1877,6 +1942,15 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                           <div className="flex items-start justify-between gap-2">
                             <h3 className="text-base sm:text-lg text-foreground font-medium truncate">{item.name}</h3>
                             <div className="flex gap-1 shrink-0">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  onClick={(e) => handleAddToShoppingList(item, e)}
+                                  title="Add to Shopping List"
+                                >
+                                  <ShoppingCart className="h-4 w-4" />
+                                </Button>
                                 {canChange('inventory', user.role) && (
                                 <Button
                                   variant="ghost"
@@ -1985,6 +2059,16 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                             )}
                           </div>
                           <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => handleAddToShoppingList(item, e)}
+                              title="Add to Shopping List"
+                              className="text-blue-600 hover:bg-blue-50"
+                            >
+                              <ShoppingCart className="h-4 w-4 mr-1" />
+                              <span className="hidden lg:inline text-xs">Add to List</span>
+                            </Button>
                             {canChange('inventory', user.role) && (
                             <Button
                               variant="outline"
@@ -2443,6 +2527,17 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="shopping-list" className="space-y-6 mt-6">
+          <ShoppingListSubModule
+            onSelectProduct={(productId) => {
+              const target = items.find((i) => String(i.id) === String(productId));
+              if (target) {
+                handleOpenDialog(target);
+              }
+            }}
+          />
         </TabsContent>
 
 
