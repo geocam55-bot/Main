@@ -33,6 +33,7 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { createClient } from '../../utils/supabase/client';
@@ -253,9 +254,10 @@ export const mapDbRowToInventoryItem = (rawItem: any) => {
 
 interface ShoppingListSubModuleProps {
   onSelectProduct?: (productId: string) => void;
+  onInspectProduct?: (item: ShoppingListItem) => void;
 }
 
-export function ShoppingListSubModule({ onSelectProduct }: ShoppingListSubModuleProps) {
+export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: ShoppingListSubModuleProps) {
   const [costViewMode, setCostViewMode] = useState<'avg_cost' | 'replacement_cost'>('avg_cost');
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>(() => {
     try {
@@ -841,6 +843,132 @@ export function ShoppingListSubModule({ onSelectProduct }: ShoppingListSubModule
     }
   };
 
+  // CSV Import state
+  const [isImportCSVOpen, setIsImportCSVOpen] = useState(false);
+  const [csvRawText, setCsvRawText] = useState('');
+  const [parsedCsvPreview, setParsedCsvPreview] = useState<ShoppingListItem[]>([]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        setCsvRawText(text);
+        parseCsvText(text);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const parseCsvText = (text: string) => {
+    try {
+      const lines = text.split(/\r\n|\n/).filter(l => l.trim().length > 0);
+      if (lines.length === 0) {
+        setParsedCsvPreview([]);
+        return;
+      }
+
+      const parseLine = (line: string) => {
+        const result = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(cur.trim().replace(/^"|"$/g, ''));
+            cur = '';
+          } else {
+            cur += char;
+          }
+        }
+        result.push(cur.trim().replace(/^"|"$/g, ''));
+        return result;
+      };
+
+      const headers = parseLine(lines[0]).map(h => h.toLowerCase());
+      
+      let skuIdx = headers.findIndex(h => h.includes('sku') || h.includes('item sku') || h.includes('code'));
+      let nameIdx = headers.findIndex(h => h.includes('name') || h.includes('product') || h.includes('title') || h.includes('item'));
+      let qtyIdx = headers.findIndex(h => h.includes('qty') || h.includes('quantity') || h.includes('count'));
+      let descIdx = headers.findIndex(h => h.includes('desc') || h.includes('notes'));
+      let catIdx = headers.findIndex(h => h.includes('cat') || h.includes('category'));
+      let costIdx = headers.findIndex(h => h.includes('cost'));
+      let priceIdx = headers.findIndex(h => h.includes('retail') || h.includes('price') || h.includes('selling'));
+
+      if (skuIdx === -1 && nameIdx === -1) {
+        skuIdx = 0;
+        nameIdx = 1;
+      } else if (skuIdx === -1) {
+        skuIdx = nameIdx === 0 ? 1 : 0;
+      } else if (nameIdx === -1) {
+        nameIdx = skuIdx === 0 ? 1 : 0;
+      }
+
+      const items: ShoppingListItem[] = [];
+      const hasHeader = (skuIdx !== -1 && nameIdx !== -1 && (headers[skuIdx]?.includes('sku') || headers[nameIdx]?.includes('name') || headers[skuIdx]?.includes('code')));
+      const startRow = hasHeader ? 1 : 0;
+
+      for (let i = startRow; i < lines.length; i++) {
+        const cols = parseLine(lines[i]);
+        if (cols.length === 0 || (cols.length === 1 && !cols[0])) continue;
+        const sku = cols[skuIdx] || `SKU-${Math.random().toString(36).substring(2, 7)}`;
+        const name = cols[nameIdx] || cols[skuIdx] || 'Imported Product';
+        const qty = qtyIdx !== -1 ? Number(cols[qtyIdx]) || 1 : 1;
+        const description = descIdx !== -1 ? cols[descIdx] : '';
+        const category = catIdx !== -1 ? cols[catIdx] : 'Imported';
+        const cost = costIdx !== -1 ? Number(cols[costIdx]) || 0 : 0;
+        const unitPrice = priceIdx !== -1 ? Number(cols[priceIdx]) || (cost > 0 ? cost * 1.25 : 19.99) : 19.99;
+
+        items.push({
+          id: `import_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+          sku,
+          name,
+          description,
+          category,
+          quantity: qty > 0 ? qty : 1,
+          cost,
+          replacementCost: cost,
+          unitPrice,
+          unitOfMeasure: 'EA',
+        });
+      }
+
+      setParsedCsvPreview(items);
+    } catch (err) {
+      console.error('CSV parse error:', err);
+      toast.error('Failed to parse CSV file');
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (parsedCsvPreview.length === 0) {
+      toast.error('No valid items found to import');
+      return;
+    }
+
+    setShoppingList(prev => {
+      const copy = [...prev];
+      for (const newItem of parsedCsvPreview) {
+        const existing = copy.find(i => (newItem.sku && i.sku === newItem.sku) || i.name.toLowerCase() === newItem.name.toLowerCase());
+        if (existing) {
+          existing.quantity += newItem.quantity;
+        } else {
+          copy.push(newItem);
+        }
+      }
+      return copy;
+    });
+
+    toast.success(`Successfully imported ${parsedCsvPreview.length} items into shopping list!`);
+    setIsImportCSVOpen(false);
+    setParsedCsvPreview([]);
+    setCsvRawText('');
+  };
+
   // Export CSV
   const handleExportCSV = () => {
     if (shoppingList.length === 0) {
@@ -1003,6 +1131,17 @@ export function ShoppingListSubModule({ onSelectProduct }: ShoppingListSubModule
             >
               <FolderOpen className="h-3.5 w-3.5" />
               Lists ({savedLists.length})
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportCSVOpen(true)}
+              className="text-xs h-9 gap-1"
+              title="Import CSV"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import
             </Button>
 
             <Button
@@ -1335,7 +1474,9 @@ export function ShoppingListSubModule({ onSelectProduct }: ShoppingListSubModule
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              if (onSelectProduct && item.inventoryId) {
+                              if (onInspectProduct) {
+                                onInspectProduct(item);
+                              } else if (onSelectProduct && item.inventoryId) {
                                 onSelectProduct(item.inventoryId);
                               } else {
                                 setSelectedDetailItem(item);

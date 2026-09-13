@@ -2531,6 +2531,24 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
 
         <TabsContent value="shopping-list" className="space-y-6 mt-6">
           <ShoppingListSubModule
+            onInspectProduct={(item) => {
+              const target = items.find((i) => String(i.id) === String(item.inventoryId || item.id) || (item.sku && String(i.sku) === String(item.sku)));
+              if (target) {
+                handleOpenDialog(target);
+              } else {
+                handleOpenDialog({
+                  id: item.inventoryId || item.id,
+                  name: item.name,
+                  sku: item.sku,
+                  description: item.description,
+                  category: item.category,
+                  cost: item.cost,
+                  unitPrice: item.unitPrice,
+                  unitOfMeasure: item.unitOfMeasure || 'EA',
+                  quantity: item.quantity,
+                } as any);
+              }
+            }}
             onSelectProduct={(productId) => {
               const target = items.find((i) => String(i.id) === String(productId));
               if (target) {
