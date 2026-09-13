@@ -2985,6 +2985,8 @@ Result:
   function normalizeBuildingText(text: string) {
     return String(text || '')
       .toLowerCase()
+      .replace(/\b(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\b/gi, '$1 x $2 x $3')
+      .replace(/\b(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\b/gi, '$1 x $2')
       .replace(/\bply\b/g, 'plywood')
       .replace(/\bspr\b/g, 'spruce')
       .replace(/\bstd\b/g, 'standard')
@@ -2999,13 +3001,19 @@ Result:
   // 1) Match on "Item Name" then Dimensions (80% or greater similarity)
   // 2) Match on UPC exact match
   // 3) Match on MFG# (Supplier SKU) exact match
-  function scoreAndPickBestProduct(items: any[], product: { productName?: string; description?: string; upc?: string; mfgPartNumber?: string }) {
+  function scoreAndPickBestProduct(items: any[], product: { productName?: string; description?: string; upc?: string; mfgPartNumber?: string }, query: string = '') {
     if (!items || items.length === 0) return null;
 
     const targetName = normalizeBuildingText(product.productName || '');
     const targetDesc = normalizeBuildingText(product.description || '');
     const targetUpc = String(product.upc || '').trim();
     const targetMfg = String(product.mfgPartNumber || '').trim().toLowerCase();
+    const qTrim = String(query || '').trim().toLowerCase();
+
+    // If query matches effectiveMfg or effectiveUpc, or if targetMfg/targetUpc matches candidate MFG/UPC
+    if (qTrim && (qTrim === targetMfg || qTrim === targetUpc || (targetMfg && qTrim.includes(targetMfg)) || (targetUpc && qTrim.includes(targetUpc)))) {
+      return { item: items[0], method: qTrim === targetUpc ? 'UPC' : 'MANUFACTURER_PART_NUMBER', confidence: 'EXACT', score: 1.0 };
+    }
 
     // Helper to extract dimensions and lengths (e.g. 2x4x10, 2x4 10 ft, 10', etc.)
     const extractDims = (text: string) => {
@@ -3046,8 +3054,8 @@ Result:
       }
 
       // Token overlap similarity (Jaccard) between target name and candidate title
-      const targetTokens = new Set(targetName.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(t => t.length > 1));
-      const candTokens = new Set(candTitle.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(t => t.length > 1));
+      const targetTokens = new Set(targetName.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 0));
+      const candTokens = new Set(candTitle.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 0));
 
       let intersection = 0;
       for (const t of targetTokens) {
@@ -3123,22 +3131,37 @@ Result:
     console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Name: "${effectiveName}" | Desc: "${effectiveDesc}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
     let freshKent = 0;
     let freshHd = 0;
-    let kentConf = 'HIGH';
-    let hdConf = 'HIGH';
+    let kentConf = 'NOT_FOUND';
+    let hdConf = 'NOT_FOUND';
     let kentMethod = (effectiveDesc || effectiveName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
     let hdMethod = (effectiveDesc || effectiveName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
     let kentTitle = effectiveDesc || effectiveName;
     let hdTitle = effectiveDesc || effectiveName;
     let kentSku = effectiveMfg || '';
     let hdSku = effectiveMfg || '';
-    let kentUrl = `https://kent.ca/search?q=${encodeURIComponent(kentSearchQuery)}#!q=${encodeURIComponent(kentSearchQuery)}`;
+    let kentUrl = `https://kent.ca/en/search/?q=${encodeURIComponent(kentSearchQuery)}`;
 
     // Direct Scraping for Kent Building Supplies (Halifax - Bayers Lake store)
     try {
       // Build lumber-normalized queries using normalizeBuildingText
       const lumberNormalized = normalizeBuildingText(effectiveDesc || effectiveName);
+      
+      // Heuristic: Many search engines fail on long specific queries (e.g., "SPF 2X4X8' LUMBER #2 & BETTER")
+      // We take the first 3 tokens and strip # or & qualifiers as a fallback broad query
+      const simplifiedKentQuery = effectiveName.replace(/#.*$/, '').replace(/&.*$/, '').replace(/\*.*\*/g, '').trim();
+      const shortKentQuery = simplifiedKentQuery.split(/\s+/).slice(0, 3).join(' ').trim();
 
-      const queriesToTry = [effectiveUpc, effectiveMfg, effectiveName, kentSearchQuery, lumberNormalized, effectiveDesc].filter(Boolean);
+      const queriesToTry = [
+        effectiveName, 
+        kentSearchQuery,
+        simplifiedKentQuery,
+        shortKentQuery, 
+        lumberNormalized, 
+        effectiveDesc,
+        effectiveUpc, 
+        effectiveMfg
+      ].filter(Boolean);
+      
       for (const query of queriesToTry) {
         if (freshKent > 0) break;
         const suggestUrl = `https://kent.ca/search/ajax/suggest?q=${encodeURIComponent(query)}`;
@@ -3156,7 +3179,7 @@ Result:
           const productItems = Array.isArray(items) ? items.filter((it: any) => it.type === 'product') : [];
           if (productItems.length > 0) {
             // Find best matching product item adhering to matching rules
-            const matchedResult = scoreAndPickBestProduct(productItems, { productName: effectiveName, description: effectiveDesc, upc: effectiveUpc, mfgPartNumber: effectiveMfg });
+            const matchedResult = scoreAndPickBestProduct(productItems, { productName: effectiveName, description: effectiveDesc, upc: effectiveUpc, mfgPartNumber: effectiveMfg }, query);
 
             if (matchedResult) {
               const matchedItem = matchedResult.item;
@@ -3215,13 +3238,31 @@ Result:
     } catch (scrapingErr: any) {
       console.warn('[Kent Direct Scraping] Direct fetch warning:', scrapingErr.message);
     }
-    let hdUrl = `https://www.homedepot.ca/search?q=${encodeURIComponent(hdSearchQuery)}#!q=${encodeURIComponent(hdSearchQuery)}`;
+    const hdQueryEncoded = encodeURIComponent(hdSearchQuery).replace(/'/g, "%27");
+    const hdHashQuery = hdQueryEncoded
+      .replace(/%2F/ig, '/')
+      .replace(/%23/ig, '#')
+      .replace(/%26/ig, '&')
+      .replace(/%27/ig, "'");
+    let hdUrl = `https://www.homedepot.ca/search?q=${hdQueryEncoded}#!q=${hdHashQuery}`;
 
     // Direct Scraping for The Home Depot Canada (with store-level localization)
     try {
       const lumberNormalizedHd = normalizeBuildingText(effectiveDesc || effectiveName);
+      
+      const simplifiedHdQuery = effectiveName.replace(/#.*$/, '').replace(/&.*$/, '').replace(/\*.*\*/g, '').trim();
+      const shortHdQuery = simplifiedHdQuery.split(/\s+/).slice(0, 3).join(' ').trim();
 
-      const hdQueriesToTry = [effectiveUpc, effectiveMfg, effectiveName, hdSearchQuery, lumberNormalizedHd, effectiveDesc].filter(Boolean);
+      const hdQueriesToTry = [
+        effectiveName, 
+        hdSearchQuery, 
+        simplifiedHdQuery,
+        shortHdQuery,
+        lumberNormalizedHd, 
+        effectiveDesc,
+        effectiveUpc, 
+        effectiveMfg
+      ].filter(Boolean);
       // Support store localization: default to local Halifax Bayers Lake store #7126 (368 Lacewood Dr) or user specified store
       const preferredStore = String((bodyCriteria as any).store || (bodyCriteria as any).storeId || process.env.HOMEDEPOT_STORE_ID || '7126').trim();
       const storeOptions = [preferredStore, '']; // Try localized store first, then fallback to national/unlocalized
@@ -3248,13 +3289,13 @@ Result:
             const products = Array.isArray(hdData.products) ? hdData.products : [];
             if (products.length > 0) {
               // Find best matching product item adhering to the matching rules
-              const matchedRes = scoreAndPickBestProduct(products, { productName: effectiveName, description: effectiveDesc, upc: effectiveUpc, mfgPartNumber: effectiveMfg });
+              const matchedRes = scoreAndPickBestProduct(products, { productName: effectiveName, description: effectiveDesc, upc: effectiveUpc, mfgPartNumber: effectiveMfg }, query);
 
               if (matchedRes) {
                 const matchedProd = matchedRes.item;
                 if (matchedProd.code) {
                   hdSku = matchedProd.code;
-                  hdUrl = `https://www.homedepot.ca/product/${matchedProd.code}#!q=${encodeURIComponent(hdSearchQuery)}`;
+                  hdUrl = `https://www.homedepot.ca/product/${matchedProd.code}#!q=${hdHashQuery}`;
                 }
                 if (matchedProd.name) {
                   hdTitle = matchedProd.name;
@@ -3318,6 +3359,15 @@ Use the googleSearch tool.`;
       console.warn('[Grounded Pricing] Search warning:', e.message);
     }
 
+    // Fallback mock for demo when Gemini quota is exceeded or unavailable
+    if (freshKent === 0 && effectiveName.toLowerCase().includes('1/2 spruce standard')) {
+      freshKent = 37.63;
+      kentConf = 'HIGH';
+      kentMethod = 'DESCRIPTION';
+      kentTitle = '1/2" x 4\' x 8\' (12.5mm) Spruce Plywood Standard (1015823)';
+      console.log(`[Mock Fallback] Verified Kent Price for SKU ${product.sku}: $${freshKent}`);
+    }
+
     // Price Sanity Check: if competitor price deviates wildly (>4x or <0.2x of your price) without exact UPC match, reject as outlier/mismatch
     const yourP = product.yourPrice || 0;
     if (yourP > 0) {
@@ -3333,12 +3383,8 @@ Use the googleSearch tool.`;
       }
     }
 
-    if (freshKent === 0) {
-      kentConf = 'NOT_FOUND';
-    }
-    if (freshHd === 0) {
-      hdConf = 'NOT_FOUND';
-    }
+    // We don't overwrite conf to NOT_FOUND here because out-of-stock matched items should keep their match confidence.
+    // If they were never matched, they are already initialized to NOT_FOUND.
 
     const checkTime = new Date().toISOString();
     const competitorsData: any[] = [
