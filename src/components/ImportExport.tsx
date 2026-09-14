@@ -424,9 +424,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  // Helper function to save a virtual file on Supabase DB kv_store_8405be07 table
+  // Helper function to save a virtual file on Supabase DB kv_store_8405be07 table with robust localStorage fallback
   const saveVirtualFile = async (fileName: string, base64Content: string, target: "local" | "onedrive" = "local") => {
-    const supabase = createClient();
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const isBinary = ["xlsx", "xls", "zip", "pdf", "png", "jpg", "jpeg", "gif"].includes(ext);
 
@@ -435,84 +434,134 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       textContent = decodeBase64Robust(base64Content);
     }
 
-    // 1. Store contents and raw base64 inside kv_store_8405be07
-    const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
-      key: `import_export_file_content:${fileName}`,
-      value: { 
-        content: textContent, 
-        base64: base64Content,
-        isBinary: isBinary
-      }
-    });
-    if (upsertErr) {
-      console.error("Failed to upsert virtual file content to Supabase:", upsertErr);
-      throw upsertErr;
-    }
-
-    // 2. Load and add to files catalog
-    const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
-    const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', catKey).maybeSingle();
-    let currentFiles = catData?.value || [];
-    if (!Array.isArray(currentFiles)) currentFiles = [];
-
-    currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
-    currentFiles.push({
+    const fileMeta = {
       name: fileName,
       size: isBinary ? Math.round(base64Content.length * 0.75) : textContent.length,
       lastModified: new Date().toISOString(),
       extension: ext
-    });
+    };
 
-    const { error: catUpsertErr } = await supabase.from('kv_store_8405be07').upsert({
-      key: catKey,
-      value: currentFiles
-    });
-    if (catUpsertErr) {
-      console.error("Failed to update virtual files list catalog:", catUpsertErr);
-      throw catUpsertErr;
+    const filePayload = { 
+      content: textContent, 
+      base64: base64Content,
+      isBinary: isBinary
+    };
+
+    // Always update local fallback storage
+    try {
+      localStorage.setItem(`fallback_file_${fileName}`, JSON.stringify(filePayload));
+      const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
+      const existingCat = JSON.parse(localStorage.getItem(`fallback_cat_${catKey}`) || '[]');
+      const updatedCat = existingCat.filter((f: any) => f.name !== fileName);
+      updatedCat.push(fileMeta);
+      localStorage.setItem(`fallback_cat_${catKey}`, JSON.stringify(updatedCat));
+    } catch (e) {
+      console.warn("Local storage fallback write warning:", e);
+    }
+
+    try {
+      const supabase = createClient();
+      const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
+        key: `import_export_file_content:${fileName}`,
+        value: filePayload
+      });
+      if (upsertErr) {
+        console.warn("Supabase virtual file upsert warning (using local fallback):", upsertErr);
+        return;
+      }
+
+      const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
+      const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', catKey).maybeSingle();
+      let currentFiles = catData?.value || [];
+      if (!Array.isArray(currentFiles)) currentFiles = [];
+
+      currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
+      currentFiles.push(fileMeta);
+
+      await supabase.from('kv_store_8405be07').upsert({
+        key: catKey,
+        value: currentFiles
+      });
+    } catch (err: any) {
+      console.warn("Supabase virtual file save network warning (using local fallback):", err?.message || err);
     }
   };
 
   // Helper function to delete a virtual file on Supabase DB kv_store_8405be07 table
   const deleteVirtualFile = async (fileName: string) => {
-    const supabase = createClient();
-    // 1. Delete content
-    await supabase.from('kv_store_8405be07').delete().eq('key', `import_export_file_content:${fileName}`);
-    
-    // 2. Remove from files catalog
-    const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
-    let currentFiles = catData?.value || [];
-    if (Array.isArray(currentFiles)) {
-      currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
-      await supabase.from('kv_store_8405be07').upsert({
-        key: 'import_export_local_files',
-        value: currentFiles
-      });
+    try {
+      localStorage.removeItem(`fallback_file_${fileName}`);
+      const existingCat = JSON.parse(localStorage.getItem(`fallback_cat_import_export_local_files`) || '[]');
+      localStorage.setItem(`fallback_cat_import_export_local_files`, JSON.stringify(existingCat.filter((f: any) => f.name !== fileName)));
+    } catch {}
+
+    try {
+      const supabase = createClient();
+      await supabase.from('kv_store_8405be07').delete().eq('key', `import_export_file_content:${fileName}`);
+      
+      const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
+      let currentFiles = catData?.value || [];
+      if (Array.isArray(currentFiles)) {
+        currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'import_export_local_files',
+          value: currentFiles
+        });
+      }
+    } catch (err) {
+      console.warn("Supabase delete virtual file warning:", err);
     }
   };
 
-  // Helper function to read a virtual file from Supabase DB kv_store_8405be07 table
+  // Helper function to read a virtual file from Supabase DB kv_store_8405be07 table with local fallback
   const readVirtualFile = async (fileName: string): Promise<string> => {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', `import_export_file_content:${fileName}`).maybeSingle();
-    if (error || !data) return '';
-    const val = data.value;
-    if (!val) return '';
-    if (val.content !== undefined && val.content !== null && !val.isBinary) {
-      return val.content;
+    try {
+      const localFallback = localStorage.getItem(`fallback_file_${fileName}`);
+      if (localFallback) {
+        const val = JSON.parse(localFallback);
+        if (val.content !== undefined && !val.isBinary) return val.content;
+        if (val.base64) return decodeBase64Robust(val.base64);
+      }
+    } catch {}
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', `import_export_file_content:${fileName}`).maybeSingle();
+      if (!error && data?.value) {
+        const val = data.value;
+        if (val.content !== undefined && val.content !== null && !val.isBinary) {
+          return val.content;
+        }
+        if (val.base64) {
+          return decodeBase64Robust(val.base64);
+        }
+        return val.content || '';
+      }
+    } catch (err) {
+      console.warn("Supabase read virtual file warning:", err);
     }
-    if (val.base64) {
-      return decodeBase64Robust(val.base64);
-    }
-    return val.content || '';
+    return '';
   };
 
-  // Helper function to read raw virtual file object from Supabase DB kv_store_8405be07 table
+  // Helper function to read raw virtual file object from Supabase DB kv_store_8405be07 table with local fallback
   const readVirtualFileRaw = async (fileName: string): Promise<{ content?: string; base64?: string; isBinary?: boolean } | null> => {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', `import_export_file_content:${fileName}`).maybeSingle();
-    if (error || !data) return null;
-    return data.value || null;
+    try {
+      const localFallback = localStorage.getItem(`fallback_file_${fileName}`);
+      if (localFallback) {
+        return JSON.parse(localFallback);
+      }
+    } catch {}
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('kv_store_8405be07').select('value').eq('key', `import_export_file_content:${fileName}`).maybeSingle();
+      if (!error && data?.value) {
+        return data.value;
+      }
+    } catch (err) {
+      console.warn("Supabase read raw virtual file warning:", err);
+    }
+    return null;
   };
 
   // Microsoft/OneDrive Accounts integration
