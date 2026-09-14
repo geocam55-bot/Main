@@ -42,6 +42,8 @@ import type { ProductCompetitivePricing } from '../../types/competitive-pricing'
 import { PriceHistoryModal } from './PriceHistoryModal';
 import { searchInventoryClient } from '../../utils/inventory-client';
 
+import * as XLSX from 'xlsx';
+
 export interface ShoppingListItem {
   id: string;
   inventoryId?: string;
@@ -848,18 +850,39 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
   const [csvRawText, setCsvRawText] = useState('');
   const [parsedCsvPreview, setParsedCsvPreview] = useState<ShoppingListItem[]>([]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (text) {
+    
+    if (file.name.toLowerCase().endsWith('.csv')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        if (text) {
+          setCsvRawText(text);
+          parseCsvText(text);
+        }
+      };
+      reader.readAsText(file);
+    } else if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+      try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const text = XLSX.utils.sheet_to_csv(worksheet);
         setCsvRawText(text);
         parseCsvText(text);
+      } catch (err) {
+        console.error('Excel parse error:', err);
+        toast.error('Failed to parse Excel file');
       }
-    };
-    reader.readAsText(file);
+    } else {
+      toast.error('Unsupported file format. Please upload a .csv or .xlsx file.');
+    }
+    
+    // Reset file input
+    e.target.value = '';
   };
 
   const parseCsvText = (text: string) => {
@@ -950,20 +973,10 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
       return;
     }
 
-    setShoppingList(prev => {
-      const copy = [...prev];
-      for (const newItem of parsedCsvPreview) {
-        const existing = copy.find(i => (newItem.sku && i.sku === newItem.sku) || i.name.toLowerCase() === newItem.name.toLowerCase());
-        if (existing) {
-          existing.quantity += newItem.quantity;
-        } else {
-          copy.push(newItem);
-        }
-      }
-      return copy;
-    });
+    setShoppingList(parsedCsvPreview);
+    setCurrentListName('Imported Shopping List');
 
-    toast.success(`Successfully imported ${parsedCsvPreview.length} items into shopping list!`);
+    toast.success(`Successfully created a new list with ${parsedCsvPreview.length} items!`);
     setIsImportCSVOpen(false);
     setParsedCsvPreview([]);
     setCsvRawText('');
@@ -1751,6 +1764,96 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
             >
               {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               Save List
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isImportCSVOpen} onOpenChange={setIsImportCSVOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Upload className="h-4 w-4 text-blue-600" />
+              Import Shopping List from CSV / Excel
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Upload a .csv or .xlsx file containing <strong>Item SKU</strong> and <strong>Product Name</strong> columns. You can also include Quantity, Category, and Cost.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 my-2 flex-1 overflow-y-auto">
+            <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors">
+              <Upload className="h-8 w-8 mx-auto text-slate-400 mb-2" />
+              <label className="cursor-pointer text-xs font-semibold text-blue-600 hover:underline block">
+                <span>Upload CSV/Excel File</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </label>
+              <p className="text-[11px] text-slate-500 mt-1">Supports comma-separated (.csv) and Excel (.xlsx) files</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Or Paste CSV Data Directly</label>
+              <textarea
+                rows={4}
+                placeholder="SKU,Product Name,Quantity,Cost&#10;PSCL 7/16-R50,Plywood Clip 7/16,50,12.98&#10;LUM248,SPF 2X4X8 Lumber,20,4.50"
+                value={csvRawText}
+                onChange={(e) => {
+                  setCsvRawText(e.target.value);
+                  parseCsvText(e.target.value);
+                }}
+                className="w-full text-xs font-mono p-2.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+              />
+            </div>
+
+            {parsedCsvPreview.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-slate-800">
+                    Preview Parsed Items ({parsedCsvPreview.length} found)
+                  </span>
+                  <span className="text-[11px] text-emerald-600 font-medium">Ready to import</span>
+                </div>
+                <div className="border rounded-md max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs bg-slate-50">
+                  {parsedCsvPreview.map((item, idx) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between gap-3 bg-white">
+                      <div>
+                        <span className="font-semibold text-slate-900 block">{item.name}</span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {item.sku && (
+                            <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                              SKU: {item.sku}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500">Qty: {item.quantity}</span>
+                          {item.cost > 0 && (
+                            <span className="text-[10px] text-emerald-700">Cost: ${item.cost.toFixed(2)}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" size="sm" onClick={() => setIsImportCSVOpen(false)} className="text-xs">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleConfirmImport}
+              disabled={parsedCsvPreview.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import {parsedCsvPreview.length} Items
             </Button>
           </DialogFooter>
         </DialogContent>
