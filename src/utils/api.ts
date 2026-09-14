@@ -745,52 +745,7 @@ export const competitivePricingAPI = {
       return await safeParseJson(res);
     } catch (err: any) {
       console.warn('[Competitive Pricing] Live scrape failed:', err.message);
-      // Return guaranteed fallback competitor hits so the UI never shows 0 hits
-      const fallbackPrice = Number(itemData.yourPrice || itemData.unitPrice || 19.99);
-      const itemName = itemData.productName || itemData.name || itemData.sku || 'Product';
-      return {
-        success: true,
-        competitors: [
-          {
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            websiteUrl: 'https://kent.ca',
-            productUrl: `https://kent.ca/search/?q=${encodeURIComponent(itemName)}`,
-            productName: `${itemName} (Bayers Lake Stock)`,
-            price: Number((fallbackPrice * 0.98).toFixed(2)),
-            regularPrice: Number((fallbackPrice * 0.98).toFixed(2)),
-            salePrice: null,
-            currency: 'CAD',
-            unitOfMeasure: 'EA',
-            packQuantity: 1,
-            normalizedUnitPrice: Number((fallbackPrice * 0.98).toFixed(2)),
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: `KENT-${itemData.sku || '001'}`,
-            availability: 'IN_STOCK',
-            checkedAt: new Date().toISOString(),
-          },
-          {
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            websiteUrl: 'https://www.homedepot.ca',
-            productUrl: `https://www.homedepot.ca/search?q=${encodeURIComponent(itemName)}`,
-            productName: `${itemName} (Home Depot Halifax Store)`,
-            price: Number((fallbackPrice * 1.02).toFixed(2)),
-            regularPrice: Number((fallbackPrice * 1.02).toFixed(2)),
-            salePrice: null,
-            currency: 'CAD',
-            unitOfMeasure: 'EA',
-            packQuantity: 1,
-            normalizedUnitPrice: Number((fallbackPrice * 1.02).toFixed(2)),
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: `HD-${itemData.sku || '001'}`,
-            availability: 'IN_STOCK',
-            checkedAt: new Date().toISOString(),
-          }
-        ]
-      };
+      return { success: false, competitors: [] };
     }
   },
   saveCompetitorPrice: async (

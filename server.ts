@@ -3396,59 +3396,6 @@ Use the googleSearch tool.`;
       console.warn('[Grounded Pricing] Search warning:', e.message);
     }
 
-    // Robust Production Fallback Estimator for when live scraping or external search is blocked/unavailable on Production Server
-    const yourP = Number(product.yourPrice || 19.99);
-    
-    function hashCode(str: string): number {
-      let hash = 0;
-      for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash) + str.charCodeAt(i);
-        hash |= 0;
-      }
-      return Math.abs(hash);
-    }
-
-    if (freshKent === 0) {
-      const seed = hashCode(product.sku || effectiveName || 'item');
-      const variance = 0.93 + ((seed % 14) / 100); // 0.93 to 1.06
-      freshKent = Number((yourP * variance).toFixed(2));
-      kentConf = 'HIGH';
-      kentMethod = 'INVENTORY_MATCH';
-      kentTitle = `${effectiveName || 'Product'} (Bayers Lake Stock)`;
-      kentSku = product.sku || `KENT-${Math.floor(100000 + (seed % 900000))}`;
-      kentUrl = `https://kent.ca/search/?q=${encodeURIComponent(effectiveName || product.sku)}`;
-      console.log(`[Production Fallback] Generated Kent Price for "${effectiveName}" (SKU: ${product.sku}): $${freshKent}`);
-    }
-
-    if (freshHd === 0) {
-      const seed = hashCode(product.sku || effectiveName || 'item') + 7;
-      const variance = 0.95 + ((seed % 12) / 100); // 0.95 to 1.06
-      freshHd = Number((yourP * variance).toFixed(2));
-      hdConf = 'HIGH';
-      hdMethod = 'INVENTORY_MATCH';
-      hdTitle = `${effectiveName || 'Product'} (Home Depot Halifax Store)`;
-      hdSku = product.sku || `HD-${Math.floor(100000 + (seed % 900000))}`;
-      hdUrl = `https://www.homedepot.ca/search?q=${encodeURIComponent(effectiveName || product.sku)}`;
-      console.log(`[Production Fallback] Generated Home Depot Price for "${effectiveName}" (SKU: ${product.sku}): $${freshHd}`);
-    }
-
-    // Price Sanity Check: if competitor price deviates wildly (>4x or <0.2x of your price) without exact UPC match, reject as outlier/mismatch
-    if (yourP > 0) {
-      if (freshKent > 0 && kentMethod !== 'UPC' && (freshKent > yourP * 4 || freshKent < yourP * 0.2)) {
-        console.log(`[Price Sanity] Rejecting Kent price ${freshKent} for SKU ${product.sku} (deviates too much from your price ${yourP})`);
-        freshKent = 0;
-        kentConf = 'NOT_FOUND';
-      }
-      if (freshHd > 0 && hdMethod !== 'UPC' && (freshHd > yourP * 4 || freshHd < yourP * 0.2)) {
-        console.log(`[Price Sanity] Rejecting Home Depot price ${freshHd} for SKU ${product.sku} (deviates too much from your price ${yourP})`);
-        freshHd = 0;
-        hdConf = 'NOT_FOUND';
-      }
-    }
-
-    // We don't overwrite conf to NOT_FOUND here because out-of-stock matched items should keep their match confidence.
-    // If they were never matched, they are already initialized to NOT_FOUND.
-
     const checkTime = new Date().toISOString();
     const competitorsData: any[] = [
       {
@@ -3770,110 +3717,21 @@ Use the googleSearch tool.`;
       };
 
       console.log(`[Competitive Pricing Scrape-Live] Scraping competitors using Kent & Home Depot tools for "${mergedProduct.productName}" (SKU: ${mergedProduct.sku})`);
-      let competitors = await executeDynamicCompetitorSearch(mergedProduct, criteria);
-
-      if (!competitors || competitors.length === 0) {
-        // Guarantee fallback hits if scraping returns empty
-        competitors = [
-          {
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            websiteUrl: 'https://kent.ca',
-            productUrl: `https://kent.ca/search/?q=${encodeURIComponent(mergedProduct.productName)}`,
-            productName: `${mergedProduct.productName} (Bayers Lake Stock)`,
-            price: Number((mergedProduct.yourPrice * 0.98).toFixed(2)),
-            regularPrice: Number((mergedProduct.yourPrice * 0.98).toFixed(2)),
-            salePrice: null,
-            currency: 'CAD',
-            unitOfMeasure: mergedProduct.unitOfMeasure,
-            packQuantity: 1,
-            normalizedUnitPrice: Number((mergedProduct.yourPrice * 0.98).toFixed(2)),
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: `KENT-${mergedProduct.sku}`,
-            availability: 'IN_STOCK',
-            checkedAt: new Date().toISOString(),
-          },
-          {
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            websiteUrl: 'https://www.homedepot.ca',
-            productUrl: `https://www.homedepot.ca/search?q=${encodeURIComponent(mergedProduct.productName)}`,
-            productName: `${mergedProduct.productName} (Home Depot Halifax Store)`,
-            price: Number((mergedProduct.yourPrice * 1.02).toFixed(2)),
-            regularPrice: Number((mergedProduct.yourPrice * 1.02).toFixed(2)),
-            salePrice: null,
-            currency: 'CAD',
-            unitOfMeasure: mergedProduct.unitOfMeasure,
-            packQuantity: 1,
-            normalizedUnitPrice: Number((mergedProduct.yourPrice * 1.02).toFixed(2)),
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: `HD-${mergedProduct.sku}`,
-            availability: 'IN_STOCK',
-            checkedAt: new Date().toISOString(),
-          }
-        ];
-      }
+      const competitors = await executeDynamicCompetitorSearch(mergedProduct, criteria);
 
       res.json({
         success: true,
         productId: mergedProduct.productId,
         sku: mergedProduct.sku,
         productName: mergedProduct.productName,
-        competitors: competitors,
+        competitors: competitors || [],
       });
     } catch (err: any) {
       console.error('[Competitive Pricing Scrape-Live] Error:', err);
-      // Even on error, return fallback competitor hits rather than 500 error so user never gets 0 hits
-      const fallbackPayload = { ...(req.method === 'GET' ? req.query : req.body), ...(req.query || {}) };
-      const fallbackPrice = Number(fallbackPayload.yourPrice || fallbackPayload.unitPrice || 19.99);
-      const itemName = fallbackPayload.productName || fallbackPayload.name || fallbackPayload.sku || 'Product';
       res.json({
-        success: true,
-        productId: fallbackPayload.productId || fallbackPayload.sku || 'item_fallback',
-        sku: fallbackPayload.sku || 'SKU-001',
-        productName: itemName,
-        competitors: [
-          {
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            websiteUrl: 'https://kent.ca',
-            productUrl: `https://kent.ca/search/?q=${encodeURIComponent(itemName)}`,
-            productName: `${itemName} (Bayers Lake Stock)`,
-            price: Number((fallbackPrice * 0.98).toFixed(2)),
-            regularPrice: Number((fallbackPrice * 0.98).toFixed(2)),
-            salePrice: null,
-            currency: 'CAD',
-            unitOfMeasure: 'EA',
-            packQuantity: 1,
-            normalizedUnitPrice: Number((fallbackPrice * 0.98).toFixed(2)),
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: `KENT-${fallbackPayload.sku || '001'}`,
-            availability: 'IN_STOCK',
-            checkedAt: new Date().toISOString(),
-          },
-          {
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            websiteUrl: 'https://www.homedepot.ca',
-            productUrl: `https://www.homedepot.ca/search?q=${encodeURIComponent(itemName)}`,
-            productName: `${itemName} (Home Depot Halifax Store)`,
-            price: Number((fallbackPrice * 1.02).toFixed(2)),
-            regularPrice: Number((fallbackPrice * 1.02).toFixed(2)),
-            salePrice: null,
-            currency: 'CAD',
-            unitOfMeasure: 'EA',
-            packQuantity: 1,
-            normalizedUnitPrice: Number((fallbackPrice * 1.02).toFixed(2)),
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: `HD-${fallbackPayload.sku || '001'}`,
-            availability: 'IN_STOCK',
-            checkedAt: new Date().toISOString(),
-          }
-        ],
+        success: false,
+        competitors: [],
+        error: err.message || 'Live scraping failed'
       });
     }
   };
