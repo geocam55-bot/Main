@@ -3734,7 +3734,7 @@ Use the googleSearch tool.`;
   });
 
   // Direct live competitor scraper endpoint (accepts both GET and POST to prevent 405 Method Not Allowed errors)
-  app.all('/api/competitive-pricing/scrape-live', async (req, res) => {
+  const handleScrapeLive = async (req: any, res: any) => {
     try {
       const payload = { ...(req.method === 'GET' ? req.query : req.body), ...(req.query || {}) };
       const { productId, sku, name, productName, description, category, yourPrice, unitPrice, upc, mfgPartNumber, searchQuery } = payload;
@@ -3876,7 +3876,10 @@ Use the googleSearch tool.`;
         ],
       });
     }
-  });
+  };
+
+  app.all('/api/scrape-competitor-live', handleScrapeLive);
+  app.all('/api/competitive-pricing/scrape-live', handleScrapeLive);
 
   // 2. POST /api/products/:productId/competitive-pricing/refresh
   app.post('/api/products/:productId/competitive-pricing/refresh', async (req, res) => {
