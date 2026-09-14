@@ -930,7 +930,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
     e.target.value = '';
   };
 
-  const parseCsvText = (text: string) => {
+  const parseCsvText = async (text: string) => {
     try {
       const lines = text.split(/\r\n|\n/).filter(l => l.trim().length > 0);
       if (lines.length === 0) {
@@ -960,55 +960,83 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
       const headers = parseLine(lines[0]).map(h => h.toLowerCase());
       
       let skuIdx = headers.findIndex(h => h.includes('sku') || h.includes('item sku') || h.includes('code'));
-      let nameIdx = headers.findIndex(h => h.includes('name') || h.includes('product') || h.includes('title') || h.includes('item'));
       let qtyIdx = headers.findIndex(h => h.includes('qty') || h.includes('quantity') || h.includes('count'));
-      let descIdx = headers.findIndex(h => h.includes('desc') || h.includes('notes'));
-      let catIdx = headers.findIndex(h => h.includes('cat') || h.includes('category'));
-      let costIdx = headers.findIndex(h => h.includes('cost'));
-      let priceIdx = headers.findIndex(h => h.includes('retail') || h.includes('price') || h.includes('selling'));
 
-      if (skuIdx === -1 && nameIdx === -1) {
+      if (skuIdx === -1) {
         skuIdx = 0;
-        nameIdx = 1;
-      } else if (skuIdx === -1) {
-        skuIdx = nameIdx === 0 ? 1 : 0;
-      } else if (nameIdx === -1) {
-        nameIdx = skuIdx === 0 ? 1 : 0;
       }
 
-      const items: ShoppingListItem[] = [];
-      const hasHeader = (skuIdx !== -1 && nameIdx !== -1 && (headers[skuIdx]?.includes('sku') || headers[nameIdx]?.includes('name') || headers[skuIdx]?.includes('code')));
+      const rawRows: { sku: string; quantity: number }[] = [];
+      const hasHeader = skuIdx !== -1 && (headers[skuIdx]?.includes('sku') || headers[skuIdx]?.includes('code'));
       const startRow = hasHeader ? 1 : 0;
 
       for (let i = startRow; i < lines.length; i++) {
         const cols = parseLine(lines[i]);
         if (cols.length === 0 || (cols.length === 1 && !cols[0])) continue;
-        const sku = cols[skuIdx] || `SKU-${Math.random().toString(36).substring(2, 7)}`;
-        const name = cols[nameIdx] || cols[skuIdx] || 'Imported Product';
+        const sku = cols[skuIdx] || '';
         const qty = qtyIdx !== -1 ? Number(cols[qtyIdx]) || 1 : 1;
-        const description = descIdx !== -1 ? cols[descIdx] : '';
-        const category = catIdx !== -1 ? cols[catIdx] : 'Imported';
-        const cost = costIdx !== -1 ? Number(cols[costIdx]) || 0 : 0;
-        const unitPrice = priceIdx !== -1 ? Number(cols[priceIdx]) || (cost > 0 ? cost * 1.25 : 19.99) : 19.99;
+        if (sku) {
+          rawRows.push({ sku, quantity: qty > 0 ? qty : 1 });
+        }
+      }
 
-        items.push({
-          id: `import_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
-          sku,
-          name,
-          description,
-          category,
-          quantity: qty > 0 ? qty : 1,
-          cost,
-          replacementCost: cost,
-          unitPrice,
-          unitOfMeasure: 'EA',
+      if (rawRows.length === 0) {
+        setParsedCsvPreview([]);
+        toast.error('No valid SKUs found in imported file');
+        return;
+      }
+
+      // Fetch from Inventory table using the imported SKUs exclusively
+      const supabase = createClient();
+      const skusToFetch = rawRows.map(r => r.sku);
+      
+      const { data: dbInventoryItems, error: invError } = await supabase
+        .from('inventory')
+        .select('*')
+        .in('sku', skusToFetch);
+
+      const inventoryMap = new Map<string, any>();
+      if (dbInventoryItems && Array.isArray(dbInventoryItems)) {
+        dbInventoryItems.forEach((dbRow: any) => {
+          if (dbRow.sku) {
+            inventoryMap.set(dbRow.sku.trim().toLowerCase(), mapDbRowToInventoryItem(dbRow));
+          }
         });
       }
 
+      const items: ShoppingListItem[] = [];
+      for (let i = 0; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        const lookupKey = row.sku.trim().toLowerCase();
+        const matchedInv = inventoryMap.get(lookupKey);
+
+        if (matchedInv) {
+          items.push({
+            ...matchedInv,
+            id: `import_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+            quantity: row.quantity,
+          });
+        } else {
+          items.push({
+            id: `import_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+            sku: row.sku,
+            name: `Unknown SKU (${row.sku})`,
+            description: 'SKU not found in inventory master table',
+            category: 'Unlisted',
+            quantity: row.quantity,
+            cost: 0,
+            replacementCost: 0,
+            unitPrice: 0,
+            unitOfMeasure: 'EA',
+          });
+        }
+      }
+
       setParsedCsvPreview(items);
+      toast.success(`Parsed ${items.length} items using inventory SKU lookup`);
     } catch (err) {
       console.error('CSV parse error:', err);
-      toast.error('Failed to parse CSV file');
+      toast.error('Failed to parse file and lookup inventory SKUs');
     }
   };
 
