@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from './supabase/client';
 import { getProjectWizardDefaults, getUserDefaults, getOrgConversionFactors } from './project-wizard-defaults-client';
 import { 

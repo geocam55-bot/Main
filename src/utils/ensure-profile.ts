@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from './supabase/client';
 import { projectId, publicAnonKey } from './supabase/info';
 

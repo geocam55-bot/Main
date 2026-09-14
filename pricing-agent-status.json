@@ -1,13 +1,13 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 954,
+    "current": 6,
     "total": 1000,
-    "percent": 95.4,
-    "matchesFound": 454,
-    "currentSku": "50316656",
-    "currentName": "PAINT FURN/CABIN.MED.BSE 946ML",
-    "startedAt": "2026-09-12T12:31:05.358Z",
-    "lastUpdated": "2026-09-12T12:41:19.211Z"
+    "percent": 0.6,
+    "matchesFound": 710,
+    "currentSku": "10770105",
+    "currentName": "1/4\" INDUSTRIAL NIPPLE X 3/8\"",
+    "startedAt": "2026-09-14T13:46:15.790Z",
+    "lastUpdated": "2026-09-14T13:46:59.486Z"
   }
 }

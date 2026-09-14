@@ -211,130 +211,48 @@ async function runCompetitivePricing() {
       return;
     }
 
-    const searchQueries: { query: string; method: 'SUPPLIER_SKU' | 'UPC' | 'DESCRIPTION' }[] = [];
+    try {
+      const res = await fetch('http://127.0.0.1:3000/api/competitive-pricing/scrape-live', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          productId: item.id,
+          sku: item.sku,
+          name: item.name,
+          productName: item.name,
+          description: item.description,
+          category: item.category,
+          yourPrice: item.unit_price,
+          unitPrice: item.unit_price,
+          upc: item.upc,
+          mfgPartNumber: item.supplier_sku,
+          searchQuery: item.description || item.name
+        })
+      });
 
-    if (item.supplier_sku && item.supplier_sku.trim().length >= 3) {
-      searchQueries.push({ query: item.supplier_sku.trim(), method: 'SUPPLIER_SKU' });
-    }
-
-    if (item.upc && item.upc.trim().length >= 6) {
-      searchQueries.push({ query: item.upc.trim(), method: 'UPC' });
-    }
-
-    if (item.description && item.description.trim().length >= 5) {
-      const cleanDesc = item.description
-        .replace(/[^a-zA-Z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (cleanDesc.length >= 4) {
-        searchQueries.push({ query: cleanDesc, method: 'DESCRIPTION' });
+      if (!res.ok) {
+        log(`   ⚠️ HTTP error fetching live pricing for ${item.sku}: ${res.statusText}`);
+        return;
       }
-    }
 
-    for (const comp of competitors) {
-      const isKent = comp.name.toLowerCase().includes('kent');
-      let matchedProduct = null;
-      let matchedMethod: string = '';
-      let matchConfidence: 'HIGH' | 'MEDIUM' = 'HIGH';
-
-      if (isKent) {
-        for (const sq of searchQueries) {
-          const result = await searchKentDirect(sq.query);
-          if (result) {
-            const validation = validateMatch(item, result, sq.method, sq.query);
-            if (validation.valid) {
-              matchedProduct = result;
-              matchedMethod = sq.method;
-              matchConfidence = validation.confidence === 'HIGH' ? 'HIGH' : 'MEDIUM';
-              break;
-            }
+      const result = await res.json();
+      if (result && result.competitors && result.competitors.length > 0) {
+        let hasMatch = false;
+        for (const comp of result.competitors) {
+          if (comp.price > 0) {
+            log(`🎯 MATCH FOUND on ${comp.competitorName}: ${item.sku} - ${comp.productName} ($${comp.price})`);
+            hasMatch = true;
           }
         }
-      }
-
-      if (matchedProduct) {
-        matchesFound++;
-        existingMatchedIds.add(String(item.id));
-        log(`🎯 MATCH FOUND on ${comp.name}: ${item.sku} - ${matchedProduct.productName} ($${matchedProduct.price})`);
-
-        try {
-          let cpId: number | null = null;
-          const { data: existingCp } = await supabase
-            .from('competitor_products')
-            .select('id')
-            .eq('competitor_id', comp.id)
-            .eq('product_url', matchedProduct.url)
-            .maybeSingle();
-
-          if (existingCp?.id) {
-            cpId = existingCp.id;
-            await supabase.from('competitor_products').update({
-              product_name: matchedProduct.productName,
-              availability: matchedProduct.inStock,
-              updated_at: new Date().toISOString()
-            }).eq('id', cpId);
-          } else {
-            const { data: newCp, error: cpErr } = await supabase.from('competitor_products').insert({
-              competitor_id: comp.id,
-              product_url: matchedProduct.url,
-              product_name: matchedProduct.productName,
-              availability: matchedProduct.inStock,
-              manufacturer_part_number: matchedProduct.modelNo || null,
-              external_product_id: matchedProduct.sku || null
-            }).select('id').single();
-
-            if (!cpErr && newCp) {
-              cpId = newCp.id;
-            }
-          }
-
-          if (cpId) {
-            const { data: existingMatch } = await supabase
-              .from('product_matches')
-              .select('id')
-              .eq('product_id', item.id)
-              .eq('competitor_product_id', cpId)
-              .maybeSingle();
-
-            if (existingMatch?.id) {
-              await supabase.from('product_matches').update({
-                match_confidence: matchConfidence,
-                match_method: matchedMethod,
-                approved: true,
-                updated_at: new Date().toISOString()
-              }).eq('id', existingMatch.id);
-            } else {
-              await supabase.from('product_matches').insert({
-                product_id: item.id,
-                competitor_product_id: cpId,
-                match_confidence: matchConfidence,
-                match_method: matchedMethod,
-                approved: true
-              });
-            }
-
-            await supabase.from('competitor_prices').insert({
-              competitor_product_id: cpId,
-              current_price: matchedProduct.price,
-              regular_price: matchedProduct.price,
-              normalized_unit_price: matchedProduct.price,
-              currency: 'CAD',
-              availability: matchedProduct.inStock,
-              checked_at: new Date().toISOString()
-            });
-
-            await supabase.from('price_history').insert({
-              product_id: item.id,
-              competitor_id: comp.id,
-              competitor_product_id: cpId,
-              price: matchedProduct.price,
-              normalized_unit_price: matchedProduct.price
-            });
-          }
-        } catch (dbErr: any) {
-          log(`   ⚠️ DB write error: ${dbErr?.message}`);
+        if (hasMatch) {
+          matchesFound++;
+          existingMatchedIds.add(String(item.id));
         }
       }
+    } catch (err: any) {
+      log(`   ⚠️ Failed to scrape live price for ${item.sku}: ${err?.message}`);
     }
   }
 

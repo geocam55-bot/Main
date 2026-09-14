@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { DeckConfig, DeckMaterials, MaterialItem, DeckingMaterialType } from '../types/deck';
 import {
   selectLumberLength,

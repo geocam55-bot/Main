@@ -2997,6 +2997,28 @@ Result:
       .trim();
   }
 
+  // Treat Search Description as a bag of words (extracting, cleaning, and tokenizing words)
+  function getBagOfWordsQueries(text: string): string[] {
+    const clean = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+    const stopWords = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with']);
+    const tokens = clean.split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t));
+    
+    const results = new Set<string>();
+    if (tokens.length > 0) {
+      results.add(tokens.join(' ')); // All bag of words tokens together
+      if (tokens.length >= 3) {
+        results.add(tokens.slice(0, 3).join(' '));
+      }
+      if (tokens.length >= 2) {
+        results.add(tokens.slice(0, 2).join(' '));
+      }
+      for (const token of tokens.slice(0, 5)) {
+        results.add(token);
+      }
+    }
+    return Array.from(results);
+  }
+
   // Multi-tier matching helper adhering to user rules:
   // 1) Match on "Item Name" then Dimensions (80% or greater similarity)
   // 2) Match on UPC exact match
@@ -3053,9 +3075,14 @@ Result:
         }
       }
 
-      // Token overlap similarity (Jaccard) between target name and candidate title
-      const targetTokens = new Set(targetName.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 0));
-      const candTokens = new Set(candTitle.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 0));
+      // Bag of words token overlap similarity (Jaccard) between target (name + description bag of words) and candidate title
+      const stopWords = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with']);
+      const targetTokens = new Set([
+        ...targetName.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/),
+        ...targetDesc.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/)
+      ].filter(t => t.length > 1 && !stopWords.has(t)));
+      
+      const candTokens = new Set(candTitle.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t)));
 
       let intersection = 0;
       for (const t of targetTokens) {
@@ -3151,6 +3178,9 @@ Result:
       const simplifiedKentQuery = effectiveName.replace(/#.*$/, '').replace(/&.*$/, '').replace(/\*.*\*/g, '').trim();
       const shortKentQuery = simplifiedKentQuery.split(/\s+/).slice(0, 3).join(' ').trim();
 
+      const descBagOfWords = getBagOfWordsQueries(effectiveDesc);
+      const nameBagOfWords = getBagOfWordsQueries(effectiveName);
+
       const queriesToTry = [
         effectiveName, 
         kentSearchQuery,
@@ -3158,6 +3188,8 @@ Result:
         shortKentQuery, 
         lumberNormalized, 
         effectiveDesc,
+        ...descBagOfWords,
+        ...nameBagOfWords,
         effectiveUpc, 
         effectiveMfg
       ].filter(Boolean);
@@ -3253,6 +3285,9 @@ Result:
       const simplifiedHdQuery = effectiveName.replace(/#.*$/, '').replace(/&.*$/, '').replace(/\*.*\*/g, '').trim();
       const shortHdQuery = simplifiedHdQuery.split(/\s+/).slice(0, 3).join(' ').trim();
 
+      const descBagOfWordsHd = getBagOfWordsQueries(effectiveDesc);
+      const nameBagOfWordsHd = getBagOfWordsQueries(effectiveName);
+
       const hdQueriesToTry = [
         effectiveName, 
         hdSearchQuery, 
@@ -3260,6 +3295,8 @@ Result:
         shortHdQuery,
         lumberNormalizedHd, 
         effectiveDesc,
+        ...descBagOfWordsHd,
+        ...nameBagOfWordsHd,
         effectiveUpc, 
         effectiveMfg
       ].filter(Boolean);

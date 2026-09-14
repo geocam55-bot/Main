@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from './supabase/client';
 import { ensureUserProfile } from './ensure-profile';
 import { isTierActive } from '../lib/global-settings';

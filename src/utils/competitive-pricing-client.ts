@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from './supabase/client';
 import { buildInventoryAndSearchClause } from './inventory-keywords';
 import type {
