@@ -2925,7 +2925,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(tempTask)
         });
-        const registerData = await registerRes.json();
+        const registerData = await parseResponseJson(registerRes);
         if (registerData.success) tempTaskId = registerData.task.id;
       }
       
@@ -2936,7 +2936,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             "Authorization": `Bearer ${session.access_token}`
           } : {}
         }, 120000);
-        const runData = await runRes.json();
+        const runData = await parseResponseJson(runRes);
         
         // delete temporary helper
         if (connectionMode === "supabase") {

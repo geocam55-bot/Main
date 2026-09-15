@@ -91,15 +91,44 @@ async function loadVirtualFileServer(fileName: string) {
       .select('value')
       .eq('key', `import_export_file_content:${fileName}`)
       .maybeSingle();
-    if (error) {
-      console.error(`[Server] Supabase fail loading virtual file ${fileName}:`, error.message);
-      return null;
+    if (!error && data?.value) {
+      return data.value;
     }
-    return data?.value || null;
   } catch (err: any) {
-    console.error(`[Server] Error loading virtual file ${fileName}:`, err?.message || err);
-    return null;
+    console.error(`[Server] Error loading virtual file ${fileName} from Supabase:`, err?.message || err);
   }
+
+  // Fallback: check local drive and onedrive directories on disk
+  try {
+    const localPath = path.join(LOCAL_DRIVE_DIR, fileName);
+    if (fs.existsSync(localPath)) {
+      const buffer = fs.readFileSync(localPath);
+      const base64 = buffer.toString('base64');
+      return {
+        name: fileName,
+        base64: base64,
+        textContent: buffer.toString('utf8'),
+        size: buffer.length,
+        lastModified: fs.statSync(localPath).mtime.toISOString()
+      };
+    }
+    const oneDrivePath = path.join(ONEDRIVE_DIR, fileName);
+    if (fs.existsSync(oneDrivePath)) {
+      const buffer = fs.readFileSync(oneDrivePath);
+      const base64 = buffer.toString('base64');
+      return {
+        name: fileName,
+        base64: base64,
+        textContent: buffer.toString('utf8'),
+        size: buffer.length,
+        lastModified: fs.statSync(oneDrivePath).mtime.toISOString()
+      };
+    }
+  } catch (err: any) {
+    console.error(`[Server] Error loading file from disk fallback for ${fileName}:`, err?.message || err);
+  }
+
+  return null;
 }
 
 
