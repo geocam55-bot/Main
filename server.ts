@@ -983,6 +983,7 @@ async function executeScheduledTask(task: any) {
           let key = k;
           const lowerK = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
           if (lowerK === 'item name' || lowerK === 'itemname' || lowerK === 'name' || lowerK === 'productname' || lowerK === 'materialname' || lowerK === 'product' || lowerK === 'item' || lowerK === 'material' || lowerK === 'title') key = 'Name';
+          else if (lowerK === 'description' || lowerK === 'desc' || lowerK === 'itemdescription' || lowerK === 'productdescription' || lowerK === 'exactdescription' || lowerK === 'kentdescription' || lowerK === 'longdescription') key = 'Description';
           else if (lowerK === 'unit price' || lowerK === 'unitprice') key = 'UnitPrice';
           else if (lowerK === 'client name' || lowerK === 'clientname') key = 'ClientName';
           else if (lowerK === 'project name' || lowerK === 'projectname') key = 'ProjectName';
@@ -1578,7 +1579,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
             } 
             else if (table === "inventory") {
               if (lowerKey === "itemname" || lowerKey === "name" || lowerKey === "productname" || lowerKey === "materialname" || lowerKey === "product" || lowerKey === "item" || lowerKey === "material" || lowerKey === "title") mappedRec.name = cleanVal;
-              else if (lowerKey === "description") mappedRec.description = cleanVal;
+              else if (lowerKey === "description" || lowerKey === "desc" || lowerKey === "itemdescription" || lowerKey === "productdescription" || lowerKey === "exactdescription" || lowerKey === "kentdescription" || lowerKey === "longdescription") mappedRec.description = cleanVal;
               else if (lowerKey === "sku" || lowerKey === "skucode" || lowerKey === "partnumber" || lowerKey === "partno") mappedRec.sku = cleanVal;
               else if (lowerKey === "category") mappedRec.category = cleanVal;
               else if (lowerKey === "quantity" || lowerKey === "quantityonhand" || lowerKey === "instock" || lowerKey === "qty") {
@@ -3042,10 +3043,38 @@ Result:
       // Extract candidate dimensions
       const candDims = extractBuildingDimensions(candTitle);
 
-      // STRICT HARD VETO 1: Cross-Section Mismatch (e.g. searching 2x4, candidate is 2x6, 2x8, etc.)
-      if (targetDims.crossSection && candDims.crossSection) {
-        if (targetDims.crossSection !== candDims.crossSection) {
-          continue; // Strict hard veto
+      // STRICT HARD VETO 0: Material Category Conflict (Plywood vs Drywall vs OSB vs Lumber vs Ceiling Tile)
+      const targetMat = targetDims.materialType || 
+        (/\b(?:plywood|sheathing)\b/i.test(targetDesc || targetName) ? 'plywood' :
+         /\b(?:drywall|sheetrock|gypsum)\b/i.test(targetDesc || targetName) ? 'drywall' :
+         /\b(?:osb|waferboard)\b/i.test(targetDesc || targetName) ? 'osb' :
+         /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(targetDesc || targetName) ? 'ceiling_tile' :
+         (targetDims.crossSection || targetDims.lengthFt ? 'lumber' : null));
+
+      const candMat = candDims.materialType || 
+        (/\b(?:plywood|sheathing)\b/i.test(candTitle) ? 'plywood' :
+         /\b(?:drywall|sheetrock|gypsum)\b/i.test(candTitle) ? 'drywall' :
+         /\b(?:osb|waferboard)\b/i.test(candTitle) ? 'osb' :
+         /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(candTitle) ? 'ceiling_tile' :
+         (candDims.crossSection || candDims.lengthFt ? 'lumber' : null));
+
+      if (targetMat && candMat && targetMat !== candMat) {
+        continue; // Strict hard veto: Never match drywall to plywood, ceiling tile to lumber, etc.
+      }
+      if (targetMat === 'plywood' && (/\b(?:drywall|sheetrock|gypsum|ceiling|fissured|moulding|trim)\b/i.test(candTitle))) {
+        continue;
+      }
+      if (targetMat === 'drywall' && (/\b(?:plywood|sheathing|osb|ceiling|fissured|stud|lumber)\b/i.test(candTitle))) {
+        continue;
+      }
+      if (targetMat === 'lumber' && (/\b(?:corner|moulding|trim|casing|baseboard|tile|mosaic|pipe|conduit|bolt|screw|hood|plunger|filter|stringer|hanger|bracket)\b/i.test(candTitle))) {
+        continue;
+      }
+
+      // STRICT HARD VETO 1: Cross-Section Mismatch (e.g. searching 2x4, candidate is 2x6, 2x8, or has no cross section)
+      if (targetDims.crossSection) {
+        if (!candDims.crossSection || targetDims.crossSection !== candDims.crossSection) {
+          continue; // Strict hard veto: candidate must have the exact matching cross section!
         }
       }
 
@@ -3064,9 +3093,9 @@ Result:
       }
 
       // STRICT HARD VETO 4: Sheet Thickness Mismatch (e.g. 1/2" drywall vs 5/8" drywall)
-      if (targetDims.thickness && candDims.thickness && (targetDims.sheetSize || candDims.sheetSize)) {
+      if (targetDims.thickness && candDims.thickness && (targetDims.sheetSize || candDims.sheetSize || targetMat === 'plywood' || targetMat === 'drywall')) {
         if (targetDims.thickness !== candDims.thickness) {
-          continue; // Strict hard veto: do not match 5/8" drywall when looking for 1/2"!
+          continue; // Strict hard veto: do not match 5/8" sheet when looking for 1/2"!
         }
       }
 
@@ -3076,6 +3105,17 @@ Result:
           continue; // Strict hard veto
         }
       }
+
+      // Grade check: Standard vs Select
+      const targetIsSelect = /\bselect\b/i.test(targetDesc || targetName);
+      const targetIsStandard = /\bstandard\b/i.test(targetDesc || targetName);
+      const candIsSelect = /\bselect\b/i.test(candTitle);
+      const candIsStandard = /\bstandard\b/i.test(candTitle);
+
+      let gradeBonus = 0;
+      if (targetIsStandard && candIsStandard) gradeBonus += 0.25;
+      if (targetIsSelect && candIsSelect) gradeBonus += 0.25;
+      if ((targetIsStandard && candIsSelect) || (targetIsSelect && candIsStandard)) gradeBonus -= 0.35;
 
       // Bag of words token overlap similarity (Jaccard) between target and candidate
       const stopWords = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with']);
@@ -3101,8 +3141,19 @@ Result:
         // Target specified length (e.g. 10ft) but candidate does not specify length
         dimBonus = -0.25;
       }
+      if (targetMat && candMat && targetMat === candMat) {
+        dimBonus += 0.20;
+      }
 
-      const totalScore = nameSimilarity + dimBonus;
+      // Exact title/description match bonus
+      const normTarget = (targetDesc || targetName).toLowerCase().trim();
+      const normCand = candTitle.toLowerCase().trim();
+      let exactBonus = 0;
+      if (normTarget === normCand || normCand.includes(normTarget) || normTarget.includes(normCand)) {
+        exactBonus = 0.40;
+      }
+
+      const totalScore = nameSimilarity + dimBonus + gradeBonus + exactBonus;
 
       if (totalScore >= 0.40 && totalScore > bestScore) {
         bestScore = totalScore;
@@ -3116,16 +3167,34 @@ Result:
       }
     }
 
-    // Safety fallback: only accept candidate if dimensions do not conflict
+    // Safety fallback: only accept candidate if dimensions and material do not conflict
     if (!bestResult && items.length > 0) {
+      const targetMat = targetDims.materialType || 
+        (/\b(?:plywood|sheathing)\b/i.test(targetDesc || targetName) ? 'plywood' :
+         /\b(?:drywall|sheetrock|gypsum)\b/i.test(targetDesc || targetName) ? 'drywall' :
+         /\b(?:osb|waferboard)\b/i.test(targetDesc || targetName) ? 'osb' :
+         /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(targetDesc || targetName) ? 'ceiling_tile' : null);
+
       for (const candItem of items) {
         const candTitle = String(candItem.title || candItem.name || '').toLowerCase();
         const candDims = extractBuildingDimensions(candTitle);
 
-        // Disqualify if dimensions conflict
-        if (targetDims.crossSection && candDims.crossSection && targetDims.crossSection !== candDims.crossSection) continue;
+        const candMat = candDims.materialType || 
+          (/\b(?:plywood|sheathing)\b/i.test(candTitle) ? 'plywood' :
+           /\b(?:drywall|sheetrock|gypsum)\b/i.test(candTitle) ? 'drywall' :
+           /\b(?:osb|waferboard)\b/i.test(candTitle) ? 'osb' :
+           /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(candTitle) ? 'ceiling_tile' : null);
+
+        if (targetMat && candMat && targetMat !== candMat) continue;
+        if (targetMat === 'plywood' && (/\b(?:drywall|sheetrock|gypsum|ceiling|fissured)\b/i.test(candTitle))) continue;
+        if (targetMat === 'drywall' && (/\b(?:plywood|sheathing|osb|ceiling|fissured)\b/i.test(candTitle))) continue;
+        if (targetMat === 'lumber' && (/\b(?:corner|moulding|trim|casing|baseboard|tile|mosaic|pipe|conduit|bolt|screw|hood|plunger|filter|stringer|hanger|bracket)\b/i.test(candTitle))) continue;
+
+        // Disqualify if dimensions conflict or crossSection is missing for lumber
+        if (targetDims.crossSection && (!candDims.crossSection || targetDims.crossSection !== candDims.crossSection)) continue;
         if (targetDims.lengthFt && candDims.lengthFt && targetDims.lengthFt !== candDims.lengthFt) continue;
         if (targetDims.thickness && candDims.thickness && targetDims.thickness !== candDims.thickness) continue;
+        if (targetDims.sheetSize && candDims.sheetSize && targetDims.sheetSize !== candDims.sheetSize) continue;
 
         // If exact length or dimension matches
         if ((targetDims.lengthFt && candDims.lengthFt === targetDims.lengthFt) ||
@@ -3224,34 +3293,44 @@ Result:
       const simplifiedKentQuery = (activeItemDesc || activeItemName).replace(/#.*$/, '').replace(/&.*$/, '').trim();
       const shortKentQuery = simplifiedKentQuery.split(/\s+/).slice(0, 4).join(' ').trim();
 
-      // Prioritize exact dimensioned queries so the competitor search directly hits the exact length / size
-      const dimSpecificQueries: string[] = [];
-      if (targetDims.crossSection && targetDims.lengthFt) {
-        dimSpecificQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}ft`);
-        dimSpecificQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}'`);
-        dimSpecificQueries.push(`${targetDims.crossSection}x${targetDims.lengthFt}`);
-        dimSpecificQueries.push(`${targetDims.crossSection}-${targetDims.lengthFt}`);
-        if (targetDims.speciesOrType) {
-          dimSpecificQueries.push(`${targetDims.speciesOrType} ${targetDims.crossSection} ${targetDims.lengthFt}ft`);
-        }
-      } else if (targetDims.crossSection && targetDims.studLength) {
-        dimSpecificQueries.push(`${targetDims.crossSection} ${targetDims.studLength}`);
-      } else if (targetDims.sheetSize && targetDims.thickness) {
-        dimSpecificQueries.push(`${targetDims.speciesOrType || 'drywall'} ${targetDims.thickness} ${targetDims.sheetSize}`);
-        dimSpecificQueries.push(`${targetDims.thickness} ${targetDims.sheetSize}`);
+      // Prioritize the user's exact Description if non-generic (since user uses Kent's Exact Description)
+      const kentQueries: string[] = [];
+      if (effectiveDesc && !isGenericCategoryName(effectiveDesc)) {
+        kentQueries.push(effectiveDesc.trim());
       }
 
-      const rawCandidates = [
-        ...dimSpecificQueries,
-        effectiveDesc, 
-        lumberNormalized, 
-        shortKentQuery, 
-        effectiveMfg, 
-        effectiveUpc, 
-        effectiveName
-      ].map(s => String(s || '').trim()).filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
+      if (targetDims.crossSection && targetDims.lengthFt) {
+        kentQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}'`);
+        kentQueries.push(`${targetDims.crossSection}x${targetDims.lengthFt}`);
+        kentQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}ft`);
+        if (targetDims.speciesOrType) {
+          kentQueries.push(`${targetDims.speciesOrType} ${targetDims.crossSection} ${targetDims.lengthFt}'`);
+        }
+      } else if (targetDims.crossSection && targetDims.studLength) {
+        kentQueries.push(`${targetDims.crossSection} ${targetDims.studLength}`);
+      } else if (targetDims.sheetSize && targetDims.thickness) {
+        if (targetDims.speciesOrType) {
+          kentQueries.push(`${targetDims.speciesOrType} ${targetDims.thickness}`);
+          kentQueries.push(`${targetDims.thickness} ${targetDims.sheetSize} ${targetDims.speciesOrType}`);
+        } else {
+          kentQueries.push(`${targetDims.thickness} ${targetDims.sheetSize}`);
+        }
+      }
 
-      const queriesToTry = rawCandidates.slice(0, 4);
+      if (simplifiedKentQuery && !kentQueries.includes(simplifiedKentQuery)) {
+        kentQueries.push(simplifiedKentQuery);
+      }
+      if (effectiveMfg && !kentQueries.includes(effectiveMfg)) {
+        kentQueries.push(effectiveMfg);
+      }
+      if (effectiveUpc && !kentQueries.includes(effectiveUpc)) {
+        kentQueries.push(effectiveUpc);
+      }
+      if (effectiveName && !isGenericCategoryName(effectiveName) && !kentQueries.includes(effectiveName)) {
+        kentQueries.push(effectiveName);
+      }
+
+      const queriesToTry = kentQueries.slice(0, 4);
       diagnosticLogs.push(`[Kent] Dimension signature: ${targetDims.signature || 'NONE'}, Candidate queries: ${JSON.stringify(queriesToTry)}`);
       
       for (const query of queriesToTry) {
@@ -3349,33 +3428,36 @@ Result:
       const simplifiedHdQuery = (effectiveDesc || effectiveName).replace(/#.*$/, '').replace(/&.*$/, '').trim();
       const shortHdQuery = simplifiedHdQuery.split(/\s+/).slice(0, 4).join(' ').trim();
 
-      const hdDimQueries: string[] = [];
-      if (targetDimsHd.crossSection && targetDimsHd.lengthFt) {
-        hdDimQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
-        hdDimQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}'`);
-        hdDimQueries.push(`${targetDimsHd.crossSection}x${targetDimsHd.lengthFt}`);
-        hdDimQueries.push(`${targetDimsHd.crossSection}-${targetDimsHd.lengthFt}`);
-        if (targetDimsHd.speciesOrType) {
-          hdDimQueries.push(`${targetDimsHd.speciesOrType} ${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
-        }
-      } else if (targetDimsHd.crossSection && targetDimsHd.studLength) {
-        hdDimQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.studLength}`);
-      } else if (targetDimsHd.sheetSize && targetDimsHd.thickness) {
-        hdDimQueries.push(`${targetDimsHd.speciesOrType || 'drywall'} ${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
-        hdDimQueries.push(`${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
+      const hdQueries: string[] = [];
+      if (effectiveDesc && !isGenericCategoryName(effectiveDesc)) {
+        const cleanHdDesc = effectiveDesc.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+        hdQueries.push(cleanHdDesc);
+        hdQueries.push(effectiveDesc.trim());
       }
 
-      const hdRawCandidates = [
-        ...hdDimQueries,
-        effectiveDesc, 
-        lumberNormalizedHd, 
-        shortHdQuery,
-        effectiveMfg, 
-        effectiveUpc, 
-        effectiveName
-      ].map(s => String(s || '').trim()).filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
+      if (targetDimsHd.crossSection && targetDimsHd.lengthFt) {
+        hdQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
+        hdQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}'`);
+        hdQueries.push(`${targetDimsHd.crossSection}x${targetDimsHd.lengthFt}`);
+        if (targetDimsHd.speciesOrType) {
+          hdQueries.push(`${targetDimsHd.speciesOrType} ${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
+        }
+      } else if (targetDimsHd.crossSection && targetDimsHd.studLength) {
+        hdQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.studLength}`);
+      } else if (targetDimsHd.sheetSize && targetDimsHd.thickness) {
+        if (targetDimsHd.speciesOrType) {
+          hdQueries.push(`${targetDimsHd.speciesOrType} ${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
+          hdQueries.push(`${targetDimsHd.thickness} ${targetDimsHd.sheetSize} ${targetDimsHd.speciesOrType}`);
+        } else {
+          hdQueries.push(`${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
+        }
+      }
 
-      const hdQueriesToTry = hdRawCandidates.slice(0, 4);
+      if (effectiveMfg && !hdQueries.includes(effectiveMfg)) hdQueries.push(effectiveMfg);
+      if (effectiveUpc && !hdQueries.includes(effectiveUpc)) hdQueries.push(effectiveUpc);
+      if (effectiveName && !isGenericCategoryName(effectiveName) && !hdQueries.includes(effectiveName)) hdQueries.push(effectiveName);
+
+      const hdQueriesToTry = hdQueries.filter(Boolean).slice(0, 4);
       diagnosticLogs.push(`[Home Depot] Dimension signature: ${targetDimsHd.signature || 'NONE'}, Candidate queries: ${JSON.stringify(hdQueriesToTry)}`);
 
       for (const query of hdQueriesToTry) {

@@ -8,7 +8,8 @@ export interface BuildingDimensions {
   sheetSize: string | null;          // e.g. "4x8", "4x9", "4x10", "4x12"
   studLength: string | null;         // e.g. "92-5/8", "104-5/8", "116-5/8"
   signature: string | null;          // canonical signature: "2x4x10", "2x6x16", "1/2-4x8", "5/8-4x8"
-  speciesOrType: string | null;      // e.g. "spf", "spruce", "fir", "drywall", "plywood", "osb"
+  speciesOrType: string | null;      // e.g. "spf", "spruce", "fir", "drywall", "plywood", "osb", "spruce plywood"
+  materialType?: string | null;      // e.g. "plywood", "drywall", "osb", "lumber", "ceiling_tile"
 }
 
 export const GENERIC_CATEGORY_KEYWORDS = [
@@ -82,7 +83,7 @@ export function isGenericCategoryName(text: string = ''): boolean {
 export function extractBuildingDimensions(text: string): BuildingDimensions {
   const raw = String(text || '').trim();
   if (!raw) {
-    return { raw: '', crossSection: null, thickness: null, width: null, lengthFt: null, sheetSize: null, studLength: null, signature: null, speciesOrType: null };
+    return { raw: '', crossSection: null, thickness: null, width: null, lengthFt: null, sheetSize: null, studLength: null, signature: null, speciesOrType: null, materialType: null };
   }
 
   let s = raw.toLowerCase()
@@ -93,9 +94,32 @@ export function extractBuildingDimensions(text: string): BuildingDimensions {
     .replace(/⅜/g, '3/8')
     .replace(/¼/g, '1/4');
 
-  // Unify units
-  s = s.replace(/\b(\d+(?:\.\d+)?|\d+\/\d+)\s*(?:in\.?|inch(?:es)?|["”])\s*(?:x|-)\s*(\d+(?:\.\d+)?|\d+\/\d+)\s*(?:in\.?|inch(?:es)?|["”])?/gi, '$1 x $2');
-  s = s.replace(/\b(\d+)\s*(?:ft\.?|feet|foot|['’])\s*(?:x|-)\s*(\d+)\s*(?:ft\.?|feet|foot|['’])?/gi, '$1 x $2');
+  let materialType: string | null = null;
+  let species: string | null = null;
+
+  // Detect material type
+  if (/\b(?:plywood|sheathing)\b/i.test(s)) materialType = 'plywood';
+  else if (/\b(?:drywall|sheetrock|gypsum)\b/i.test(s)) materialType = 'drywall';
+  else if (/\b(?:osb|waferboard)\b/i.test(s)) materialType = 'osb';
+  else if (/\b(?:mdf)\b/i.test(s)) materialType = 'mdf';
+  else if (/\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(s)) materialType = 'ceiling_tile';
+
+  // Detect wood species or treatment
+  if (/\b(?:spruce)\b/i.test(s)) species = 'spruce';
+  else if (/\b(?:pine)\b/i.test(s)) species = 'pine';
+  else if (/\b(?:fir)\b/i.test(s)) species = 'fir';
+  else if (/\b(?:spf)\b/i.test(s)) species = 'spf';
+  else if (/\b(?:pressure treated|pt)\b/i.test(s)) species = 'treated';
+  else if (/\b(?:cedar)\b/i.test(s)) species = 'cedar';
+
+  let speciesOrType: string | null = null;
+  if (species && materialType) {
+    speciesOrType = `${species} ${materialType}`;
+  } else if (materialType) {
+    speciesOrType = materialType;
+  } else if (species) {
+    speciesOrType = species;
+  }
 
   let crossSection: string | null = null;
   let thickness: string | null = null;
@@ -103,15 +127,6 @@ export function extractBuildingDimensions(text: string): BuildingDimensions {
   let lengthFt: string | null = null;
   let sheetSize: string | null = null;
   let studLength: string | null = null;
-  let speciesOrType: string | null = null;
-
-  // Detect species or product type
-  if (/\b(?:spf|spruce|pine|fir)\b/i.test(s)) speciesOrType = 'spruce';
-  else if (/\b(?:drywall|sheetrock|gypsum)\b/i.test(s)) speciesOrType = 'drywall';
-  else if (/\b(?:plywood|sheathing)\b/i.test(s)) speciesOrType = 'plywood';
-  else if (/\b(?:osb|waferboard)\b/i.test(s)) speciesOrType = 'osb';
-  else if (/\b(?:pressure treated|pt)\b/i.test(s)) speciesOrType = 'treated';
-  else if (/\b(?:cedar)\b/i.test(s)) speciesOrType = 'cedar';
 
   // Stud length e.g. 92-5/8, 104-5/8, 116-5/8
   const studMatch = s.match(/\b(92\s*[-/]?\s*5\/8|104\s*[-/]?\s*5\/8|116\s*[-/]?\s*5\/8)\b/i);
@@ -119,48 +134,63 @@ export function extractBuildingDimensions(text: string): BuildingDimensions {
     studLength = studMatch[1].replace(/\s+/g, '');
   }
 
-  // Sheet goods: 4x8, 4x9, 4x10, 4x12
-  const sheetMatch = s.match(/\b4\s*x\s*(8|9|10|12)\b/i);
+  // Sheet goods: 4x8, 4x9, 4x10, 4x12 (matches "4x8", "4' x 8'", "4 ft. x 8 ft.", "4 ft x 8 ft")
+  const sheetMatch = s.match(/(?<![\/\d])4\s*(?:['’]|ft\.?|feet|foot)?\s*x\s*(8|9|10|12)(?:['’]|ft\.?|feet|foot)?\b/i);
   if (sheetMatch) {
     sheetSize = `4x${sheetMatch[1]}`;
-    const sheetThickMatch = s.match(/\b(1\/4|3\/8|7\/16|1\/2|5\/8|3\/4)\b/i) ||
-                            s.match(/\b(0\.25|0\.375|0\.4375|0\.5|0\.625|0\.75)\b/i);
+    const sheetThickMatch = s.match(/(?<!\d\/)\b(1\/4|3\/8|7\/16|1\/2|5\/8|3\/4)\b/i) ||
+                            s.match(/\b(0\.25|0\.375|0\.4375|0\.5|0\.625|0\.75)\b/i) ||
+                            s.match(/\b(8|9|11|12|12\.5|15|15\.5|18|18\.5)\s*mm\b/i);
     if (sheetThickMatch) {
-      thickness = sheetThickMatch[1];
-      if (thickness === '0.5') thickness = '1/2';
-      if (thickness === '0.625') thickness = '5/8';
-      if (thickness === '0.75') thickness = '3/4';
+      let t = sheetThickMatch[1];
+      if (t === '0.5' || t === '12' || t === '12.5') t = '1/2';
+      else if (t === '0.625' || t === '15' || t === '15.5') t = '5/8';
+      else if (t === '0.75' || t === '18' || t === '18.5') t = '3/4';
+      else if (t === '0.4375' || t === '11') t = '7/16';
+      else if (t === '0.375' || t === '9') t = '3/8';
+      else if (t === '0.25' || t === '8') t = '1/4';
+      thickness = t;
     }
   }
 
-  // 3-part lumber dimensions: 2x4x8, 2x4x10, 2x4x12, 2x4x16, 2x6x12, 2x4-10, 2x4-8, 2x4-12, 2x4 10', 2 x 4 x 10
-  const threePartMatch = s.match(/\b([1246])\s*x\s*([23468]|10|12)\s*(?:x|-|\s)\s*(\d{1,2})\s*(?:ft|['’]|\b)/i);
-  if (threePartMatch) {
-    thickness = threePartMatch[1];
-    width = threePartMatch[2];
-    crossSection = `${thickness}x${width}`;
-    const l = parseInt(threePartMatch[3], 10);
-    if (l >= 6 && l <= 24) {
-      lengthFt = String(l);
-    }
-  }
+  // Lumber parsing - only if this is NOT a sheet good and NOT sheet material (drywall, plywood, osb, ceiling_tile)
+  const isSheetProduct = sheetSize !== null || materialType === 'plywood' || materialType === 'drywall' || materialType === 'osb' || materialType === 'ceiling_tile' || materialType === 'mdf';
 
-  // 2-part cross section: 2x4, 2x6, 2x8, 2x10, 2x12, 1x4, 1x6, 4x4, 6x6
-  if (!crossSection) {
-    const twoPartMatch = s.match(/\b([1246])\s*x\s*([23468]|10|12)\b/i);
-    if (twoPartMatch) {
-      thickness = twoPartMatch[1];
-      width = twoPartMatch[2];
+  if (!isSheetProduct) {
+    // 3-part lumber dimensions: 2x4x8, 2x4x10, 2x4x12, 2x4x16, 2x6x12, 2x4-10, 2x4-8, 2x4-12, 2x4 10', 2 x 4 x 10
+    // Negative lookbehind (?<![\/\d]) ensures fractions like "1/2 x 4 x 8" NEVER match lumber!
+    const threePartMatch = s.match(/(?<![\/\d])([1246])\s*x\s*([23468]|10|12)\s*(?:x|-|\s)\s*(\d{1,2})\s*(?:ft|['’]|\b)/i);
+    if (threePartMatch) {
+      thickness = threePartMatch[1];
+      width = threePartMatch[2];
       crossSection = `${thickness}x${width}`;
+      const l = parseInt(threePartMatch[3], 10);
+      if (l >= 6 && l <= 24) {
+        lengthFt = String(l);
+      }
     }
-  }
 
-  // Explicit length (8', 10', 12', 14', 16', 8ft, 10ft, 12ft, 16ft, -8', -10', -12', -8, -10, -12)
-  if (!lengthFt && !sheetSize) {
-    const explicitLenMatch = s.match(/\b(8|9|10|12|14|16|18|20|24)\s*(?:ft|['’]|foot|feet|-ft)\b/i) ||
-                             s.match(/(?:x|-)\s*(8|9|10|12|14|16|18|20|24)\s*(?:['’]|ft|\b)/i);
-    if (explicitLenMatch) {
-      lengthFt = explicitLenMatch[1];
+    // 2-part cross section: 2x4, 2x6, 2x8, 2x10, 2x12, 1x4, 1x6, 4x4, 6x6
+    if (!crossSection) {
+      const twoPartMatch = s.match(/(?<![\/\d])([1246])\s*x\s*([23468]|10|12)\b/i);
+      if (twoPartMatch) {
+        thickness = twoPartMatch[1];
+        width = twoPartMatch[2];
+        crossSection = `${thickness}x${width}`;
+      }
+    }
+
+    // Explicit length (8', 10', 12', 14', 16', 8ft, 10ft, 12ft, 16ft, -8', -10', -12', -8, -10, -12)
+    if (!lengthFt && !studLength) {
+      const explicitLenMatch = s.match(/\b(8|9|10|12|14|16|18|20|24)\s*(?:ft|['’]|foot|feet|-ft)\b/i) ||
+                               s.match(/(?:x|-)\s*(8|9|10|12|14|16|18|20|24)\s*(?:['’]|ft|\b)/i);
+      if (explicitLenMatch) {
+        lengthFt = explicitLenMatch[1];
+      }
+    }
+
+    if (crossSection) {
+      materialType = 'lumber';
     }
   }
 
@@ -178,7 +208,7 @@ export function extractBuildingDimensions(text: string): BuildingDimensions {
     signature = crossSection;
   }
 
-  return { raw, crossSection, thickness, width, lengthFt, sheetSize, studLength, signature, speciesOrType };
+  return { raw, crossSection, thickness, width, lengthFt, sheetSize, studLength, signature, speciesOrType, materialType };
 }
 
 /**
@@ -284,18 +314,20 @@ export function extractRealProductSearchTerm(item: {
  * Uses exact product dimensions (e.g., "2x4 10ft") or the real description instead of generic category headers.
  */
 export function buildCompetitorSearchUrl(competitor: 'kent' | 'homeDepot', term: string): string {
-  const safeTerm = isGenericCategoryName(term) ? '' : term;
+  const safeTerm = isGenericCategoryName(term) ? '' : term.trim();
   const dims = extractBuildingDimensions(safeTerm);
   
   let query = safeTerm;
-  if (dims.crossSection && dims.lengthFt) {
-    query = `${dims.crossSection} ${dims.lengthFt}ft`;
-  } else if (dims.crossSection && dims.studLength) {
-    query = `${dims.crossSection} ${dims.studLength}`;
-  } else if (dims.sheetSize && dims.thickness) {
-    query = `${dims.speciesOrType || 'drywall'} ${dims.thickness} ${dims.sheetSize}`;
-  } else if (dims.signature) {
-    query = dims.signature;
+  if (!query) {
+    if (dims.crossSection && dims.lengthFt) {
+      query = `${dims.crossSection} ${dims.lengthFt}ft`;
+    } else if (dims.crossSection && dims.studLength) {
+      query = `${dims.crossSection} ${dims.studLength}`;
+    } else if (dims.sheetSize && dims.thickness) {
+      query = `${dims.speciesOrType || 'plywood'} ${dims.thickness} ${dims.sheetSize}`;
+    } else if (dims.signature) {
+      query = dims.signature;
+    }
   }
 
   if (!query || isGenericCategoryName(query)) {
