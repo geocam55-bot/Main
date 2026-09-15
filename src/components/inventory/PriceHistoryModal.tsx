@@ -94,12 +94,64 @@ export function PriceHistoryModal({
     return Array.from(map.values());
   })();
 
+  const [configuredCompetitors, setConfiguredCompetitors] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadCompetitors() {
+      const { competitivePricingAPI } = await import('../../utils/api');
+      const comps = await competitivePricingAPI.getCompetitors();
+      setConfiguredCompetitors(comps);
+    }
+    if (open) {
+      loadCompetitors();
+    }
+  }, [open]);
+
   const uniqueCompetitors = Array.from(new Set(history.map((h) => h.competitorName)));
-  const competitorColors: Record<string, string> = {
-    'KENT Building Supplies': '#d97706',
-    'The Home Depot': '#dc2626',
-    Kent: '#d97706',
-    'Home Depot': '#dc2626',
+  const isGreyColor = (hex: string) => {
+    if (!hex) return true;
+    const h = hex.toLowerCase().trim();
+    return ['#64748b', '#94a3b8', '#6b7280', '#cbd5e1', '#475569', '#1e293b', '#9ca3af', '#4b5563', '#374151', '#f3f4f6', '#e5e7eb'].includes(h);
+  };
+
+  const competitorColors: Record<string, string> = {};
+  configuredCompetitors.forEach((c) => {
+    if (c.name && c.colorHex && !isGreyColor(c.colorHex)) {
+      competitorColors[c.name] = c.colorHex;
+      competitorColors[c.name.toLowerCase().trim()] = c.colorHex;
+      const firstWord = c.name.split(' ')[0].toLowerCase();
+      competitorColors[firstWord] = c.colorHex;
+    }
+  });
+
+  const getCompetitorColor = (compName: string) => {
+    if (!compName) return '#0bd057';
+    const lower = compName.toLowerCase().trim();
+
+    if (lower.includes('kent')) {
+      const found = configuredCompetitors.find(c => c.name && c.name.toLowerCase().includes('kent'));
+      if (found?.colorHex && !isGreyColor(found.colorHex)) return found.colorHex;
+      return '#0bd057';
+    }
+    if (lower.includes('home depot') || lower.includes('hd')) {
+      const found = configuredCompetitors.find(c => c.name && (c.name.toLowerCase().includes('home depot') || c.name.toLowerCase().includes('hd')));
+      if (found?.colorHex && !isGreyColor(found.colorHex)) return found.colorHex;
+      return '#f96302';
+    }
+
+    if (competitorColors[compName]) return competitorColors[compName];
+    if (competitorColors[lower]) return competitorColors[lower];
+    
+    for (const c of configuredCompetitors) {
+      if (c.name && c.colorHex && !isGreyColor(c.colorHex)) {
+        const cLower = c.name.toLowerCase();
+        if (lower.includes(cLower) || cLower.includes(lower)) {
+          return c.colorHex;
+        }
+      }
+    }
+
+    return '#2563eb';
   };
 
   return (
@@ -185,7 +237,7 @@ export function PriceHistoryModal({
                         key={comp}
                         type="monotone"
                         dataKey={comp}
-                        stroke={competitorColors[comp] || ['#10b981', '#8b5cf6', '#f59e0b'][idx % 3]}
+                        stroke={getCompetitorColor(comp)}
                         strokeWidth={2}
                         dot={{ r: 3 }}
                       />

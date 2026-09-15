@@ -59,6 +59,26 @@ export function CompetitivePricingPanel({
   const [jobStatus, setJobStatus] = useState<PricingJobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [configuredCompetitors, setConfiguredCompetitors] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadComps() {
+      try {
+        const comps = await competitivePricingAPI.getCompetitors();
+        setConfiguredCompetitors(comps);
+      } catch (e) {
+        // ignore
+      }
+    }
+    loadComps();
+  }, []);
+
+  const getCompetitorColor = (compName: string, defaultColor = '#3b82f6') => {
+    const found = configuredCompetitors.find(c => 
+      c.name && (c.name.toLowerCase() === compName.toLowerCase() || c.name.toLowerCase().includes(compName.toLowerCase()) || compName.toLowerCase().includes(c.name.toLowerCase()))
+    );
+    return found?.colorHex || defaultColor;
+  };
 
   // Load existing pricing data
   const loadPricing = async () => {
@@ -396,11 +416,13 @@ export function CompetitivePricingPanel({
                             ? 'border-amber-200 bg-amber-50/40'
                             : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
+                        style={{ borderLeftWidth: '4px', borderLeftColor: getCompetitorColor(comp.competitorName, comp.competitorId === 1 ? '#0bd057' : '#f96302') }}
                       >
                         {/* Competitor Header */}
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div>
                             <div className="flex items-center gap-1.5">
+                              <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: getCompetitorColor(comp.competitorName, comp.competitorId === 1 ? '#0bd057' : '#f96302') }}></span>
                               <h4 className="font-semibold text-sm text-slate-900">
                                 {comp.competitorName}
                               </h4>
@@ -520,7 +542,7 @@ export function CompetitivePricingPanel({
                 <Package className="h-8 w-8 text-slate-400 mx-auto mb-1.5" />
                 <p className="text-sm font-medium text-slate-700">No Competitor Pricing Stored Yet</p>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                  Click &ldquo;Refresh Prices&rdquo; to launch a Playwright check across Kent and The Home Depot for this product.
+                  Click &ldquo;Refresh Prices&rdquo; to launch a live competitor price scrape for this product.
                 </p>
               </div>
             )}

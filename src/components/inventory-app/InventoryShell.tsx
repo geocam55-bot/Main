@@ -328,7 +328,7 @@ function HomeView({
     {
       id: 'shopping-list',
       label: 'Shopping List',
-      description: 'Build material packages, monitor replacement vs. average cost, and compare live competitor pricing across Kent and Home Depot.',
+      description: 'Build material packages, monitor replacement vs. average cost, and compare live pricing across regional competitors.',
       icon: ShoppingCart,
       gradient: 'from-blue-500 to-cyan-600',
       shadow: 'shadow-blue-500/20',

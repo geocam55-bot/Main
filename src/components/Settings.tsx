@@ -108,6 +108,7 @@ import { useSubscription } from '../hooks/useSubscription';
 import { getOrgMode, setOrgMode } from '../utils/settings-client';
 import type { OrgUserMode } from '../utils/settings-client';
 import { WorkflowSettingsDialog } from './settings/WorkflowSettingsDialog';
+import CompetitorsSettings from './settings/CompetitorsSettings';
 import { useTheme, type ThemeMode } from './ThemeProvider';
 import { CustomFieldsDialog } from './settings/CustomFieldsDialog';
 import { SettingsModuleHelp } from './SettingsModuleHelp';
@@ -1751,6 +1752,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                       <TabsTrigger value="inventory" className="whitespace-nowrap px-4">Inventory & Pricing</TabsTrigger>
                       <TabsTrigger value="wizards" className="whitespace-nowrap px-4">Project Wizards</TabsTrigger>
                       <TabsTrigger value="users" className="whitespace-nowrap px-4">Users</TabsTrigger>
+                      <TabsTrigger value="competitors" className="whitespace-nowrap px-4">Competitors</TabsTrigger>
                     </TabsList>
                   </div>
                   
@@ -2387,6 +2389,14 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                             Choose how users are notified when invited. Emailing directly requires that you have configured SMTP settings in your Supabase Auth dashboard.
                           </p>
                         </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="competitors" className="mt-4">
+                    <Card>
+                      <CardContent className="pt-6">
+                        <CompetitorsSettings />
                       </CardContent>
                     </Card>
                   </TabsContent>

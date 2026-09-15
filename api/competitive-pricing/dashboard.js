@@ -28,7 +28,7 @@ function resolveInventoryTitles(rawName = '', rawDescription = '', category = ''
     'fasteners', 'hand tools', 'power tools', 'plumbing', 'lighting', 'seasonal',
     'hardware', 'outlets,boxes', 'fuses,outlets', 'ventilation', 'heating and cooling',
     'home decor', 'outdoor living', 'building product', 'tools & hardware',
-    'electrical & lighting', 'paint & decor'
+    'electrical & lighting', 'paint & decor', 'frame materials', 'materials', 'framing', 'lumber'
   ];
 
   const hasGenericKeyword = genericCategoryKeywords.some(keyword => cleanNameLower.includes(keyword));
@@ -40,12 +40,12 @@ function resolveInventoryTitles(rawName = '', rawDescription = '', category = ''
 
   if (isGenericOrEmpty && parsedDescription && parsedDescription.trim() !== '') {
     finalName = parsedDescription;
-    finalDescription = rawName || '';
+    finalDescription = parsedDescription;
   }
 
   return {
     title: finalName || parsedDescription || rawName || 'Product',
-    description: finalDescription || '',
+    description: finalDescription || finalName || '',
   };
 }
 

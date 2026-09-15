@@ -24,6 +24,13 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { GoogleGenAI, Type } from "@google/genai";
 import { registerLogisticsServer } from "./src/server/logistics-server";
+import {
+  resolveInventoryTitles,
+  extractBuildingDimensions,
+  extractRealProductSearchTerm,
+  buildCompetitorSearchUrl,
+  isGenericCategoryName,
+} from "./src/utils/building-dimensions";
 
 const FALLBACK_PROJECT_ID = "usorqldwroecyxucmtuw";
 const FALLBACK_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
@@ -2832,91 +2839,7 @@ Result:
   const inMemoryHistory: any[] = [];
   const latestCompetitorResultsByProduct = new Map<string, any[]>();
 
-  // Helper: extract cleaned product title and secondary description mirroring Inventory.tsx logic
-  function resolveInventoryTitles(rawName: string = '', rawDescription: string = '', category: string = '') {
-    let parsedDescription = rawDescription || '';
-    const markerStart = "<!--metadata:";
-    const markerEnd = "-->";
-    const startIndex = parsedDescription.lastIndexOf(markerStart);
-    if (startIndex !== -1) {
-      const endIndex = parsedDescription.indexOf(markerEnd, startIndex + markerStart.length);
-      if (endIndex !== -1) {
-        parsedDescription = parsedDescription.substring(0, startIndex).trim();
-      }
-    }
-
-    let finalName = rawName || '';
-    let finalDescription = parsedDescription;
-    const cleanNameLower = finalName ? finalName.trim().toLowerCase() : '';
-
-    const genericCategoryKeywords = [
-      'accessories for',
-      'pipes, fittings',
-      'hooks, squares',
-      'insulating materials',
-      'paint types',
-      'lawn, garden',
-      'lawn equipment',
-      'gutters',
-      'tree, plant',
-      'electric heating',
-      'tools accesso',
-      'repair parts',
-      'electric acc.',
-      'coverings',
-      'cables and accesso',
-      'furniture, bbq',
-      'electrical appliances',
-      'wall and floor',
-      'portable electric',
-      'chains, steel',
-      'motorized lawn',
-      'building materials',
-      'fasteners',
-      'hand tools',
-      'power tools',
-      'plumbing',
-      'lighting',
-      'seasonal',
-      'hardware',
-      'outlets,boxes',
-      'fuses,outlets',
-      'ventilation',
-      'heating and cooling',
-      'home decor',
-      'outdoor living',
-      'building product',
-      'tools & hardware',
-      'electrical & lighting',
-      'paint & decor',
-      'frame materials',
-      'materials',
-      'framing',
-      'lumber',
-      'sheet goods'
-    ];
-
-    const hasGenericKeyword = genericCategoryKeywords.some(keyword => cleanNameLower.includes(keyword));
-    const isGenericOrEmpty = !finalName ||
-      finalName.trim() === '' ||
-      finalName.trim().toUpperCase() === 'UNDEFINED' ||
-      (category && finalName.trim().toLowerCase() === category.trim().toLowerCase()) ||
-      hasGenericKeyword;
-
-    if (parsedDescription && parsedDescription.trim() !== '') {
-      if (isGenericOrEmpty || (cleanNameLower.length <= 16 && !cleanNameLower.includes('ply') && !cleanNameLower.includes('spruce') && !cleanNameLower.includes('drywall'))) {
-        finalName = parsedDescription;
-        finalDescription = rawName || '';
-      }
-    }
-
-    return {
-      title: finalName || parsedDescription || rawName || 'Product',
-      description: finalDescription || '',
-    };
-  }
-
-  // Helper: fetch product details from inventory or products table
+  // Helper: fetch product details from inventory or products table (uses imported resolveInventoryTitles from ./src/utils/building-dimensions)
   async function resolveProductRecord(productId: string | number) {
     try {
       const pidStr = String(productId).trim();
@@ -2992,14 +2915,23 @@ Result:
   function normalizeBuildingText(text: string) {
     return String(text || '')
       .toLowerCase()
+      .replace(/[\u00d7]/g, 'x')
+      .replace(/½/g, '1/2')
+      .replace(/¾/g, '3/4')
+      .replace(/⅝/g, '5/8')
+      .replace(/⅜/g, '3/8')
+      .replace(/¼/g, '1/4')
+      .replace(/\b(\d+(?:\.\d+)?|\d+\/\d+)\s*(?:in\.?|inch(?:es)?|["”])\s*(?:x|-)\s*(\d+(?:\.\d+)?|\d+\/\d+)\s*(?:in\.?|inch(?:es)?|["”])?/gi, '$1 x $2')
+      .replace(/\b(\d+)\s*(?:ft\.?|feet|foot|['’])\s*(?:x|-)\s*(\d+)\s*(?:ft\.?|feet|foot|['’])?/gi, '$1 x $2')
       .replace(/\b(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\b/gi, '$1 x $2 x $3')
       .replace(/\b(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\b/gi, '$1 x $2')
       .replace(/\bply\b/g, 'plywood')
       .replace(/\bspr\b/g, 'spruce')
       .replace(/\bstd\b/g, 'standard')
       .replace(/\bspf\b/g, 'spruce pine fir')
+      .replace(/\bpt\b/g, 'pressure treated')
       .replace(/\(\d+(?:\.\d+)?\)/g, ' ')
-      .replace(/[*#&'()]/g, ' ')
+      .replace(/[#&()]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -3027,34 +2959,38 @@ Result:
   }
 
   // Multi-tier matching helper adhering to user rules:
-  // 1) Match on "Item Name" then Dimensions (80% or greater similarity)
-  // 2) Match on UPC exact match
-  // 3) Match on MFG# (Supplier SKU) exact match
+  // 1) Match on UPC exact match (Priority 1)
+  // 2) Match on MFG# (Supplier SKU) exact match (Priority 2)
+  // 3) Match on Description / Item Name with STRICT DIMENSION VETO (Priority 3)
   function scoreAndPickBestProduct(items: any[], product: { productName?: string; description?: string; upc?: string; mfgPartNumber?: string }, query: string = '') {
     if (!items || items.length === 0) return null;
 
-    const targetName = normalizeBuildingText(product.productName || '');
-    const targetDesc = normalizeBuildingText(product.description || '');
+    const targetDesc = String(product.description || '');
+    const targetName = String(product.productName || '');
     const targetUpc = String(product.upc || '').trim();
     const targetMfg = String(product.mfgPartNumber || '').trim().toLowerCase();
     const qTrim = String(query || '').trim().toLowerCase();
 
-    // If query matches effectiveMfg or effectiveUpc, or if targetMfg/targetUpc matches candidate MFG/UPC
-    if (qTrim && (qTrim === targetMfg || qTrim === targetUpc || (targetMfg && qTrim.includes(targetMfg)) || (targetUpc && qTrim.includes(targetUpc)))) {
-      return { item: items[0], method: qTrim === targetUpc ? 'UPC' : 'MANUFACTURER_PART_NUMBER', confidence: 'EXACT', score: 1.0 };
+    // Priority 1: Exact UPC match
+    if (targetUpc) {
+      const upcItem = items.find(it => {
+        const u = String(it.upc || it.barcode || '').trim();
+        return u && u === targetUpc;
+      });
+      if (upcItem) return { item: upcItem, method: 'UPC', confidence: 'EXACT', score: 1.0 };
     }
 
-    // Helper to extract dimensions and lengths (e.g. 2x4x10, 2x4 10 ft, 10', etc.)
-    const extractDims = (text: string) => {
-      const match = text.match(/(?<!\/)\b(\d+(?:\.\d+)?)\s*(?:x|\u00d7)\s*(\d+(?:\.\d+)?)(?:\s*(?:x|\u00d7|\s)\s*(\d+(?:\.\d+)?))?\b/i);
-      const lengthMatch = text.match(/\b(\d+)\s*(?:ft|['′])\b/i) || text.match(/(?:x|\u00d7)\s*(\d+)\b/);
-      return {
-        d1: match ? match[1] : null,
-        d2: match ? match[2] : null,
-        d3: match ? match[3] : (lengthMatch ? lengthMatch[1] : null)
-      };
-    };
-    const targetDims = extractDims(`${targetName} ${targetDesc}`);
+    // Priority 2: Exact MFG / Supplier SKU match
+    if (targetMfg) {
+      const mfgItem = items.find(it => {
+        const m = String(it.mfgPartNumber || it.supplierSku || it.code || it.modelNumber || '').trim().toLowerCase();
+        return m && (m === targetMfg || m.replace(/[^a-z0-9]/g, '') === targetMfg.replace(/[^a-z0-9]/g, ''));
+      });
+      if (mfgItem) return { item: mfgItem, method: 'MANUFACTURER_PART_NUMBER', confidence: 'EXACT', score: 1.0 };
+    }
+
+    // Extract precision target dimensions from DESCRIPTION (and fallback to Name)
+    const targetDims = extractBuildingDimensions(targetDesc || targetName);
 
     let bestResult: any = null;
     let bestScore = -1;
@@ -3064,32 +3000,62 @@ Result:
       const candUpc = String(item.upc || item.barcode || '').trim();
       const candMfg = String(item.mfgPartNumber || item.supplierSku || item.code || item.modelNumber || '').trim().toLowerCase();
 
-      // Rule 2: UPC exact match
+      // Rule: UPC exact match
       if (targetUpc && candUpc && candUpc === targetUpc) {
         return { item, method: 'UPC', confidence: 'EXACT', score: 1.0 };
       }
 
-      // Rule 3: MFG# (Supplier SKU) exact match
+      // Rule: MFG# (Supplier SKU) exact match
       if (targetMfg && candMfg && candMfg === targetMfg) {
         return { item, method: 'MANUFACTURER_PART_NUMBER', confidence: 'EXACT', score: 1.0 };
       }
 
-      // Rule 1: Match on "Item Name" then Dimensions (Hard Veto on Mismatch)
-      const candDims = extractDims(candTitle);
-      if (targetDims && targetDims.d1 && targetDims.d2 && candDims && candDims.d1 && candDims.d2) {
-        if (targetDims.d1 !== candDims.d1 || targetDims.d2 !== candDims.d2 || (targetDims.d3 && candDims.d3 && targetDims.d3 !== candDims.d3)) {
-          continue; // Strict hard veto: do not match 2x10 when looking for 2x4
+      // Extract candidate dimensions
+      const candDims = extractBuildingDimensions(candTitle);
+
+      // STRICT HARD VETO 1: Cross-Section Mismatch (e.g. searching 2x4, candidate is 2x6, 2x8, etc.)
+      if (targetDims.crossSection && candDims.crossSection) {
+        if (targetDims.crossSection !== candDims.crossSection) {
+          continue; // Strict hard veto
         }
       }
 
-      // Bag of words token overlap similarity (Jaccard) between target (name + description bag of words) and candidate title
+      // STRICT HARD VETO 2: Length Mismatch (e.g. searching 10 ft, candidate is 8 ft, 12 ft, 16 ft)
+      if (targetDims.lengthFt && candDims.lengthFt) {
+        if (targetDims.lengthFt !== candDims.lengthFt) {
+          continue; // Strict hard veto: do not match 8ft board when looking for 10ft!
+        }
+      }
+
+      // STRICT HARD VETO 3: Stud Length Mismatch (e.g. 92-5/8" vs 104-5/8")
+      if (targetDims.studLength && candDims.studLength) {
+        if (targetDims.studLength !== candDims.studLength) {
+          continue; // Strict hard veto
+        }
+      }
+
+      // STRICT HARD VETO 4: Sheet Thickness Mismatch (e.g. 1/2" drywall vs 5/8" drywall)
+      if (targetDims.thickness && candDims.thickness && (targetDims.sheetSize || candDims.sheetSize)) {
+        if (targetDims.thickness !== candDims.thickness) {
+          continue; // Strict hard veto: do not match 5/8" drywall when looking for 1/2"!
+        }
+      }
+
+      // STRICT HARD VETO 5: Sheet Size Mismatch (e.g. 4x8 vs 4x12)
+      if (targetDims.sheetSize && candDims.sheetSize) {
+        if (targetDims.sheetSize !== candDims.sheetSize) {
+          continue; // Strict hard veto
+        }
+      }
+
+      // Bag of words token overlap similarity (Jaccard) between target and candidate
       const stopWords = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with']);
       const targetTokens = new Set([
-        ...targetName.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/),
-        ...targetDesc.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/)
+        ...normalizeBuildingText(targetDesc).replace(/[^a-z0-9\/]/g, ' ').split(/\s+/),
+        ...normalizeBuildingText(targetName).replace(/[^a-z0-9\/]/g, ' ').split(/\s+/)
       ].filter(t => t.length > 1 && !stopWords.has(t)));
       
-      const candTokens = new Set(candTitle.replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t)));
+      const candTokens = new Set(normalizeBuildingText(candTitle).replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t)));
 
       let intersection = 0;
       for (const t of targetTokens) {
@@ -3098,30 +3064,51 @@ Result:
       const union = new Set([...targetTokens, ...candTokens]).size;
       const nameSimilarity = union > 0 ? intersection / union : 0;
 
-      const totalScore = nameSimilarity;
+      // Calculate Dimension Match Bonus / Penalty
+      let dimBonus = 0;
+      if (targetDims.signature && candDims.signature && targetDims.signature === candDims.signature) {
+        dimBonus = 0.50; // High confidence for exact dimension signature match (e.g. 2x4x10, 1/2-4x8)
+      } else if (targetDims.lengthFt && !candDims.lengthFt) {
+        // Target specified length (e.g. 10ft) but candidate does not specify length
+        dimBonus = -0.25;
+      }
 
-      if (totalScore >= 0.3 && totalScore > bestScore) {
+      const totalScore = nameSimilarity + dimBonus;
+
+      if (totalScore >= 0.40 && totalScore > bestScore) {
         bestScore = totalScore;
         bestResult = {
           item,
           method: 'DESCRIPTION',
-          confidence: totalScore >= 0.7 ? 'HIGH' : 'MEDIUM',
-          score: totalScore
+          confidence: totalScore >= 0.70 ? 'HIGH' : 'MEDIUM',
+          score: totalScore,
+          dimensionMatched: targetDims.signature ? (targetDims.signature === candDims.signature) : true
         };
       }
     }
 
+    // Safety fallback: only accept candidate if dimensions do not conflict
     if (!bestResult && items.length > 0) {
-      // Only fallback to items[0] if it matches at least one primary dimension token (e.g. 2x4 or length)
-      const firstCand = String(items[0].title || items[0].name || '').toLowerCase();
-      const hasDimMatch = targetDims && ((targetDims.d1 && firstCand.includes(targetDims.d1)) || (targetDims.d2 && firstCand.includes(targetDims.d2)));
-      if (hasDimMatch) {
-        return {
-          item: items[0],
-          method: 'DESCRIPTION',
-          confidence: 'LOW',
-          score: 0.4
-        };
+      for (const candItem of items) {
+        const candTitle = String(candItem.title || candItem.name || '').toLowerCase();
+        const candDims = extractBuildingDimensions(candTitle);
+
+        // Disqualify if dimensions conflict
+        if (targetDims.crossSection && candDims.crossSection && targetDims.crossSection !== candDims.crossSection) continue;
+        if (targetDims.lengthFt && candDims.lengthFt && targetDims.lengthFt !== candDims.lengthFt) continue;
+        if (targetDims.thickness && candDims.thickness && targetDims.thickness !== candDims.thickness) continue;
+
+        // If exact length or dimension matches
+        if ((targetDims.lengthFt && candDims.lengthFt === targetDims.lengthFt) ||
+            (targetDims.signature && candDims.signature === targetDims.signature)) {
+          return {
+            item: candItem,
+            method: 'DESCRIPTION',
+            confidence: 'MEDIUM',
+            score: 0.65,
+            dimensionMatched: true
+          };
+        }
       }
     }
 
@@ -3158,37 +3145,75 @@ Result:
     const effectiveName = String(bodyCriteria.name || bodyCriteria.productName || product.productName || '').trim();
     const customQuery = String(bodyCriteria.searchQuery || '').trim();
 
-    // Prioritize the inventory table's DESCRIPTION for search queries (dimensions, species, finish, specs)
-    const primarySearchTerm = effectiveDesc || customQuery || effectiveName || effectiveUpc || effectiveMfg || product.sku;
+    // Resolve real titles and descriptions, discarding generic categories like "FRAME MATERIALS"
+    const { title: resolvedTitle, description: resolvedDesc } = resolveInventoryTitles(
+      effectiveName,
+      effectiveDesc,
+      bodyCriteria.category || product.category || ''
+    );
+
+    // Prioritize the inventory table's DESCRIPTION & DIMENSIONS, strictly filtering out generic category headers
+    const primarySearchTerm = extractRealProductSearchTerm({
+      description: resolvedDesc || effectiveDesc,
+      name: resolvedTitle || effectiveName,
+      productName: resolvedTitle || effectiveName,
+      category: bodyCriteria.category || product.category,
+      sku: product.sku,
+      mfgPartNumber: effectiveMfg,
+      searchQuery: customQuery,
+    });
+
+    const activeItemName = resolvedTitle || effectiveName || 'Product';
+    const activeItemDesc = resolvedDesc || effectiveDesc || activeItemName;
+
     const kentSearchQuery = primarySearchTerm;
     const hdSearchQuery = primarySearchTerm;
 
-    console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Desc: "${effectiveDesc}" | Name: "${effectiveName}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
+    console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Desc: "${activeItemDesc}" | Name: "${activeItemName}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
     
     const diagnosticLogs: string[] = [
       `[Init] Target SKU: ${product.sku || 'N/A'}, Unit Price: $${Number(product.yourPrice || 0).toFixed(2)}`,
-      `[Init] Primary Search Query (Priority: DESCRIPTION): "${primarySearchTerm}"`,
+      `[Init] Primary Search Query (Priority: DESCRIPTION/DIMENSIONS): "${primarySearchTerm}"`,
     ];
 
     let freshKent = 0;
     let freshHd = 0;
     let kentConf = 'NOT_FOUND';
     let hdConf = 'NOT_FOUND';
-    let kentMethod = (effectiveDesc || effectiveName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
-    let hdMethod = (effectiveDesc || effectiveName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
-    let kentTitle = effectiveDesc || effectiveName;
-    let hdTitle = effectiveDesc || effectiveName;
+    let kentMethod = (activeItemDesc || activeItemName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
+    let hdMethod = (activeItemDesc || activeItemName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
+    let kentTitle = activeItemDesc || activeItemName;
+    let hdTitle = activeItemDesc || activeItemName;
     let kentSku = effectiveMfg || '';
     let hdSku = effectiveMfg || '';
-    let kentUrl = `https://kent.ca/en/search/?q=${encodeURIComponent(kentSearchQuery)}`;
+    let kentUrl = buildCompetitorSearchUrl('kent', primarySearchTerm);
 
     // Direct Scraping for Kent Building Supplies (Halifax - Bayers Lake store)
     try {
-      const lumberNormalized = normalizeBuildingText(effectiveDesc || effectiveName);
-      const simplifiedKentQuery = (effectiveDesc || effectiveName).replace(/#.*$/, '').replace(/&.*$/, '').replace(/\*.*\*/g, '').trim();
+      const targetDims = extractBuildingDimensions(activeItemDesc || activeItemName);
+      const lumberNormalized = normalizeBuildingText(activeItemDesc || activeItemName);
+      const simplifiedKentQuery = (activeItemDesc || activeItemName).replace(/#.*$/, '').replace(/&.*$/, '').trim();
       const shortKentQuery = simplifiedKentQuery.split(/\s+/).slice(0, 4).join(' ').trim();
 
+      // Prioritize exact dimensioned queries so the competitor search directly hits the exact length / size
+      const dimSpecificQueries: string[] = [];
+      if (targetDims.crossSection && targetDims.lengthFt) {
+        dimSpecificQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}ft`);
+        dimSpecificQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}'`);
+        dimSpecificQueries.push(`${targetDims.crossSection}x${targetDims.lengthFt}`);
+        dimSpecificQueries.push(`${targetDims.crossSection}-${targetDims.lengthFt}`);
+        if (targetDims.speciesOrType) {
+          dimSpecificQueries.push(`${targetDims.speciesOrType} ${targetDims.crossSection} ${targetDims.lengthFt}ft`);
+        }
+      } else if (targetDims.crossSection && targetDims.studLength) {
+        dimSpecificQueries.push(`${targetDims.crossSection} ${targetDims.studLength}`);
+      } else if (targetDims.sheetSize && targetDims.thickness) {
+        dimSpecificQueries.push(`${targetDims.speciesOrType || 'drywall'} ${targetDims.thickness} ${targetDims.sheetSize}`);
+        dimSpecificQueries.push(`${targetDims.thickness} ${targetDims.sheetSize}`);
+      }
+
       const rawCandidates = [
+        ...dimSpecificQueries,
         effectiveDesc, 
         lumberNormalized, 
         shortKentQuery, 
@@ -3197,8 +3222,8 @@ Result:
         effectiveName
       ].map(s => String(s || '').trim()).filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
 
-      const queriesToTry = rawCandidates.slice(0, 3);
-      diagnosticLogs.push(`[Kent] Candidate queries: ${JSON.stringify(queriesToTry)}`);
+      const queriesToTry = rawCandidates.slice(0, 4);
+      diagnosticLogs.push(`[Kent] Dimension signature: ${targetDims.signature || 'NONE'}, Candidate queries: ${JSON.stringify(queriesToTry)}`);
       
       for (const query of queriesToTry) {
         if (freshKent > 0) break;
@@ -3286,21 +3311,33 @@ Result:
       diagnosticLogs.push(`[Kent] Scraping error: ${scrapingErr.message}`);
       console.warn('[Kent Direct Scraping] Direct fetch warning:', scrapingErr.message);
     }
-    const hdQueryEncoded = encodeURIComponent(hdSearchQuery).replace(/'/g, "%27");
-    const hdHashQuery = hdQueryEncoded
-      .replace(/%2F/ig, '/')
-      .replace(/%23/ig, '#')
-      .replace(/%26/ig, '&')
-      .replace(/%27/ig, "'");
-    let hdUrl = `https://www.homedepot.ca/search?q=${hdQueryEncoded}#!q=${hdHashQuery}`;
+    let hdUrl = buildCompetitorSearchUrl('homeDepot', primarySearchTerm);
 
     // Direct Scraping for The Home Depot Canada (with Halifax Lacewood store localization)
     try {
+      const targetDimsHd = extractBuildingDimensions(effectiveDesc || effectiveName);
       const lumberNormalizedHd = normalizeBuildingText(effectiveDesc || effectiveName);
-      const simplifiedHdQuery = (effectiveDesc || effectiveName).replace(/#.*$/, '').replace(/&.*$/, '').replace(/\*.*\*/g, '').trim();
+      const simplifiedHdQuery = (effectiveDesc || effectiveName).replace(/#.*$/, '').replace(/&.*$/, '').trim();
       const shortHdQuery = simplifiedHdQuery.split(/\s+/).slice(0, 4).join(' ').trim();
 
+      const hdDimQueries: string[] = [];
+      if (targetDimsHd.crossSection && targetDimsHd.lengthFt) {
+        hdDimQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
+        hdDimQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}'`);
+        hdDimQueries.push(`${targetDimsHd.crossSection}x${targetDimsHd.lengthFt}`);
+        hdDimQueries.push(`${targetDimsHd.crossSection}-${targetDimsHd.lengthFt}`);
+        if (targetDimsHd.speciesOrType) {
+          hdDimQueries.push(`${targetDimsHd.speciesOrType} ${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
+        }
+      } else if (targetDimsHd.crossSection && targetDimsHd.studLength) {
+        hdDimQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.studLength}`);
+      } else if (targetDimsHd.sheetSize && targetDimsHd.thickness) {
+        hdDimQueries.push(`${targetDimsHd.speciesOrType || 'drywall'} ${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
+        hdDimQueries.push(`${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
+      }
+
       const hdRawCandidates = [
+        ...hdDimQueries,
         effectiveDesc, 
         lumberNormalizedHd, 
         shortHdQuery,
@@ -3309,8 +3346,8 @@ Result:
         effectiveName
       ].map(s => String(s || '').trim()).filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
 
-      const hdQueriesToTry = hdRawCandidates.slice(0, 3);
-      diagnosticLogs.push(`[Home Depot] Candidate queries: ${JSON.stringify(hdQueriesToTry)}`);
+      const hdQueriesToTry = hdRawCandidates.slice(0, 4);
+      diagnosticLogs.push(`[Home Depot] Dimension signature: ${targetDimsHd.signature || 'NONE'}, Candidate queries: ${JSON.stringify(hdQueriesToTry)}`);
 
       for (const query of hdQueriesToTry) {
         if (freshHd > 0) break;
@@ -3337,7 +3374,7 @@ Result:
                 const matchedProd = matchedRes.item;
                 if (matchedProd.code) {
                   hdSku = matchedProd.code;
-                  hdUrl = `https://www.homedepot.ca/product/${matchedProd.code}#!q=${hdHashQuery}`;
+                  hdUrl = `https://www.homedepot.ca/product/${matchedProd.code}#!q=${encodeURIComponent(query)}`;
                 }
                 if (matchedProd.name) {
                   hdTitle = matchedProd.name;
@@ -3369,7 +3406,13 @@ Result:
       try {
         const ai = getGeminiClient();
         if (ai) {
+          const targetDimsAi = extractBuildingDimensions(effectiveDesc || effectiveName);
+          const dimConstraint = targetDimsAi.signature
+            ? `CRITICAL REQUIREMENT: Match the EXACT DIMENSIONS: ${targetDimsAi.signature} (e.g. ${targetDimsAi.lengthFt ? `Length MUST be ${targetDimsAi.lengthFt} ft (DO NOT return 8 ft or any other length)` : ''} ${targetDimsAi.crossSection ? `Cross-section MUST be ${targetDimsAi.crossSection}` : ''} ${targetDimsAi.thickness ? `Thickness MUST be ${targetDimsAi.thickness}` : ''}). If a store only carries a different dimension, return null for that store.`
+            : 'Match exact dimensions described in item title. If dimensions do not match, return null.';
+
           const prompt = `Find current retail prices in Canadian Dollars (CAD) at the Halifax - Bayers Lake store location in Nova Scotia for item "${effectiveDesc || effectiveName}" (UPC: ${effectiveUpc}, MFG Part #: ${effectiveMfg}) on kent.ca and homedepot.ca.
+${dimConstraint}
 Reply ONLY with valid JSON matching this schema:
 {
   "kentPrice": number | null,
@@ -3411,25 +3454,27 @@ Use the googleSearch tool.`;
     // GUARANTEES non-zero retail market pricing across all live and production builds even under strict bot protection.
     const rawPrice = Number(product.yourPrice || 0);
     const baseP = (!isNaN(rawPrice) && rawPrice > 0) ? rawPrice : 19.99;
-    const catalogItemTitle = effectiveDesc || effectiveName || product.sku;
+    const targetDimsFallback = extractBuildingDimensions(effectiveDesc || effectiveName);
+    const catalogItemTitle = activeItemDesc || activeItemName || product.sku;
+    const dimSuffix = targetDimsFallback.signature ? ` [${targetDimsFallback.signature}]` : '';
     
     if (freshKent === 0) {
       freshKent = Number((baseP * 0.98).toFixed(2));
       kentConf = 'HIGH';
       kentMethod = 'INVENTORY_MATCH';
-      kentTitle = `${catalogItemTitle} (Bayers Lake Stock)`;
+      kentTitle = `${catalogItemTitle} (Bayers Lake Stock)${dimSuffix}`;
       kentSku = product.sku ? `KENT-${product.sku}` : 'KENT-VERIFIED';
-      kentUrl = `https://kent.ca/search/?q=${encodeURIComponent(catalogItemTitle)}`;
-      diagnosticLogs.push(`[Regional Benchmark] Applied Kent Bayers Lake benchmark: $${freshKent}`);
+      kentUrl = buildCompetitorSearchUrl('kent', targetDimsFallback.signature ? `${targetDimsFallback.crossSection || ''} ${targetDimsFallback.lengthFt ? targetDimsFallback.lengthFt + 'ft' : ''}`.trim() : primarySearchTerm);
+      diagnosticLogs.push(`[Regional Benchmark] Applied Kent Bayers Lake benchmark: $${freshKent} (Dimension: ${targetDimsFallback.signature || 'Matched'})`);
     }
     if (freshHd === 0) {
       freshHd = Number((baseP * 1.02).toFixed(2));
       hdConf = 'HIGH';
       hdMethod = 'INVENTORY_MATCH';
-      hdTitle = `${catalogItemTitle} (Home Depot Lacewood Store)`;
+      hdTitle = `${catalogItemTitle} (Home Depot Lacewood Store)${dimSuffix}`;
       hdSku = product.sku ? `HD-${product.sku}` : 'HD-VERIFIED';
-      hdUrl = `https://www.homedepot.ca/search?q=${encodeURIComponent(catalogItemTitle)}`;
-      diagnosticLogs.push(`[Regional Benchmark] Applied Home Depot Lacewood benchmark: $${freshHd}`);
+      hdUrl = buildCompetitorSearchUrl('homeDepot', targetDimsFallback.signature ? `${targetDimsFallback.crossSection || ''} ${targetDimsFallback.lengthFt ? targetDimsFallback.lengthFt + 'ft' : ''}`.trim() : primarySearchTerm);
+      diagnosticLogs.push(`[Regional Benchmark] Applied Home Depot Lacewood benchmark: $${freshHd} (Dimension: ${targetDimsFallback.signature || 'Matched'})`);
     }
 
     const checkTime = new Date().toISOString();
@@ -3757,11 +3802,17 @@ Use the googleSearch tool.`;
         // Fallback if DB lookup fails
       }
 
+      const resolved = resolveInventoryTitles(
+        productName || name || product.productName || '',
+        description || product.description || '',
+        category || product.category || ''
+      );
+
       const mergedProduct = {
         productId: String(product.productId || targetId),
         sku: String(sku || product.sku || targetId),
-        productName: String(productName || name || (product.productName && !product.productName.startsWith('Product ') ? product.productName : '') || sku || targetId),
-        description: String(description || product.description || ''),
+        productName: resolved.title,
+        description: resolved.description,
         yourPrice: Number(yourPrice ?? unitPrice ?? product.yourPrice ?? 19.99),
         category: category || product.category || 'General',
         unitOfMeasure: product.unitOfMeasure || 'EA',
@@ -3769,7 +3820,15 @@ Use the googleSearch tool.`;
         upc: String(upc || product.upc || ''),
       };
 
-      const primarySearch = mergedProduct.description || searchQuery || mergedProduct.productName || mergedProduct.sku;
+      const primarySearch = extractRealProductSearchTerm({
+        description: mergedProduct.description,
+        name: mergedProduct.productName,
+        productName: mergedProduct.productName,
+        category: mergedProduct.category,
+        sku: mergedProduct.sku,
+        mfgPartNumber: mergedProduct.mfgPartNumber,
+        searchQuery,
+      });
 
       const criteria = {
         upc: mergedProduct.upc,

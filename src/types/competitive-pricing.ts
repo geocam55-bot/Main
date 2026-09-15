@@ -112,6 +112,9 @@ export interface CompetitorConfig {
   productUrlPattern?: string;
   active: boolean;
   scrapingMethod?: string;
+  storeLocation?: string | null;
+  colorHex?: string | null;
+  scrapingInfo?: any | null;
   lastSuccessfulCheck?: string | null;
   lastError?: string | null;
   createdAt?: string;

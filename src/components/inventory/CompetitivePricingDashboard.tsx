@@ -1012,7 +1012,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
               Quick SKU Competitor Price Check
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Enter any RONA SKU, Product Code, or Manufacturer Part Number to inspect competitive pricing against KENT and The Home Depot.
+              Enter any SKU, Product Code, or Manufacturer Part Number to inspect live competitive pricing across regional competitors.
             </DialogDescription>
           </DialogHeader>
 

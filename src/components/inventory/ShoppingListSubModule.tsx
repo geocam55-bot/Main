@@ -42,6 +42,21 @@ import { competitivePricingAPI } from '../../utils/api';
 import type { ProductCompetitivePricing } from '../../types/competitive-pricing';
 import { PriceHistoryModal } from './PriceHistoryModal';
 import { searchInventoryClient } from '../../utils/inventory-client';
+import {
+  resolveInventoryTitles,
+  extractRealProductSearchTerm,
+  buildCompetitorSearchUrl,
+  isGenericCategoryName,
+  extractBuildingDimensions,
+} from '../../utils/building-dimensions';
+
+export {
+  resolveInventoryTitles,
+  extractRealProductSearchTerm,
+  buildCompetitorSearchUrl,
+  isGenericCategoryName,
+  extractBuildingDimensions,
+};
 
 import * as XLSX from 'xlsx';
 
@@ -112,97 +127,8 @@ const LOCAL_STORAGE_ACTIVE_KEY = 'prospaces_active_shopping_list';
 const DEFAULT_ORG_ID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
 
 /**
- * Intelligent title & description resolver that mirrors Inventory.tsx and server.ts logic.
- * Swaps generic category headings (e.g. "BUILDING MATERIALS", "FRAME MATERIALS", "PORTABLE ELECTRIC")
- * with the actual specific product name contained in description.
- */
-export function resolveInventoryTitles(rawName: string = '', rawDescription: string = '', category: string = '') {
-  let parsedDescription = rawDescription ? String(rawDescription).trim() : '';
-
-  // Strip embedded <!--metadata:...--> tags if present
-  const markerStart = "<!--metadata:";
-  const markerEnd = "-->";
-  const startIndex = parsedDescription.lastIndexOf(markerStart);
-  if (startIndex !== -1) {
-    const endIndex = parsedDescription.indexOf(markerEnd, startIndex + markerStart.length);
-    if (endIndex !== -1) {
-      parsedDescription = parsedDescription.substring(0, startIndex).trim();
-    }
-  }
-
-  let finalName = rawName ? String(rawName).trim() : '';
-  let finalDescription = parsedDescription;
-  const cleanNameLower = finalName.toLowerCase();
-
-  const genericCategoryKeywords = [
-    'accessories for',
-    'pipes, fittings',
-    'hooks, squares',
-    'insulating materials',
-    'paint types',
-    'lawn, garden',
-    'lawn equipment',
-    'gutters',
-    'tree, plant',
-    'electric heating',
-    'tools accesso',
-    'repair parts',
-    'electric acc.',
-    'coverings',
-    'cables and accesso',
-    'furniture, bbq',
-    'electrical appliances',
-    'wall and floor',
-    'portable electric',
-    'chains, steel',
-    'motorized lawn',
-    'building materials',
-    'fasteners',
-    'hand tools',
-    'power tools',
-    'plumbing',
-    'lighting',
-    'seasonal',
-    'hardware',
-    'outlets,boxes',
-    'fuses,outlets',
-    'ventilation',
-    'heating and cooling',
-    'home decor',
-    'outdoor living',
-    'building product',
-    'tools & hardware',
-    'electrical & lighting',
-    'paint & decor',
-    'frame materials',
-    'materials',
-    'framing',
-    'lumber',
-    'sheet goods'
-  ];
-
-  const hasGenericKeyword = genericCategoryKeywords.some(keyword => cleanNameLower.includes(keyword));
-  const isGenericOrEmpty = !finalName || 
-    finalName === '' || 
-    finalName.toUpperCase() === 'UNDEFINED' ||
-    (category && finalName.toLowerCase() === category.trim().toLowerCase()) ||
-    hasGenericKeyword;
-
-  if (parsedDescription && parsedDescription !== '') {
-    if (isGenericOrEmpty || (cleanNameLower.length <= 16 && !cleanNameLower.includes('ply') && !cleanNameLower.includes('spruce') && !cleanNameLower.includes('drywall'))) {
-      finalName = parsedDescription;
-      finalDescription = rawName || '';
-    }
-  }
-
-  return {
-    title: finalName || parsedDescription || rawName || 'Product',
-    description: finalDescription || '',
-  };
-}
-
-/**
- * Normalizes any ShoppingListItem or DB record ensuring the real product name is displayed.
+ * Normalizes any ShoppingListItem or DB record ensuring the real product name is displayed
+ * and generic category headers (e.g. "FRAME MATERIALS") are never used as descriptions.
  */
 export const normalizeShoppingListItem = (item: any): ShoppingListItem => {
   const { title, description } = resolveInventoryTitles(
@@ -214,7 +140,7 @@ export const normalizeShoppingListItem = (item: any): ShoppingListItem => {
   return {
     ...item,
     name: title,
-    description: description || item.description || '',
+    description: description || title || item.description || '',
   };
 };
 
@@ -287,6 +213,28 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
   const [isSearchingPrices, setIsSearchingPrices] = useState(false);
   const [scrapingItemIds, setScrapingItemIds] = useState<Set<string>>(new Set());
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
+  
+  const [configuredCompetitors, setConfiguredCompetitors] = useState<any[]>([]);
+  useEffect(() => {
+    async function loadComps() {
+      const comps = await competitivePricingAPI.getCompetitors();
+      setConfiguredCompetitors(comps);
+    }
+    loadComps();
+  }, []);
+
+  const findCompetitorByCriteria = (id: number, nameSubstring: string, defaultHex: string, defaultName: string, defaultLoc: string) => {
+    const found = configuredCompetitors.find(c => Number(c.id) === id || (c.name && c.name.toLowerCase().includes(nameSubstring.toLowerCase())));
+    return {
+      name: found?.name || defaultName,
+      storeLocation: found?.storeLocation || defaultLoc,
+      colorHex: found?.colorHex || defaultHex,
+      websiteUrl: found?.websiteUrl || ''
+    };
+  };
+
+  const kentConfig = findCompetitorByCriteria(1, 'kent', '#0bd057', 'KENT Building Supplies', 'Halifax - Bayers Lake');
+  const hdConfig = findCompetitorByCriteria(2, 'home depot', '#f96302', 'The Home Depot', 'Halifax Lacewood');
   const [isSaveListDialogOpen, setIsSaveListDialogOpen] = useState(false);
   const [isLoadListDialogOpen, setIsLoadListDialogOpen] = useState(false);
   const [savedLists, setSavedLists] = useState<SavedShoppingListRecord[]>([]);
@@ -623,7 +571,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
     }
 
     setIsSearchingPrices(true);
-    toast.info(`Scraping competitor prices (Kent Bayers Lake & Home Depot Halifax) for ${shoppingList.length} items...`);
+    toast.info(`Scraping competitor prices (${kentConfig.name} & ${hdConfig.name}) for ${shoppingList.length} items...`);
 
     let updatedCount = 0;
     const updatedList = [...shoppingList];
@@ -632,17 +580,26 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
       const item = updatedList[i];
       const targetId = item.inventoryId || item.id;
       const { title: itemTitle, description: itemDesc } = resolveInventoryTitles(item.name, item.description, item.category);
-      const effectiveSearchTerm = item.description || itemDesc || itemTitle || item.name;
+      const effectiveSearchTerm = extractRealProductSearchTerm({
+        description: item.description || itemDesc,
+        name: itemTitle || item.name,
+        productName: itemTitle || item.name,
+        category: item.category,
+        sku: item.sku,
+        mfgPartNumber: item.mfgPartNumber || item.modelNumber,
+      });
+
+      const kentDirectUrl = buildCompetitorSearchUrl('kent', effectiveSearchTerm);
+      const hdDirectUrl = buildCompetitorSearchUrl('homeDepot', effectiveSearchTerm);
 
       try {
-        // Query live scraping tools (same Kent & Home Depot scraper as Competitive Pricing)
-        // Prioritize the DESCRIPTION from the inventory table as requested
+        // Query live scraping tools
         const scrapeRes = await competitivePricingAPI.scrapeLiveItem({
           productId: targetId,
           sku: item.sku,
           name: itemTitle,
           productName: itemTitle,
-          description: item.description || itemDesc,
+          description: itemDesc || item.description,
           category: item.category,
           yourPrice: item.unitPrice,
           mfgPartNumber: item.mfgPartNumber || item.modelNumber,
@@ -691,6 +648,13 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
           bestDeal = lowest === kentPrice ? 'kent' : 'homeDepot';
         }
 
+        const kentProdUrl = (kentComp?.productUrl && !kentComp.productUrl.includes('FRAME%20MATERIALS') && !kentComp.productUrl.includes('FRAME+MATERIALS'))
+          ? kentComp.productUrl
+          : kentDirectUrl;
+        const hdProdUrl = (hdComp?.productUrl && !hdComp.productUrl.includes('FRAME%20MATERIALS') && !hdComp.productUrl.includes('FRAME+MATERIALS'))
+          ? hdComp.productUrl
+          : hdDirectUrl;
+
         updatedList[i] = {
           ...item,
           competitorData: {
@@ -698,26 +662,26 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
             bestDeal,
             kent: {
               price: kentPrice,
-              storeName: kentComp?.competitorName || 'KENT Building Supplies (Bayers Lake)',
-              storeLocation: 'Halifax - Bayers Lake',
-              productTitle: kentComp?.productName || `${effectiveSearchTerm} (Bayers Lake Stock)`,
-              url: kentComp?.productUrl || `https://kent.ca/search/?q=${encodeURIComponent(effectiveSearchTerm)}`,
+              storeName: kentComp?.competitorName || `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+              storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
+              productTitle: kentComp?.productName || `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
+              url: kentProdUrl,
               inStock: true,
               matchConfidence: kentComp?.matchConfidence || 'HIGH',
               notes: kentComp?.notes,
             },
             homeDepot: {
               price: hdPrice,
-              storeName: hdComp?.competitorName || 'The Home Depot (Halifax Lacewood)',
-              storeLocation: 'Halifax Lacewood',
-              productTitle: hdComp?.productName || `${effectiveSearchTerm} (Home Depot Lacewood Store)`,
-              url: hdComp?.productUrl || `https://www.homedepot.ca/search?q=${encodeURIComponent(effectiveSearchTerm)}`,
+              storeName: hdComp?.competitorName || `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+              storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
+              productTitle: hdComp?.productName || `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
+              url: hdProdUrl,
               inStock: true,
               matchConfidence: hdComp?.matchConfidence || 'HIGH',
               notes: hdComp?.notes,
             },
             lastChecked: new Date().toISOString(),
-            marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs Kent $${kentPrice.toFixed(2)} & HD $${hdPrice.toFixed(2)}`,
+            marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${kentPrice.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${hdPrice.toFixed(2)}`,
           },
         };
         updatedCount++;
@@ -735,24 +699,24 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
             bestDeal: item.unitPrice <= benchmarkKent ? 'prospaces' : 'kent',
             kent: {
               price: benchmarkKent,
-              storeName: 'KENT Building Supplies (Bayers Lake)',
-              storeLocation: 'Halifax - Bayers Lake',
-              productTitle: `${effectiveSearchTerm} (Bayers Lake Stock)`,
-              url: `https://kent.ca/search/?q=${encodeURIComponent(effectiveSearchTerm)}`,
+              storeName: `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+              storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
+              productTitle: `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
+              url: kentDirectUrl,
               inStock: true,
               matchConfidence: 'HIGH',
             },
             homeDepot: {
               price: benchmarkHd,
-              storeName: 'The Home Depot (Halifax Lacewood)',
-              storeLocation: 'Halifax Lacewood',
-              productTitle: `${effectiveSearchTerm} (Home Depot Lacewood Store)`,
-              url: `https://www.homedepot.ca/search?q=${encodeURIComponent(effectiveSearchTerm)}`,
+              storeName: `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+              storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
+              productTitle: `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
+              url: hdDirectUrl,
               inStock: true,
               matchConfidence: 'HIGH',
             },
             lastChecked: new Date().toISOString(),
-            marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs Kent $${benchmarkKent.toFixed(2)} & HD $${benchmarkHd.toFixed(2)}`,
+            marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${benchmarkKent.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${benchmarkHd.toFixed(2)}`,
           },
         };
         updatedCount++;
@@ -768,10 +732,20 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
   const handleScrapeSingleItem = async (item: ShoppingListItem) => {
     const targetId = item.inventoryId || item.id;
     const { title: itemTitle, description: itemDesc } = resolveInventoryTitles(item.name, item.description, item.category);
-    const effectiveSearchTerm = item.description || itemDesc || itemTitle || item.name;
+    const effectiveSearchTerm = extractRealProductSearchTerm({
+      description: item.description || itemDesc,
+      name: itemTitle || item.name,
+      productName: itemTitle || item.name,
+      category: item.category,
+      sku: item.sku,
+      mfgPartNumber: item.mfgPartNumber || item.modelNumber,
+    });
+
+    const kentDirectUrl = buildCompetitorSearchUrl('kent', effectiveSearchTerm);
+    const hdDirectUrl = buildCompetitorSearchUrl('homeDepot', effectiveSearchTerm);
 
     setScrapingItemIds((prev) => new Set(prev).add(item.id));
-    toast.info(`Scraping Kent & Home Depot for "${effectiveSearchTerm}"...`);
+    toast.info(`Scraping ${kentConfig.name.split(' ')[0]} & ${hdConfig.name.split(' ')[0]} for "${effectiveSearchTerm}"...`);
 
     try {
       const scrapeRes = await competitivePricingAPI.scrapeLiveItem({
@@ -779,7 +753,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
         sku: item.sku,
         name: itemTitle,
         productName: itemTitle,
-        description: item.description || itemDesc,
+        description: itemDesc || item.description,
         category: item.category,
         yourPrice: item.unitPrice,
         mfgPartNumber: item.mfgPartNumber || item.modelNumber,
@@ -825,6 +799,13 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
           bestDeal = lowest === kentPrice ? 'kent' : 'homeDepot';
         }
 
+        const kentProdUrl = (kentComp?.productUrl && !kentComp.productUrl.includes('FRAME%20MATERIALS') && !kentComp.productUrl.includes('FRAME+MATERIALS'))
+          ? kentComp.productUrl
+          : kentDirectUrl;
+        const hdProdUrl = (hdComp?.productUrl && !hdComp.productUrl.includes('FRAME%20MATERIALS') && !hdComp.productUrl.includes('FRAME+MATERIALS'))
+          ? hdComp.productUrl
+          : hdDirectUrl;
+
         setShoppingList((prev) =>
           prev.map((p) => {
             if (p.id !== item.id) return p;
@@ -835,26 +816,26 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                 bestDeal,
                 kent: {
                   price: kentPrice,
-                  storeName: kentComp?.competitorName || 'KENT Building Supplies (Bayers Lake)',
-                  storeLocation: 'Halifax - Bayers Lake',
-                  productTitle: kentComp?.productName || `${effectiveSearchTerm} (Bayers Lake Stock)`,
-                  url: kentComp?.productUrl || `https://kent.ca/search/?q=${encodeURIComponent(effectiveSearchTerm)}`,
+                  storeName: kentComp?.competitorName || `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+                  storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
+                  productTitle: kentComp?.productName || `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
+                  url: kentProdUrl,
                   inStock: true,
                   matchConfidence: kentComp?.matchConfidence || 'HIGH',
                   notes: kentComp?.notes,
                 },
                 homeDepot: {
                   price: hdPrice,
-                  storeName: hdComp?.competitorName || 'The Home Depot (Halifax Lacewood)',
-                  storeLocation: 'Halifax Lacewood',
-                  productTitle: hdComp?.productName || `${effectiveSearchTerm} (Home Depot Lacewood Store)`,
-                  url: hdComp?.productUrl || `https://www.homedepot.ca/search?q=${encodeURIComponent(effectiveSearchTerm)}`,
+                  storeName: hdComp?.competitorName || `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+                  storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
+                  productTitle: hdComp?.productName || `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
+                  url: hdProdUrl,
                   inStock: true,
                   matchConfidence: hdComp?.matchConfidence || 'HIGH',
                   notes: hdComp?.notes,
                 },
                 lastChecked: new Date().toISOString(),
-                marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs Kent $${kentPrice.toFixed(2)} & HD $${hdPrice.toFixed(2)}`,
+                marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${kentPrice.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${hdPrice.toFixed(2)}`,
               },
             };
           })
@@ -876,24 +857,24 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                 bestDeal: item.unitPrice <= benchmarkKent ? 'prospaces' : 'kent',
                 kent: {
                   price: benchmarkKent,
-                  storeName: 'KENT Building Supplies (Bayers Lake)',
-                  storeLocation: 'Halifax - Bayers Lake',
-                  productTitle: `${effectiveSearchTerm} (Bayers Lake Stock)`,
-                  url: `https://kent.ca/search/?q=${encodeURIComponent(effectiveSearchTerm)}`,
+                  storeName: `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+                  storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
+                  productTitle: `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
+                  url: kentDirectUrl,
                   inStock: true,
                   matchConfidence: 'HIGH',
                 },
                 homeDepot: {
                   price: benchmarkHd,
-                  storeName: 'The Home Depot (Halifax Lacewood)',
-                  storeLocation: 'Halifax Lacewood',
-                  productTitle: `${effectiveSearchTerm} (Home Depot Lacewood Store)`,
-                  url: `https://www.homedepot.ca/search?q=${encodeURIComponent(effectiveSearchTerm)}`,
+                  storeName: `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+                  storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
+                  productTitle: `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
+                  url: hdDirectUrl,
                   inStock: true,
                   matchConfidence: 'HIGH',
                 },
                 lastChecked: new Date().toISOString(),
-                marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs Kent $${benchmarkKent.toFixed(2)} & HD $${benchmarkHd.toFixed(2)}`,
+                marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${benchmarkKent.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${benchmarkHd.toFixed(2)}`,
               },
             };
           })
@@ -916,24 +897,24 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
               bestDeal: item.unitPrice <= benchmarkKent ? 'prospaces' : 'kent',
               kent: {
                 price: benchmarkKent,
-                storeName: 'KENT Building Supplies (Bayers Lake)',
-                storeLocation: 'Halifax - Bayers Lake',
-                productTitle: `${effectiveSearchTerm} (Bayers Lake Stock)`,
-                url: `https://kent.ca/search/?q=${encodeURIComponent(effectiveSearchTerm)}`,
+                storeName: `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+                storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
+                productTitle: `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
+                url: kentDirectUrl,
                 inStock: true,
                 matchConfidence: 'HIGH',
               },
               homeDepot: {
                 price: benchmarkHd,
-                storeName: 'The Home Depot (Halifax Lacewood)',
-                storeLocation: 'Halifax Lacewood',
-                productTitle: `${effectiveSearchTerm} (Home Depot Lacewood Store)`,
-                url: `https://www.homedepot.ca/search?q=${encodeURIComponent(effectiveSearchTerm)}`,
+                storeName: `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+                storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
+                productTitle: `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
+                url: hdDirectUrl,
                 inStock: true,
                 matchConfidence: 'HIGH',
               },
               lastChecked: new Date().toISOString(),
-              marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs Kent $${benchmarkKent.toFixed(2)} & HD $${benchmarkHd.toFixed(2)}`,
+              marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${benchmarkKent.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${benchmarkHd.toFixed(2)}`,
             },
           };
         })
@@ -1203,8 +1184,8 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
       'Unit Retail (CAD)',
       'Cost Total (CAD)',
       'Retail Total (CAD)',
-      'Kent Price (CAD)',
-      'Home Depot Price (CAD)',
+      `${kentConfig.name.split(' ')[0]} Price (CAD)`,
+      `${hdConfig.name.split(' ')[0]} Price (CAD)`,
       'Lowest Competitor (CAD)',
       'Best Price Deal',
     ];
@@ -1477,13 +1458,13 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
 
         <Card className="border-slate-200 shadow-xs">
           <CardContent className="p-3.5">
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">Kent Total</span>
+            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">{kentConfig.name.split(' ')[0]} Total</span>
             <span className="text-xl font-bold text-slate-800 mt-1 block">
               {totals.kentTotal > 0 ? `$${totals.kentTotal.toFixed(2)}` : '—'}
             </span>
             {totals.kentTotal > 0 && (
               <span className={`text-[10px] font-medium ${totals.kentDelta <= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                {totals.kentDelta <= 0 ? `Save $${Math.abs(totals.kentDelta).toFixed(2)} vs Kent` : `$${totals.kentDelta.toFixed(2)} above Kent`}
+                {totals.kentDelta <= 0 ? `Save $${Math.abs(totals.kentDelta).toFixed(2)} vs ${kentConfig.name.split(' ')[0]}` : `$${totals.kentDelta.toFixed(2)} above ${kentConfig.name.split(' ')[0]}`}
               </span>
             )}
           </CardContent>
@@ -1491,13 +1472,13 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
 
         <Card className="border-slate-200 shadow-xs">
           <CardContent className="p-3.5">
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">Home Depot Total</span>
+            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">{hdConfig.name.split(' ')[0]} Total</span>
             <span className="text-xl font-bold text-slate-800 mt-1 block">
               {totals.homeDepotTotal > 0 ? `$${totals.homeDepotTotal.toFixed(2)}` : '—'}
             </span>
             {totals.homeDepotTotal > 0 && (
               <span className={`text-[10px] font-medium ${totals.hdDelta <= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                {totals.hdDelta <= 0 ? `Save $${Math.abs(totals.hdDelta).toFixed(2)} vs HD` : `$${totals.hdDelta.toFixed(2)} above HD`}
+                {totals.hdDelta <= 0 ? `Save $${Math.abs(totals.hdDelta).toFixed(2)} vs ${hdConfig.name.split(' ')[0]}` : `$${totals.hdDelta.toFixed(2)} above ${hdConfig.name.split(' ')[0]}`}
               </span>
             )}
           </CardContent>
@@ -1577,8 +1558,8 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                 <th className="py-3 px-3 text-center">Qty</th>
                 <th className="py-3 px-3 text-right">{costViewMode === 'replacement_cost' ? 'Rep. Cost' : 'Avg Cost'}</th>
                 <th className="py-3 px-3 text-right">Retail</th>
-                <th className="py-3 px-3 text-right">Kent Price</th>
-                <th className="py-3 px-3 text-right">Home Depot</th>
+                <th className="py-3 px-3 text-right">{kentConfig.name.split(' ')[0]} Price</th>
+                <th className="py-3 px-3 text-right">{hdConfig.name.split(' ')[0]}</th>
                 <th className="py-3 px-3 text-center">Best Deal</th>
                 <th className="py-3 px-3 text-right">Line Total</th>
                 <th className="py-3 px-3 text-center">Actions</th>
@@ -1706,9 +1687,10 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                                 href={item.competitorData.kent.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+                                className="text-[10px] hover:underline flex items-center gap-0.5"
+                                style={{ color: kentConfig.colorHex }}
                               >
-                                View Kent <ExternalLink className="h-2.5 w-2.5" />
+                                View {kentConfig.name.split(' ')[0]} <ExternalLink className="h-2.5 w-2.5" />
                               </a>
                             )}
                           </div>
@@ -1727,9 +1709,10 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                                 href={item.competitorData.homeDepot.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[10px] text-orange-600 hover:underline flex items-center gap-0.5"
+                                className="text-[10px] hover:underline flex items-center gap-0.5"
+                                style={{ color: hdConfig.colorHex }}
                               >
-                                View HD <ExternalLink className="h-2.5 w-2.5" />
+                                View {hdConfig.name.split(' ')[0]} <ExternalLink className="h-2.5 w-2.5" />
                               </a>
                             )}
                           </div>
@@ -1745,12 +1728,12 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                             ProSpaces
                           </Badge>
                         ) : item.competitorData?.bestDeal === 'kent' ? (
-                          <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px]">
-                            Kent (${kentPrice.toFixed(2)})
+                          <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px]" style={{ backgroundColor: `${kentConfig.colorHex}20`, color: kentConfig.colorHex, borderColor: `${kentConfig.colorHex}50` }}>
+                            {kentConfig.name.split(' ')[0]} (${kentPrice.toFixed(2)})
                           </Badge>
                         ) : item.competitorData?.bestDeal === 'homeDepot' ? (
-                          <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-[10px]">
-                            HD (${hdPrice.toFixed(2)})
+                          <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-[10px]" style={{ backgroundColor: `${hdConfig.colorHex}20`, color: hdConfig.colorHex, borderColor: `${hdConfig.colorHex}50` }}>
+                            {hdConfig.name.split(' ')[0]} (${hdPrice.toFixed(2)})
                           </Badge>
                         ) : (
                           <span className="text-slate-400 text-[11px]">—</span>
@@ -1771,7 +1754,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                             onClick={() => handleScrapeSingleItem(item)}
                             disabled={scrapingItemIds.has(item.id)}
                             className="h-7 w-7 p-0 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                            title="Scrape Live Prices (Kent & Home Depot)"
+                            title={`Scrape Live Prices (${kentConfig.name.split(' ')[0]} & ${hdConfig.name.split(' ')[0]})`}
                           >
                             {scrapingItemIds.has(item.id) ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
@@ -2316,11 +2299,11 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                 </h5>
 
                 {/* Kent */}
-                <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between">
+                <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between" style={{ borderColor: `${kentConfig.colorHex}30` }}>
                   <div>
-                    <span className="font-semibold text-slate-800 block">KENT Building Supplies</span>
+                    <span className="font-semibold text-slate-800 block">{kentConfig.name}</span>
                     <span className="text-[11px] text-slate-500">
-                      {selectedDetailItem.competitorData?.kent?.storeLocation || 'Halifax - Bayers Lake'}
+                      {selectedDetailItem.competitorData?.kent?.storeLocation || kentConfig.storeLocation || 'Halifax - Bayers Lake'}
                     </span>
                   </div>
                   <div className="text-right">
@@ -2332,9 +2315,10 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                             href={selectedDetailItem.competitorData.kent.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="block text-[10px] text-blue-600 hover:underline"
+                            className="block text-[10px] hover:underline"
+                            style={{ color: kentConfig.colorHex }}
                           >
-                            View on Kent.ca
+                            View on {new URL(kentConfig.websiteUrl || 'https://kent.ca').hostname.replace('www.', '')}
                           </a>
                         )}
                       </div>
@@ -2345,11 +2329,11 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                 </div>
 
                 {/* Home Depot */}
-                <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between">
+                <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between" style={{ borderColor: `${hdConfig.colorHex}30` }}>
                   <div>
-                    <span className="font-semibold text-slate-800 block">The Home Depot</span>
+                    <span className="font-semibold text-slate-800 block">{hdConfig.name}</span>
                     <span className="text-[11px] text-slate-500">
-                      {selectedDetailItem.competitorData?.homeDepot?.storeLocation || 'Halifax Lacewood'}
+                      {selectedDetailItem.competitorData?.homeDepot?.storeLocation || hdConfig.storeLocation || 'Halifax Lacewood'}
                     </span>
                   </div>
                   <div className="text-right">
@@ -2361,9 +2345,10 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                             href={selectedDetailItem.competitorData.homeDepot.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="block text-[10px] text-orange-600 hover:underline"
+                            className="block text-[10px] hover:underline"
+                            style={{ color: hdConfig.colorHex }}
                           >
-                            View on HomeDepot.ca
+                            View on {new URL(hdConfig.websiteUrl || 'https://homedepot.ca').hostname.replace('www.', '')}
                           </a>
                         )}
                       </div>
