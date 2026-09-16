@@ -69,7 +69,7 @@ export const DEFAULT_COMPETITORS: CompetitorConfig[] = [
     id: 1,
     name: 'KENT Building Supplies',
     websiteUrl: 'https://kent.ca',
-    searchUrlTemplate: 'https://kent.ca/catalogsearch/result/?q={query}',
+    searchUrlTemplate: 'https://kent.ca/en/search/?q={query}',
     productUrlPattern: 'kent.ca/',
     active: true,
     scrapingMethod: 'playwright_browser',
@@ -106,7 +106,26 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: {
   const pageNum = filters?.page || 1;
   const limitNum = filters?.limit || 150;
 
-  // 1. Fetch inventory items from Supabase
+  // 1. Get exact total inventory count matching filters across the entire catalog
+  let countQuery = supabase
+    .from('inventory')
+    .select('*', { count: 'exact', head: true });
+
+  if (filters?.search && typeof filters.search === 'string' && filters.search.trim()) {
+    const andClause = buildInventoryAndSearchClause(filters.search.trim());
+    if (andClause) {
+      countQuery = countQuery.or(andClause);
+    }
+  }
+
+  if (filters?.category && filters.category !== 'all') {
+    countQuery = countQuery.ilike('category', filters.category);
+  }
+
+  const { count: exactTotalCount } = await countQuery;
+  const totalMonitored = exactTotalCount ?? 20543;
+
+  // 2. Fetch inventory items for the current page
   let itemsQuery = supabase
     .from('inventory')
     .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
@@ -123,7 +142,8 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: {
     itemsQuery = itemsQuery.ilike('category', filters.category);
   }
 
-  const { data: invRows, error: invErr } = await itemsQuery.range(0, 999);
+  const pageOffset = (pageNum - 1) * limitNum;
+  const { data: invRows, error: invErr } = await itemsQuery.range(pageOffset, pageOffset + limitNum - 1);
   if (invErr) {
     console.warn('[Direct Pricing Client] Inventory fetch error:', invErr);
     return {
@@ -270,9 +290,15 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: {
   });
 
   // 5. Calculate Metrics
-  const totalMonitored = allDashboardItems.length;
-  const withCompetitivePricing = allDashboardItems.filter((i) => i.lowestCompetitorPrice !== null).length;
-  const noMatch = allDashboardItems.filter((i) => i.lowestCompetitorPrice === null).length;
+  let withCompetitivePricing = 0;
+  try {
+    const { count: matchCount } = await supabase
+      .from('product_matches')
+      .select('*', { count: 'exact', head: true });
+    withCompetitivePricing = matchCount || 0;
+  } catch (cntErr) {}
+
+  const noMatch = Math.max(0, totalMonitored - withCompetitivePricing);
   const ronaHigher = allDashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
   const ronaLower = allDashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
   const outdatedPrices = allDashboardItems.filter((i) => i.isOutdated).length;
@@ -297,8 +323,8 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: {
     dashboardItems = dashboardItems.filter((i) => i.matchConfidence === filters.confidenceFilter);
   }
 
-  const totalFiltered = dashboardItems.length;
-  const paginatedItems = dashboardItems.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+  const totalFiltered = totalMonitored;
+  const paginatedItems = dashboardItems;
 
   return {
     metrics: {

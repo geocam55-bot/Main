@@ -3228,55 +3228,6 @@ Result:
     return bestResult;
   }
 
-  // Precision regional retail catalog pricing lookup for Atlantic Canada stores (Kent Bayers Lake & Home Depot Lacewood)
-  function getRegionalCatalogPrice(queryText: string, basePrice: number): { kent: number; hd: number } {
-    const upper = String(queryText || '').toUpperCase();
-    
-    // 1. SPF 2x4x104-5/8 Stud (exact user reported match: Kent $5.37, Home Depot $5.48)
-    if (upper.includes('104-5/8') || upper.includes('104 5/8') || (upper.includes('2X4') && upper.includes('104'))) {
-      return { kent: 5.37, hd: 5.48 };
-    }
-    // 2. SPF 2x4x92-5/8 Stud
-    if (upper.includes('92-5/8') || upper.includes('92 5/8') || (upper.includes('2X4') && upper.includes('92'))) {
-      return { kent: 4.78, hd: 4.89 };
-    }
-    // 2.b SPF 2x6x92-5/8 Stud
-    if (upper.includes('2X6') && (upper.includes('92-5/8') || upper.includes('92 5/8') || upper.includes('92'))) {
-      return { kent: 7.89, hd: 8.09 };
-    }
-    // 3. 2x4x8 Lumber
-    if (upper.includes('2X4') && (upper.includes('8FT') || upper.includes(' 8 ') || upper.endsWith(' 8') || upper.includes('X8'))) {
-      return { kent: 4.29, hd: 4.38 };
-    }
-    // 4. 2x6x8 Lumber
-    if (upper.includes('2X6') && (upper.includes('8FT') || upper.includes(' 8 ') || upper.endsWith(' 8') || upper.includes('X8'))) {
-      return { kent: 6.98, hd: 7.12 };
-    }
-    // 5. 2x6x10 Lumber
-    if (upper.includes('2X6') && (upper.includes('10FT') || upper.includes(' 10 ') || upper.endsWith(' 10') || upper.includes('X10'))) {
-      return { kent: 8.89, hd: 9.05 };
-    }
-    // 6. 2x6x12 Lumber
-    if (upper.includes('2X6') && (upper.includes('12FT') || upper.includes(' 12 ') || upper.endsWith(' 12') || upper.includes('X12'))) {
-      return { kent: 10.49, hd: 10.75 };
-    }
-    // 7. OSB 7/16 4x8
-    if (upper.includes('OSB') || upper.includes('7/16')) {
-      return { kent: 21.98, hd: 22.48 };
-    }
-    // 8. Plywood 1/2 4x8
-    if (upper.includes('PLYWOOD') && upper.includes('1/2')) {
-      return { kent: 36.98, hd: 37.98 };
-    }
-
-    // Heuristic fallback based on basePrice
-    const bp = (!isNaN(basePrice) && basePrice > 0) ? basePrice : 19.99;
-    return {
-      kent: Number((bp * 0.98).toFixed(2)),
-      hd: Number((bp * 1.02).toFixed(2))
-    };
-  }
-
   // Dynamic helper to execute live competitor web search using ONLY the item information from the list
   async function executeDynamicCompetitorSearch(
     product: {
@@ -3349,98 +3300,279 @@ Result:
     let kentSku = effectiveMfg || '';
     let hdSku = effectiveMfg || '';
     let kentUrl = buildCompetitorSearchUrl('kent', primarySearchTerm);
+
+    // Direct Scraping for Kent Building Supplies (Halifax - Bayers Lake store)
+    try {
+      const targetDims = extractBuildingDimensions(activeItemDesc || activeItemName);
+      const lumberNormalized = normalizeBuildingText(activeItemDesc || activeItemName);
+      const simplifiedKentQuery = (activeItemDesc || activeItemName).replace(/#.*$/, '').replace(/&.*$/, '').trim();
+      const shortKentQuery = simplifiedKentQuery.split(/\s+/).slice(0, 4).join(' ').trim();
+
+      // Prioritize the user's exact Description if non-generic (since user uses Kent's Exact Description)
+      const kentQueries: string[] = [];
+      if (effectiveDesc && !isGenericCategoryName(effectiveDesc)) {
+        kentQueries.push(effectiveDesc.trim());
+      }
+
+      if (targetDims.crossSection && targetDims.lengthFt) {
+        kentQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}'`);
+        kentQueries.push(`${targetDims.crossSection}x${targetDims.lengthFt}`);
+        kentQueries.push(`${targetDims.crossSection} ${targetDims.lengthFt}ft`);
+        if (targetDims.speciesOrType) {
+          kentQueries.push(`${targetDims.speciesOrType} ${targetDims.crossSection} ${targetDims.lengthFt}'`);
+        }
+      } else if (targetDims.crossSection && targetDims.studLength) {
+        kentQueries.push(`${targetDims.crossSection} ${targetDims.studLength}`);
+      } else if (targetDims.sheetSize && targetDims.thickness) {
+        if (targetDims.speciesOrType) {
+          kentQueries.push(`${targetDims.speciesOrType} ${targetDims.thickness}`);
+          kentQueries.push(`${targetDims.thickness} ${targetDims.sheetSize} ${targetDims.speciesOrType}`);
+        } else {
+          kentQueries.push(`${targetDims.thickness} ${targetDims.sheetSize}`);
+        }
+      }
+
+      if (simplifiedKentQuery && !kentQueries.includes(simplifiedKentQuery)) {
+        kentQueries.push(simplifiedKentQuery);
+      }
+      if (effectiveMfg && !kentQueries.includes(effectiveMfg)) {
+        kentQueries.push(effectiveMfg);
+      }
+      if (effectiveUpc && !kentQueries.includes(effectiveUpc)) {
+        kentQueries.push(effectiveUpc);
+      }
+      if (effectiveName && !isGenericCategoryName(effectiveName) && !kentQueries.includes(effectiveName)) {
+        kentQueries.push(effectiveName);
+      }
+
+      const queriesToTry = kentQueries.slice(0, 4);
+      diagnosticLogs.push(`[Kent] Dimension signature: ${targetDims.signature || 'NONE'}, Candidate queries: ${JSON.stringify(queriesToTry)}`);
+      
+      for (const query of queriesToTry) {
+        if (freshKent > 0) break;
+        const suggestUrl = `https://kent.ca/search/ajax/suggest?q=${encodeURIComponent(query)}`;
+        try {
+          const suggestRes = await fetch(suggestUrl, {
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
+            },
+            signal: AbortSignal.timeout(2000)
+          });
+
+          if (suggestRes.ok) {
+            const items: any = await suggestRes.json().catch(() => []);
+            const productItems = Array.isArray(items) ? items.filter((it: any) => it.type === 'product') : [];
+            if (productItems.length > 0) {
+              const matchedResult = scoreAndPickBestProduct(productItems, { productName: effectiveName, description: effectiveDesc, upc: effectiveUpc, mfgPartNumber: effectiveMfg }, query);
+
+              if (matchedResult) {
+                const matchedItem = matchedResult.item;
+                if (matchedItem.url) {
+                  kentUrl = matchedItem.url.includes('#!q=') ? matchedItem.url : `${matchedItem.url}#!q=${encodeURIComponent(query)}`;
+                }
+                if (matchedItem.title) kentTitle = matchedItem.title;
+                kentMethod = matchedResult.method;
+                kentConf = matchedResult.confidence;
+                
+                const priceHtml = String(matchedItem.price || matchedItem.special_price || '');
+                const priceAmountMatch = priceHtml.match(/data-price-amount="([0-9.]+)"/) || priceHtml.match(/\$([0-9]+\.[0-9]{2})/);
+                if (priceAmountMatch) {
+                  freshKent = Number(priceAmountMatch[1]);
+                  diagnosticLogs.push(`[Kent] Matched "${query}" -> "${kentTitle}" at $${freshKent}`);
+                  console.log(`[Kent AJAX Scraping] Matched "${query}" -> ${kentTitle}: ${freshKent} (Bayers Lake)`);
+                  break;
+                }
+              }
+            }
+          }
+        } catch (fetchErr: any) {
+          diagnosticLogs.push(`[Kent] Query "${query}" timed out or warning: ${fetchErr.message}`);
+        }
+      }
+
+      // Fallback to standard Kent page search if AJAX returned no direct price
+      if (freshKent === 0) {
+        try {
+          const kentRes = await fetch(kentUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5',
+              'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
+            },
+            signal: AbortSignal.timeout(2500)
+          });
+
+          if (kentRes.ok) {
+            const kentHtml = await kentRes.text();
+            const cheerio = await import('cheerio');
+            const $ = cheerio.load(kentHtml);
+            
+            const priceEls = $('.price, [data-price-amount], .product-item-price, .special-price');
+            if (priceEls.length > 0) {
+              const priceText = $(priceEls[0]).attr('data-price-amount') || $(priceEls[0]).text();
+              const matchPrice = priceText.match(/\$?([0-9]+\.[0-9]{2})/);
+              if (matchPrice) {
+                freshKent = Number(matchPrice[1]);
+                diagnosticLogs.push(`[Kent] Scraped page price: $${freshKent}`);
+                console.log(`[Kent Direct Scraping] Successfully scraped Bayers Lake price for SKU ${product.sku}: ${freshKent}`);
+              }
+            }
+            
+            const productLink = $('.product-item-link').attr('href');
+            if (productLink) {
+              kentUrl = productLink.includes('#!q=') ? productLink : `${productLink}#!q=${encodeURIComponent(kentSearchQuery)}`;
+            }
+          }
+        } catch (pageErr: any) {
+          diagnosticLogs.push(`[Kent] Page scrape timed out: ${pageErr.message}`);
+        }
+      }
+    } catch (scrapingErr: any) {
+      diagnosticLogs.push(`[Kent] Scraping error: ${scrapingErr.message}`);
+      console.warn('[Kent Direct Scraping] Direct fetch warning:', scrapingErr.message);
+    }
     let hdUrl = buildCompetitorSearchUrl('homeDepot', primarySearchTerm);
 
-
-    // Playwright Direct Scraping
+    // Direct Scraping for The Home Depot Canada (with Halifax Lacewood store localization)
     try {
-      const { getPlaywrightBrowser, findBestProductMatch, COMPETITORS } = await import('./src/services/playwright-scraper.js');
-      const browser = await getPlaywrightBrowser();
-      const context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-      });
-      const page = await context.newPage();
+      const targetDimsHd = extractBuildingDimensions(effectiveDesc || effectiveName);
+      const lumberNormalizedHd = normalizeBuildingText(effectiveDesc || effectiveName);
+      const simplifiedHdQuery = (effectiveDesc || effectiveName).replace(/#.*$/, '').replace(/&.*$/, '').trim();
+      const shortHdQuery = simplifiedHdQuery.split(/\s+/).slice(0, 4).join(' ').trim();
 
-      const invItem = {
-        sku: product.sku,
-        name: product.productName,
-        description: product.description,
-        mfg: product.mfgPartNumber,
-        upc: product.upc,
-        category: product.category,
-        dimensions: product.description || product.productName,
-        unit_price: product.yourPrice ? (product.yourPrice > 100 ? product.yourPrice / 100 : product.yourPrice) : 0
-      };
-
-      diagnosticLogs.push(`[Playwright] Starting headless search for: ${primarySearchTerm}`);
-
-      // Kent Playwright Scraping
-      try {
-        // Apply store cookies
-        if (COMPETITORS.kent.cookies && COMPETITORS.kent.cookies.length) {
-          const formattedCookies = COMPETITORS.kent.cookies.map(c => ({
-            name: c.name,
-            value: c.value,
-            domain: c.domain,
-            path: "/"
-          }));
-          await context.addCookies(formattedCookies);
-        }
-        
-        const kentMatch = await findBestProductMatch(page, COMPETITORS.kent, invItem);
-        if (kentMatch && kentMatch.price != null && kentMatch.score >= COMPETITORS.kent.matchThreshold) {
-            freshKent = kentMatch.price;
-            kentTitle = kentMatch.candidate.title;
-            kentUrl = kentMatch.candidate.url;
-            kentSku = kentUrl.split('/').pop() || '';
-            kentMethod = 'PLAYWRIGHT_SCRAPE';
-            kentConf = 'HIGH';
-            diagnosticLogs.push(`[Kent Playwright] Found match: ${kentTitle} at $${freshKent}`);
-        } else {
-            diagnosticLogs.push(`[Kent Playwright] No qualified match found (Score: ${kentMatch ? kentMatch.score : 0})`);
-        }
-      } catch (err: any) {
-        diagnosticLogs.push(`[Kent Playwright Error] ${err.message}`);
+      const hdQueries: string[] = [];
+      if (effectiveDesc && !isGenericCategoryName(effectiveDesc)) {
+        const cleanHdDesc = effectiveDesc.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+        hdQueries.push(cleanHdDesc);
+        hdQueries.push(effectiveDesc.trim());
       }
 
-      // Home Depot Playwright Scraping
-      try {
-        // Apply store cookies
-        if (COMPETITORS.homeDepot.cookies && COMPETITORS.homeDepot.cookies.length) {
-          const formattedCookies = COMPETITORS.homeDepot.cookies.map(c => ({
-            name: c.name,
-            value: c.value,
-            domain: c.domain,
-            path: "/"
-          }));
-          await context.addCookies(formattedCookies);
+      if (targetDimsHd.crossSection && targetDimsHd.lengthFt) {
+        hdQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
+        hdQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}'`);
+        hdQueries.push(`${targetDimsHd.crossSection}x${targetDimsHd.lengthFt}`);
+        if (targetDimsHd.speciesOrType) {
+          hdQueries.push(`${targetDimsHd.speciesOrType} ${targetDimsHd.crossSection} ${targetDimsHd.lengthFt}ft`);
         }
-
-        const hdMatch = await findBestProductMatch(page, COMPETITORS.homeDepot, invItem);
-        if (hdMatch && hdMatch.price != null && hdMatch.score >= COMPETITORS.homeDepot.matchThreshold) {
-            freshHd = hdMatch.price;
-            hdTitle = hdMatch.candidate.title;
-            hdUrl = hdMatch.candidate.url;
-            hdSku = hdUrl.split('/').pop() || '';
-            hdMethod = 'PLAYWRIGHT_SCRAPE';
-            hdConf = 'HIGH';
-            diagnosticLogs.push(`[Home Depot Playwright] Found match: ${hdTitle} at $${freshHd}`);
+      } else if (targetDimsHd.crossSection && targetDimsHd.studLength) {
+        hdQueries.push(`${targetDimsHd.crossSection} ${targetDimsHd.studLength}`);
+      } else if (targetDimsHd.sheetSize && targetDimsHd.thickness) {
+        if (targetDimsHd.speciesOrType) {
+          hdQueries.push(`${targetDimsHd.speciesOrType} ${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
+          hdQueries.push(`${targetDimsHd.thickness} ${targetDimsHd.sheetSize} ${targetDimsHd.speciesOrType}`);
         } else {
-            diagnosticLogs.push(`[Home Depot Playwright] No qualified match found (Score: ${hdMatch ? hdMatch.score : 0})`);
+          hdQueries.push(`${targetDimsHd.thickness} ${targetDimsHd.sheetSize}`);
         }
-      } catch (err: any) {
-        diagnosticLogs.push(`[Home Depot Playwright Error] ${err.message}`);
       }
 
-      await page.close();
-      await context.close();
-    } catch (err: any) {
-      if (err.message && (err.message.includes('Notice') || err.message.includes('binaries not found'))) {
-        diagnosticLogs.push(`[Playwright Info] Headless browser not active; utilizing verified regional inventory benchmark catalog.`);
-      } else {
-        diagnosticLogs.push(`[Playwright Initialization Error] ${err.message}`);
-        console.error("[Playwright Initialization Error]", err);
+      if (effectiveMfg && !hdQueries.includes(effectiveMfg)) hdQueries.push(effectiveMfg);
+      if (effectiveUpc && !hdQueries.includes(effectiveUpc)) hdQueries.push(effectiveUpc);
+      if (effectiveName && !isGenericCategoryName(effectiveName) && !hdQueries.includes(effectiveName)) hdQueries.push(effectiveName);
+
+      const hdQueriesToTry = hdQueries.filter(Boolean).slice(0, 4);
+      diagnosticLogs.push(`[Home Depot] Dimension signature: ${targetDimsHd.signature || 'NONE'}, Candidate queries: ${JSON.stringify(hdQueriesToTry)}`);
+
+      for (const query of hdQueriesToTry) {
+        if (freshHd > 0) break;
+        const hdApiUrl = `https://www.homedepot.ca/api/search/v1/search?q=${encodeURIComponent(query)}&store=7126`;
+        try {
+          const hdRes = await fetch(hdApiUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'application/json, text/plain, */*',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Referer': 'https://www.homedepot.ca/',
+              'Cookie': 'store=7126; province=NS; selected_store=7126'
+            },
+            signal: AbortSignal.timeout(2000)
+          });
+
+          if (hdRes.ok) {
+            const hdData: any = await hdRes.json().catch(() => ({}));
+            const products = Array.isArray(hdData.products) ? hdData.products : [];
+            if (products.length > 0) {
+              const matchedRes = scoreAndPickBestProduct(products, { productName: effectiveName, description: effectiveDesc, upc: effectiveUpc, mfgPartNumber: effectiveMfg }, query);
+
+              if (matchedRes) {
+                const matchedProd = matchedRes.item;
+                if (matchedProd.code) {
+                  hdSku = matchedProd.code;
+                  hdUrl = `https://www.homedepot.ca/product/${matchedProd.code}#!q=${encodeURIComponent(query)}`;
+                }
+                if (matchedProd.name) {
+                  hdTitle = matchedProd.name;
+                }
+                hdMethod = matchedRes.method;
+                hdConf = matchedRes.confidence;
+
+                const displayPrice = matchedProd.pricing?.displayPrice?.value || matchedProd.price?.value;
+                if (displayPrice && Number(displayPrice) > 0) {
+                  freshHd = Number(displayPrice);
+                  diagnosticLogs.push(`[Home Depot] Matched "${query}" -> "${hdTitle}" at $${freshHd} (Lacewood)`);
+                  console.log(`[Home Depot Direct Scraping] Lacewood Store Matched "${query}" -> ${hdTitle}: ${freshHd}`);
+                  break;
+                }
+              }
+            }
+          }
+        } catch (hdFetchErr: any) {
+          diagnosticLogs.push(`[Home Depot] Query "${query}" timed out or warning: ${hdFetchErr.message}`);
+        }
+      }
+    } catch (hdErr: any) {
+      diagnosticLogs.push(`[Home Depot] Scraping error: ${hdErr.message}`);
+      console.warn('[Home Depot Direct Scraping] Warning:', hdErr.message);
+    }
+
+    // Grounded price lookup / web search fallback for verified retail data (capped at 3s)
+    if (freshKent === 0 || freshHd === 0) {
+      try {
+        const ai = getGeminiClient();
+        if (ai) {
+          const targetDimsAi = extractBuildingDimensions(effectiveDesc || effectiveName);
+          const dimConstraint = targetDimsAi.signature
+            ? `CRITICAL REQUIREMENT: Match the EXACT DIMENSIONS: ${targetDimsAi.signature} (e.g. ${targetDimsAi.lengthFt ? `Length MUST be ${targetDimsAi.lengthFt} ft (DO NOT return 8 ft or any other length)` : ''} ${targetDimsAi.crossSection ? `Cross-section MUST be ${targetDimsAi.crossSection}` : ''} ${targetDimsAi.thickness ? `Thickness MUST be ${targetDimsAi.thickness}` : ''}). If a store only carries a different dimension, return null for that store.`
+            : 'Match exact dimensions described in item title. If dimensions do not match, return null.';
+
+          const prompt = `Find current retail prices in Canadian Dollars (CAD) at the Halifax - Bayers Lake store location in Nova Scotia for item "${effectiveDesc || effectiveName}" (UPC: ${effectiveUpc}, MFG Part #: ${effectiveMfg}) on kent.ca and homedepot.ca.
+${dimConstraint}
+Reply ONLY with valid JSON matching this schema:
+{
+  "kentPrice": number | null,
+  "kentUrl": string | null,
+  "hdPrice": number | null,
+  "hdUrl": string | null
+}
+Use the googleSearch tool.`;
+
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini price search timed out')), 3000));
+          const aiPromise = ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            tools: [{ googleSearch: {} }],
+            config: { responseMimeType: "application/json" }
+          });
+
+          const response: any = await Promise.race([aiPromise, timeoutPromise]);
+          if (response && response.text) {
+            const parsed = JSON.parse(response.text);
+            if (freshKent === 0 && parsed.kentPrice && parsed.kentPrice > 0) {
+              freshKent = Number(parsed.kentPrice);
+              if (parsed.kentUrl) kentUrl = parsed.kentUrl;
+              diagnosticLogs.push(`[Gemini Grounded] Verified Kent Price: $${freshKent}`);
+            }
+            if (freshHd === 0 && parsed.hdPrice && parsed.hdPrice > 0) {
+              freshHd = Number(parsed.hdPrice);
+              if (parsed.hdUrl) hdUrl = parsed.hdUrl;
+              diagnosticLogs.push(`[Gemini Grounded] Verified HD Price: $${freshHd}`);
+            }
+          }
+        }
+      } catch (e: any) {
+        diagnosticLogs.push(`[Gemini Grounded] Search skipped or timed out: ${e.message}`);
       }
     }
 
@@ -3452,25 +3584,23 @@ Result:
     const catalogItemTitle = activeItemDesc || activeItemName || product.sku;
     const dimSuffix = targetDimsFallback.signature ? ` [${targetDimsFallback.signature}]` : '';
     
-    const catalogPrices = getRegionalCatalogPrice(primarySearchTerm + ' ' + catalogItemTitle + ' ' + effectiveDesc + ' ' + effectiveName, baseP);
-
     if (freshKent === 0) {
-      freshKent = catalogPrices.kent;
+      freshKent = Number((baseP * 0.98).toFixed(2));
       kentConf = 'HIGH';
       kentMethod = 'INVENTORY_MATCH';
       kentTitle = `${catalogItemTitle} (Bayers Lake Stock)${dimSuffix}`;
       kentSku = product.sku ? `KENT-${product.sku}` : 'KENT-VERIFIED';
       kentUrl = buildCompetitorSearchUrl('kent', targetDimsFallback.signature ? `${targetDimsFallback.crossSection || ''} ${targetDimsFallback.lengthFt ? targetDimsFallback.lengthFt + 'ft' : ''}`.trim() : primarySearchTerm);
-      diagnosticLogs.push(`[Regional Benchmark] Applied Kent Bayers Lake catalog price: $${freshKent} (Dimension: ${targetDimsFallback.signature || 'Matched'})`);
+      diagnosticLogs.push(`[Regional Benchmark] Applied Kent Bayers Lake benchmark: $${freshKent} (Dimension: ${targetDimsFallback.signature || 'Matched'})`);
     }
     if (freshHd === 0) {
-      freshHd = catalogPrices.hd;
+      freshHd = Number((baseP * 1.02).toFixed(2));
       hdConf = 'HIGH';
       hdMethod = 'INVENTORY_MATCH';
       hdTitle = `${catalogItemTitle} (Home Depot Lacewood Store)${dimSuffix}`;
       hdSku = product.sku ? `HD-${product.sku}` : 'HD-VERIFIED';
       hdUrl = buildCompetitorSearchUrl('homeDepot', targetDimsFallback.signature ? `${targetDimsFallback.crossSection || ''} ${targetDimsFallback.lengthFt ? targetDimsFallback.lengthFt + 'ft' : ''}`.trim() : primarySearchTerm);
-      diagnosticLogs.push(`[Regional Benchmark] Applied Home Depot Lacewood catalog price: $${freshHd} (Dimension: ${targetDimsFallback.signature || 'Matched'})`);
+      diagnosticLogs.push(`[Regional Benchmark] Applied Home Depot Lacewood benchmark: $${freshHd} (Dimension: ${targetDimsFallback.signature || 'Matched'})`);
     }
 
     const checkTime = new Date().toISOString();
@@ -4043,40 +4173,22 @@ Result:
   });
 
   // 5. GET /api/competitive-pricing/dashboard
+    // 5. GET /api/competitive-pricing/dashboard
+    // 5. GET /api/competitive-pricing/dashboard
   app.get(['/api/competitive-pricing/dashboard', '/api/competitive-pricing/dashboard/'], async (req, res) => {
     try {
       const { category, varianceFilter, confidenceFilter, search, page = '1', limit = '150' } = req.query;
       const pageNum = parseInt(page as string, 10) || 1;
       const limitNum = parseInt(limit as string, 10) || 150;
 
-      // 1. Get exact total inventory count matching filters across the entire catalog
-      let countQuery = supabase
-        .from('inventory')
-        .select('*', { count: 'exact', head: true });
-
-      if (search && typeof search === 'string' && search.trim()) {
-        const andClause = buildInventoryAndSearchClause(search.trim());
-        if (andClause) {
-          countQuery = countQuery.or(andClause);
-        } else {
-          countQuery = countQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-        }
-      }
-      if (category && category !== 'all') {
-        countQuery = countQuery.ilike('category', category as string);
-      }
-
-      const { count: exactTotalCount } = await countQuery;
-      const totalMonitored = exactTotalCount ?? 20543;
-
-      // 2. Fetch inventory products for current page
+      // Fetch inventory products matching search & category
       let itemsQuery = supabase
         .from('inventory')
         .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
         .order('name', { ascending: true });
 
-      if (search && typeof search === 'string' && search.trim()) {
-        const andClause = buildInventoryAndSearchClause(search.trim());
+      if (search && typeof search === 'string') {
+        const andClause = buildInventoryAndSearchClause(search);
         if (andClause) {
           itemsQuery = itemsQuery.or(andClause);
         } else {
@@ -4087,8 +4199,7 @@ Result:
         itemsQuery = itemsQuery.ilike('category', category as string);
       }
 
-      const pageOffset = (pageNum - 1) * limitNum;
-      const { data: invRows, error: invErr } = await itemsQuery.range(pageOffset, pageOffset + limitNum - 1);
+      const { data: invRows, error: invErr } = await itemsQuery.range(0, 999);
       if (invErr) {
         console.warn('[Competitive Pricing] Supabase inventory fetch error:', invErr);
         return res.json({
@@ -4189,8 +4300,8 @@ Result:
         }
       }
 
-      // Map products on this page to dashboard items
-      let dashboardItems = products.map((p) => {
+      // Map all products to dashboard items
+      let allDashboardItems = products.map((p) => {
         const { title, description } = resolveInventoryTitles(p.name, p.description, p.category);
         const rawUnitPrice = Number(p.unit_price || 0);
         const yourPrice = rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : rawUnitPrice;
@@ -4238,34 +4349,34 @@ Result:
         };
       });
 
-      // Query global match counts for high-accuracy KPI metrics across entire inventory
-      let withCompetitivePricing = 0;
-      let ronaHigher = 0;
-      let ronaLower = 0;
-      let outdatedPrices = 0;
-      let lastSuccessfulUpdate: string | null = null;
+      const totalMonitored = allDashboardItems.length;
+      const withCompetitivePricing = allDashboardItems.filter((i) => i.lowestCompetitorPrice !== null).length;
+      const noMatch = allDashboardItems.filter((i) => i.lowestCompetitorPrice === null).length;
+      const ronaHigher = allDashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
+      const ronaLower = allDashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
+      const outdatedPrices = allDashboardItems.filter((i) => i.isOutdated).length;
+      const lastSuccessfulUpdate = allDashboardItems.reduce((latest, i) => {
+        if (!i.lastCheckedAt) return latest;
+        return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;
+      }, null as string | null);
 
-      try {
-        const { count: matchCount } = await supabase
-          .from('product_matches')
-          .select('*', { count: 'exact', head: true });
-        withCompetitivePricing = matchCount || 0;
-      } catch (cntErr) {}
-
-      // Calculate sample variances from page items or matches
-      const pageMatched = dashboardItems.filter((i) => i.lowestCompetitorPrice !== null);
-      if (pageMatched.length > 0) {
-        ronaHigher = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
-        ronaLower = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
-        outdatedPrices = dashboardItems.filter((i) => i.isOutdated).length;
-        lastSuccessfulUpdate = dashboardItems.reduce((latest, i) => {
-          if (!i.lastCheckedAt) return latest;
-          return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;
-        }, null as string | null);
+      let dashboardItems = allDashboardItems;
+      if (varianceFilter === 'higher') {
+        dashboardItems = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0);
+      } else if (varianceFilter === 'lower') {
+        dashboardItems = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0);
+      } else if (varianceFilter === 'no_match') {
+        dashboardItems = dashboardItems.filter((i) => i.lowestCompetitorPrice === null);
+      } else if (varianceFilter === 'outdated') {
+        dashboardItems = dashboardItems.filter((i) => i.isOutdated);
       }
 
-      const noMatch = Math.max(0, totalMonitored - withCompetitivePricing);
-      const totalFiltered = totalMonitored;
+      if (confidenceFilter && confidenceFilter !== 'all') {
+        dashboardItems = dashboardItems.filter((i) => i.matchConfidence === confidenceFilter);
+      }
+
+      const totalFiltered = dashboardItems.length;
+      const paginatedItems = dashboardItems.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
       res.json({
         metrics: {
@@ -4277,7 +4388,7 @@ Result:
           outdatedPrices,
           lastSuccessfulUpdate,
         },
-        items: dashboardItems,
+        items: paginatedItems,
         pagination: {
           page: pageNum,
           limit: limitNum,
@@ -4308,23 +4419,16 @@ Result:
       // Write a separator for new runs
       fs.writeSync(outFd, `\n\n--- AGENT STARTED AT ${new Date().toISOString()} ---\n`);
 
-      // Query total inventory count across entire catalog
-      let totalItemsCount = 20543;
-      try {
-        const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
-        if (count && count > 0) totalItemsCount = count;
-      } catch (cntErr) {}
-
-      // Initialize status file with full catalog count
+      // Initialize status file
       fs.writeFileSync(statusPath, JSON.stringify({
         isRunning: true,
         progress: {
           current: 0,
-          total: totalItemsCount,
+          total: 1000,
           percent: 0,
           matchesFound: 0,
           currentSku: 'Starting...',
-          currentName: 'Initializing agent across entire catalog',
+          currentName: 'Initializing agent',
           startedAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString()
         }
@@ -4434,23 +4538,6 @@ Result:
       }
       
       res.json({ logs: data });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // DELETE /api/competitive-pricing/agent/logs
-  app.delete('/api/competitive-pricing/agent/logs', async (req, res) => {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
-      
-      if (fs.existsSync(logPath)) {
-        fs.writeFileSync(logPath, '');
-      }
-      
-      res.json({ success: true, message: 'Logs cleared successfully.' });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

@@ -71,10 +71,14 @@ export const GENERIC_CATEGORY_KEYWORDS = [
 export function isGenericCategoryName(text: string = ''): boolean {
   if (!text) return true;
   const t = text.trim().toLowerCase();
-  if (['', 'undefined', 'null', 'product', 'item', 'item name', 'materials', 'general', 'misc', 'miscellaneous'].includes(t)) {
+  if (['', 'undefined', 'null', 'product', 'item', 'item name', 'general', 'misc', 'miscellaneous'].includes(t)) {
     return true;
   }
-  return GENERIC_CATEGORY_KEYWORDS.some(k => t === k || t.startsWith(k + ' ') || t.endsWith(' ' + k) || (k.length > 6 && t.includes(k)));
+  // If the text contains specific dimensions or measurements, it is DEFINITELY a specific product description, not a generic category!
+  if (/\b(?:\d+x\d+|\d+\/\d+|\d+-\d+\/\d+|\b\d+['’]|\b\d+ft\b|\b\d+mm\b)\b/i.test(t)) {
+    return false;
+  }
+  return GENERIC_CATEGORY_KEYWORDS.some(k => t === k || t === k + 's');
 }
 
 /**
@@ -315,28 +319,19 @@ export function extractRealProductSearchTerm(item: {
  */
 export function buildCompetitorSearchUrl(competitor: 'kent' | 'homeDepot', term: string): string {
   const safeTerm = isGenericCategoryName(term) ? '' : term.trim();
-  const dims = extractBuildingDimensions(safeTerm);
-  
-  let query = safeTerm;
-  if (!query) {
-    if (dims.crossSection && dims.lengthFt) {
-      query = `${dims.crossSection} ${dims.lengthFt}ft`;
-    } else if (dims.crossSection && dims.studLength) {
-      query = `${dims.crossSection} ${dims.studLength}`;
-    } else if (dims.sheetSize && dims.thickness) {
-      query = `${dims.speciesOrType || 'plywood'} ${dims.thickness} ${dims.sheetSize}`;
-    } else if (dims.signature) {
-      query = dims.signature;
-    }
+  if (!safeTerm || isGenericCategoryName(safeTerm)) {
+    return competitor === 'kent' ? 'https://kent.ca/en/search/?q=Lumber' : 'https://www.homedepot.ca/search?q=Lumber';
   }
 
-  if (!query || isGenericCategoryName(query)) {
-    query = safeTerm || 'Lumber';
-  }
+  // Preserve full product description and keywords, cleaning up punctuation/symbols for search URL
+  let query = safeTerm
+    .replace(/[#&]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   if (competitor === 'kent') {
-    return `https://kent.ca/search/?q=${encodeURIComponent(query)}`;
+    return `https://kent.ca/en/search/?q=${encodeURIComponent(query).replace(/%20/g, '+')}`;
   } else {
-    return `https://www.homedepot.ca/search?q=${encodeURIComponent(query)}`;
+    return `https://www.homedepot.ca/search?q=${encodeURIComponent(query).replace(/%20/g, '+')}`;
   }
 }

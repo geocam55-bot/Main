@@ -1,0 +1,23 @@
+{
+  "scrapedAt": "2026-09-15T21:27:34.404Z",
+  "itemsProcessed": 1,
+  "results": [
+    {
+      "sku": "00277165",
+      "name": "ACCESSORIES FOR STATIONARY ELECT",
+      "description": "WHEEL CUT-OFF 4 1/2X.045X7/8\"",
+      "yourPrice": 3.29,
+      "competitors": {
+        "KENT Building Supplies": {
+          "matchFound": true,
+          "score": 216,
+          "price": 3.29,
+          "productTitle": "4-1/2\" x .045\" x 7/8\" Metal Cut-Off Wheel",
+          "productUrl": "https://kent.ca/en/4-1-2-x-045-x-7-8-metal-cut-off-wheel-1082236",
+          "mfg": "DWA8051",
+          "upc": "885911266598"
+        }
+      }
+    }
+  ]
+}

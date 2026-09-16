@@ -37,6 +37,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/leaflet": "^1.9.21",
+    "@types/string-similarity": "^4.0.2",
     "@vis.gl/react-google-maps": "^1.9.0",
     "@zxing/library": "^0.23.0",
     "cheerio": "^1.2.0",
@@ -60,8 +61,8 @@
     "motion": "^12.4.7",
     "multer": "^2.1.1",
     "nodemailer": "^6.9.16",
-    "puppeteer": "^24.4.0",
-    "puppeteer-core": "^25.10.0",
+    "playwright": "^1.63.0",
+    "playwright-core": "^1.63.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dnd": "^16.0.1",
@@ -73,6 +74,7 @@
     "react-router": "^7.1.5",
     "recharts": "^2.15.1",
     "sonner": "^2.0.1",
+    "string-similarity": "^4.0.4",
     "tailwind-merge": "^3.0.1",
     "tesseract.js": "^5.1.1",
     "tw-animate-css": "^1.1.0",
@@ -103,6 +105,8 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "lint": "echo 'No lint errors'",
-    "agent:pricing": "tsx src/scripts/pricing-agent.ts"
+    "agent:pricing": "tsx src/scripts/pricing-agent.ts",
+    "scraper": "node scraper.js",
+    "scraper:cjs": "node scraper.cjs"
   }
 }

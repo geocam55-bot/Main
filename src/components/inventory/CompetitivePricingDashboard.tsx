@@ -31,6 +31,7 @@ import {
   Zap,
   StopCircle,
   ShoppingCart,
+  Trash2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -303,12 +304,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           // RPC may not exist or fail, proceed to fallback
         }
 
-        // 2. Query distinct category sample from inventory table
+        // 2. Query distinct categories from inventory table
         const { data: catRows, error: catError } = await supabase
           .from('inventory')
           .select('category')
           .not('category', 'is', null)
-          .limit(1000);
+          .order('category');
 
         if (!catError && Array.isArray(catRows) && catRows.length > 0 && isMounted) {
           const fetched = catRows.map((r: any) => r.category).filter(Boolean).map((s: string) => String(s).trim());
@@ -1066,24 +1067,49 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
               {diagnosticLogs}
             </pre>
           </div>
-          <div className="flex justify-end mt-4">
-            <Button variant="outline" size="sm" onClick={() => setIsDiagnosticOpen(false)} className="bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700">
-              Close
-            </Button>
+          <div className="flex items-center justify-between mt-4">
             <Button 
-              variant="default" 
+              variant="outline" 
               size="sm" 
-              className="ml-2 bg-blue-600 text-white hover:bg-blue-700"
+              className="bg-rose-950/40 text-rose-300 border-rose-900/60 hover:bg-rose-900/50 hover:text-rose-200 text-xs gap-1.5"
               onClick={async () => {
                 try {
-                  const data = await competitivePricingAPI.getPricingAgentLogs();
-                  setDiagnosticLogs(data.logs);
-                } catch(e) {}
+                  const res = await competitivePricingAPI.clearPricingAgentLogs();
+                  if (res.success) {
+                    setDiagnosticLogs('Logs cleared.');
+                    toast.success('Agent diagnostic logs cleared.');
+                  } else {
+                    toast.error(res.message || 'Failed to clear logs');
+                  }
+                } catch (e: any) {
+                  toast.error(e.message || 'Failed to clear logs');
+                }
               }}
             >
-              <RefreshCw className="h-3.5 w-3.5 mr-1" />
-              Refresh Logs
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear Logs
             </Button>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsDiagnosticOpen(false)} className="bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 text-xs">
+                Close
+              </Button>
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="bg-blue-600 text-white hover:bg-blue-700 text-xs gap-1.5"
+                onClick={async () => {
+                  try {
+                    const data = await competitivePricingAPI.getPricingAgentLogs();
+                    setDiagnosticLogs(data.logs);
+                    toast.success('Logs refreshed');
+                  } catch(e) {}
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Refresh Logs
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

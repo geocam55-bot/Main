@@ -757,7 +757,7 @@ export const competitivePricingAPI = {
             competitorId: 1,
             competitorName: 'KENT Building Supplies',
             websiteUrl: 'https://kent.ca',
-            productUrl: `https://kent.ca/search/?q=${encodeURIComponent(title)}`,
+            productUrl: `https://kent.ca/en/search/?q=${encodeURIComponent(title).replace(/%20/g, '+')}`,
             productName: `${title} (Bayers Lake Stock)`,
             price: fallbackKent,
             regularPrice: fallbackKent,
@@ -989,6 +989,18 @@ export const competitivePricingAPI = {
       return await safeParseJson(res);
     } catch (err: any) {
       return { logs: `[Competitive Pricing Direct Monitor] Status: Active\nDirect Supabase connection verified.\nLast check: ${new Date().toLocaleTimeString()}` };
+    }
+  },
+  clearPricingAgentLogs: async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const headers = await getServerHeaders();
+      const res = await fetch('/api/competitive-pricing/agent/logs', {
+        method: 'DELETE',
+        headers,
+      });
+      return await safeParseJson(res);
+    } catch (err: any) {
+      return { success: false, message: err.message };
     }
   },
   getCompetitors: async (): Promise<CompetitorConfig[]> => {
