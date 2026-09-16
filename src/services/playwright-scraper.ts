@@ -384,12 +384,13 @@ export async function scrapeSearchResults(
   searchTerm: string
 ): Promise<CandidateProduct[]> {
   const cleanTerm = searchTerm.replace(/[\x27\"]/g, '').trim();
+  if (!cleanTerm) return [];
 
-  // Fast-path direct Kent API query (instant response without full page load)
-  if (config.id === 1 && cleanTerm) {
+  // Fast-path direct Kent API query (instant response in ~300ms without browser page load)
+  if (config.id === 1) {
     try {
       const searchEndpoint = `https://eucs28.ksearchnet.com/cloud-search/n-search/search?ticket=klevu-164006757741514325&term=${encodeURIComponent(cleanTerm)}&responseType=json`;
-      const res = await fetch(searchEndpoint, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+      const res = await fetch(searchEndpoint, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         const data = await res.json();
         const results = (data.result || []).map((r: any) => ({
@@ -405,15 +406,18 @@ export async function scrapeSearchResults(
         if (results.length > 0) return results;
       }
     } catch (apiErr) {}
+    // If Kent API had no results, don't waste 6s loading page - Kent website uses same backend
+    return [];
   }
 
   const encodedQuery = encodeURIComponent(cleanTerm).replace(/%20/g, '+');
   const url = config.searchUrl + encodedQuery;
 
   try {
+    // Ultra-fast timeout for competitor page load to prevent blocking the agent
     await page.goto(url, {
       waitUntil: 'domcontentloaded',
-      timeout: 6000
+      timeout: 1200
     });
 
     // Kent-specific high-speed in-page evaluation:
