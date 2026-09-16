@@ -61,7 +61,7 @@ export const COMPETITORS: Record<string, CompetitorConfig> = {
       description: '.product-item-description, .product.description, .description',
       productLink: 'a.product-item-link, .product-item-photo, a'
     },
-    matchThreshold: 50
+    matchThreshold: 45
   },
 
   homeDepot: {
@@ -88,7 +88,7 @@ export const COMPETITORS: Record<string, CompetitorConfig> = {
       description: '.acl-product-card__description, .description',
       productLink: 'a.acl-product-card__title-link, a[href*="/product/"], a[data-testid="product-card-title-link"]'
     },
-    matchThreshold: 50
+    matchThreshold: 45
   }
 };
 
@@ -259,7 +259,42 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
     }
   }
 
-  // 4. Description String Similarity via string-similarity (+ up to 50)
+  // 4. Token & Significant Words Matching (+ up to 55 points)
+  const stopWords = new Set(['the', 'and', 'for', 'with', 'in', 'to', 'of', 'by', 'on', 'at', 'from', 'a', 'an', 'per', 'ea']);
+  const cleanInvWords = invTitle
+    .replace(/[^a-z0-9\/\- ]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 2 && !stopWords.has(w));
+
+  if (cleanInvWords.length > 0) {
+    let matchedWords = 0;
+    for (const word of cleanInvWords) {
+      if (candTitle.includes(word)) {
+        matchedWords++;
+      }
+    }
+    const tokenRatio = matchedWords / cleanInvWords.length;
+    score += Math.round(tokenRatio * 55);
+
+    // Brand / First word match bonus (e.g., SIKA, DEWALT, BOSTITCH, STANLEY)
+    const firstWord = cleanInvWords[0];
+    if (firstWord && firstWord.length >= 3 && candTitle.includes(firstWord)) {
+      score += 20;
+    }
+
+    // Numbers & Spec match bonus (e.g., '01', '4l', '16', '3.25', '6x6')
+    const numbersInInv = cleanInvWords.filter(w => /\d/.test(w));
+    if (numbersInInv.length > 0) {
+      const matchedNums = numbersInInv.filter(n => candTitle.includes(n)).length;
+      if (matchedNums === numbersInInv.length) {
+        score += 20;
+      } else if (matchedNums > 0) {
+        score += 10;
+      }
+    }
+  }
+
+  // 5. Description String Similarity via string-similarity (+ up to 25)
   const targetDesc = inventoryItem.description || inventoryItem.name || '';
   const candDesc = candidate.title || candidate.description || '';
   if (targetDesc && candDesc) {
@@ -267,10 +302,10 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
       targetDesc.toLowerCase(),
       candDesc.toLowerCase()
     );
-    score += descScore * 50;
+    score += Math.round(descScore * 25);
   }
 
-  // 5. Grade & Keyword Matching Bonus
+  // 6. Grade & Keyword Matching Bonus
   const invIsSelect = /\bselect\b/i.test(invTitle);
   const candIsSelect = /\bselect\b/i.test(candTitle);
   const invIsStandard = /\bstandard\b/i.test(invTitle);
@@ -295,41 +330,48 @@ export function getSearchTerms(item: InventoryItem): string[] {
     terms.push(String(item.upc).trim());
   }
 
-  const desc = (item.description || item.name || '').trim();
-  if (desc) {
-    // 2. Cleaned without trailing delimiters like "#2 & BETTER"
-    const cleaned = desc.replace(/#.*$/, '').replace(/&.*$/, '').trim();
+  // 2. Manufacturer part number / supplier sku
+  const mfg = item.mfg || item.supplier_sku;
+  if (mfg && String(mfg).trim().length >= 4 && !/^\d+$/.test(String(mfg))) {
+    terms.push(String(mfg).trim());
+  }
+
+  const rawDesc = (item.description || item.name || '').trim();
+  if (rawDesc) {
+    // Clean POS abbreviations
+    const cleaned = rawDesc
+      .replace(/["']/g, ' ')
+      .replace(/\bSPLP\b/gi, 'Shiplap')
+      .replace(/\bLUM\b/gi, 'Lumber')
+      .replace(/\bBALU\b/gi, 'Baluster')
+      .replace(/\bPREPAINTED\b/gi, 'Primed')
+      .replace(/\bFRAM\.\b/gi, 'Framing')
+      .replace(/\bREG\.\b/gi, 'Regular')
+      .replace(/\bELEC\b|\bELECT\b/gi, 'Electric')
+      .replace(/#.*$/, '')
+      .replace(/&.*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Concise search query (first 3-4 key tokens)
+    const words = cleaned.split(' ').filter(w => w.length > 1);
+    if (words.length > 4) {
+      terms.push(words.slice(0, 4).join(' '));
+    }
     if (cleaned) {
       terms.push(cleaned);
     }
 
-    // 3. Compact dimensional query (e.g. 2x4 8ft or 2x4x8)
-    const dims = extractDimensions(desc);
+    // Dimensional query (e.g. 2x4 8ft or 2x4x8)
+    const dims = extractDimensions(rawDesc);
     if (dims) {
-      if (dims.includes('x')) {
-        const parts = dims.split('x');
-        if (parts.length === 3) {
-          terms.push(`${parts[0]}x${parts[1]} ${parts[2]}ft`);
-          terms.push(dims);
-        } else {
-          terms.push(dims);
-        }
-      }
-    }
-
-    // 4. Raw description if distinct
-    if (desc !== cleaned && !terms.includes(desc)) {
-      terms.push(desc);
+      terms.push(`${dims} Lumber`);
     }
   }
 
-  // 5. Manufacturer part number
-  const mfg = item.mfg || item.supplier_sku;
-  if (mfg && String(mfg).trim().length >= 3) {
-    terms.push(String(mfg).trim());
-  }
-
-  return Array.from(new Set(terms.filter(t => t && t.length >= 2)));
+  // Deduplicate and cap at 2 highest-quality terms for extreme speed
+  const unique = Array.from(new Set(terms.filter(t => t && t.length >= 3)));
+  return unique.slice(0, 2);
 }
 
 // ======================================================
@@ -341,13 +383,37 @@ export async function scrapeSearchResults(
   config: CompetitorConfig,
   searchTerm: string
 ): Promise<CandidateProduct[]> {
-  const encodedQuery = encodeURIComponent(searchTerm).replace(/%20/g, '+');
+  const cleanTerm = searchTerm.replace(/[\x27\"]/g, '').trim();
+
+  // Fast-path direct Kent API query (instant response without full page load)
+  if (config.id === 1 && cleanTerm) {
+    try {
+      const searchEndpoint = `https://eucs28.ksearchnet.com/cloud-search/n-search/search?ticket=klevu-164006757741514325&term=${encodeURIComponent(cleanTerm)}&responseType=json`;
+      const res = await fetch(searchEndpoint, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        const results = (data.result || []).map((r: any) => ({
+          title: r.name || '',
+          priceText: String(r.salePrice || r.price || ''),
+          mfg: r.model_no || r.sku || '',
+          sku: r.sku || '',
+          upc: r.upc || '',
+          dimensions: '',
+          description: r.shortDesc || r.desc || '',
+          url: r.url || ''
+        }));
+        if (results.length > 0) return results;
+      }
+    } catch (apiErr) {}
+  }
+
+  const encodedQuery = encodeURIComponent(cleanTerm).replace(/%20/g, '+');
   const url = config.searchUrl + encodedQuery;
 
   try {
     await page.goto(url, {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 6000
     });
 
     // Kent-specific high-speed in-page evaluation:

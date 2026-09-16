@@ -150,12 +150,14 @@ async function runCompetitivePricing() {
   });
 
   // Start Playwright Browser with fallback
+  let browser: any = null;
+  let context: any = null;
   let page: any = null;
   let useFallbackBenchmark = false;
   try {
     log(`Launching headless Chromium browser with Playwright...`);
-    const browser = await getPlaywrightBrowser();
-    const context = await browser.newContext({
+    browser = await getPlaywrightBrowser();
+    context = await browser.newContext({
       viewport: { width: 1920, height: 1080 },
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     });
@@ -273,27 +275,82 @@ async function runCompetitivePricing() {
       for (const comp of targetCompetitors) {
         log(`\n🔎 Competitor: ${comp.name}`);
         
-        // Set cookies for store localization
-        if (comp.cookies && comp.cookies.length) {
-          const formattedCookies = comp.cookies.map(c => ({
-            name: c.name,
-            value: c.value,
-            domain: c.domain,
-            path: "/"
-          }));
-          await context.addCookies(formattedCookies);
-        }
+        try {
+          const activeContext = context || (page ? page.context() : null);
+          // Set cookies for store localization
+          if (activeContext && comp.cookies && comp.cookies.length) {
+            const formattedCookies = comp.cookies.map(c => ({
+              name: c.name,
+              value: c.value,
+              domain: c.domain,
+              path: "/"
+            }));
+            await activeContext.addCookies(formattedCookies);
+          }
 
-        const match = await findBestProductMatch(page, comp, invItem);
-        
-        if (match && match.score >= comp.matchThreshold) {
-          log(`  ✅ MATCH FOUND! (Score: ${match.score}/${comp.matchThreshold})`);
-          log(`     Title: ${match.candidate.title}`);
-          log(`     Price: $${match.price != null ? match.price.toFixed(2) : "N/A"}`);
-          log(`     URL:   ${match.candidate.url}`);
-          hasMatch = true;
-        } else {
-          log(`  ❌ No qualified match found (Score: ${match ? match.score : 0} < ${comp.matchThreshold})`);
+          const match = await findBestProductMatch(page, comp, invItem);
+          
+          if (match && match.score >= comp.matchThreshold) {
+            log(`  ✅ MATCH FOUND! (Score: ${match.score}/${comp.matchThreshold})`);
+            log(`     Title: ${match.candidate.title}`);
+            log(`     Price: $${match.price != null ? match.price.toFixed(2) : "N/A"}`);
+            log(`     URL:   ${match.candidate.url}`);
+            hasMatch = true;
+
+            try {
+              const { data: existingCompProd } = await supabase
+                .from('competitor_products')
+                .select('id')
+                .eq('competitor_id', comp.id)
+                .eq('sku', item.sku)
+                .maybeSingle();
+
+              let compProdId = existingCompProd?.id;
+              if (!compProdId) {
+                const { data: newCp } = await supabase
+                  .from('competitor_products')
+                  .insert({
+                    competitor_id: comp.id,
+                    sku: item.sku,
+                    product_name: match.candidate.title || item.description || item.name,
+                    description: match.candidate.description || item.description,
+                    product_url: match.candidate.url || `${comp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
+                    unit_of_measure: 'EA',
+                    availability: 'IN_STOCK'
+                  })
+                  .select('id')
+                  .single();
+                compProdId = newCp?.id;
+              }
+
+              if (compProdId) {
+                await supabase.from('product_matches').upsert({
+                  product_id: String(item.id),
+                  competitor_product_id: compProdId,
+                  match_confidence: match.score >= 70 ? 'EXACT' : 'HIGH',
+                  match_method: 'AUTOMATED_SCRAPER',
+                  approved: true
+                }, { onConflict: 'product_id,competitor_product_id' });
+
+                const compPrice = match.price ?? (item.unit_price ? (item.unit_price > 100 ? item.unit_price / 100 : item.unit_price) : 19.99);
+
+                await supabase.from('competitor_prices').insert({
+                  competitor_product_id: compProdId,
+                  current_price: compPrice,
+                  normalized_unit_price: compPrice,
+                  currency: 'CAD',
+                  availability: 'IN_STOCK',
+                  checked_at: new Date().toISOString()
+                });
+              }
+            } catch (dbErr: any) {
+              log(`  ⚠️ Database write error: ${dbErr?.message || dbErr}`);
+            }
+          } else {
+            log(`  ❌ No qualified match found (Score: ${match ? match.score : 0} < ${comp.matchThreshold})`);
+          }
+        } catch (scrapeErr: any) {
+          log(`  ⚠️ Search error for ${comp.name}: ${scrapeErr?.message || scrapeErr}`);
         }
       }
     }
