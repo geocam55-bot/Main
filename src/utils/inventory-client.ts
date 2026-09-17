@@ -249,7 +249,7 @@ export async function getAllInventoryClient() {
       .select(INVENTORY_SELECT, { count: 'exact' })
       .eq('organization_id', userOrgId)
       .order('name', { ascending: true })
-      .limit(1000);
+      
       
     if (batchError) {
       // Database error loading inventory

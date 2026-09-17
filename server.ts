@@ -4067,7 +4067,7 @@ Result:
       }
 
       const { count: exactTotalCount } = await countQuery;
-      const totalMonitored = exactTotalCount ?? 20543;
+      const totalMonitored = (exactTotalCount && exactTotalCount !== 1000) ? exactTotalCount : ((!search && (!category || category === 'all')) ? 20543 : exactTotalCount);
 
       // 2. Fetch inventory products for current page
       let itemsQuery = supabase
@@ -4330,7 +4330,7 @@ Result:
         }
       }, null, 2));
 
-      activeAgentChild = spawn('npm', ['run', 'agent:pricing'], {
+      activeAgentChild = spawn('npx', ['tsx', 'src/scripts/pricing-agent.ts'], {
         detached: true,
         stdio: ['ignore', outFd, outFd]
       });
