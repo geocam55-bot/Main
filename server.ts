@@ -2526,7 +2526,7 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (req, res) => { res.json({ status: 'ok', v: 20543 }); return; 
     res.json({ status: 'ok' });
   });
 
