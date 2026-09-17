@@ -359,7 +359,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <BarChart3 className="h-6 w-6 text-blue-600" />
-            Competitive Pricing Intelligence Dashboard (v2)
+            Competitive Pricing Intelligence Dashboard (v2.1)
           </h2>
           <p className="text-sm text-slate-500 mt-1">
             Real-time market price monitoring for RONA Atlantic products against regional competitors.
