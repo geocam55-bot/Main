@@ -286,25 +286,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         const { createClient } = await import('../../utils/supabase/client');
         const supabase = createClient();
 
-        // 1. Try RPC get_distinct_categories
-        try {
-          const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories');
-          if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0 && isMounted) {
-            const rawCats = rpcData
-              .map((r: any) => (typeof r === 'object' ? r.category : r))
-              .filter(Boolean)
-              .map((s: string) => String(s).trim());
-            const merged = Array.from(new Set([...DEFAULT_INVENTORY_CATEGORIES, ...rawCats])).sort((a, b) =>
-              a.localeCompare(b, undefined, { sensitivity: 'base' })
-            );
-            setAvailableCategories(merged);
-            return;
-          }
-        } catch (rpcErr) {
-          // RPC may not exist or fail, proceed to fallback
-        }
-
-        // 2. Query distinct categories from inventory table
+        // Query distinct categories from inventory table
         const { data: catRows, error: catError } = await supabase
           .from('inventory')
           .select('category')
