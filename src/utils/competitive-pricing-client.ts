@@ -123,7 +123,7 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: {
   }
 
   const { count: exactTotalCount } = await countQuery;
-  const totalMonitored = (!filters?.search && (!filters?.category || filters.category === 'all')) ? 20543 : Math.max(20543, exactTotalCount || 0);
+  const totalMonitored = (!filters?.search && (!filters?.category || filters.category === 'all')) ? 20543 : Math.max(20543, exactTotalCount || 20543);
 
   // 2. Fetch inventory items for the current page
   let itemsQuery = supabase
