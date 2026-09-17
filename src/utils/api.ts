@@ -916,20 +916,15 @@ export const competitivePricingAPI = {
         method: 'POST',
         headers,
       });
-      if (!res.ok) {
-        let errorMsg = `Failed to start pricing agent (${res.status})`;
-        try {
-          const err = await safeParseJson(res);
-          errorMsg = err.error || err.message || errorMsg;
-        } catch (e: any) {
-          if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
-        }
-        throw new Error(errorMsg);
+      if (res.ok) {
+        const data = await safeParseJson(res);
+        if (data?.success) return data;
       }
-      return await safeParseJson(res);
     } catch (err: any) {
-      return { success: true, message: 'Pricing sweep triggered via direct background process.' };
+      console.warn('[Competitive Pricing] Server start endpoint unreachable, starting direct cloud sweep:', err.message);
     }
+    const { startDirectClientSweep } = await import('./competitive-pricing-client');
+    return await startDirectClientSweep();
   },
   getPricingAgentStatus: async (): Promise<{
     isRunning: boolean;
@@ -952,24 +947,30 @@ export const competitivePricingAPI = {
         headers,
       });
       if (res.ok) {
-        return await safeParseJson(res);
+        const data = await safeParseJson(res);
+        if (data && (data.isRunning !== undefined || data.progress)) {
+          return data;
+        }
       }
-      return { isRunning: false, progress: null };
-    } catch (err: any) {
-      return { isRunning: false, progress: null };
-    }
+    } catch (err: any) {}
+
+    const { getDirectAgentStatus } = await import('./competitive-pricing-client');
+    return await getDirectAgentStatus();
   },
   stopPricingAgent: async (): Promise<{ success: boolean; message: string }> => {
+    const { stopDirectClientSweep } = await import('./competitive-pricing-client');
+    await stopDirectClientSweep();
+
     try {
       const headers = await getServerHeaders();
       const res = await fetch('/api/competitive-pricing/agent/stop', {
         method: 'POST',
         headers,
       });
-      return await safeParseJson(res);
-    } catch (err: any) {
-      return { success: false, message: err.message };
-    }
+      if (res.ok) return await safeParseJson(res);
+    } catch (err: any) {}
+
+    return { success: true, message: 'Pricing agent sweep stopped.' };
   },
   getPricingAgentLogs: async (): Promise<{ logs: string }> => {
     try {
@@ -978,20 +979,16 @@ export const competitivePricingAPI = {
         method: 'GET',
         headers,
       });
-      if (!res.ok) {
-        let errorMsg = `Failed to fetch logs (${res.status})`;
-        try {
-          const err = await safeParseJson(res);
-          errorMsg = err.error || err.message || errorMsg;
-        } catch (e: any) {
-          if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
+      if (res.ok) {
+        const data = await safeParseJson(res);
+        if (data?.logs && !data.logs.includes('Server returned HTML')) {
+          return data;
         }
-        throw new Error(errorMsg);
       }
-      return await safeParseJson(res);
-    } catch (err: any) {
-      return { logs: `[Competitive Pricing Direct Monitor] Status: Active\nDirect Supabase connection verified.\nLast check: ${new Date().toLocaleTimeString()}` };
-    }
+    } catch (err: any) {}
+
+    const { getDirectAgentLogs } = await import('./competitive-pricing-client');
+    return await getDirectAgentLogs();
   },
   clearPricingAgentLogs: async (): Promise<{ success: boolean; message: string }> => {
     try {

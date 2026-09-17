@@ -30,12 +30,30 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const STATUS_FILE = path.join(process.cwd(), 'pricing-agent-status.json');
 const LOG_FILE = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
 
+const recentLogs: string[] = [];
+let lastKvLogFlush = 0;
+let lastKvStatusFlush = 0;
+
 function log(msg: string) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
   try {
     fs.appendFileSync(LOG_FILE, line + '\n');
   } catch (e) {}
+
+  recentLogs.push(line);
+  if (recentLogs.length > 250) {
+    recentLogs.shift();
+  }
+
+  const now = Date.now();
+  if (now - lastKvLogFlush > 3000) {
+    lastKvLogFlush = now;
+    supabase.from('kv_store_8405be07').upsert({
+      key: 'pricing_agent:logs',
+      value: { logs: recentLogs.join('\n') }
+    }).catch(() => {});
+  }
 }
 
 function updateStatus(status: {
@@ -56,6 +74,16 @@ function updateStatus(status: {
     fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
   } catch (e) {
     console.error("Failed to write status file", e);
+  }
+
+  const now = Date.now();
+  // Flush immediately if starting/stopping, or throttled every 2.5s during scan
+  if (!status.isRunning || !status.progress?.current || now - lastKvStatusFlush > 2500) {
+    lastKvStatusFlush = now;
+    supabase.from('kv_store_8405be07').upsert({
+      key: 'pricing_agent:status',
+      value: status
+    }).catch(() => {});
   }
 }
 
