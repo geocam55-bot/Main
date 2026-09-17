@@ -889,8 +889,10 @@ export const competitivePricingAPI = {
       if (filters?.search) query.set('search', filters.search);
       if (filters?.page) query.set('page', filters.page.toString());
       if (filters?.limit) query.set('limit', filters.limit.toString());
-      const qs = query.toString();
-      const res = await fetch(`/api/competitive-pricing/dashboard${qs ? `?${qs}` : ''}`, { headers });
+      let qs = query.toString();
+      query.set('_t', Date.now().toString());
+      qs = query.toString();
+      const res = await fetch(`/api/competitive-pricing/dashboard?${qs}`, { headers, cache: 'no-store' });
       if (!res.ok) {
         let errorMsg = `Failed to fetch pricing dashboard (${res.status})`;
         try {
