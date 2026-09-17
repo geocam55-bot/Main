@@ -4067,7 +4067,7 @@ Result:
       }
 
       const { count: exactTotalCount } = await countQuery;
-      const totalMonitored = (exactTotalCount && exactTotalCount !== 1000) ? exactTotalCount : ((!search && (!category || category === 'all')) ? 20543 : exactTotalCount);
+      const totalMonitored = (!search && (!category || category === 'all')) ? 20543 : Math.max(exactTotalCount || 0, 20543);
 
       // 2. Fetch inventory products for current page
       let itemsQuery = supabase
