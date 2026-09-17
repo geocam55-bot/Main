@@ -558,30 +558,28 @@ let sharedBrowser: Browser | null = null;
 
 export async function getPlaywrightBrowser(): Promise<Browser> {
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
+    const customExecPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || process.env.CHROMIUM_PATH || undefined;
+    const launchOptions: any = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ]
+    };
+    if (customExecPath) {
+      launchOptions.executablePath = customExecPath;
+    }
+
     try {
-      sharedBrowser = await chromium.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ]
-      });
+      sharedBrowser = await chromium.launch(launchOptions);
     } catch (err: any) {
       try {
         console.log('[Playwright Scraper] Browser executable missing. Attempting automatic installation via npx playwright install chromium...');
         const { execSync } = await import('child_process');
         execSync('npx playwright install chromium', { stdio: 'inherit' });
-        sharedBrowser = await chromium.launch({
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-          ]
-        });
+        sharedBrowser = await chromium.launch(launchOptions);
       } catch (installErr: any) {
         console.warn(`[Playwright Scraper] Auto-install/launch notice: ${installErr.message}. Regional catalog benchmark pricing will be applied.`);
         throw new Error(`Playwright Initialization Notice: ${err.message}. Regional catalog benchmark pricing will be applied.`);

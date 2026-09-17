@@ -4330,12 +4330,13 @@ Result:
         }
       }, null, 2));
 
-      const isProd = process.env.NODE_ENV === 'production';
-      const agentScriptPath = isProd 
-        ? path.join(process.cwd(), 'dist', 'pricing-agent.cjs')
-        : path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
+      const cjsPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
+      const tsPath = path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
       
-      activeAgentChild = isProd
+      const useCompiled = fs.existsSync(cjsPath);
+      const agentScriptPath = useCompiled ? cjsPath : tsPath;
+      
+      activeAgentChild = useCompiled
         ? spawn('node', [agentScriptPath], {
             detached: true,
             stdio: ['ignore', outFd, outFd]

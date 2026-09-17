@@ -1,13 +1,13 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 51,
+    "current": 139,
     "total": 20543,
-    "percent": 0.2,
-    "matchesFound": 1154,
-    "currentSku": "12675369",
-    "currentName": "FERT.PLANT WATER 24-8-16 1.5KG",
-    "startedAt": "2026-09-16T23:00:24.702Z",
-    "lastUpdated": "2026-09-16T23:01:02.326Z"
+    "percent": 0.7,
+    "matchesFound": 1189,
+    "currentSku": "1166300",
+    "currentName": "SU PACKING TAPE CLEAR 48MMX100",
+    "startedAt": "2026-09-17T18:57:28.237Z",
+    "lastUpdated": "2026-09-17T19:00:07.139Z"
   }
 }
