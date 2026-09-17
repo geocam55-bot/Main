@@ -16,7 +16,13 @@ export default async function handler(req, res) {
 
     const nowIso = new Date().toISOString();
 
-    // 1. Mark as stopped in Supabase kv_store
+    // 1. Write stop signal file for any local process
+    try {
+      const stopPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
+      fs.writeFileSync(stopPath, 'stop');
+    } catch (e) {}
+
+    // 2. Mark as stopped in Supabase kv_store
     const { data: currentData } = await supabase
       .from('kv_store_8405be07')
       .select('value')
@@ -30,12 +36,17 @@ export default async function handler(req, res) {
     const stoppedStatus = {
       isRunning: false,
       stoppedAt: nowIso,
-      progress: existingStatus?.progress || {
-        current: 139,
+      progress: existingStatus?.progress ? {
+        ...existingStatus.progress,
+        currentSku: 'Paused',
+        currentName: 'Catalog sweep paused',
+        lastUpdated: nowIso
+      } : {
+        current: 0,
         total: 20543,
-        percent: 0.7,
-        matchesFound: 1189,
-        currentSku: 'Stopped',
+        percent: 0,
+        matchesFound: 1174,
+        currentSku: 'Paused',
         currentName: 'Catalog sweep paused',
         startedAt: nowIso,
         lastUpdated: nowIso
@@ -55,10 +66,8 @@ export default async function handler(req, res) {
     // Update local file if available
     try {
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
-      if (fs.existsSync(statusPath)) {
-        fs.writeFileSync(statusPath, JSON.stringify(stoppedStatus, null, 2));
-      }
-    } catch (fErr) {}
+      fs.writeFileSync(statusPath, JSON.stringify(stoppedStatus, null, 2));
+    } catch (e) {}
 
     return res.status(200).json({
       success: true,

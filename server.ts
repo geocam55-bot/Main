@@ -4305,6 +4305,12 @@ Result:
       // Open sync so we have a raw file descriptor
       const outFd = fs.openSync(logPath, 'a');
       
+      // Clear stop signal
+      const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
+      if (fs.existsSync(stopSignalPath)) {
+        try { fs.unlinkSync(stopSignalPath); } catch (e) {}
+      }
+
       // Write a separator for new runs
       fs.writeSync(outFd, `\n\n--- AGENT STARTED AT ${new Date().toISOString()} ---\n`);
 
@@ -4315,16 +4321,27 @@ Result:
         if (count && count > 0) totalItemsCount = count;
       } catch (cntErr) {}
 
-      // Initialize status object with full catalog count
+      // Check for existing progress
+      let currentItem = 0;
+      let matchesFound = 1174;
+      if (fs.existsSync(statusPath)) {
+        try {
+          const prev = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+          if (prev?.progress?.current) currentItem = prev.progress.current;
+          if (prev?.progress?.matchesFound) matchesFound = prev.progress.matchesFound;
+        } catch (e) {}
+      }
+
+      // Initialize status object with catalog count
       const initialStatus = {
         isRunning: true,
         progress: {
-          current: 0,
+          current: currentItem,
           total: totalItemsCount,
-          percent: 0,
-          matchesFound: 0,
+          percent: Number(((currentItem / totalItemsCount) * 100).toFixed(1)),
+          matchesFound,
           currentSku: 'Starting...',
-          currentName: 'Initializing agent across entire catalog (20,543 SKUs)',
+          currentName: `Active catalog sweep initialized (${totalItemsCount} SKUs)`,
           startedAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString()
         }
@@ -4413,10 +4430,10 @@ Result:
       res.json({
         isRunning: false,
         progress: {
-          current: 139,
+          current: 0,
           total: 20543,
-          percent: 0.7,
-          matchesFound: 1189,
+          percent: 0,
+          matchesFound: 1174,
           currentSku: 'Ready',
           currentName: 'Catalog monitor synchronized (20,543 SKUs)',
           startedAt: new Date().toISOString(),
@@ -4434,6 +4451,12 @@ Result:
       const fs = await import('fs');
       const path = await import('path');
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
+      const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
+
+      // Write stop signal file
+      try {
+        fs.writeFileSync(stopSignalPath, 'stop');
+      } catch (e) {}
 
       if (activeAgentChild && activeAgentChild.pid) {
         try {

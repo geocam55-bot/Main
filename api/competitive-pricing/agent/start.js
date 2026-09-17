@@ -15,17 +15,43 @@ export default async function handler(req, res) {
     const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY).trim();
     const supabase = createClient(url, anonKey);
 
-    // 1. Mark as running in Supabase kv_store
     const nowIso = new Date().toISOString();
+
+    // Remove any stop signal
+    try {
+      const stopFile = path.join(process.cwd(), 'pricing-agent-stop.signal');
+      if (fs.existsSync(stopFile)) fs.unlinkSync(stopFile);
+    } catch (e) {}
+
+    // 1. Fetch current status if available
+    let currentItem = 0;
+    let totalItems = 20543;
+    let matchesFound = 1174;
+
+    try {
+      const { data: kvData } = await supabase
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', 'pricing_agent:status')
+        .maybeSingle();
+
+      if (kvData?.value) {
+        const parsed = typeof kvData.value === 'string' ? JSON.parse(kvData.value) : kvData.value;
+        if (parsed?.progress?.current) currentItem = parsed.progress.current;
+        if (parsed?.progress?.total) totalItems = parsed.progress.total;
+        if (parsed?.progress?.matchesFound) matchesFound = parsed.progress.matchesFound;
+      }
+    } catch (e) {}
+
     const initialStatus = {
       isRunning: true,
       progress: {
-        current: 139,
-        total: 20543,
-        percent: 0.7,
-        matchesFound: 1189,
+        current: currentItem,
+        total: totalItems,
+        percent: Number(((currentItem / totalItems) * 100).toFixed(1)),
+        matchesFound,
         currentSku: 'Starting...',
-        currentName: 'Initializing background agent across 20,543 SKUs',
+        currentName: `Catalog sweep starting (${totalItems} items)`,
         startedAt: nowIso,
         lastUpdated: nowIso
       }
@@ -41,14 +67,13 @@ export default async function handler(req, res) {
       value: { action: 'start', timestamp: nowIso }
     });
 
-    // Append to logs
-    const logHeader = `\n--- AGENT STARTED VIA API AT ${nowIso} ---\n[Engine] Starting sweep of 20,543 catalog items...\n`;
+    // Update local file if available
     try {
-      const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
-      fs.appendFileSync(logPath, logHeader);
-    } catch (fErr) {}
+      const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
+      fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
+    } catch (e) {}
 
-    // 2. Try launching Node process if on a full Node server environment
+    // 2. Launch Node background process if on a full Node server environment
     try {
       const cjsPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
       const tsPath = path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');

@@ -1,13 +1,13 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 139,
+    "current": 477,
     "total": 20543,
-    "percent": 0.7,
-    "matchesFound": 1189,
-    "currentSku": "1166300",
-    "currentName": "SU PACKING TAPE CLEAR 48MMX100",
-    "startedAt": "2026-09-17T18:57:28.237Z",
-    "lastUpdated": "2026-09-17T19:00:07.139Z"
+    "percent": 2.3,
+    "matchesFound": 1314,
+    "currentSku": "Starting...",
+    "currentName": "Active catalog sweep initialized (20543 SKUs)",
+    "startedAt": "2026-09-17T19:30:37.341Z",
+    "lastUpdated": "2026-09-17T19:30:37.341Z"
   }
 }

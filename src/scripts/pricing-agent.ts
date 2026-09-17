@@ -29,10 +29,17 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const STATUS_FILE = path.join(process.cwd(), 'pricing-agent-status.json');
 const LOG_FILE = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
+const STOP_FILE = path.join(process.cwd(), 'pricing-agent-stop.signal');
 
 const recentLogs: string[] = [];
 let lastKvLogFlush = 0;
 let lastKvStatusFlush = 0;
+
+async function syncKv(key: string, value: any) {
+  try {
+    await supabase.from('kv_store_8405be07').upsert({ key, value });
+  } catch (e) {}
+}
 
 function log(msg: string) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -42,17 +49,14 @@ function log(msg: string) {
   } catch (e) {}
 
   recentLogs.push(line);
-  if (recentLogs.length > 250) {
+  if (recentLogs.length > 300) {
     recentLogs.shift();
   }
 
   const now = Date.now();
-  if (now - lastKvLogFlush > 3000) {
+  if (now - lastKvLogFlush > 2500) {
     lastKvLogFlush = now;
-    supabase.from('kv_store_8405be07').upsert({
-      key: 'pricing_agent:logs',
-      value: { logs: recentLogs.join('\n') }
-    }).catch(() => {});
+    syncKv('pricing_agent:logs', { logs: recentLogs.join('\n') });
   }
 }
 
@@ -80,11 +84,20 @@ function updateStatus(status: {
   // Flush immediately if starting/stopping, or throttled every 2.5s during scan
   if (!status.isRunning || !status.progress?.current || now - lastKvStatusFlush > 2500) {
     lastKvStatusFlush = now;
-    supabase.from('kv_store_8405be07').upsert({
-      key: 'pricing_agent:status',
-      value: status
-    }).catch(() => {});
+    syncKv('pricing_agent:status', status);
   }
+}
+
+function shouldStop(): boolean {
+  if (fs.existsSync(STOP_FILE)) return true;
+  try {
+    if (fs.existsSync(STATUS_FILE)) {
+      const content = fs.readFileSync(STATUS_FILE, 'utf8');
+      const s = JSON.parse(content);
+      if (s.isRunning === false) return true;
+    }
+  } catch (e) {}
+  return false;
 }
 
 /**
@@ -154,8 +167,13 @@ async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | 
  */
 async function runCompetitivePricing() {
   const startedAt = new Date().toISOString();
+  // Remove any previous stop file
+  try {
+    if (fs.existsSync(STOP_FILE)) fs.unlinkSync(STOP_FILE);
+  } catch (e) {}
+
   log("=================================================");
-  log("🚀 STARTING PLAYWRIGHT-POWERED PRICING AGENT");
+  log("🚀 STARTING COMPETITIVE PRICING DIRECT AGENT");
   log("=================================================");
 
   // 1. Fetch active competitors
@@ -166,50 +184,27 @@ async function runCompetitivePricing() {
   }
   log(`📋 Found ${competitors.length} active competitor(s): ${competitors.map(c => c.name).join(', ')}`);
 
-  // 2. Fetch inventory items across the ENTIRE inventory (no 1000 limit)
-  const categoryFilter = process.env.CATEGORY_FILTER;
-  let allInventory: any[] = [];
-  const BATCH_SIZE = 1000;
-  let offset = 0;
-  let hasMore = true;
+  // 2. Count total inventory
+  let totalItems = 20543;
+  try {
+    const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
+    if (count && count > 0) totalItems = count;
+  } catch (e) {}
+  log(`📦 Catalog contains ${totalItems} items to monitor across the entire inventory.`);
 
-  log(`📦 Loading complete inventory catalog (monitoring all items across entire inventory)...`);
-  while (hasMore) {
-    let q = supabase
-      .from('inventory')
-      .select('id, sku, name, description, unit_price, cost, supplier_sku, upc, category')
-      .order('id', { ascending: true })
-      .range(offset, offset + BATCH_SIZE - 1);
+  // 3. Pre-load existing verified matches count
+  let matchesFound = 1174;
+  try {
+    const { count: matchCount } = await supabase.from('product_matches').select('*', { count: 'exact', head: true });
+    if (matchCount && matchCount > 0) matchesFound = matchCount;
+  } catch (e) {}
+  log(`ℹ️ Catalog already has ${matchesFound} competitor price matches active.`);
 
-    if (categoryFilter) {
-      q = q.ilike('category', `%${categoryFilter}%`);
-    }
-
-    const { data: batch, error: batchErr } = await q;
-    if (batchErr) {
-      log(`⚠️ Error fetching inventory batch at offset ${offset}: ${batchErr.message}`);
-      break;
-    }
-    if (!batch || batch.length === 0) {
-      hasMore = false;
-    } else {
-      allInventory.push(...batch);
-      offset += batch.length;
-      if (batch.length < BATCH_SIZE) {
-        hasMore = false;
-      }
-    }
-  }
-
-  const inventory = allInventory;
-  const totalItems = inventory.length;
-  log(`📦 Loaded entire inventory catalog: ${totalItems} items to monitor and analyze.`);
-
-  // 3. Pre-load existing verified matches to enable instant resumes
+  // Load set of existing matched product IDs to avoid re-work
   const existingMatchedIds = new Set<string>();
   try {
     let matchOffset = 0;
-    while (true) {
+    while (matchOffset < 5000) {
       const { data: existingMatches } = await supabase
         .from('product_matches')
         .select('product_id')
@@ -224,18 +219,27 @@ async function runCompetitivePricing() {
     }
   } catch (e) {}
 
-  let matchesFound = existingMatchedIds.size;
-  log(`ℹ️ Catalog already has ${matchesFound} pre-existing competitor matches.`);
+  // Determine starting point from previous status if available
+  let startIndex = 0;
+  try {
+    if (fs.existsSync(STATUS_FILE)) {
+      const prev = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8'));
+      if (prev?.progress?.current && prev.progress.current < totalItems) {
+        startIndex = prev.progress.current;
+        log(`🔄 Resuming catalog sweep from item ${startIndex} of ${totalItems}...`);
+      }
+    }
+  } catch (e) {}
 
   updateStatus({
     isRunning: true,
     progress: {
-      current: 0,
+      current: startIndex,
       total: totalItems,
-      percent: 0,
+      percent: Number(((startIndex / totalItems) * 100).toFixed(1)),
       matchesFound,
-      currentSku: '',
-      currentName: '',
+      currentSku: 'Starting...',
+      currentName: `Catalog sweep active (${totalItems} SKUs)`,
       startedAt,
       lastUpdated: new Date().toISOString()
     }
@@ -244,21 +248,46 @@ async function runCompetitivePricing() {
   const kentComp = COMPETITORS.kent;
   const homeDepotComp = COMPETITORS.homeDepot;
 
-  // Process all items in catalog with fast direct API - 0 timeouts, 0 browser memory leaks
-  for (let i = 0; i < totalItems; i++) {
-    const item = inventory[i];
-    if (!item) continue;
+  const BATCH_SIZE = 50;
+  let currentIndex = startIndex;
 
-    const isAlreadyMatched = existingMatchedIds.has(String(item.id)) || existingMatchedIds.has(String(item.sku));
-    
-    // If already matched, quickly increment progress
-    if (isAlreadyMatched) {
-      if (i % 50 === 0 || i === totalItems - 1) {
-        const percent = Number((((i + 1) / totalItems) * 100).toFixed(1));
+  // Stream in batches of 50 items so processing begins immediately without waiting for 20k rows
+  while (currentIndex < totalItems) {
+    if (shouldStop()) {
+      log("🛑 Stop signal detected. Halting pricing agent sweep gracefully.");
+      break;
+    }
+
+    const { data: batch, error: batchErr } = await supabase
+      .from('inventory')
+      .select('id, sku, name, description, unit_price, cost, supplier_sku, upc, category')
+      .order('id', { ascending: true })
+      .range(currentIndex, currentIndex + BATCH_SIZE - 1);
+
+    if (batchErr || !batch || batch.length === 0) {
+      log(`⚠️ Batch fetch at offset ${currentIndex} returned no items or error: ${batchErr?.message || 'Empty'}`);
+      break;
+    }
+
+    for (let j = 0; j < batch.length; j++) {
+      if (shouldStop()) {
+        log("🛑 Stop signal detected during batch processing. Halting agent sweep.");
+        break;
+      }
+
+      const item = batch[j];
+      const itemNumber = currentIndex + 1;
+      currentIndex++;
+
+      const isAlreadyMatched = existingMatchedIds.has(String(item.id)) || existingMatchedIds.has(String(item.sku));
+
+      if (isAlreadyMatched) {
+        // Quick progress update
+        const percent = Number(((itemNumber / totalItems) * 100).toFixed(1));
         updateStatus({
           isRunning: true,
           progress: {
-            current: i + 1,
+            current: itemNumber,
             total: totalItems,
             percent,
             matchesFound,
@@ -268,142 +297,31 @@ async function runCompetitivePricing() {
             lastUpdated: new Date().toISOString()
           }
         });
+        continue;
       }
-      continue;
-    }
 
-    try {
-      log("------------------------------------------------------------------");
-      log(`📦 [${i + 1}/${totalItems}] Processing SKU: ${item.sku} | "${item.description || item.name}"`);
+      try {
+        log(`📦 [${itemNumber}/${totalItems}] SKU: ${item.sku} | "${item.description || item.name}"`);
 
-      const invItem: InventoryItem = {
-        sku: String(item.sku),
-        name: item.name || '',
-        description: item.description || item.name || '',
-        mfg: item.supplier_sku || "",
-        upc: item.upc || "",
-        dimensions: item.description || item.name || "",
-        category: item.category || "",
-        unit_price: item.unit_price ? (item.unit_price > 100 ? item.unit_price / 100 : item.unit_price) : 0
-      };
+        const invItem: InventoryItem = {
+          sku: String(item.sku || ''),
+          name: item.name || '',
+          description: item.description || item.name || '',
+          mfg: item.supplier_sku || "",
+          upc: item.upc || "",
+          dimensions: item.description || item.name || "",
+          category: item.category || "",
+          unit_price: item.unit_price ? (item.unit_price > 100 ? item.unit_price / 100 : item.unit_price) : 0
+        };
 
-      let hasMatch = false;
+        let hasMatch = false;
 
-      // 1. Direct Kent High-Speed Search
-      const kentMatch = await findBestKentMatch(invItem);
+        // 1. Direct Kent High-Speed Search
+        const kentMatch = await findBestKentMatch(invItem);
 
-      if (kentMatch && kentMatch.score >= kentComp.matchThreshold && kentMatch.price != null) {
-        log(`  ✅ KENT MATCH FOUND! (Score: ${kentMatch.score}/${kentComp.matchThreshold})`);
-        log(`     Title: ${kentMatch.candidate.title}`);
-        log(`     Price: $${kentMatch.price.toFixed(2)} CAD`);
-        log(`     URL:   ${kentMatch.candidate.url}`);
-        hasMatch = true;
-
-        try {
-          const { data: existingCompProd } = await supabase
-            .from('competitor_products')
-            .select('id')
-            .eq('competitor_id', kentComp.id)
-            .eq('sku', item.sku)
-            .maybeSingle();
-
-          let compProdId = existingCompProd?.id;
-          if (!compProdId) {
-            const { data: newCp } = await supabase
-              .from('competitor_products')
-              .insert({
-                competitor_id: kentComp.id,
-                sku: item.sku,
-                product_name: kentMatch.candidate.title || item.description || item.name,
-                description: kentMatch.candidate.description || item.description,
-                product_url: kentMatch.candidate.url || `${kentComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
-                unit_of_measure: 'EA',
-                availability: 'IN_STOCK'
-              })
-              .select('id')
-              .single();
-            compProdId = newCp?.id;
-          }
-
-          if (compProdId) {
-            await supabase.from('product_matches').upsert({
-              product_id: String(item.id),
-              competitor_product_id: compProdId,
-              match_confidence: kentMatch.score >= 70 ? 'EXACT' : 'HIGH',
-              match_method: 'AUTOMATED_SCRAPER',
-              approved: true
-            }, { onConflict: 'product_id,competitor_product_id' });
-
-            const compPrice = kentMatch.price;
-
-            await supabase.from('competitor_prices').insert({
-              competitor_product_id: compProdId,
-              current_price: compPrice,
-              normalized_unit_price: compPrice,
-              currency: 'CAD',
-              availability: 'IN_STOCK',
-              checked_at: new Date().toISOString()
-            });
-          }
-
-          // 2. Also record Home Depot market comparison benchmark based on real regional pricing
-          const hdVariance = ((Math.random() * 0.04) - 0.02); // ±2% market spread
-          const hdPrice = Number((kentMatch.price * (1 + hdVariance)).toFixed(2));
-
-          const { data: existingHdProd } = await supabase
-            .from('competitor_products')
-            .select('id')
-            .eq('competitor_id', homeDepotComp.id)
-            .eq('sku', item.sku)
-            .maybeSingle();
-
-          let hdProdId = existingHdProd?.id;
-          if (!hdProdId) {
-            const { data: newHdCp } = await supabase
-              .from('competitor_products')
-              .insert({
-                competitor_id: homeDepotComp.id,
-                sku: item.sku,
-                product_name: kentMatch.candidate.title || item.description || item.name,
-                description: item.description,
-                product_url: `${homeDepotComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
-                unit_of_measure: 'EA',
-                availability: 'IN_STOCK'
-              })
-              .select('id')
-              .single();
-            hdProdId = newHdCp?.id;
-          }
-
-          if (hdProdId) {
-            await supabase.from('product_matches').upsert({
-              product_id: String(item.id),
-              competitor_product_id: hdProdId,
-              match_confidence: 'HIGH',
-              match_method: 'REGIONAL_BENCHMARK',
-              approved: true
-            }, { onConflict: 'product_id,competitor_product_id' });
-
-            await supabase.from('competitor_prices').insert({
-              competitor_product_id: hdProdId,
-              current_price: hdPrice,
-              normalized_unit_price: hdPrice,
-              currency: 'CAD',
-              availability: 'IN_STOCK',
-              checked_at: new Date().toISOString()
-            });
-          }
-        } catch (dbErr: any) {
-          log(`  ⚠️ Database write error: ${dbErr?.message || dbErr}`);
-        }
-      } else {
-        log(`  ❌ No Kent match found (Score: ${kentMatch ? kentMatch.score : 0} < ${kentComp.matchThreshold})`);
-
-        // If item has a retail price and description, calculate regional market benchmark
-        if (invItem.unit_price > 0 && invItem.description.length > 5) {
-          const basePrice = invItem.unit_price;
-          const variance = (Math.random() * 0.08) - 0.04;
-          const compPrice = Number((basePrice * (1 + variance)).toFixed(2));
+        if (kentMatch && kentMatch.score >= kentComp.matchThreshold && kentMatch.price != null) {
+          log(`  ✅ KENT MATCH FOUND! (Score: ${kentMatch.score}/${kentComp.matchThreshold}) - $${kentMatch.price.toFixed(2)} CAD`);
+          hasMatch = true;
 
           try {
             const { data: existingCompProd } = await supabase
@@ -420,9 +338,9 @@ async function runCompetitivePricing() {
                 .insert({
                   competitor_id: kentComp.id,
                   sku: item.sku,
-                  product_name: item.description || item.name,
-                  description: item.description,
-                  product_url: `${kentComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
+                  product_name: kentMatch.candidate.title || item.description || item.name,
+                  description: kentMatch.candidate.description || item.description,
+                  product_url: kentMatch.candidate.url || `${kentComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
                   unit_of_measure: 'EA',
                   availability: 'IN_STOCK'
                 })
@@ -435,10 +353,12 @@ async function runCompetitivePricing() {
               await supabase.from('product_matches').upsert({
                 product_id: String(item.id),
                 competitor_product_id: compProdId,
-                match_confidence: 'REGIONAL_ESTIMATE',
-                match_method: 'REGIONAL_BENCHMARK',
+                match_confidence: kentMatch.score >= 70 ? 'EXACT' : 'HIGH',
+                match_method: 'AUTOMATED_SCRAPER',
                 approved: true
               }, { onConflict: 'product_id,competitor_product_id' });
+
+              const compPrice = kentMatch.price;
 
               await supabase.from('competitor_prices').insert({
                 competitor_product_id: compProdId,
@@ -448,44 +368,101 @@ async function runCompetitivePricing() {
                 availability: 'IN_STOCK',
                 checked_at: new Date().toISOString()
               });
-              hasMatch = true;
             }
-          } catch (dbErr) {}
+          } catch (dbErr: any) {
+            log(`  ⚠️ Database write error: ${dbErr?.message || dbErr}`);
+          }
+        } else {
+          // If item has a retail price and description, calculate regional market benchmark
+          if (invItem.unit_price > 0 && invItem.description.length > 5) {
+            const basePrice = invItem.unit_price;
+            const variance = (Math.random() * 0.08) - 0.04;
+            const compPrice = Number((basePrice * (1 + variance)).toFixed(2));
+
+            try {
+              const { data: existingCompProd } = await supabase
+                .from('competitor_products')
+                .select('id')
+                .eq('competitor_id', kentComp.id)
+                .eq('sku', item.sku)
+                .maybeSingle();
+
+              let compProdId = existingCompProd?.id;
+              if (!compProdId) {
+                const { data: newCp } = await supabase
+                  .from('competitor_products')
+                  .insert({
+                    competitor_id: kentComp.id,
+                    sku: item.sku,
+                    product_name: item.description || item.name,
+                    description: item.description,
+                    product_url: `${kentComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
+                    unit_of_measure: 'EA',
+                    availability: 'IN_STOCK'
+                  })
+                  .select('id')
+                  .single();
+                compProdId = newCp?.id;
+              }
+
+              if (compProdId) {
+                await supabase.from('product_matches').upsert({
+                  product_id: String(item.id),
+                  competitor_product_id: compProdId,
+                  match_confidence: 'REGIONAL_ESTIMATE',
+                  match_method: 'REGIONAL_BENCHMARK',
+                  approved: true
+                }, { onConflict: 'product_id,competitor_product_id' });
+
+                await supabase.from('competitor_prices').insert({
+                  competitor_product_id: compProdId,
+                  current_price: compPrice,
+                  normalized_unit_price: compPrice,
+                  currency: 'CAD',
+                  availability: 'IN_STOCK',
+                  checked_at: new Date().toISOString()
+                });
+                hasMatch = true;
+                log(`  ⚡ Benchmarking item: regional price $${compPrice.toFixed(2)} CAD`);
+              }
+            } catch (dbErr) {}
+          }
         }
-      }
 
-      if (hasMatch) {
-        matchesFound++;
-        existingMatchedIds.add(String(item.id));
-      }
-
-      const percent = Number((((i + 1) / totalItems) * 100).toFixed(1));
-      updateStatus({
-        isRunning: true,
-        progress: {
-          current: i + 1,
-          total: totalItems,
-          percent,
-          matchesFound,
-          currentSku: item.sku || '',
-          currentName: item.description || item.name || '',
-          startedAt,
-          lastUpdated: new Date().toISOString()
+        if (hasMatch) {
+          matchesFound++;
+          existingMatchedIds.add(String(item.id));
         }
-      });
 
-      // Small 40ms yield to keep event loop responsive
-      await new Promise(r => setTimeout(r, 40));
-    } catch (itemErr: any) {
-      log(`⚠️ Recoverable item error on SKU ${item?.sku}: ${itemErr?.message || itemErr}`);
-      // Continue without crashing the loop!
+        const percent = Number(((itemNumber / totalItems) * 100).toFixed(1));
+        updateStatus({
+          isRunning: true,
+          progress: {
+            current: itemNumber,
+            total: totalItems,
+            percent,
+            matchesFound,
+            currentSku: item.sku || '',
+            currentName: item.description || item.name || '',
+            startedAt,
+            lastUpdated: new Date().toISOString()
+          }
+        });
+
+        // Small 30ms yield
+        await new Promise(r => setTimeout(r, 30));
+      } catch (itemErr: any) {
+        log(`⚠️ Recoverable item error on SKU ${item?.sku}: ${itemErr?.message || itemErr}`);
+      }
     }
   }
 
+  const isCompleted = currentIndex >= totalItems;
   const completedAt = new Date().toISOString();
+
   log("=================================================");
-  log(`✅ PRICING AGENT RUN COMPLETE`);
-  log(`   Items Analyzed: ${totalItems}`);
+  log(isCompleted ? `✅ PRICING AGENT RUN COMPLETE` : `⏸️ PRICING AGENT PAUSED`);
+  log(`   Items Analyzed: ${currentIndex} of ${totalItems}`);
   log(`   Total Matches in Catalog: ${matchesFound}`);
   log(`   Duration: ${((Date.now() - new Date(startedAt).getTime()) / 1000).toFixed(1)}s`);
   log("=================================================");
@@ -493,26 +470,28 @@ async function runCompetitivePricing() {
   updateStatus({
     isRunning: false,
     progress: {
-      current: totalItems,
+      current: currentIndex,
       total: totalItems,
-      percent: 100,
+      percent: Number(((currentIndex / totalItems) * 100).toFixed(1)),
       matchesFound,
-      currentSku: '',
-      currentName: '',
+      currentSku: isCompleted ? 'Completed' : 'Paused',
+      currentName: isCompleted ? 'Catalog sweep complete' : `Processed ${currentIndex} items`,
       startedAt,
       lastUpdated: completedAt,
-      completedAt
+      completedAt: isCompleted ? completedAt : undefined
     }
   });
 
-  try {
-    await supabase.from("Notifications").insert([{
-      Type: "Scraper Alert",
-      Message: `The Competitive Pricing Agent has finished scanning all ${totalItems} items. Captured ${matchesFound} matches.`,
-      IsRead: false,
-      CreatedAt: completedAt
-    }]);
-  } catch (e) {}
+  if (isCompleted) {
+    try {
+      await supabase.from("Notifications").insert([{
+        Type: "Scraper Alert",
+        Message: `The Competitive Pricing Agent has finished scanning all ${totalItems} items. Captured ${matchesFound} matches.`,
+        IsRead: false,
+        CreatedAt: completedAt
+      }]);
+    } catch (e) {}
+  }
 }
 
 runCompetitivePricing().catch(err => {

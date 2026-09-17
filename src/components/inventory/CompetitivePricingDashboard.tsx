@@ -125,16 +125,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     } | null;
   }>({
     isRunning: false,
-    progress: {
-      current: 139,
-      total: 20543,
-      percent: 0.7,
-      matchesFound: 1189,
-      currentSku: 'Ready',
-      currentName: 'Catalog monitor synchronized (20,543 SKUs)',
-      startedAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString()
-    }
+    progress: null
   });
   const [isAgentStopping, setIsAgentStopping] = useState(false);
   const [activeCheckedItem, setActiveCheckedItem] = useState<{

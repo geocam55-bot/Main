@@ -100,7 +100,6 @@
     "jsdom": "^26.0.0"
   },
   "scripts": {
-    "postinstall": "npx playwright install chromium --with-deps || npx playwright install chromium || true",
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/scripts/pricing-agent.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/pricing-agent.cjs",
     "start": "node dist/server.cjs",

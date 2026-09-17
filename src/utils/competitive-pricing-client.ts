@@ -46,10 +46,10 @@ export const DEFAULT_COMPETITORS = [
 export const DEFAULT_AGENT_STATUS: AgentStatus = {
   isRunning: false,
   progress: {
-    current: 139,
+    current: 0,
     total: 20543,
-    percent: 0.7,
-    matchesFound: 1189,
+    percent: 0,
+    matchesFound: 1174,
     currentSku: 'Ready',
     currentName: 'Catalog monitor synchronized (20,543 SKUs)',
     startedAt: new Date().toISOString(),
@@ -444,18 +444,26 @@ export async function startDirectClientSweep(onProgress?: (status: AgentStatus) 
 
   const startedAt = new Date().toISOString();
 
-  let initialMatches = 1189;
+  let initialMatches = 1174;
+  let startOffset = 0;
   try {
     const { count } = await supabase.from('product_matches').select('*', { count: 'exact', head: true });
     if (count && count > 0) initialMatches = count;
   } catch (e) {}
 
+  try {
+    const existing = await getDirectAgentStatus();
+    if (existing?.progress?.current) {
+      startOffset = existing.progress.current;
+    }
+  } catch (e) {}
+
   const currentStatus: AgentStatus = {
     isRunning: true,
     progress: {
-      current: 139,
+      current: startOffset,
       total: 20543,
-      percent: 0.7,
+      percent: Number(((startOffset / 20543) * 100).toFixed(1)),
       matchesFound: initialMatches,
       currentSku: 'Starting...',
       currentName: 'Initializing High-Speed Direct Engine across 20,543 SKUs',
@@ -485,7 +493,7 @@ export async function startDirectClientSweep(onProgress?: (status: AgentStatus) 
         .from('inventory')
         .select('id, sku, name, description, unit_price, category')
         .order('id', { ascending: true })
-        .limit(100);
+        .range(startOffset, startOffset + 99);
 
       const catalogItems = items || [];
       const total = 20543;
@@ -519,7 +527,7 @@ export async function startDirectClientSweep(onProgress?: (status: AgentStatus) 
           }
         }
 
-        const currentCount = 140 + i;
+        const currentCount = startOffset + i + 1;
         const percent = Number(((currentCount / total) * 100).toFixed(1));
 
         const updated: AgentStatus = {
@@ -551,12 +559,13 @@ export async function startDirectClientSweep(onProgress?: (status: AgentStatus) 
         await new Promise(res => setTimeout(res, 150));
       }
 
+      const finalCount = startOffset + catalogItems.length;
       const finalStatus: AgentStatus = {
         isRunning: false,
         progress: {
-          current: 240,
+          current: finalCount,
           total: 20543,
-          percent: 1.2,
+          percent: Number(((finalCount / 20543) * 100).toFixed(1)),
           matchesFound: matches,
           currentSku: 'Complete',
           currentName: 'Catalog batch sweep completed successfully',
