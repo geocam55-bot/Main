@@ -4330,10 +4330,20 @@ Result:
         }
       }, null, 2));
 
-      activeAgentChild = spawn('npx', ['tsx', 'src/scripts/pricing-agent.ts'], {
-        detached: true,
-        stdio: ['ignore', outFd, outFd]
-      });
+      const isProd = process.env.NODE_ENV === 'production';
+      const agentScriptPath = isProd 
+        ? path.join(process.cwd(), 'dist', 'pricing-agent.cjs')
+        : path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
+      
+      activeAgentChild = isProd
+        ? spawn('node', [agentScriptPath], {
+            detached: true,
+            stdio: ['ignore', outFd, outFd]
+          })
+        : spawn('npx', ['tsx', agentScriptPath], {
+            detached: true,
+            stdio: ['ignore', outFd, outFd]
+          });
       activeAgentChild.unref();
 
       activeAgentChild.on('close', () => {
