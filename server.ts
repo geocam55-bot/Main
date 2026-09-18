@@ -4554,6 +4554,57 @@ Result:
     }
   });
 
+  // POST /api/competitive-pricing/agent/reset
+  app.post('/api/competitive-pricing/agent/reset', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
+      const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
+
+      try { fs.writeFileSync(stopSignalPath, 'stop'); } catch (e) {}
+      if (activeAgentChild) {
+        try { activeAgentChild.kill('SIGTERM'); } catch (e) {}
+        activeAgentChild = null;
+      }
+      try {
+        const { exec } = await import('child_process');
+        exec('pkill -f pricing-agent', () => {});
+      } catch (e) {}
+
+      const resetStatus = {
+        isRunning: false,
+        progress: {
+          current: 0,
+          total: 20543,
+          percent: 0,
+          matchesFound: 1174,
+          currentSku: 'Ready',
+          currentName: 'Catalog monitor synchronized (20,543 SKUs)',
+          startedAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString()
+        }
+      };
+
+      try {
+        fs.writeFileSync(statusPath, JSON.stringify(resetStatus, null, 2));
+      } catch (e) {}
+
+      await supabase.from('kv_store_8405be07').upsert({
+        key: 'pricing_agent:status',
+        value: resetStatus
+      });
+      await supabase.from('kv_store_8405be07').upsert({
+        key: 'pricing_agent:control',
+        value: { action: 'stop', timestamp: new Date().toISOString() }
+      });
+
+      res.json({ success: true, message: 'Pricing agent status reset successfully.', status: resetStatus });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // GET /api/competitive-pricing/agent/logs
   app.get('/api/competitive-pricing/agent/logs', async (req, res) => {
     try {

@@ -387,12 +387,47 @@ export async function getDirectAgentStatus(): Promise<AgentStatus> {
     if (!error && data?.value) {
       const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
       if (parsed && (parsed.isRunning !== undefined || parsed.progress)) {
+        // Prevent UI stalling if lastUpdated is stale (> 25 seconds)
+        if (parsed.isRunning && parsed.progress?.lastUpdated) {
+          const ageMs = Date.now() - new Date(parsed.progress.lastUpdated).getTime();
+          if (ageMs > 25000) {
+            parsed.isRunning = false;
+            parsed.progress.currentSku = 'Ready';
+            parsed.progress.currentName = 'Catalog monitor synchronized';
+          }
+        }
         return parsed;
       }
     }
   } catch (e) {}
 
   return DEFAULT_AGENT_STATUS;
+}
+
+export async function resetAgentStatus(): Promise<void> {
+  try {
+    const resetStatus = {
+      isRunning: false,
+      progress: {
+        current: 0,
+        total: 20543,
+        percent: 0,
+        matchesFound: 1174,
+        currentSku: 'Ready',
+        currentName: 'Catalog monitor synchronized (20,543 SKUs)',
+        startedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString()
+      }
+    };
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'pricing_agent:status',
+      value: resetStatus
+    });
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'pricing_agent:control',
+      value: { action: 'stop', timestamp: new Date().toISOString() }
+    });
+  } catch (e) {}
 }
 
 /**

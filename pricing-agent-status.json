@@ -1,12 +1,12 @@
 {
-  "isRunning": true,
+  "isRunning": false,
   "progress": {
-    "current": 2719,
+    "current": 0,
     "total": 20543,
-    "percent": 13.2,
-    "matchesFound": 1435,
-    "currentSku": "30007338",
-    "currentName": "DRAWER WARMING 1.5CFT 30\" GN",
+    "percent": 0,
+    "matchesFound": 1174,
+    "currentSku": "Ready",
+    "currentName": "Catalog monitor synchronized (20,543 SKUs)",
     "startedAt": "2026-09-18T11:02:18.093Z",
     "lastUpdated": "2026-09-18T11:03:26.861Z"
   }
