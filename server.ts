@@ -4321,12 +4321,19 @@ Result:
         if (count && count > 0) totalItemsCount = count;
       } catch (cntErr) {}
 
-      // Check for existing progress
+      // Check for existing progress and active run
       let currentItem = 0;
       let matchesFound = 1174;
       if (fs.existsSync(statusPath)) {
         try {
           const prev = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+          if (prev?.isRunning && prev?.progress?.lastUpdated) {
+            const ageMs = Date.now() - new Date(prev.progress.lastUpdated).getTime();
+            if (ageMs < 20000) {
+              // Agent is already actively running and making progress
+              return res.json({ success: true, message: 'Pricing agent is actively running.', status: prev });
+            }
+          }
           if (prev?.progress?.current) currentItem = prev.progress.current;
           if (prev?.progress?.matchesFound) matchesFound = prev.progress.matchesFound;
         } catch (e) {}
@@ -4363,6 +4370,7 @@ Result:
 
       const cjsPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
       const tsPath = path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
+      const binTsx = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
       
       const useCompiled = fs.existsSync(cjsPath);
       const agentScriptPath = useCompiled ? cjsPath : tsPath;
@@ -4372,10 +4380,15 @@ Result:
             detached: true,
             stdio: ['ignore', outFd, outFd]
           })
-        : spawn('npx', ['tsx', agentScriptPath], {
-            detached: true,
-            stdio: ['ignore', outFd, outFd]
-          });
+        : (fs.existsSync(binTsx)
+            ? spawn(binTsx, [agentScriptPath], {
+                detached: true,
+                stdio: ['ignore', outFd, outFd]
+              })
+            : spawn('node', [agentScriptPath], {
+                detached: true,
+                stdio: ['ignore', outFd, outFd]
+              }));
       activeAgentChild.unref();
 
       activeAgentChild.on('close', (code) => {
@@ -4383,12 +4396,15 @@ Result:
         try {
           if (fs.existsSync(statusPath)) {
             const cur = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-            cur.isRunning = false;
-            cur.progress = cur.progress || {};
-            cur.progress.currentSku = 'Ready';
-            cur.progress.lastUpdated = new Date().toISOString();
-            fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
-            supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
+            const lastMs = cur?.progress?.lastUpdated ? new Date(cur.progress.lastUpdated).getTime() : 0;
+            if (Date.now() - lastMs > 15000) {
+              cur.isRunning = false;
+              cur.progress = cur.progress || {};
+              cur.progress.currentSku = 'Ready';
+              cur.progress.lastUpdated = new Date().toISOString();
+              fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
+              supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
+            }
           }
         } catch (e) {}
       });

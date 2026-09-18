@@ -307,6 +307,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         setAgentStatus((prev) => {
           if (prev?.isRunning && !status.isRunning) {
             toast.success(`Pricing agent finished! ${status.progress?.matchesFound || 0} matches found.`);
+            // When agent completes, reload the dashboard metrics once
+            loadDashboard();
           }
           return status;
         });
@@ -323,8 +325,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     window.addEventListener('pricing-agent-progress', handleCustomProgress);
 
     checkStatus();
-    // Only poll when agent is active (every 3.5s); otherwise slow check (every 25s)
-    pollInterval = setInterval(checkStatus, agentStatus?.isRunning ? 3500 : 25000);
+    // Fast 2.5s poll during active background sweep; responsive 6s poll when idle
+    pollInterval = setInterval(checkStatus, agentStatus?.isRunning ? 2500 : 6000);
 
     return () => {
       isMounted = false;
@@ -463,10 +465,10 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                     currentName: 'Launching background agent sweep...',
                     lastUpdated: new Date().toISOString()
                   } : {
-                    current: 139,
+                    current: 0,
                     total: 20543,
-                    percent: 0.7,
-                    matchesFound: 1189,
+                    percent: 0,
+                    matchesFound: 1174,
                     currentSku: 'Starting...',
                     currentName: 'Launching background agent sweep...',
                     startedAt: new Date().toISOString(),
@@ -476,7 +478,9 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                 const res = await competitivePricingAPI.runPricingAgent();
                 toast.success(res.message || 'High-speed background pricing agent started!');
                 const s = await competitivePricingAPI.getPricingAgentStatus();
-                setAgentStatus(s);
+                if (s?.progress) {
+                  setAgentStatus(s);
+                }
               } catch (e: any) {
                 toast.error(e.message || 'Failed to start pricing agent.');
               }
@@ -643,10 +647,10 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                           currentName: 'Launching background agent sweep...',
                           lastUpdated: new Date().toISOString()
                         } : {
-                          current: 139,
+                          current: 0,
                           total: 20543,
-                          percent: 0.7,
-                          matchesFound: 1189,
+                          percent: 0,
+                          matchesFound: 1174,
                           currentSku: 'Starting...',
                           currentName: 'Launching background agent sweep...',
                           startedAt: new Date().toISOString(),
@@ -656,7 +660,9 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                       const res = await competitivePricingAPI.runPricingAgent();
                       toast.success(res.message || 'Background pricing agent sweep active!');
                       const s = await competitivePricingAPI.getPricingAgentStatus();
-                      setAgentStatus(s);
+                      if (s?.progress) {
+                        setAgentStatus(s);
+                      }
                     } catch (e: any) {
                       toast.error(e.message || 'Failed to start agent');
                     }
