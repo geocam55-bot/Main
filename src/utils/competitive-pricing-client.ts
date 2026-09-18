@@ -210,16 +210,24 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: any) {
       };
     });
 
+    const withCompetitivePricing = competitiveCount + higherCount + lowerCount;
     return {
       items,
       metrics: {
+        totalMonitored: 20543,
+        withCompetitivePricing,
+        noMatch: Math.max(0, 20543 - withCompetitivePricing),
+        ronaHigher: higherCount,
+        ronaLower: lowerCount,
+        outdatedPrices: 0,
+        lastSuccessfulUpdate: new Date().toISOString(),
+        // Legacy compatibility
         totalProductsTracked: 20543,
         monitoredCompetitors: 2,
         competitiveCount,
         higherCount,
         lowerCount,
         opportunitiesCount,
-        lastSuccessfulUpdate: new Date().toISOString(),
       },
       pagination: {
         page: 1,
@@ -232,13 +240,19 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: any) {
     return {
       items: [],
       metrics: {
+        totalMonitored: 20543,
+        withCompetitivePricing: 0,
+        noMatch: 20543,
+        ronaHigher: 0,
+        ronaLower: 0,
+        outdatedPrices: 0,
+        lastSuccessfulUpdate: new Date().toISOString(),
         totalProductsTracked: 20543,
         monitoredCompetitors: 2,
         competitiveCount: 0,
         higherCount: 0,
         lowerCount: 0,
         opportunitiesCount: 0,
-        lastSuccessfulUpdate: new Date().toISOString(),
       },
       pagination: { page: 1, limit: 150, totalItems: 20543, totalPages: 137 }
     };

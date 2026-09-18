@@ -90,6 +90,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
   });
   const [items, setItems] = useState<PricingDashboardItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Available categories across the entire catalog
@@ -170,23 +171,34 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
   const [pagination, setPagination] = useState({ page: 1, limit: 150, total: 0, totalPages: 1 });
 
-  const sanitizeMetrics = (m: PricingDashboardMetrics): PricingDashboardMetrics => {
+  const sanitizeMetrics = (m?: any): PricingDashboardMetrics => {
     const isFiltered = !!searchQuery.trim() || (categoryFilter && categoryFilter !== 'all');
-    const effectiveTotal = (!isFiltered && (!m.totalMonitored || m.totalMonitored <= 1000))
+    const rawTotal = m?.totalMonitored ?? m?.totalProductsTracked ?? 0;
+    const effectiveTotal = (!isFiltered && (!rawTotal || rawTotal <= 1000))
       ? 20543
-      : Math.max(m.totalMonitored || 20543, 20543);
-    const withComp = m.withCompetitivePricing || 0;
+      : Math.max(rawTotal, 20543);
+    const withComp = Number(m?.withCompetitivePricing ?? m?.competitiveCount ?? 0) || 0;
+    const higher = Number(m?.ronaHigher ?? m?.higherCount ?? 0) || 0;
+    const lower = Number(m?.ronaLower ?? m?.lowerCount ?? 0) || 0;
+    const outdated = Number(m?.outdatedPrices ?? 0) || 0;
     return {
-      ...m,
       totalMonitored: effectiveTotal,
       withCompetitivePricing: withComp,
-      noMatch: Math.max(0, effectiveTotal - withComp)
+      noMatch: Math.max(0, effectiveTotal - withComp),
+      ronaHigher: higher,
+      ronaLower: lower,
+      outdatedPrices: outdated,
+      lastSuccessfulUpdate: m?.lastSuccessfulUpdate || null
     };
   };
 
-  const loadDashboard = async () => {
+  const loadDashboard = async (forceFullLoading = false) => {
     try {
-      setIsLoading(true);
+      if (items.length === 0 || forceFullLoading) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
       setError(null);
       const res = await competitivePricingAPI.getDashboard({
         category: categoryFilter !== 'all' ? categoryFilter : undefined,
@@ -200,7 +212,24 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
       setMetrics(sanitizeMetrics(res.metrics));
       setItems(res.items || []);
       if (res.pagination) {
-        setPagination(res.pagination);
+        setPagination(prev => {
+          const totalItems = res.pagination.totalItems || res.pagination.total || prev.total;
+          const totalPages = res.pagination.totalPages || prev.totalPages;
+          if (
+            prev.page === res.pagination.page &&
+            prev.limit === res.pagination.limit &&
+            prev.total === totalItems &&
+            prev.totalPages === totalPages
+          ) {
+            return prev;
+          }
+          return {
+            page: res.pagination.page,
+            limit: res.pagination.limit,
+            total: totalItems,
+            totalPages
+          };
+        });
       }
     } catch (err: any) {
       console.warn('[Dashboard] Primary fetch failed, attempting direct Supabase query:', err);
@@ -216,7 +245,11 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         setMetrics(sanitizeMetrics(directRes.metrics));
         setItems(directRes.items || []);
         if (directRes.pagination) {
-          setPagination(directRes.pagination);
+          setPagination(prev => ({
+            ...prev,
+            ...directRes.pagination,
+            total: directRes.pagination.totalItems || directRes.pagination.total || prev.total
+          }));
         }
         setError(null);
       } catch (directErr: any) {
@@ -224,6 +257,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
       }
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -260,7 +294,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     loadDashboard();
   };
 
-  // Poll agent status & auto-refresh dashboard when matches increment or agent finishes
+  // Poll agent status ONLY — do not auto-reload the items table on each poll
   useEffect(() => {
     let isMounted = true;
     let pollInterval: any = null;
@@ -271,14 +305,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         if (!isMounted) return;
 
         setAgentStatus((prev) => {
-          // If matches increased or run completed, trigger dashboard refresh
-          if (prev?.progress && status.progress) {
-            if (status.progress.matchesFound > prev.progress.matchesFound) {
-              loadDashboard();
-            }
-          }
           if (prev?.isRunning && !status.isRunning) {
-            loadDashboard();
             toast.success(`Pricing agent finished! ${status.progress?.matchesFound || 0} matches found.`);
           }
           return status;
@@ -296,7 +323,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     window.addEventListener('pricing-agent-progress', handleCustomProgress);
 
     checkStatus();
-    pollInterval = setInterval(checkStatus, agentStatus?.isRunning ? 2500 : 8000);
+    // Only poll when agent is active (every 3.5s); otherwise slow check (every 25s)
+    pollInterval = setInterval(checkStatus, agentStatus?.isRunning ? 3500 : 25000);
 
     return () => {
       isMounted = false;
@@ -506,11 +534,11 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           <Button
             variant="outline"
             size="sm"
-            onClick={loadDashboard}
-            disabled={isLoading}
+            onClick={() => loadDashboard(true)}
+            disabled={isLoading || isRefreshing}
             className="h-8 gap-1.5 text-xs text-slate-700"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} />
             Reload View
           </Button>
         </div>
@@ -677,7 +705,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                   Monitored
                 </span>
                 <div className="mt-1 text-2xl font-bold text-slate-900">
-                  {displayTotal.toLocaleString()}
+                  {(displayTotal ?? 0).toLocaleString()}
                 </div>
                 <span className="text-[11px] text-slate-400 mt-0.5 block">Catalog Items</span>
               </CardContent>
@@ -690,7 +718,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                   Matched
                 </span>
                 <div className="mt-1 text-2xl font-bold text-emerald-700">
-                  {metrics.withCompetitivePricing.toLocaleString()}
+                  {(metrics?.withCompetitivePricing ?? 0).toLocaleString()}
                 </div>
                 <span className="text-[11px] text-emerald-600 mt-0.5 block">
                   {`${coveragePct}% coverage`}
@@ -705,7 +733,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                   Unmatched
                 </span>
                 <div className="mt-1 text-2xl font-bold text-slate-600">
-                  {displayUnmatched.toLocaleString()}
+                  {(displayUnmatched ?? 0).toLocaleString()}
                 </div>
                 <span className="text-[11px] text-slate-400 mt-0.5 block">Pending sweep</span>
               </CardContent>
@@ -719,7 +747,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                 </span>
                 <div className="mt-1 text-2xl font-bold text-emerald-600 flex items-center gap-1">
                   <TrendingDown className="h-5 w-5" />
-                  {metrics.ronaLower.toLocaleString()}
+                  {(metrics?.ronaLower ?? 0).toLocaleString()}
                 </div>
                 <span className="text-[11px] text-emerald-700 mt-0.5 block">Competitive advantage</span>
               </CardContent>
@@ -733,7 +761,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                 </span>
                 <div className="mt-1 text-2xl font-bold text-amber-600 flex items-center gap-1">
                   <TrendingUp className="h-5 w-5" />
-                  {metrics.ronaHigher.toLocaleString()}
+                  {(metrics?.ronaHigher ?? 0).toLocaleString()}
                 </div>
                 <span className="text-[11px] text-amber-700 mt-0.5 block">Margin / price review</span>
               </CardContent>
@@ -747,7 +775,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                 </span>
                 <div className="mt-1 text-2xl font-bold text-rose-600 flex items-center gap-1">
                   <AlertTriangle className="h-4 w-4" />
-                  {metrics.outdatedPrices.toLocaleString()}
+                  {(metrics?.outdatedPrices ?? 0).toLocaleString()}
                 </div>
                 <span className="text-[11px] text-rose-600 mt-0.5 block">Needs refresh</span>
               </CardContent>
@@ -796,7 +824,13 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
             {/* Price Variance Filter */}
             <div className="w-full md:w-48">
-              <Select value={varianceFilter} onValueChange={setVarianceFilter}>
+              <Select
+                value={varianceFilter}
+                onValueChange={(val) => {
+                  setVarianceFilter(val);
+                  setPagination((prev) => ({ ...prev, page: 1 }));
+                }}
+              >
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Price Status" />
                 </SelectTrigger>
@@ -812,7 +846,13 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
             {/* Confidence Filter */}
             <div className="w-full md:w-44">
-              <Select value={confidenceFilter} onValueChange={setConfidenceFilter}>
+              <Select
+                value={confidenceFilter}
+                onValueChange={(val) => {
+                  setConfidenceFilter(val);
+                  setPagination((prev) => ({ ...prev, page: 1 }));
+                }}
+              >
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Confidence" />
                 </SelectTrigger>
@@ -842,12 +882,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           </div>
         </CardHeader>
 
-        {isLoading ? (
+        {isLoading && items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-500">
             <Loader2 className="h-6 w-6 animate-spin text-blue-600 mb-2" />
             <span className="text-xs">Loading comparison matrix...</span>
           </div>
-        ) : error ? (
+        ) : error && items.length === 0 ? (
           <div className="p-6 text-center text-sm text-red-600 bg-red-50">
             <p className="font-semibold mb-1">Failed to load competitive pricing data</p>
             <p className="text-xs">{error}</p>
@@ -861,7 +901,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
+            {isRefreshing && (
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-100 overflow-hidden z-10">
+                <div className="h-full bg-blue-600 animate-pulse w-full"></div>
+              </div>
+            )}
             <table className="w-full text-left text-xs text-slate-600">
               <thead className="bg-slate-100/75 text-slate-700 border-b border-slate-200">
                 <tr>
