@@ -4255,9 +4255,22 @@ Result:
       // Calculate sample variances from page items or matches
       const pageMatched = dashboardItems.filter((i) => i.lowestCompetitorPrice !== null);
       if (pageMatched.length > 0) {
-        ronaHigher = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
-        ronaLower = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
-        outdatedPrices = dashboardItems.filter((i) => i.isOutdated).length;
+        const higherInSample = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
+        const lowerInSample = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
+        const outdatedInSample = dashboardItems.filter((i) => i.isOutdated).length;
+        
+        // When viewing the overall catalog (not filtering), scale to the total matched count
+        if (!search && (!category || category === 'all') && withCompetitivePricing > pageMatched.length) {
+          const ratio = withCompetitivePricing / pageMatched.length;
+          ronaHigher = Math.round(higherInSample * ratio);
+          ronaLower = Math.round(lowerInSample * ratio);
+          outdatedPrices = Math.round(outdatedInSample * ratio);
+        } else {
+          ronaHigher = higherInSample;
+          ronaLower = lowerInSample;
+          outdatedPrices = outdatedInSample;
+        }
+
         lastSuccessfulUpdate = dashboardItems.reduce((latest, i) => {
           if (!i.lastCheckedAt) return latest;
           return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;

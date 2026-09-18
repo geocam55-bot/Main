@@ -699,8 +699,9 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         const displayTotal = (!isFiltering && (!metrics.totalMonitored || metrics.totalMonitored <= 1000))
           ? 20543
           : Math.max(metrics.totalMonitored || 20543, 20543);
-        const displayUnmatched = Math.max(0, displayTotal - (metrics.withCompetitivePricing || 0));
-        const coveragePct = displayTotal > 0 ? Math.round(((metrics.withCompetitivePricing || 0) / displayTotal) * 100) : 0;
+        const displayMatched = Math.max(metrics?.withCompetitivePricing || 0, agentStatus?.progress?.matchesFound || 0);
+        const displayUnmatched = Math.max(0, displayTotal - displayMatched);
+        const coveragePct = displayTotal > 0 ? Math.round((displayMatched / displayTotal) * 100) : 0;
 
         return (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -724,7 +725,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                   Matched
                 </span>
                 <div className="mt-1 text-2xl font-bold text-emerald-700">
-                  {(metrics?.withCompetitivePricing ?? 0).toLocaleString()}
+                  {displayMatched.toLocaleString()}
                 </div>
                 <span className="text-[11px] text-emerald-600 mt-0.5 block">
                   {`${coveragePct}% coverage`}
@@ -739,7 +740,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                   Unmatched
                 </span>
                 <div className="mt-1 text-2xl font-bold text-slate-600">
-                  {(displayUnmatched ?? 0).toLocaleString()}
+                  {displayUnmatched.toLocaleString()}
                 </div>
                 <span className="text-[11px] text-slate-400 mt-0.5 block">Pending sweep</span>
               </CardContent>

@@ -1,13 +1,13 @@
 {
-  "isRunning": false,
+  "isRunning": true,
   "progress": {
-    "current": 1032,
+    "current": 2719,
     "total": 20543,
-    "percent": 5,
-    "matchesFound": 1281,
-    "currentSku": "03825021",
-    "currentName": "INSTAL.KIT MEMBRANE DELTA-MS",
-    "startedAt": "2026-09-18T10:45:03.162Z",
-    "lastUpdated": "2026-09-18T10:45:44.039Z"
+    "percent": 13.2,
+    "matchesFound": 1435,
+    "currentSku": "30007338",
+    "currentName": "DRAWER WARMING 1.5CFT 30\" GN",
+    "startedAt": "2026-09-18T11:02:18.093Z",
+    "lastUpdated": "2026-09-18T11:03:26.861Z"
   }
 }

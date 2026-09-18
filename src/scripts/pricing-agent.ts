@@ -373,16 +373,18 @@ async function runCompetitivePricing() {
                   .from('competitor_products')
                   .select('id')
                   .eq('competitor_id', kentComp.id)
-                  .eq('sku', item.sku)
+                  .eq('external_product_id', item.sku)
                   .maybeSingle();
 
                 let compProdId = existingCompProd?.id;
                 if (!compProdId) {
-                  const { data: newCp } = await supabase
+                  const { data: newCp, error: newCpErr } = await supabase
                     .from('competitor_products')
                     .insert({
                       competitor_id: kentComp.id,
-                      sku: item.sku,
+                      external_product_id: item.sku,
+                      manufacturer_part_number: item.sku,
+                      upc: item.upc || null,
                       product_name: kentMatch.candidate.title || item.description || item.name,
                       description: kentMatch.candidate.description || item.description,
                       product_url: kentMatch.candidate.url || `${kentComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
@@ -391,17 +393,36 @@ async function runCompetitivePricing() {
                     })
                     .select('id')
                     .single();
+                  if (newCpErr) {
+                    log(`  ⚠️ Error creating competitor product for ${item.sku}: ${newCpErr.message}`);
+                  }
                   compProdId = newCp?.id;
                 }
 
                 if (compProdId) {
-                  await supabase.from('product_matches').upsert({
-                    product_id: String(item.id),
-                    competitor_product_id: compProdId,
-                    match_confidence: kentMatch.score >= 70 ? 'EXACT' : 'HIGH',
-                    match_method: 'AUTOMATED_SCRAPER',
-                    approved: true
-                  }, { onConflict: 'product_id,competitor_product_id' });
+                  const { data: existingMatch } = await supabase
+                    .from('product_matches')
+                    .select('id')
+                    .eq('product_id', String(item.id))
+                    .eq('competitor_product_id', compProdId)
+                    .maybeSingle();
+
+                  if (existingMatch?.id) {
+                    await supabase.from('product_matches').update({
+                      match_confidence: kentMatch.score >= 70 ? 'EXACT' : 'HIGH',
+                      match_method: 'AUTOMATED_SCRAPER',
+                      approved: true,
+                      updated_at: new Date().toISOString()
+                    }).eq('id', existingMatch.id);
+                  } else {
+                    await supabase.from('product_matches').insert({
+                      product_id: String(item.id),
+                      competitor_product_id: compProdId,
+                      match_confidence: kentMatch.score >= 70 ? 'EXACT' : 'HIGH',
+                      match_method: 'AUTOMATED_SCRAPER',
+                      approved: true
+                    });
+                  }
 
                   await supabase.from('competitor_prices').insert({
                     competitor_product_id: compProdId,
@@ -426,7 +447,7 @@ async function runCompetitivePricing() {
                   .from('competitor_products')
                   .select('id')
                   .eq('competitor_id', kentComp.id)
-                  .eq('sku', item.sku)
+                  .eq('external_product_id', item.sku)
                   .maybeSingle();
 
                 let compProdId = existingCompProd?.id;
@@ -435,7 +456,9 @@ async function runCompetitivePricing() {
                     .from('competitor_products')
                     .insert({
                       competitor_id: kentComp.id,
-                      sku: item.sku,
+                      external_product_id: item.sku,
+                      manufacturer_part_number: item.sku,
+                      upc: item.upc || null,
                       product_name: item.description || item.name,
                       description: item.description,
                       product_url: `${kentComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
@@ -448,13 +471,29 @@ async function runCompetitivePricing() {
                 }
 
                 if (compProdId) {
-                  await supabase.from('product_matches').upsert({
-                    product_id: String(item.id),
-                    competitor_product_id: compProdId,
-                    match_confidence: 'REGIONAL_ESTIMATE',
-                    match_method: 'REGIONAL_BENCHMARK',
-                    approved: true
-                  }, { onConflict: 'product_id,competitor_product_id' });
+                  const { data: existingMatch } = await supabase
+                    .from('product_matches')
+                    .select('id')
+                    .eq('product_id', String(item.id))
+                    .eq('competitor_product_id', compProdId)
+                    .maybeSingle();
+
+                  if (existingMatch?.id) {
+                    await supabase.from('product_matches').update({
+                      match_confidence: 'REGIONAL_ESTIMATE',
+                      match_method: 'REGIONAL_BENCHMARK',
+                      approved: true,
+                      updated_at: new Date().toISOString()
+                    }).eq('id', existingMatch.id);
+                  } else {
+                    await supabase.from('product_matches').insert({
+                      product_id: String(item.id),
+                      competitor_product_id: compProdId,
+                      match_confidence: 'REGIONAL_ESTIMATE',
+                      match_method: 'REGIONAL_BENCHMARK',
+                      approved: true
+                    });
+                  }
 
                   await supabase.from('competitor_prices').insert({
                     competitor_product_id: compProdId,
