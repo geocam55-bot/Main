@@ -1,13 +1,13 @@
 {
-  "isRunning": true,
+  "isRunning": false,
   "progress": {
     "current": 477,
     "total": 20543,
     "percent": 2.3,
     "matchesFound": 1314,
-    "currentSku": "Starting...",
-    "currentName": "Active catalog sweep initialized (20543 SKUs)",
+    "currentSku": "Ready",
+    "currentName": "Pricing agent ready (20,543 SKUs in catalog)",
     "startedAt": "2026-09-17T19:30:37.341Z",
-    "lastUpdated": "2026-09-17T19:30:37.341Z"
+    "lastUpdated": "2026-09-18T02:55:00.000Z"
   }
 }

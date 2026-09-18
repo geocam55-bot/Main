@@ -4378,8 +4378,19 @@ Result:
           });
       activeAgentChild.unref();
 
-      activeAgentChild.on('close', () => {
+      activeAgentChild.on('close', (code) => {
         activeAgentChild = null;
+        try {
+          if (fs.existsSync(statusPath)) {
+            const cur = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+            cur.isRunning = false;
+            cur.progress = cur.progress || {};
+            cur.progress.currentSku = 'Ready';
+            cur.progress.lastUpdated = new Date().toISOString();
+            fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
+            supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
+          }
+        } catch (e) {}
       });
 
       res.json({ success: true, message: 'Pricing agent started in background.', status: initialStatus });
@@ -4403,11 +4414,17 @@ Result:
         } catch (e) {}
       }
 
-      // Check if process has died or finished
-      if (fileData && fileData.isRunning && fileData.progress?.lastUpdated) {
-        const diffMs = Date.now() - new Date(fileData.progress.lastUpdated).getTime();
-        if (diffMs > 5 * 60 * 1000 && !activeAgentChild) {
+      // Check if process has died or finished - avoid UI stalling
+      if (fileData && fileData.isRunning) {
+        const lastUpdatedMs = fileData.progress?.lastUpdated ? new Date(fileData.progress.lastUpdated).getTime() : 0;
+        const diffMs = Date.now() - lastUpdatedMs;
+        // If there's no active child in this process and no updates for 25 seconds, it's stopped
+        if (!activeAgentChild && diffMs > 25 * 1000) {
           fileData.isRunning = false;
+          try {
+            fs.writeFileSync(statusPath, JSON.stringify(fileData, null, 2));
+            supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: fileData });
+          } catch (e) {}
         }
       }
 

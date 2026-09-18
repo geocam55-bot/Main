@@ -601,3 +601,42 @@ export async function closePlaywrightBrowser(): Promise<void> {
 }
 
 export const closePuppeteerBrowser = closePlaywrightBrowser;
+
+export async function restartPlaywrightBrowser(): Promise<Browser> {
+  await closePlaywrightBrowser();
+  return await getPlaywrightBrowser();
+}
+
+/**
+ * Creates an isolated, memory-optimized page for scraping with blocked assets
+ */
+export async function createOptimizedPage(browser: Browser): Promise<Page> {
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    viewport: { width: 1280, height: 720 },
+    locale: 'en-US'
+  });
+  const page = await context.newPage();
+  try {
+    await page.route('**/*', (route) => {
+      const resourceType = route.request().resourceType();
+      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+        return route.abort();
+      }
+      return route.continue();
+    });
+  } catch (e) {}
+  return page;
+}
+
+/**
+ * RAM monitoring helper
+ */
+export function getMemoryUsageInfo(): { heapUsedMB: number; heapTotalMB: number; rssMB: number } {
+  const mem = process.memoryUsage();
+  return {
+    heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024 * 10) / 10,
+    heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024 * 10) / 10,
+    rssMB: Math.round(mem.rss / 1024 / 1024 * 10) / 10
+  };
+}
