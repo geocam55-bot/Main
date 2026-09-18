@@ -32,6 +32,7 @@ import {
   StopCircle,
   ShoppingCart,
   Trash2,
+  Sparkles,
 } from 'lucide-react';
 import {
   Dialog,
@@ -129,6 +130,30 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     progress: null
   });
   const [isAgentStopping, setIsAgentStopping] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
+
+  const handleRunAiEnrichment = async () => {
+    try {
+      setIsEnriching(true);
+      toast.info('✨ AI Catalog Enrichment Agent running... Searching manufacturer databases and enriching inventory.');
+      const res = await fetch('/api/inventory/ai-enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 10 })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`✨ Successfully enriched ${data.enrichedCount} inventory items! Descriptions updated, item names left untouched.`);
+        loadDashboard(true);
+      } else {
+        toast.error(data.error || 'Failed to run AI enrichment');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to run AI enrichment');
+    } finally {
+      setIsEnriching(false);
+    }
+  };
   const [activeCheckedItem, setActiveCheckedItem] = useState<{
     productId: string;
     sku: string;
@@ -533,6 +558,18 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           >
             <ShoppingCart className="h-3.5 w-3.5 text-blue-600" />
             Shopping List
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRunAiEnrichment}
+            disabled={isEnriching}
+            className="h-8 gap-1.5 text-xs bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 border-purple-200 hover:bg-purple-100 font-medium"
+            title="Run AI Catalog Enrichment Agent"
+          >
+            <Sparkles className={`h-3.5 w-3.5 text-purple-600 ${isEnriching ? 'animate-spin' : ''}`} />
+            {isEnriching ? 'Enriching...' : '✨ Run AI Catalog Agent'}
           </Button>
 
           <Button

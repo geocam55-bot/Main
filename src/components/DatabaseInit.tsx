@@ -44,10 +44,20 @@ CREATE TABLE IF NOT EXISTS public.inventory (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Disable RLS completely for inventory table
-ALTER TABLE public.inventory DISABLE ROW LEVEL SECURITY;
+-- Enable Row Level Security (RLS) for inventory table
+ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
 
--- Grant full access to all roles
+-- Create secure RLS policies
+DROP POLICY IF EXISTS "Enable read access for all users on inventory" ON public.inventory;
+DROP POLICY IF EXISTS "Enable write access for authenticated users on inventory" ON public.inventory;
+
+CREATE POLICY "Enable read access for all users on inventory" ON public.inventory
+  FOR SELECT TO public USING (true);
+
+CREATE POLICY "Enable write access for authenticated users on inventory" ON public.inventory
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Grant access to roles
 GRANT ALL ON public.inventory TO anon;
 GRANT ALL ON public.inventory TO authenticated;
 

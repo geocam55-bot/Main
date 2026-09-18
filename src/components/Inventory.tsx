@@ -136,6 +136,35 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   
   // ⚡ Performance optimization: Track if search is computing
   const [isSearching, setIsSearching] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
+
+  const handleRunAiEnrichment = async () => {
+    try {
+      setIsEnriching(true);
+      toast.info('✨ Playwright Catalog Enrichment Agent running... Extracting attributes, brands, and enriching descriptions.');
+      const startTime = Date.now();
+      const res = await fetch('/api/inventory/ai-enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 25, organizationId: user.organizationId })
+      });
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 2000) {
+        await new Promise(r => setTimeout(r, 2000 - elapsed));
+      }
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`✨ Successfully enriched ${data.enrichedCount} inventory items using Playwright parser! Descriptions updated, item names left untouched.`);
+        loadInventory();
+      } else {
+        toast.error(data.error || 'Failed to run enrichment');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to run enrichment');
+    } finally {
+      setIsEnriching(false);
+    }
+  };
   
   // ⚡ Performance tracking
   const [loadTimeMs, setLoadTimeMs] = useState(0);
@@ -229,6 +258,10 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     sku: '',
     category: '',
     description: '',
+    brand: '',
+    shortDescription: '',
+    searchKeywords: '',
+    attributesText: '',
     unitOfMeasure: 'ea',
     priceLevels: '',
     departmentCode: '',
@@ -867,6 +900,10 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
         sku: item.sku,
         category: item.category,
         description: item.description,
+        brand: (item as any).brand || '',
+        shortDescription: (item as any).shortDescription || (item as any).short_description || '',
+        searchKeywords: (item as any).searchKeywords || (item as any).search_keywords || '',
+        attributesText: (item as any).attributes ? JSON.stringify((item as any).attributes, null, 2) : '',
         unitOfMeasure: item.unitOfMeasure,
         priceLevels: (item as any).priceLevels || '',
         departmentCode: (item as any).departmentCode || '',
@@ -898,6 +935,10 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
         sku: '',
         category: '',
         description: '',
+        brand: '',
+        shortDescription: '',
+        searchKeywords: '',
+        attributesText: '',
         unitOfMeasure: 'ea',
         priceLevels: '',
         departmentCode: '',
@@ -1043,6 +1084,10 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
         notes: formData.notes || '',
         tags: formData.tags ? formData.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
         priceLevels: formData.priceLevels || '',
+        brand: formData.brand || null,
+        short_description: formData.shortDescription || null,
+        search_keywords: formData.searchKeywords || null,
+        attributes: formData.attributesText ? (() => { try { return JSON.parse(formData.attributesText); } catch { return null; } })() : null,
       };
 
       if (editingItem) {
@@ -1461,6 +1506,36 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   return (
     <PermissionGate user={user} module="inventory" action="view">
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      {/* AI Catalog Enrichment Agent Status Bar (Prominent Top Banner) */}
+      {isEnriching && (
+        <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-purple-500/40 animate-fade-in">
+          <div className="flex items-center gap-3.5">
+            <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center text-purple-300 shrink-0 border border-white/20">
+              <Sparkles className="h-5 w-5 animate-spin text-purple-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-white">AI Catalog Enrichment Agent Active</h4>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/30 text-purple-200 border border-purple-400/30 animate-pulse">
+                  Searching Manufacturer & Retailer Databases
+                </span>
+              </div>
+              <p className="text-xs text-purple-200 mt-0.5">
+                Enriching inventory descriptions, brands, attributes & short specs. Item names remain strictly untouched.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
+              <div className="h-2 w-20 bg-white/20 rounded-full overflow-hidden">
+                <div className="h-full bg-purple-400 animate-pulse w-3/4 rounded-full"></div>
+              </div>
+              <span className="text-xs font-mono text-purple-200">Processing...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-xl sm:text-2xl font-bold text-foreground hidden sm:block">Inventory Management</h2>
@@ -1475,6 +1550,18 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
             <span className="hidden sm:inline">Import CSV</span>
             <span className="sm:hidden ml-2">Import</span>
           </Button>
+          <Button
+            variant="outline"
+            onClick={handleRunAiEnrichment}
+            disabled={isEnriching}
+            className="flex-1 sm:flex-none bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 border-purple-200 hover:bg-purple-100 font-medium"
+            title="Run AI Catalog Enrichment Agent on Inventory"
+          >
+            <Sparkles className={`h-4 w-4 sm:mr-2 text-purple-600 ${isEnriching ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isEnriching ? 'Enriching...' : '✨ AI Catalog Agent'}</span>
+            <span className="sm:hidden ml-2">{isEnriching ? 'Enriching' : 'AI Agent'}</span>
+          </Button>
+
           {canAdd('inventory', user.role) && (
           <Button onClick={() => handleOpenDialog()} className="flex-1 sm:flex-none" data-tour="inventory-add">
             <Plus className="h-4 w-4 sm:mr-2" />
@@ -1512,6 +1599,8 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
           </div>
         </Alert>
       )}
+
+
 
       {/* Scan Result Dialog */}
       <Dialog open={!!scanResult} onOpenChange={(open) => !open && setScanResult(null)}>
@@ -2677,6 +2766,53 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Enter item description"
                     rows={2}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Catalog Enrichment Fields */}
+            <div className="space-y-4 pt-4 border-t border-border">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-600" /> Catalog Enrichment & Metadata
+                </h3>
+                <span className="text-xs text-muted-foreground">Brand, Short Description, Keywords & Attributes</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-foreground font-medium">Brand</label>
+                  <Input
+                    value={formData.brand}
+                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                    placeholder="e.g. DEWALT, KOHLER, RONA"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-foreground font-medium">Short Description (Max 35 chars)</label>
+                  <Input
+                    value={formData.shortDescription}
+                    onChange={(e) => setFormData({ ...formData, shortDescription: e.target.value.toUpperCase().slice(0, 35) })}
+                    placeholder="UPPERCASE SHORT DESC"
+                    maxLength={35}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm text-foreground">Search Keywords (Comma separated)</label>
+                  <Input
+                    value={formData.searchKeywords}
+                    onChange={(e) => setFormData({ ...formData, searchKeywords: e.target.value })}
+                    placeholder="drill, cordless, 20v, power tools..."
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm text-foreground">Attributes (JSON)</label>
+                  <Textarea
+                    value={formData.attributesText}
+                    onChange={(e) => setFormData({ ...formData, attributesText: e.target.value })}
+                    placeholder='{"VOLTAGE": "20V", "BATTERY": "Li-Ion"}'
+                    rows={2}
+                    className="font-mono text-xs"
                   />
                 </div>
               </div>

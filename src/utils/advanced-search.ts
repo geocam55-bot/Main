@@ -378,6 +378,11 @@ interface SearchableItem {
   sku: string;
   description: string;
   category: string;
+  brand?: string;
+  shortDescription?: string;
+  short_description?: string;
+  searchKeywords?: string;
+  search_keywords?: string;
   supplier?: string;
   barcode?: string;
   location?: string;
@@ -479,6 +484,9 @@ export function advancedSearch<T extends SearchableItem>(
       { field: 'name', weight: 10, value: item.name },
       { field: 'sku', weight: 8, value: item.sku },
       { field: 'item_number', weight: 9, value: (item as any).item_number }, // High priority for item numbers
+      { field: 'brand', weight: 9, value: (item as any).brand },
+      { field: 'short_description', weight: 9, value: (item as any).shortDescription || (item as any).short_description },
+      { field: 'search_keywords', weight: 8, value: (item as any).searchKeywords || (item as any).search_keywords },
       { field: 'description', weight: 6, value: item.description },
       { field: 'category', weight: 7, value: item.category },
       { field: 'supplier', weight: 4, value: item.supplier },
