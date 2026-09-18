@@ -4515,6 +4515,12 @@ Result:
         activeAgentChild = null;
       }
 
+      // Proactively terminate any orphan or background agent process instances
+      try {
+        const { exec } = await import('child_process');
+        exec('pkill -f pricing-agent', () => {});
+      } catch (pkErr) {}
+
       let stoppedData: any = { isRunning: false, stoppedAt: new Date().toISOString() };
       if (fs.existsSync(statusPath)) {
         try {
@@ -4522,6 +4528,11 @@ Result:
           stoppedData = JSON.parse(content);
           stoppedData.isRunning = false;
           stoppedData.stoppedAt = new Date().toISOString();
+          if (stoppedData.progress) {
+            stoppedData.progress.currentSku = 'Stopped';
+            stoppedData.progress.currentName = 'Catalog sweep paused';
+            stoppedData.progress.lastUpdated = new Date().toISOString();
+          }
           fs.writeFileSync(statusPath, JSON.stringify(stoppedData, null, 2));
         } catch (e) {}
       }

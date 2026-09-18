@@ -105,6 +105,85 @@ function log(msg: string) {
   }
 }
 
+let isStopTriggered = false;
+let lastRemoteStopCheck = 0;
+
+async function checkRemoteStop(): Promise<boolean> {
+  if (isStopTriggered) return true;
+  if (fs.existsSync(STOP_FILE)) {
+    isStopTriggered = true;
+    return true;
+  }
+  try {
+    if (fs.existsSync(STATUS_FILE)) {
+      const content = fs.readFileSync(STATUS_FILE, 'utf8');
+      const s = JSON.parse(content);
+      if (s.isRunning === false) {
+        isStopTriggered = true;
+        return true;
+      }
+    }
+  } catch (e) {}
+
+  const now = Date.now();
+  if (now - lastRemoteStopCheck > 1000) {
+    lastRemoteStopCheck = now;
+    try {
+      const { data } = await supabase
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', 'pricing_agent:control')
+        .maybeSingle();
+      if (data?.value?.action === 'stop') {
+        isStopTriggered = true;
+        return true;
+      }
+    } catch (e) {}
+  }
+  return false;
+}
+
+function shouldStop(): boolean {
+  if (isStopTriggered) return true;
+  if (fs.existsSync(STOP_FILE)) {
+    isStopTriggered = true;
+    return true;
+  }
+  try {
+    if (fs.existsSync(STATUS_FILE)) {
+      const content = fs.readFileSync(STATUS_FILE, 'utf8');
+      const s = JSON.parse(content);
+      if (s.isRunning === false) {
+        isStopTriggered = true;
+        return true;
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
+process.on('SIGTERM', () => {
+  log("🛑 Process received SIGTERM. Halting immediately...");
+  isStopTriggered = true;
+  try {
+    const prev = fs.existsSync(STATUS_FILE) ? JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')) : {};
+    prev.isRunning = false;
+    if (prev.progress) {
+      prev.progress.currentSku = 'Stopped';
+      prev.progress.currentName = 'Catalog sweep paused';
+      prev.progress.lastUpdated = new Date().toISOString();
+    }
+    fs.writeFileSync(STATUS_FILE, JSON.stringify(prev, null, 2));
+    syncKv('pricing_agent:status', prev);
+  } catch (e) {}
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  isStopTriggered = true;
+  process.exit(0);
+});
+
 function updateStatus(status: {
   isRunning: boolean;
   progress?: {
@@ -119,6 +198,9 @@ function updateStatus(status: {
     completedAt?: string;
   };
 }) {
+  if (isStopTriggered && status.isRunning) {
+    status.isRunning = false;
+  }
   try {
     fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
   } catch (e) {
@@ -130,18 +212,6 @@ function updateStatus(status: {
     lastKvStatusFlush = now;
     syncKv('pricing_agent:status', status);
   }
-}
-
-function shouldStop(): boolean {
-  if (fs.existsSync(STOP_FILE)) return true;
-  try {
-    if (fs.existsSync(STATUS_FILE)) {
-      const content = fs.readFileSync(STATUS_FILE, 'utf8');
-      const s = JSON.parse(content);
-      if (s.isRunning === false) return true;
-    }
-  } catch (e) {}
-  return false;
 }
 
 /**
@@ -303,7 +373,7 @@ async function runCompetitivePricing() {
   let totalProcessedInRun = 0;
 
   while (currentIndex < totalItems) {
-    if (shouldStop()) {
+    if (shouldStop() || await checkRemoteStop()) {
       log("🛑 Stop signal detected. Halting pricing agent sweep gracefully.");
       break;
     }
