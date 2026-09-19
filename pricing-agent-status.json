@@ -1,13 +1,14 @@
 {
-  "isRunning": false,
+  "isRunning": true,
   "progress": {
-    "current": 0,
+    "current": 1057,
     "total": 20543,
-    "percent": 0,
-    "matchesFound": 1174,
-    "currentSku": "Ready",
-    "currentName": "Catalog monitor synchronized (20,543 SKUs)",
-    "startedAt": "2026-09-18T11:02:18.093Z",
-    "lastUpdated": "2026-09-18T11:03:26.861Z"
-  }
+    "percent": 5.1,
+    "matchesFound": 13382,
+    "currentSku": "00005104",
+    "currentName": "GLUE ROCK MULCH 32OZ",
+    "startedAt": "2026-09-19T13:49:08.234Z",
+    "lastUpdated": "2026-09-19T13:49:19.862Z"
+  },
+  "pid": 938
 }

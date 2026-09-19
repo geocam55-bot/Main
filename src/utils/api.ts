@@ -909,7 +909,7 @@ export const competitivePricingAPI = {
       return await fetchCompetitivePricingDashboardDirect(filters);
     }
   },
-  runPricingAgent: async (): Promise<{ success: boolean; message: string }> => {
+  runPricingAgent: async (): Promise<{ success: boolean; message: string; status?: any }> => {
     try {
       const headers = await getServerHeaders();
       const res = await fetch('/api/competitive-pricing/agent/start', {

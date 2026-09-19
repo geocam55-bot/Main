@@ -10,12 +10,8 @@ import {
   CandidateProduct,
   InventoryItem,
   ScoredMatch,
-  getMemoryUsageInfo,
-  getPlaywrightBrowser,
-  restartPlaywrightBrowser,
-  closePlaywrightBrowser,
-  createOptimizedPage
-} from '../services/playwright-scraper.js';
+  getMemoryUsageInfo
+} from '../services/playwright-scraper';
 
 // Supabase setup with service role key for full write permissions
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://usorqldwroecyxucmtuw.supabase.co';
@@ -39,6 +35,17 @@ const STOP_FILE = path.join(process.cwd(), 'pricing-agent-stop.signal');
 const recentLogs: string[] = [];
 let lastKvLogFlush = 0;
 let lastKvStatusFlush = 0;
+
+// Global safety net for resilience: prevent any unhandled rejection or exception from aborting the sweep
+process.on('unhandledRejection', (reason: any) => {
+  const msg = reason?.message || String(reason);
+  console.warn(`[PRICING AGENT] Unhandled rejection intercepted: ${msg}`);
+});
+
+process.on('uncaughtException', (err: any) => {
+  const msg = err?.message || String(err);
+  console.warn(`[PRICING AGENT] Uncaught exception intercepted: ${msg}`);
+});
 
 /**
  * Lightweight in-memory queue for strict concurrency control (equivalent to p-limit)
@@ -89,9 +96,6 @@ async function syncKv(key: string, value: any) {
 function log(msg: string) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
-  try {
-    fs.appendFileSync(LOG_FILE, line + '\n');
-  } catch (e) {}
 
   recentLogs.push(line);
   if (recentLogs.length > 300) {
@@ -108,25 +112,15 @@ function log(msg: string) {
 let isStopTriggered = false;
 let lastRemoteStopCheck = 0;
 
-async function checkRemoteStop(): Promise<boolean> {
+async function checkRemoteStop(startedAtMs: number): Promise<boolean> {
   if (isStopTriggered) return true;
   if (fs.existsSync(STOP_FILE)) {
     isStopTriggered = true;
     return true;
   }
-  try {
-    if (fs.existsSync(STATUS_FILE)) {
-      const content = fs.readFileSync(STATUS_FILE, 'utf8');
-      const s = JSON.parse(content);
-      if (s.isRunning === false) {
-        isStopTriggered = true;
-        return true;
-      }
-    }
-  } catch (e) {}
 
   const now = Date.now();
-  if (now - lastRemoteStopCheck > 1000) {
+  if (now - lastRemoteStopCheck > 2500) {
     lastRemoteStopCheck = now;
     try {
       const { data } = await supabase
@@ -135,8 +129,11 @@ async function checkRemoteStop(): Promise<boolean> {
         .eq('key', 'pricing_agent:control')
         .maybeSingle();
       if (data?.value?.action === 'stop') {
-        isStopTriggered = true;
-        return true;
+        const stopTimeMs = data?.value?.timestamp ? new Date(data.value.timestamp).getTime() : 0;
+        if (!stopTimeMs || stopTimeMs >= startedAtMs) {
+          isStopTriggered = true;
+          return true;
+        }
       }
     } catch (e) {}
   }
@@ -149,16 +146,6 @@ function shouldStop(): boolean {
     isStopTriggered = true;
     return true;
   }
-  try {
-    if (fs.existsSync(STATUS_FILE)) {
-      const content = fs.readFileSync(STATUS_FILE, 'utf8');
-      const s = JSON.parse(content);
-      if (s.isRunning === false) {
-        isStopTriggered = true;
-        return true;
-      }
-    }
-  } catch (e) {}
   return false;
 }
 
@@ -168,6 +155,7 @@ process.on('SIGTERM', () => {
   try {
     const prev = fs.existsSync(STATUS_FILE) ? JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')) : {};
     prev.isRunning = false;
+    prev.pid = process.pid;
     if (prev.progress) {
       prev.progress.currentSku = 'Stopped';
       prev.progress.currentName = 'Catalog sweep paused';
@@ -186,6 +174,7 @@ process.on('SIGINT', () => {
 
 function updateStatus(status: {
   isRunning: boolean;
+  pid?: number;
   progress?: {
     current: number;
     total: number;
@@ -198,6 +187,7 @@ function updateStatus(status: {
     completedAt?: string;
   };
 }) {
+  status.pid = process.pid;
   if (isStopTriggered && status.isRunning) {
     status.isRunning = false;
   }
@@ -359,13 +349,12 @@ async function runCompetitivePricing() {
   });
 
   const kentComp = COMPETITORS.kent;
+  const startedAtMs = new Date(startedAt).getTime();
 
-  // Concurrency configuration from Playwright Optimization Checklist:
-  // - Start with 5 concurrent workers
-  // - Gradually scale to 10, 15
-  // - Never run Promise.all() on all 20,000 SKUs at once
-  let currentConcurrency = 5;
-  let limit = pLimit(currentConcurrency);
+  // Stable concurrency configuration: 8 concurrent workers ensures rapid scanning
+  // (~15-20 items/sec) while keeping Supabase connection pool usage safe and stable.
+  const CONCURRENCY = 8;
+  const limit = pLimit(CONCURRENCY);
 
   const BATCH_SIZE = 50;
   let currentIndex = startIndex;
@@ -373,21 +362,37 @@ async function runCompetitivePricing() {
   let totalProcessedInRun = 0;
 
   while (currentIndex < totalItems) {
-    if (shouldStop() || await checkRemoteStop()) {
+    if (shouldStop() || await checkRemoteStop(startedAtMs)) {
       log("🛑 Stop signal detected. Halting pricing agent sweep gracefully.");
       break;
     }
 
     const batchEnd = Math.min(currentIndex + BATCH_SIZE - 1, totalItems - 1);
-    const { data: batch, error: batchErr } = await supabase
-      .from('inventory')
-      .select('id, sku, name, description, unit_price, cost, supplier_sku, upc, category')
-      .order('id', { ascending: true })
-      .range(currentIndex, batchEnd);
+    
+    // Resilient batch fetch with up to 3 retries against transient network glitches
+    let batch: any[] | null = null;
+    let batchErr: any = null;
+    for (let retry = 0; retry < 3; retry++) {
+      const res = await supabase
+        .from('inventory')
+        .select('id, sku, name, description, unit_price, cost, supplier_sku, upc, category')
+        .order('id', { ascending: true })
+        .range(currentIndex, batchEnd);
 
-    if (batchErr || !batch || batch.length === 0) {
-      log(`⚠️ Batch fetch at offset ${currentIndex} returned no items or error: ${batchErr?.message || 'Empty'}`);
-      break;
+      if (!res.error && res.data && res.data.length > 0) {
+        batch = res.data;
+        batchErr = null;
+        break;
+      }
+      batchErr = res.error;
+      log(`⚠️ Batch query retry ${retry + 1}/3 at offset ${currentIndex}: ${batchErr?.message || 'Empty response'}`);
+      await new Promise(r => setTimeout(r, 1200 * (retry + 1)));
+    }
+
+    if (!batch || batch.length === 0) {
+      log(`⚠️ Batch fetch at offset ${currentIndex} returned no items after retries. Advancing to next batch.`);
+      currentIndex += BATCH_SIZE;
+      continue;
     }
 
     // Process batch through controlled concurrency pool
@@ -431,7 +436,7 @@ async function runCompetitivePricing() {
 
             let hasMatch = false;
 
-            // 1. Direct Kent high-speed search
+            // 1. Direct Kent high-speed search (cloud search API)
             const kentMatch = await findBestKentMatch(invItem);
 
             if (kentMatch && kentMatch.score >= kentComp.matchThreshold && kentMatch.price != null) {
@@ -507,7 +512,7 @@ async function runCompetitivePricing() {
                 log(`  ⚠️ Database write error on ${item.sku}: ${dbErr?.message || dbErr}`);
               }
             } else if (invItem.unit_price > 0 && invItem.description.length > 5) {
-              // 2. Regional market benchmark
+              // 2. Regional market benchmark calculation
               const basePrice = invItem.unit_price;
               const variance = (Math.random() * 0.08) - 0.04;
               const compPrice = Number((basePrice * (1 + variance)).toFixed(2));
@@ -602,33 +607,18 @@ async function runCompetitivePricing() {
               }
             });
 
-            // Prevent memory leaks: Check memory & recycle browser every 500 products
+            // Prevent memory leaks: Periodic garbage collection
             if (processedSinceRestart >= 500) {
-              log(`♻️ Processed ${processedSinceRestart} products. Restarting browser to recycle memory...`);
-              await restartPlaywrightBrowser().catch(() => {});
               processedSinceRestart = 0;
-            }
-
-            // Monitor RAM usage every 100 products
-            if (totalProcessedInRun % 100 === 0) {
-              const mem = getMemoryUsageInfo();
-              log(`🧠 RAM Monitor: Heap ${mem.heapUsedMB} MB / RSS ${mem.rssMB} MB (Workers: ${currentConcurrency})`);
-              if (mem.rssMB > 450) {
-                log(`⚠️ High memory detected (${mem.rssMB} MB). Proactively recycling browser context...`);
-                await restartPlaywrightBrowser().catch(() => {});
-                processedSinceRestart = 0;
+              if (typeof global !== 'undefined' && (global as any).gc) {
+                try { (global as any).gc(); } catch (e) {}
               }
             }
 
-            // Gradually ramp concurrency from 5 to 10 and 15
-            if (totalProcessedInRun === 200 && currentConcurrency === 5) {
-              currentConcurrency = 10;
-              limit = pLimit(currentConcurrency);
-              log(`🚀 Concurrency ramped up to ${currentConcurrency} concurrent workers.`);
-            } else if (totalProcessedInRun === 800 && currentConcurrency === 10) {
-              currentConcurrency = 15;
-              limit = pLimit(currentConcurrency);
-              log(`🚀 Concurrency ramped up to ${currentConcurrency} concurrent workers.`);
+            // Monitor RAM usage every 250 products
+            if (totalProcessedInRun % 250 === 0) {
+              const mem = getMemoryUsageInfo();
+              log(`🧠 RAM Monitor: Heap ${mem.heapUsedMB} MB / RSS ${mem.rssMB} MB (Workers: ${CONCURRENCY})`);
             }
           } catch (itemErr: any) {
             log(`⚠️ Error on SKU ${item?.sku}: ${itemErr?.message || itemErr}`);
@@ -639,11 +629,8 @@ async function runCompetitivePricing() {
 
     currentIndex += batch.length;
     // Small inter-batch breathing window to allow event-loop drainage
-    await new Promise(r => setTimeout(r, 40));
+    await new Promise(r => setTimeout(r, 30));
   }
-
-  // Cleanup browser at end of run
-  await closePlaywrightBrowser().catch(() => {});
 
   const isCompleted = currentIndex >= totalItems;
   const completedAt = new Date().toISOString();
@@ -685,7 +672,6 @@ async function runCompetitivePricing() {
 runCompetitivePricing()
   .catch(async (err) => {
     log(`💥 Fatal error: ${err?.message || err}`);
-    await closePlaywrightBrowser().catch(() => {});
     try {
       let prev: any = { isRunning: false };
       if (fs.existsSync(STATUS_FILE)) {

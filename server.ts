@@ -4609,43 +4609,75 @@ Result:
       const cjsPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
       const tsPath = path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
       const binTsx = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
-      
+
+      // Guarantee dist/pricing-agent.cjs is compiled and available
+      if (!fs.existsSync(cjsPath) && fs.existsSync(tsPath)) {
+        try {
+          const esbuild = await import('esbuild');
+          esbuild.buildSync({
+            entryPoints: [tsPath],
+            bundle: true,
+            platform: 'node',
+            format: 'cjs',
+            packages: 'external',
+            sourcemap: true,
+            outfile: cjsPath
+          });
+          console.log('[Pricing Agent] Bundled dist/pricing-agent.cjs on demand');
+        } catch (bErr: any) {
+          console.error('[Pricing Agent] Dynamic build failed:', bErr);
+        }
+      }
+
       const useCompiled = fs.existsSync(cjsPath);
       const agentScriptPath = useCompiled ? cjsPath : tsPath;
-      
-      activeAgentChild = useCompiled
-        ? spawn('node', [agentScriptPath], {
-            detached: true,
-            stdio: ['ignore', outFd, outFd]
-          })
-        : (fs.existsSync(binTsx)
-            ? spawn(binTsx, [agentScriptPath], {
-                detached: true,
-                stdio: ['ignore', outFd, outFd]
-              })
-            : spawn('node', [agentScriptPath], {
-                detached: true,
-                stdio: ['ignore', outFd, outFd]
-              }));
-      activeAgentChild.unref();
 
-      activeAgentChild.on('close', (code) => {
-        activeAgentChild = null;
-        try {
-          if (fs.existsSync(statusPath)) {
-            const cur = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-            const lastMs = cur?.progress?.lastUpdated ? new Date(cur.progress.lastUpdated).getTime() : 0;
-            if (Date.now() - lastMs > 15000) {
-              cur.isRunning = false;
-              cur.progress = cur.progress || {};
-              cur.progress.currentSku = 'Ready';
-              cur.progress.lastUpdated = new Date().toISOString();
-              fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
-              supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
+      try {
+        activeAgentChild = useCompiled
+          ? spawn('node', [agentScriptPath], {
+              detached: true,
+              stdio: ['ignore', outFd, outFd]
+            })
+          : (fs.existsSync(binTsx)
+              ? spawn(binTsx, [agentScriptPath], {
+                  detached: true,
+                  stdio: ['ignore', outFd, outFd]
+                })
+              : spawn('node', [agentScriptPath], {
+                  detached: true,
+                  stdio: ['ignore', outFd, outFd]
+                }));
+
+        activeAgentChild.on('error', (err: any) => {
+          console.error('[Pricing Agent Process Error]:', err);
+          try {
+            fs.writeSync(outFd, `\n[ERROR]: Failed to start agent process: ${err?.message || err}\n`);
+          } catch (e) {}
+        });
+
+        activeAgentChild.unref();
+
+        activeAgentChild.on('close', (code: number) => {
+          console.log(`[Pricing Agent Process] Exited with code ${code}`);
+          activeAgentChild = null;
+          try {
+            if (fs.existsSync(statusPath)) {
+              const cur = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+              if (cur && cur.isRunning) {
+                cur.isRunning = false;
+                cur.progress = cur.progress || {};
+                cur.progress.currentSku = code === 0 ? 'Completed' : 'Paused';
+                cur.progress.lastUpdated = new Date().toISOString();
+                fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
+                supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
+              }
             }
-          }
-        } catch (e) {}
-      });
+          } catch (e) {}
+        });
+      } catch (spawnErr: any) {
+        console.error('[Pricing Agent] Spawn error:', spawnErr);
+        return res.status(500).json({ error: `Failed to spawn agent: ${spawnErr?.message || spawnErr}` });
+      }
 
       res.json({ success: true, message: 'Pricing agent started in background.', status: initialStatus });
     } catch (e: any) {
@@ -4668,12 +4700,23 @@ Result:
         } catch (e) {}
       }
 
-      // Check if process has died or finished - avoid UI stalling
+      // Check if process has died or finished - avoid false positives
       if (fileData && fileData.isRunning) {
         const lastUpdatedMs = fileData.progress?.lastUpdated ? new Date(fileData.progress.lastUpdated).getTime() : 0;
         const diffMs = Date.now() - lastUpdatedMs;
-        // If there's no active child in this process and no updates for 25 seconds, it's stopped
-        if (!activeAgentChild && diffMs > 25 * 1000) {
+
+        let isPidAlive = false;
+        if (fileData.pid) {
+          try {
+            process.kill(fileData.pid, 0);
+            isPidAlive = true;
+          } catch (e) {
+            isPidAlive = false;
+          }
+        }
+
+        // Only mark dead if PID is definitely gone and no updates for > 3 minutes (180s)
+        if (!isPidAlive && !activeAgentChild && diffMs > 180 * 1000) {
           fileData.isRunning = false;
           try {
             fs.writeFileSync(statusPath, JSON.stringify(fileData, null, 2));

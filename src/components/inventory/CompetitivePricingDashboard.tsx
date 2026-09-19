@@ -755,9 +755,13 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                             }));
                             const res = await competitivePricingAPI.runPricingAgent();
                             toast.success(res.message || 'Background pricing agent sweep active!');
-                            const s = await competitivePricingAPI.getPricingAgentStatus();
-                            if (s?.progress) {
-                              setAgentStatus(s);
+                            if (res?.status?.progress) {
+                              setAgentStatus(res.status);
+                            } else {
+                              const s = await competitivePricingAPI.getPricingAgentStatus();
+                              if (s?.progress) {
+                                setAgentStatus(s);
+                              }
                             }
                           } catch (e: any) {
                             toast.error(e.message || 'Failed to start agent');
