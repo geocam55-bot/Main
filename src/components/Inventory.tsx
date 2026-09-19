@@ -102,6 +102,13 @@ interface InventoryItem {
   imageUrl?: string;
   tags?: string[];
   notes?: string;
+  brand?: string;
+  shortDescription?: string;
+  short_description?: string;
+  attributes?: Record<string, any>;
+  searchKeywords?: string[];
+  search_keywords?: string[];
+  enrichmentUpdatedAt?: string;
   status: 'active' | 'inactive' | 'discontinued';
   createdAt: string;
   updatedAt: string;
@@ -586,9 +593,35 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       (dbItem.category && finalName.trim().toLowerCase() === dbItem.category.trim().toLowerCase()) ||
       hasGenericKeyword;
 
-    if (isGenericOrEmpty && parsedDescription && parsedDescription.trim() !== '') {
+    // Check if description is an extended catalog description (should NEVER become the item name)
+    const isExtendedDescription = parsedDescription && (
+      parsedDescription.length > 55 ||
+      parsedDescription.toLowerCase().includes('professional-grade') ||
+      parsedDescription.toLowerCase().includes('designed for superior') ||
+      parsedDescription.toLowerCase().includes('exacting industry standards') ||
+      parsedDescription.toLowerCase().includes('delivering contractor-grade') ||
+      parsedDescription.toLowerCase().includes('engineered specifically') ||
+      parsedDescription.toLowerCase().includes('key specifications include')
+    );
+
+    // Retrieve database short description and brand if present
+    const dbShortDesc = getCaseInsensitive(dbItem, 'short_description', '') || getCaseInsensitive(dbItem, 'shortDescription', '');
+    const dbBrand = getCaseInsensitive(dbItem, 'brand', '');
+    const dbAttributes = getCaseInsensitive(dbItem, 'attributes', null);
+    const dbSearchKeywords = getCaseInsensitive(dbItem, 'search_keywords', null);
+    const dbEnrichmentUpdatedAt = getCaseInsensitive(dbItem, 'enrichment_updated_at', '');
+
+    if (dbShortDesc && dbShortDesc.trim() !== '') {
+      // If a dedicated short description exists, use it as the clean display name
+      finalName = dbShortDesc.trim();
+      finalDescription = parsedDescription || rawName || '';
+    } else if (isGenericOrEmpty && parsedDescription && parsedDescription.trim() !== '' && !isExtendedDescription) {
+      // Only swap if parsedDescription is a concise specific item title (e.g. "DRYDEX SPACKLING 3.78L"), NOT an extended paragraph!
       finalName = parsedDescription;
       finalDescription = rawName || '';
+    } else {
+      finalName = rawName || parsedDescription || 'Item';
+      finalDescription = parsedDescription || '';
     }
 
     const currentCategory = getCaseInsensitive(dbItem, 'category', '');
@@ -599,6 +632,13 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       sku: getCaseInsensitive(dbItem, 'sku', ''),
       category: currentCategory || (isGenericOrEmpty && rawName ? rawName.trim() : 'Uncategorized'),
       description: finalDescription,
+      brand: dbBrand,
+      shortDescription: dbShortDesc,
+      short_description: dbShortDesc,
+      attributes: dbAttributes,
+      searchKeywords: Array.isArray(dbSearchKeywords) ? dbSearchKeywords : (typeof dbSearchKeywords === 'string' ? dbSearchKeywords.split(',') : []),
+      search_keywords: Array.isArray(dbSearchKeywords) ? dbSearchKeywords : (typeof dbSearchKeywords === 'string' ? dbSearchKeywords.split(',') : []),
+      enrichmentUpdatedAt: dbEnrichmentUpdatedAt,
       unitOfMeasure: dbUnitOfMeasure,
       quantityOnHand: metadata.quantityOnHand !== undefined ? metadata.quantityOnHand : dbQuantity,
       quantityOnOrder: dbQuantityOnOrder,
@@ -2065,6 +2105,11 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                           </div>
                           <p className="text-xs sm:text-sm text-muted-foreground truncate mt-1">SKU: {item.sku}</p>
                           <div className="flex flex-wrap gap-1 mt-2">
+                            {item.brand && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-800 border-amber-300 font-medium">
+                                {item.brand}
+                              </Badge>
+                            )}
                             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
                               item.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
                               item.status === 'inactive' ? 'bg-muted text-foreground border-border' :
@@ -2100,8 +2145,13 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                       <div className="flex-1">
                         <div className="hidden lg:flex items-start justify-between">
                           <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-lg text-foreground">{item.name}</h3>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-lg text-foreground font-semibold">{item.name}</h3>
+                              {item.brand && (
+                                <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300 font-medium text-xs">
+                                  {item.brand}
+                                </Badge>
+                              )}
                               <Badge variant="outline" className={
                                 item.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
                                 item.status === 'inactive' ? 'bg-muted text-foreground border-border' :
@@ -2130,9 +2180,18 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                                 </Badge>
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground mt-1">SKU: {item.sku}</p>
+                            <p className="text-sm text-muted-foreground mt-1 font-mono">SKU: {item.sku}</p>
                             {item.description && (
-                              <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
+                              <p className="text-sm text-muted-foreground mt-1 leading-relaxed max-w-4xl">{item.description}</p>
+                            )}
+                            {item.attributes && typeof item.attributes === 'object' && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {Object.entries(item.attributes).slice(0, 4).map(([k, v]) => (
+                                  <span key={k} className="inline-flex items-center text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                    <span className="font-medium mr-1 text-slate-500">{k}:</span> {String(v)}
+                                  </span>
+                                ))}
+                              </div>
                             )}
                             {/* Show matched fields for advanced search */}
                             {useAdvancedSearch && item._matchedFields && item._matchedFields.length > 0 && searchQuery && (
