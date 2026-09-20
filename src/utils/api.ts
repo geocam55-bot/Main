@@ -1068,6 +1068,92 @@ export const competitivePricingAPI = {
   },
 };
 
+// AI Catalog Enrichment Background Agent API
+export interface CatalogAgentStatusResponse {
+  isRunning: boolean;
+  pid?: number;
+  stoppedAt?: string;
+  progress?: {
+    current: number;
+    total: number;
+    percent: number;
+    enrichedCount: number;
+    currentSku: string;
+    currentName: string;
+    startedAt: string;
+    lastUpdated: string;
+    completedAt?: string;
+  } | null;
+}
+
+export const catalogAgentAPI = {
+  start: async (): Promise<{ success: boolean; message: string; status?: CatalogAgentStatusResponse }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/catalog-agent/start', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+    });
+    return await safeParseJson(res);
+  },
+  getStatus: async (): Promise<CatalogAgentStatusResponse> => {
+    try {
+      const headers = await getServerHeaders();
+      const res = await fetch('/api/catalog-agent/status', {
+        method: 'GET',
+        headers,
+      });
+      if (res.ok) {
+        return await safeParseJson(res);
+      }
+    } catch (err: any) {}
+    return {
+      isRunning: false,
+      progress: {
+        current: 0,
+        total: 20543,
+        percent: 0,
+        enrichedCount: 0,
+        currentSku: 'Ready',
+        currentName: 'Catalog enrichment agent ready',
+        startedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+      },
+    };
+  },
+  stop: async (): Promise<{ success: boolean; message: string; status?: any }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/catalog-agent/stop', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+    });
+    return await safeParseJson(res);
+  },
+  reset: async (): Promise<{ success: boolean; message: string; status?: any }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/catalog-agent/reset', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+    });
+    return await safeParseJson(res);
+  },
+  getLogs: async (): Promise<{ logs: string }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/catalog-agent/logs', {
+      method: 'GET',
+      headers,
+    });
+    return await safeParseJson(res);
+  },
+  clearLogs: async (): Promise<{ success: boolean; message: string }> => {
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/catalog-agent/logs', {
+      method: 'DELETE',
+      headers,
+    });
+    return await safeParseJson(res);
+  },
+};
+
 // Lead Scoring APIs
 export const leadScoresAPI = {
   getAll: (organizationId: string) => getLeadScores(organizationId),

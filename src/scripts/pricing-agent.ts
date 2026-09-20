@@ -6,6 +6,10 @@ import {
   getSearchTerms,
   calculateMatchScore,
   extractPrice,
+  determineMatchConfidence,
+  parseItemAttributes,
+  extractBrand,
+  parseSearchKeywords,
   COMPETITORS,
   CandidateProduct,
   InventoryItem,
@@ -227,6 +231,8 @@ async function searchKentFast(cleanTerm: string): Promise<CandidateProduct[]> {
       upc: r.upc || '',
       dimensions: '',
       description: r.shortDesc || r.desc || '',
+      brand: r.brand || r.manufacturer || '',
+      category: r.category || '',
       url: r.url || ''
     }));
   } catch (e) {
@@ -250,15 +256,55 @@ async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | 
 
   if (!allCandidates.length) return null;
 
+  const invBrand = extractBrand(invItem);
+  const parsedAttrs = parseItemAttributes(invItem.attributes);
+  const searchKeywords = parseSearchKeywords(invItem.search_keywords);
+
   const scored: ScoredMatch[] = allCandidates.map(candidate => {
     const score = calculateMatchScore(invItem, candidate);
     const parsedPrice = extractPrice(candidate.priceText);
+
+    const candBrand = (candidate.brand || '').toLowerCase() || extractBrand({ sku: candidate.sku || '' }, candidate.title);
+    const brandMatched = Boolean(invBrand && (invBrand === candBrand || candidate.title.toLowerCase().includes(invBrand)));
+
+    const upcMatch = Boolean(invItem.upc && candidate.upc && invItem.upc.trim() === candidate.upc.trim());
+    const mfgMatch = Boolean(
+      (invItem.mfg && candidate.mfg && invItem.mfg.trim().toLowerCase() === candidate.mfg.trim().toLowerCase()) ||
+      (parsedAttrs.model && candidate.title.toLowerCase().includes(String(parsedAttrs.model).toLowerCase()))
+    );
+
+    const attrMatch = Boolean(
+      (parsedAttrs.dimensions && candidate.title.toLowerCase().includes(String(parsedAttrs.dimensions).toLowerCase())) ||
+      (parsedAttrs.material && candidate.title.toLowerCase().includes(String(parsedAttrs.material).toLowerCase())) ||
+      (parsedAttrs.model && candidate.title.toLowerCase().includes(String(parsedAttrs.model).toLowerCase()))
+    );
+
+    const keywordMatch = Boolean(
+      searchKeywords.some(kw => kw.length >= 4 && candidate.title.toLowerCase().includes(kw.toLowerCase()))
+    );
+
+    const { confidence, method } = determineMatchConfidence(score, {
+      upcMatch,
+      mfgMatch,
+      brandMatch: brandMatched,
+      attrMatch,
+      keywordMatch
+    });
+
     return {
       candidate,
       score,
       price: parsedPrice,
       matchFound: score >= 50,
-      competitorName: 'KENT Building Supplies'
+      competitorName: 'KENT Building Supplies',
+      confidenceLevel: confidence,
+      matchMethod: method,
+      matchSignals: {
+        brandMatched,
+        exactIdentifier: upcMatch || mfgMatch,
+        attributesMatched: attrMatch,
+        keywordsMatched: keywordMatch
+      }
     };
   });
 
@@ -375,7 +421,7 @@ async function runCompetitivePricing() {
     for (let retry = 0; retry < 3; retry++) {
       const res = await supabase
         .from('inventory')
-        .select('id, sku, name, description, unit_price, cost, supplier_sku, upc, category')
+        .select('id, sku, name, description, short_description, brand, search_keywords, attributes, unit_price, cost, supplier_sku, upc, category')
         .order('id', { ascending: true })
         .range(currentIndex, batchEnd);
 
@@ -423,25 +469,39 @@ async function runCompetitivePricing() {
           }
 
           try {
+            const parsedAttrs = parseItemAttributes(item.attributes);
             const invItem: InventoryItem = {
               sku: String(item.sku || ''),
               name: item.name || '',
               description: item.description || item.name || '',
-              mfg: item.supplier_sku || "",
+              short_description: item.short_description || '',
+              brand: item.brand || parsedAttrs.brand || '',
+              search_keywords: item.search_keywords || [],
+              attributes: item.attributes || {},
+              mfg: item.supplier_sku || parsedAttrs.model || parsedAttrs.mpn || "",
               upc: item.upc || "",
-              dimensions: item.description || item.name || "",
+              dimensions: parsedAttrs.dimensions || parsedAttrs.size || item.description || item.name || "",
               category: item.category || "",
               unit_price: item.unit_price ? (item.unit_price > 100 ? item.unit_price / 100 : item.unit_price) : 0
             };
 
             let hasMatch = false;
 
-            // 1. Direct Kent high-speed search (cloud search API)
+            // 1. Direct Kent high-speed search (cloud search API with brand, keywords & attributes)
             const kentMatch = await findBestKentMatch(invItem);
 
             if (kentMatch && kentMatch.score >= kentComp.matchThreshold && kentMatch.price != null) {
               hasMatch = true;
-              log(`  ✅ KENT MATCH! [${item.sku}] (Score: ${kentMatch.score}) - $${kentMatch.price.toFixed(2)} CAD`);
+              const matchConfidence = kentMatch.confidenceLevel || (kentMatch.score >= 80 ? 'EXACT' : kentMatch.score >= 65 ? 'HIGH' : 'MEDIUM');
+              const matchMethod = kentMatch.matchMethod || (kentMatch.matchSignals?.brandMatched ? 'BRAND_SPEC_MATCH' : 'AUTOMATED_SCRAPER');
+
+              const signalsLog = [
+                invItem.brand ? `Brand: ${invItem.brand}` : null,
+                kentMatch.matchSignals?.attributesMatched ? 'Spec Matched' : null,
+                kentMatch.matchSignals?.keywordsMatched ? 'Keywords Matched' : null,
+              ].filter(Boolean).join(' | ');
+
+              log(`  ✅ KENT MATCH! [${item.sku}] (Score: ${kentMatch.score}, Conf: ${matchConfidence}, Method: ${matchMethod}${signalsLog ? ` - ${signalsLog}` : ''}) - $${kentMatch.price.toFixed(2)} CAD`);
 
               try {
                 const { data: existingCompProd } = await supabase
@@ -484,8 +544,8 @@ async function runCompetitivePricing() {
 
                   if (existingMatch?.id) {
                     await supabase.from('product_matches').update({
-                      match_confidence: kentMatch.score >= 70 ? 'EXACT' : 'HIGH',
-                      match_method: 'AUTOMATED_SCRAPER',
+                      match_confidence: matchConfidence,
+                      match_method: matchMethod,
                       approved: true,
                       updated_at: new Date().toISOString()
                     }).eq('id', existingMatch.id);
@@ -493,8 +553,8 @@ async function runCompetitivePricing() {
                     await supabase.from('product_matches').insert({
                       product_id: String(item.id),
                       competitor_product_id: compProdId,
-                      match_confidence: kentMatch.score >= 70 ? 'EXACT' : 'HIGH',
-                      match_method: 'AUTOMATED_SCRAPER',
+                      match_confidence: matchConfidence,
+                      match_method: matchMethod,
                       approved: true
                     });
                   }

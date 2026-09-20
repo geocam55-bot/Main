@@ -34,8 +34,10 @@ import {
   Download,
   RefreshCw,
   ShoppingCart,
+  StopCircle,
+  Terminal,
 } from 'lucide-react';
-import { inventoryAPI } from '../utils/api';
+import { inventoryAPI, catalogAgentAPI, type CatalogAgentStatusResponse } from '../utils/api';
 import type { User } from '../App';
 import { PermissionGate } from './PermissionGate';
 import { canAdd, canChange, canDelete } from '../utils/permissions';
@@ -143,33 +145,115 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   
   // ⚡ Performance optimization: Track if search is computing
   const [isSearching, setIsSearching] = useState(false);
-  const [isEnriching, setIsEnriching] = useState(false);
+  const [catalogAgentStatus, setCatalogAgentStatus] = useState<CatalogAgentStatusResponse>({
+    isRunning: false,
+    progress: null
+  });
+  const [isCatalogAgentStopping, setIsCatalogAgentStopping] = useState(false);
+  const [isCatalogLogsOpen, setIsCatalogLogsOpen] = useState(false);
+  const [catalogLogs, setCatalogLogs] = useState('');
+
+  // Auto-poll catalog agent status during active sweep
+  useEffect(() => {
+    let isMounted = true;
+    let pollInterval: any = null;
+
+    const checkCatalogStatus = async () => {
+      try {
+        const status = await catalogAgentAPI.getStatus();
+        if (!isMounted) return;
+        setCatalogAgentStatus(prev => {
+          if (prev?.isRunning && !status.isRunning) {
+            toast.success(`✨ AI Catalog Enrichment Agent completed! ${status.progress?.enrichedCount || 0} items enriched.`);
+            loadInventory();
+          }
+          return status;
+        });
+      } catch (err) {}
+    };
+
+    checkCatalogStatus();
+    pollInterval = setInterval(checkCatalogStatus, catalogAgentStatus?.isRunning ? 2500 : 7000);
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [catalogAgentStatus?.isRunning]);
+
+  // Auto-refresh logs when diagnostic modal is open
+  useEffect(() => {
+    if (!isCatalogLogsOpen) return;
+    let isMounted = true;
+    const fetchLogs = async () => {
+      try {
+        const data = await catalogAgentAPI.getLogs();
+        if (isMounted && data?.logs) {
+          setCatalogLogs(data.logs);
+        }
+      } catch (e) {}
+    };
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isCatalogLogsOpen]);
 
   const handleRunAiEnrichment = async () => {
     try {
-      setIsEnriching(true);
-      toast.info('✨ Playwright Catalog Enrichment Agent running... Extracting attributes, brands, and enriching descriptions.');
-      const startTime = Date.now();
-      const res = await fetch('/api/inventory/ai-enrich', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 25, organizationId: user.organizationId })
-      });
-      const elapsed = Date.now() - startTime;
-      if (elapsed < 2000) {
-        await new Promise(r => setTimeout(r, 2000 - elapsed));
-      }
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`✨ Successfully enriched ${data.enrichedCount} inventory items using Playwright parser! Descriptions updated, item names left untouched.`);
-        loadInventory();
-      } else {
-        toast.error(data.error || 'Failed to run enrichment');
+      setCatalogAgentStatus(prev => ({
+        isRunning: true,
+        progress: prev.progress ? {
+          ...prev.progress,
+          currentSku: 'Starting...',
+          currentName: 'Launching background agent sweep over entire inventory...',
+          lastUpdated: new Date().toISOString()
+        } : {
+          current: 0,
+          total: 20543,
+          percent: 0,
+          enrichedCount: 0,
+          currentSku: 'Starting...',
+          currentName: 'Launching background agent sweep over entire inventory...',
+          startedAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString()
+        }
+      }));
+      toast.info('✨ AI Catalog Agent initializing background sweep across entire inventory (20,543 SKUs)...');
+      const res = await catalogAgentAPI.start();
+      toast.success(res.message || 'AI Catalog Agent started across entire inventory!');
+      const s = await catalogAgentAPI.getStatus();
+      if (s?.progress) {
+        setCatalogAgentStatus(s);
       }
     } catch (e: any) {
-      toast.error(e.message || 'Failed to run enrichment');
+      toast.error(e.message || 'Failed to start AI Catalog Agent');
+    }
+  };
+
+  const handleStopCatalogAgent = async () => {
+    try {
+      setIsCatalogAgentStopping(true);
+      await catalogAgentAPI.stop();
+      toast.info('Stopping AI Catalog Agent sweep...');
+      const s = await catalogAgentAPI.getStatus();
+      setCatalogAgentStatus(s);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to stop agent');
     } finally {
-      setIsEnriching(false);
+      setIsCatalogAgentStopping(false);
+    }
+  };
+
+  const handleOpenCatalogLogs = async () => {
+    try {
+      const data = await catalogAgentAPI.getLogs();
+      setCatalogLogs(data.logs);
+      setIsCatalogLogsOpen(true);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to fetch catalog agent logs');
     }
   };
   
@@ -1546,31 +1630,94 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   return (
     <PermissionGate user={user} module="inventory" action="view">
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      {/* AI Catalog Enrichment Agent Status Bar (Prominent Top Banner) */}
-      {isEnriching && (
-        <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-purple-500/40 animate-fade-in">
-          <div className="flex items-center gap-3.5">
-            <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center text-purple-300 shrink-0 border border-white/20">
-              <Sparkles className="h-5 w-5 animate-spin text-purple-300" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-bold text-white">AI Catalog Enrichment Agent Active</h4>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/30 text-purple-200 border border-purple-400/30 animate-pulse">
-                  Searching Manufacturer & Retailer Databases
-                </span>
+      {/* AI Catalog Enrichment Agent Status Bar (Prominent Top Banner with live progress, memory guard & controls) */}
+      {(catalogAgentStatus?.isRunning || (catalogAgentStatus?.progress && catalogAgentStatus.progress.current > 0)) && (
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white rounded-xl p-4 sm:p-5 shadow-xl border border-purple-500/30 space-y-3.5 animate-fade-in">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="h-10 w-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300 shrink-0 border border-purple-400/30 mt-0.5">
+                {catalogAgentStatus?.isRunning ? (
+                  <Sparkles className="h-5 w-5 animate-spin text-purple-300" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                )}
               </div>
-              <p className="text-xs text-purple-200 mt-0.5">
-                Enriching inventory descriptions, brands, attributes & short specs. Item names remain strictly untouched.
-              </p>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-white">AI Catalog Enrichment Agent</h4>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    catalogAgentStatus?.isRunning
+                      ? 'bg-purple-500/20 text-purple-200 border-purple-400/40 animate-pulse'
+                      : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+                  }`}>
+                    {catalogAgentStatus?.isRunning ? 'Active Background Sweep' : 'Sweep Paused / Complete'}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-white/10 text-slate-300 border border-white/10">
+                    ⚡ Concurrency Limit 10 · Auto-GC · RAM Guard
+                  </span>
+                </div>
+                <p className="text-xs text-purple-200/90 line-clamp-1">
+                  {catalogAgentStatus.progress?.currentName || 'Enriching attributes, brands, technical specs & descriptions across entire inventory. Names left untouched.'}
+                </p>
+                {catalogAgentStatus.progress?.currentSku && (
+                  <p className="text-[11px] font-mono text-purple-300">
+                    Current SKU: <span className="font-semibold text-white">{catalogAgentStatus.progress.currentSku}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 self-start md:self-center flex-wrap">
+              {catalogAgentStatus?.isRunning ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleStopCatalogAgent}
+                  disabled={isCatalogAgentStopping}
+                  className="h-8 gap-1.5 text-xs bg-rose-500/20 text-rose-200 border-rose-500/40 hover:bg-rose-500/30 hover:text-white"
+                >
+                  <StopCircle className="h-3.5 w-3.5 text-rose-400" />
+                  {isCatalogAgentStopping ? 'Stopping...' : 'Stop Agent'}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRunAiEnrichment}
+                  className="h-8 gap-1.5 text-xs bg-purple-500/20 text-purple-200 border-purple-500/40 hover:bg-purple-500/30 hover:text-white"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-purple-300" />
+                  Resume Sweep
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenCatalogLogs}
+                className="h-8 gap-1.5 text-xs bg-white/10 text-white border-white/20 hover:bg-white/20"
+              >
+                <Terminal className="h-3.5 w-3.5 text-purple-300" />
+                Diagnostics Log
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
-              <div className="h-2 w-20 bg-white/20 rounded-full overflow-hidden">
-                <div className="h-full bg-purple-400 animate-pulse w-3/4 rounded-full"></div>
-              </div>
-              <span className="text-xs font-mono text-purple-200">Processing...</span>
+
+          {/* Progress bar and metrics row */}
+          <div className="pt-2 border-t border-white/10 space-y-2">
+            <div className="flex items-center justify-between text-xs text-purple-200/90 font-mono">
+              <span>
+                Processed: <strong className="text-white">{(catalogAgentStatus.progress?.current || 0).toLocaleString()}</strong> / {(catalogAgentStatus.progress?.total || 20543).toLocaleString()} SKUs
+              </span>
+              <span>
+                Enriched: <strong className="text-emerald-300">{(catalogAgentStatus.progress?.enrichedCount || 0).toLocaleString()}</strong> ({catalogAgentStatus.progress?.percent || 0}%)
+              </span>
+            </div>
+            <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 transition-all duration-300 rounded-full"
+                style={{ width: `${Math.min(100, catalogAgentStatus.progress?.percent || 0)}%` }}
+              />
             </div>
           </div>
         </div>
@@ -1593,13 +1740,21 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
           <Button
             variant="outline"
             onClick={handleRunAiEnrichment}
-            disabled={isEnriching}
-            className="flex-1 sm:flex-none bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 border-purple-200 hover:bg-purple-100 font-medium"
-            title="Run AI Catalog Enrichment Agent on Inventory"
+            disabled={catalogAgentStatus?.isRunning}
+            className={`flex-1 sm:flex-none font-medium ${
+              catalogAgentStatus?.isRunning
+                ? 'bg-purple-100 text-purple-800 border-purple-300'
+                : 'bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+            }`}
+            title="Run AI Catalog Enrichment Agent across entire inventory (20,543 SKUs)"
           >
-            <Sparkles className={`h-4 w-4 sm:mr-2 text-purple-600 ${isEnriching ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">{isEnriching ? 'Enriching...' : '✨ AI Catalog Agent'}</span>
-            <span className="sm:hidden ml-2">{isEnriching ? 'Enriching' : 'AI Agent'}</span>
+            <Sparkles className={`h-4 w-4 sm:mr-2 text-purple-600 ${catalogAgentStatus?.isRunning ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">
+              {catalogAgentStatus?.isRunning ? `Agent Active (${catalogAgentStatus.progress?.percent || 0}%)` : '✨ AI Catalog Agent (All 20k)'}
+            </span>
+            <span className="sm:hidden ml-2">
+              {catalogAgentStatus?.isRunning ? `${catalogAgentStatus.progress?.percent || 0}%` : 'AI Agent'}
+            </span>
           </Button>
 
           {canAdd('inventory', user.role) && (
@@ -3155,6 +3310,63 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
             <Button onClick={handleSave} className="w-full sm:w-auto">
               {editingItem ? 'Update Item' : 'Create Item'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Catalog Enrichment Agent Diagnostic Dialog */}
+      <Dialog open={isCatalogLogsOpen} onOpenChange={setIsCatalogLogsOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Terminal className="h-5 w-5 text-purple-600" />
+              AI Catalog Agent Diagnostics & Worker Telemetry
+            </DialogTitle>
+            <DialogDescription>
+              Live background terminal output, concurrency thread logs, memory usage (RSS/Heap), and item enrichment stream across all 20,543 SKUs.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-[360px] max-h-[500px] overflow-y-auto bg-slate-950 text-slate-100 font-mono text-xs p-4 rounded-lg border border-slate-800 whitespace-pre-wrap select-text leading-relaxed">
+            {catalogLogs || 'Awaiting agent execution logs...'}
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-border mt-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                <span className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+                Live streaming every 3s
+              </span>
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Memory Guard: Auto-GC &lt; 400MB RSS
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await catalogAgentAPI.clearLogs();
+                    setCatalogLogs('');
+                    toast.success('Catalog agent logs cleared');
+                  } catch (e: any) {
+                    toast.error(e.message || 'Failed to clear logs');
+                  }
+                }}
+                className="text-xs"
+              >
+                Clear Log
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setIsCatalogLogsOpen(false)}
+                className="text-xs"
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

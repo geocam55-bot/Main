@@ -100,6 +100,10 @@ export interface InventoryItem {
   sku: string;
   name?: string;
   description?: string;
+  short_description?: string;
+  brand?: string;
+  search_keywords?: string[] | string;
+  attributes?: Record<string, any> | string;
   dimensions?: string;
   mfg?: string;
   supplier_sku?: string;
@@ -118,8 +122,12 @@ export interface CandidateProduct {
   upc?: string;
   dimensions?: string;
   description?: string;
+  brand?: string;
+  category?: string;
   url: string;
 }
+
+export type MatchConfidenceLevel = 'EXACT' | 'HIGH' | 'MEDIUM' | 'LOW' | 'REGIONAL_ESTIMATE';
 
 export interface ScoredMatch {
   candidate: CandidateProduct;
@@ -127,6 +135,15 @@ export interface ScoredMatch {
   price: number | null;
   matchFound: boolean;
   competitorName: string;
+  confidenceLevel?: MatchConfidenceLevel;
+  matchMethod?: string;
+  matchSignals?: {
+    brandMatched?: boolean;
+    exactIdentifier?: boolean;
+    dimensionsMatched?: boolean;
+    attributesMatched?: boolean;
+    keywordsMatched?: boolean;
+  };
 }
 
 // ======================================================
@@ -214,35 +231,135 @@ export function extractDimensions(text?: string | null): string {
 }
 
 // ======================================================
-// MATCH SCORING (Enhanced Weighted Formula)
+// MATCH SCORING (Enhanced Multi-Signal Formula with Brand, Attributes, Keywords & Description)
 // ======================================================
+
+const KNOWN_BRANDS = [
+  'dewalt', 'milwaukee', 'makita', 'bosch', 'bostitch', 'stanley', 'irwin',
+  'sika', 'lepage', 'dap', 'owens corning', 'certainteed', 'iko', 'bp',
+  'simpson strong-tie', 'canwel', 'taiga', 'james hardie', 'trex', 'timbertech',
+  'durock', 'hardiebacker', 'sheetrock', 'cgc', 'armstrong', 'ge', 'leviton',
+  'legrand', 'schlage', 'weiser', 'kwikset', 'paslode', 'hitachi', 'metabo',
+  'ryobi', 'ridgid', 'gorilla', 'titebond', 'resisto', 'soprema', 'grace',
+  'blueskin', 'tyvek', 'tuck tape', 'knauf', 'rockwool', 'roxul', 'johns manville'
+];
+
+/**
+ * Safely parse attributes if stored as JSON string or object
+ */
+export function parseItemAttributes(attrs?: Record<string, any> | string | null): Record<string, any> {
+  if (!attrs) return {};
+  if (typeof attrs === 'object') return attrs;
+  try {
+    return JSON.parse(attrs);
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Extract clean search keywords as string array
+ */
+export function parseSearchKeywords(keywords?: string[] | string | null): string[] {
+  if (!keywords) return [];
+  if (Array.isArray(keywords)) {
+    return keywords.map(k => String(k).trim()).filter(k => k.length > 1);
+  }
+  if (typeof keywords === 'string') {
+    return keywords.split(/[,;\n]/).map(k => k.trim()).filter(k => k.length > 1);
+  }
+  return [];
+}
+
+/**
+ * Extract normalized brand from item or text
+ */
+export function extractBrand(item: InventoryItem, text?: string): string {
+  if (item.brand && item.brand.trim()) {
+    return item.brand.trim().toLowerCase();
+  }
+  const parsedAttrs = parseItemAttributes(item.attributes);
+  if (parsedAttrs.brand && typeof parsedAttrs.brand === 'string') {
+    return parsedAttrs.brand.trim().toLowerCase();
+  }
+  const target = `${text || ''} ${item.name || ''} ${item.description || ''}`.toLowerCase();
+  for (const b of KNOWN_BRANDS) {
+    const regex = new RegExp(`\\b${b.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(target)) {
+      return b;
+    }
+  }
+  return '';
+}
+
+/**
+ * Computes match confidence level and metadata based on score and verified match signals
+ */
+export function determineMatchConfidence(
+  score: number,
+  signals?: {
+    upcMatch?: boolean;
+    mfgMatch?: boolean;
+    brandMatch?: boolean;
+    attrMatch?: boolean;
+    keywordMatch?: boolean;
+  }
+): { confidence: MatchConfidenceLevel; method: string } {
+  if (signals?.upcMatch) {
+    return { confidence: 'EXACT', method: 'UPC_BARCODE' };
+  }
+  if (signals?.mfgMatch && (signals.brandMatch || score >= 75)) {
+    return { confidence: 'EXACT', method: 'BRAND_MPN_MATCH' };
+  }
+  if (score >= 80) {
+    return { confidence: 'EXACT', method: signals?.brandMatch ? 'VERIFIED_BRAND_SPEC' : 'AUTOMATED_SCRAPER' };
+  }
+  if (score >= 65 || (signals?.brandMatch && (signals.attrMatch || signals.keywordMatch))) {
+    return { confidence: 'HIGH', method: signals?.brandMatch ? 'BRAND_SPEC_MATCH' : 'HIGH_TOKEN_MATCH' };
+  }
+  if (score >= 45) {
+    return { confidence: 'MEDIUM', method: 'SPEC_MATCH' };
+  }
+  return { confidence: 'LOW', method: 'PARTIAL_MATCH' };
+}
 
 export function calculateMatchScore(inventoryItem: InventoryItem, candidate: CandidateProduct): number {
   let score = 0;
 
-  const invTitle = (inventoryItem.description || inventoryItem.name || '').toLowerCase();
-  const candTitle = (candidate.title || candidate.description || '').toLowerCase();
+  const invTitle = (inventoryItem.name || '').toLowerCase();
+  const invDesc = (inventoryItem.description || inventoryItem.short_description || '').toLowerCase();
+  const fullInvText = `${invTitle} ${invDesc}`.trim();
+
+  const candTitle = (candidate.title || '').toLowerCase();
+  const candDesc = (candidate.description || '').toLowerCase();
+  const fullCandText = `${candTitle} ${candDesc}`.trim();
 
   // HARD VETO 1: Material Category Conflict (Plywood vs Drywall)
-  const invIsPlywood = /\b(?:plywood|sheathing)\b/i.test(invTitle);
-  const candIsDrywall = /\b(?:drywall|sheetrock|gypsum)\b/i.test(candTitle);
+  const invIsPlywood = /\b(?:plywood|sheathing|osb)\b/i.test(fullInvText);
+  const candIsDrywall = /\b(?:drywall|sheetrock|gypsum)\b/i.test(fullCandText);
   if (invIsPlywood && candIsDrywall) return 0;
 
   // HARD VETO 2: Treated vs Untreated Lumber Mismatch
-  const invIsTreated = /\b(?:treated|pressure|pt|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(invTitle);
-  const candIsTreated = /\b(?:treated|pressure|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(candTitle);
+  const invIsTreated = /\b(?:treated|pressure|pt|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(fullInvText);
+  const candIsTreated = /\b(?:treated|pressure|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(fullCandText);
   if (!invIsTreated && candIsTreated) return 0;
   if (invIsTreated && !candIsTreated) return 0;
 
+  // ==========================================
   // 1. Exact UPC Match (+100)
+  // ==========================================
   const normInvUpc = normalizeUPC(inventoryItem.upc);
   const normCandUpc = normalizeUPC(candidate.upc);
   if (normInvUpc && normCandUpc && normInvUpc === normCandUpc) {
     score += 100;
   }
 
+  // ==========================================
   // 2. Exact Manufacturer Part / Model # Match (+80)
-  const normInvMfg = normalizeMfg(inventoryItem.mfg || inventoryItem.supplier_sku);
+  // ==========================================
+  const parsedAttrs = parseItemAttributes(inventoryItem.attributes);
+  const mfgCandidate = inventoryItem.mfg || inventoryItem.supplier_sku || parsedAttrs.model || parsedAttrs.mpn || parsedAttrs.mfg_part_number;
+  const normInvMfg = normalizeMfg(mfgCandidate);
   const normCandMfg = normalizeMfg(candidate.mfg || candidate.sku);
   if (normInvMfg && normCandMfg) {
     if (normInvMfg === normCandMfg || normCandMfg.includes(normInvMfg)) {
@@ -250,18 +367,110 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
     }
   }
 
-  // 3. Dimensions Match (+40)
-  const invDims = inventoryItem.dimensions || extractDimensions(inventoryItem.description || inventoryItem.name);
-  const candDims = candidate.dimensions || extractDimensions(candidate.title || candidate.description);
+  // ==========================================
+  // 3. BRAND MATCHING & CONFLICT DETECTION (+35 / -60)
+  // ==========================================
+  const invBrand = extractBrand(inventoryItem);
+  const candBrand = (candidate.brand || '').toLowerCase() || extractBrand({ sku: candidate.sku || '' }, fullCandText);
+
+  if (invBrand) {
+    if (candBrand && invBrand === candBrand) {
+      score += 35;
+    } else if (fullCandText.includes(invBrand)) {
+      score += 30;
+    } else if (candBrand && candBrand !== invBrand) {
+      // Direct brand contradiction between recognized major brands (e.g. DeWalt vs Milwaukee)
+      score -= 60;
+    }
+  }
+
+  // ==========================================
+  // 4. ATTRIBUTES (JSON) DEEP MATCHING (+ up to 45)
+  // ==========================================
+  if (parsedAttrs && Object.keys(parsedAttrs).length > 0) {
+    // Model / MPN inside attributes
+    const attrModel = parsedAttrs.model || parsedAttrs.mpn || parsedAttrs.mfg_part_number;
+    if (attrModel && String(attrModel).length >= 3) {
+      const cleanModel = String(attrModel).toLowerCase();
+      if (fullCandText.includes(cleanModel)) {
+        score += 35;
+      }
+    }
+
+    // Dimensions or Size inside attributes
+    const attrDims = parsedAttrs.dimensions || parsedAttrs.size || parsedAttrs.thickness;
+    if (attrDims && String(attrDims).length >= 2) {
+      const cleanDims = normalizeText(String(attrDims));
+      const candClean = normalizeText(fullCandText);
+      if (candClean.includes(cleanDims)) {
+        score += 25;
+      }
+    }
+
+    // Material or Finish inside attributes
+    const attrMaterial = parsedAttrs.material || parsedAttrs.finish;
+    if (attrMaterial && String(attrMaterial).length >= 3) {
+      const cleanMat = String(attrMaterial).toLowerCase();
+      if (fullCandText.includes(cleanMat)) {
+        score += 15;
+      }
+    }
+
+    // Grade inside attributes
+    const attrGrade = parsedAttrs.grade;
+    if (attrGrade && String(attrGrade).length >= 2) {
+      const cleanGrade = String(attrGrade).toLowerCase();
+      if (fullCandText.includes(cleanGrade)) {
+        score += 15;
+      }
+    }
+
+    // Voltage / Spec / Pack Count
+    const attrVoltage = parsedAttrs.voltage;
+    if (attrVoltage && fullCandText.includes(String(attrVoltage).toLowerCase())) {
+      score += 15;
+    }
+  }
+
+  // ==========================================
+  // 5. SEARCH KEYWORDS COVERAGE (+ up to 30)
+  // ==========================================
+  const searchKeywords = parseSearchKeywords(inventoryItem.search_keywords);
+  if (searchKeywords.length > 0) {
+    let kwHits = 0;
+    for (const kw of searchKeywords) {
+      const cleanKw = kw.toLowerCase().trim();
+      if (cleanKw.length >= 3 && fullCandText.includes(cleanKw)) {
+        kwHits++;
+      } else {
+        // Test individual significant tokens of the keyword
+        const tokens = cleanKw.split(/\s+/).filter(t => t.length >= 3);
+        const matched = tokens.filter(t => fullCandText.includes(t)).length;
+        if (tokens.length > 0 && matched === tokens.length) {
+          kwHits += 0.8;
+        }
+      }
+    }
+    const kwRatio = Math.min(1, kwHits / Math.min(searchKeywords.length, 3));
+    score += Math.round(kwRatio * 30);
+  }
+
+  // ==========================================
+  // 6. DIMENSIONS MATCHING (+40)
+  // ==========================================
+  const invDims = inventoryItem.dimensions || parsedAttrs.dimensions || extractDimensions(fullInvText);
+  const candDims = candidate.dimensions || extractDimensions(fullCandText);
   if (invDims && candDims) {
     if (normalizeText(invDims) === normalizeText(candDims)) {
       score += 40;
     }
   }
 
-  // 4. Token & Significant Words Matching (+ up to 55 points)
+  // ==========================================
+  // 7. TOKEN & SIGNIFICANT WORDS MATCHING (+ up to 45)
+  // ==========================================
   const stopWords = new Set(['the', 'and', 'for', 'with', 'in', 'to', 'of', 'by', 'on', 'at', 'from', 'a', 'an', 'per', 'ea']);
-  const cleanInvWords = invTitle
+  const cleanInvWords = (invTitle + ' ' + (inventoryItem.short_description || ''))
     .replace(/[^a-z0-9\/\- ]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length >= 2 && !stopWords.has(w));
@@ -269,23 +478,17 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
   if (cleanInvWords.length > 0) {
     let matchedWords = 0;
     for (const word of cleanInvWords) {
-      if (candTitle.includes(word)) {
+      if (fullCandText.includes(word)) {
         matchedWords++;
       }
     }
     const tokenRatio = matchedWords / cleanInvWords.length;
-    score += Math.round(tokenRatio * 55);
-
-    // Brand / First word match bonus (e.g., SIKA, DEWALT, BOSTITCH, STANLEY)
-    const firstWord = cleanInvWords[0];
-    if (firstWord && firstWord.length >= 3 && candTitle.includes(firstWord)) {
-      score += 20;
-    }
+    score += Math.round(tokenRatio * 45);
 
     // Numbers & Spec match bonus (e.g., '01', '4l', '16', '3.25', '6x6')
     const numbersInInv = cleanInvWords.filter(w => /\d/.test(w));
     if (numbersInInv.length > 0) {
-      const matchedNums = numbersInInv.filter(n => candTitle.includes(n)).length;
+      const matchedNums = numbersInInv.filter(n => fullCandText.includes(n)).length;
       if (matchedNums === numbersInInv.length) {
         score += 20;
       } else if (matchedNums > 0) {
@@ -294,49 +497,77 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
     }
   }
 
-  // 5. Description String Similarity via string-similarity (+ up to 25)
-  const targetDesc = inventoryItem.description || inventoryItem.name || '';
-  const candDesc = candidate.title || candidate.description || '';
-  if (targetDesc && candDesc) {
+  // ==========================================
+  // 8. ENRICHED DESCRIPTION SIMILARITY (+ up to 25)
+  // ==========================================
+  const targetDesc = inventoryItem.description || inventoryItem.short_description || inventoryItem.name || '';
+  const candDescText = candidate.title || candidate.description || '';
+  if (targetDesc && candDescText) {
     const descScore = similarity.compareTwoStrings(
-      targetDesc.toLowerCase(),
-      candDesc.toLowerCase()
+      targetDesc.toLowerCase().slice(0, 300),
+      candDescText.toLowerCase().slice(0, 300)
     );
     score += Math.round(descScore * 25);
   }
 
-  // 6. Grade & Keyword Matching Bonus
-  const invIsSelect = /\bselect\b/i.test(invTitle);
-  const candIsSelect = /\bselect\b/i.test(candTitle);
-  const invIsStandard = /\bstandard\b/i.test(invTitle);
-  const candIsStandard = /\bstandard\b/i.test(candTitle);
+  // ==========================================
+  // 9. Grade & Standard Keywords
+  // ==========================================
+  const invIsSelect = /\bselect\b/i.test(fullInvText);
+  const candIsSelect = /\bselect\b/i.test(fullCandText);
+  const invIsStandard = /\bstandard\b/i.test(fullInvText);
+  const candIsStandard = /\bstandard\b/i.test(fullCandText);
 
   if (invIsSelect && candIsSelect) score += 15;
   if (invIsStandard && candIsStandard) score += 15;
   if (invIsStandard && candIsSelect) score -= 20;
 
-  return Math.round(score);
+  return Math.max(0, Math.round(score));
 }
 
 // ======================================================
-// SEARCH TERM GENERATION
+// SEARCH TERM GENERATION (Multi-Signal Query Builder)
 // ======================================================
 
 export function getSearchTerms(item: InventoryItem): string[] {
   const terms: string[] = [];
+  const parsedAttrs = parseItemAttributes(item.attributes);
+  const brand = extractBrand(item);
 
-  // 1. UPC barcode (if valid)
+  // 1. UPC barcode (highest precision)
   if (item.upc && String(item.upc).trim().length >= 6) {
     terms.push(String(item.upc).trim());
   }
 
-  // 2. Manufacturer part number / supplier sku
-  const mfg = item.mfg || item.supplier_sku;
-  if (mfg && String(mfg).trim().length >= 4 && !/^\d+$/.test(String(mfg))) {
-    terms.push(String(mfg).trim());
+  // 2. Brand + Manufacturer Part / Model # (highest precision text query)
+  const mfg = item.mfg || item.supplier_sku || parsedAttrs.model || parsedAttrs.mpn;
+  if (mfg && String(mfg).trim().length >= 3 && !/^\d{1,3}$/.test(String(mfg))) {
+    const cleanMfg = String(mfg).trim();
+    if (brand) {
+      terms.push(`${brand} ${cleanMfg}`);
+    }
+    terms.push(cleanMfg);
   }
 
-  const rawDesc = (item.description || item.name || '').trim();
+  // 3. Top High-Intent Search Keywords from Catalog Enrichment
+  const keywords = parseSearchKeywords(item.search_keywords);
+  if (keywords.length > 0) {
+    // Pick top 2 most descriptive keywords (between 8 and 45 chars)
+    const validKw = keywords.filter(k => k.length >= 6 && k.length <= 50);
+    for (const kw of validKw.slice(0, 2)) {
+      terms.push(kw);
+    }
+  }
+
+  // 4. Brand + Dimensions / Spec (e.g. Sika SikaBond 29oz, Simpson Strong-Tie H2.5A)
+  const dims = parsedAttrs.dimensions || parsedAttrs.size || extractDimensions(item.description || item.name);
+  if (brand && dims) {
+    const cat = item.category ? item.category.replace(/[^a-zA-Z]/g, ' ').trim().split(' ')[0] : '';
+    terms.push(`${brand} ${dims} ${cat}`.trim());
+  }
+
+  // 5. Cleaned Title / POS Description Query
+  const rawDesc = (item.description || item.short_description || item.name || '').trim();
   if (rawDesc) {
     // Clean POS abbreviations
     const cleaned = rawDesc
@@ -356,22 +587,30 @@ export function getSearchTerms(item: InventoryItem): string[] {
     // Concise search query (first 3-4 key tokens)
     const words = cleaned.split(' ').filter(w => w.length > 1);
     if (words.length > 4) {
-      terms.push(words.slice(0, 4).join(' '));
+      const concise = words.slice(0, 4).join(' ');
+      if (brand && !concise.toLowerCase().includes(brand)) {
+        terms.push(`${brand} ${concise}`);
+      } else {
+        terms.push(concise);
+      }
     }
-    if (cleaned) {
+    if (cleaned && cleaned.length <= 45) {
       terms.push(cleaned);
-    }
-
-    // Dimensional query (e.g. 2x4 8ft or 2x4x8)
-    const dims = extractDimensions(rawDesc);
-    if (dims) {
-      terms.push(`${dims} Lumber`);
     }
   }
 
-  // Deduplicate and cap at 2 highest-quality terms for extreme speed
-  const unique = Array.from(new Set(terms.filter(t => t && t.length >= 3)));
-  return unique.slice(0, 2);
+  // Deduplicate and select top 3 most targeted queries
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const t of terms) {
+    const norm = t.toLowerCase().trim();
+    if (norm.length >= 3 && !seen.has(norm)) {
+      seen.add(norm);
+      unique.push(t.trim());
+    }
+  }
+
+  return unique.slice(0, 3);
 }
 
 // ======================================================
@@ -401,6 +640,8 @@ export async function scrapeSearchResults(
           upc: r.upc || '',
           dimensions: '',
           description: r.shortDesc || r.desc || '',
+          brand: r.brand || r.manufacturer || '',
+          category: r.category || '',
           url: r.url || ''
         }));
         if (results.length > 0) return results;
@@ -534,15 +775,57 @@ export async function findBestProductMatch(
   });
 
   // Calculate match scores
+  const invBrand = extractBrand(inventoryItem);
+  const parsedAttrs = parseItemAttributes(inventoryItem.attributes);
+  const searchKeywords = parseSearchKeywords(inventoryItem.search_keywords);
+
   const scored = uniqueCandidates.map(candidate => {
     const score = calculateMatchScore(inventoryItem, candidate);
     const parsedPrice = extractPrice(candidate.priceText);
+
+    const candBrand = (candidate.brand || '').toLowerCase() || extractBrand({ sku: candidate.sku || '' }, candidate.title);
+    const brandMatched = Boolean(invBrand && (invBrand === candBrand || candidate.title.toLowerCase().includes(invBrand)));
+
+    const normInvUpc = normalizeUPC(inventoryItem.upc);
+    const normCandUpc = normalizeUPC(candidate.upc);
+    const upcMatch = Boolean(normInvUpc && normCandUpc && normInvUpc === normCandUpc);
+
+    const normInvMfg = normalizeMfg(inventoryItem.mfg || inventoryItem.supplier_sku || parsedAttrs.model || parsedAttrs.mpn);
+    const normCandMfg = normalizeMfg(candidate.mfg || candidate.sku);
+    const mfgMatch = Boolean(normInvMfg && normCandMfg && (normInvMfg === normCandMfg || normCandMfg.includes(normInvMfg)));
+
+    const attrMatch = Boolean(
+      (parsedAttrs.dimensions && candidate.title.toLowerCase().includes(String(parsedAttrs.dimensions).toLowerCase())) ||
+      (parsedAttrs.model && candidate.title.toLowerCase().includes(String(parsedAttrs.model).toLowerCase())) ||
+      (parsedAttrs.material && candidate.title.toLowerCase().includes(String(parsedAttrs.material).toLowerCase()))
+    );
+
+    const keywordMatch = Boolean(
+      searchKeywords.some(kw => kw.length >= 4 && candidate.title.toLowerCase().includes(kw.toLowerCase()))
+    );
+
+    const { confidence, method } = determineMatchConfidence(score, {
+      upcMatch,
+      mfgMatch,
+      brandMatch: brandMatched,
+      attrMatch,
+      keywordMatch
+    });
+
     return {
       candidate,
       score,
       price: parsedPrice,
       matchFound: score >= config.matchThreshold,
-      competitorName: config.name
+      competitorName: config.name,
+      confidenceLevel: confidence,
+      matchMethod: method,
+      matchSignals: {
+        brandMatched,
+        exactIdentifier: upcMatch || mfgMatch,
+        attributesMatched: attrMatch,
+        keywordsMatched: keywordMatch
+      }
     };
   });
 

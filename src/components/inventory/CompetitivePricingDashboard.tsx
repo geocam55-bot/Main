@@ -42,7 +42,7 @@ import {
   DialogDescription,
 } from '../ui/dialog';
 import { CompetitivePricingPanel } from './CompetitivePricingPanel';
-import { competitivePricingAPI } from '../../utils/api';
+import { competitivePricingAPI, catalogAgentAPI } from '../../utils/api';
 import { fetchCompetitivePricingDashboardDirect } from '../../utils/competitive-pricing-client';
 import { supabase } from '../../utils/supabase/client';
 import type {
@@ -135,21 +135,15 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
   const handleRunAiEnrichment = async () => {
     try {
       setIsEnriching(true);
-      toast.info('✨ AI Catalog Enrichment Agent running... Searching manufacturer databases and enriching inventory.');
-      const res = await fetch('/api/inventory/ai-enrich', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 10 })
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`✨ Successfully enriched ${data.enrichedCount} inventory items! Descriptions updated, item names left untouched.`);
-        loadDashboard(true);
-      } else {
-        toast.error(data.error || 'Failed to run AI enrichment');
+      toast.info('✨ Launching AI Catalog Enrichment Agent across entire inventory (20,543 SKUs)...');
+      const res = await catalogAgentAPI.start();
+      toast.success(res.message || 'AI Catalog Agent started across entire inventory!');
+      const s = await catalogAgentAPI.getStatus();
+      if (s?.isRunning) {
+        toast.info(`⚡ Catalog worker active. Progress: ${s.progress?.percent || 0}%. Live updates stream in the main Inventory tab.`);
       }
     } catch (e: any) {
-      toast.error(e.message || 'Failed to run AI enrichment');
+      toast.error(e.message || 'Failed to start AI Catalog Agent');
     } finally {
       setIsEnriching(false);
     }

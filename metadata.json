@@ -1,6 +1,6 @@
 {
   "name": "ProSpaces CRM",
-  "description": "Comprehensive ProSpaces CRM application featuring inventory management with 20,543 SKUs, shopping list planning, and backend-driven competitor pricing intelligence.",
+  "description": "Comprehensive ProSpaces CRM application featuring inventory management across 20,543 SKUs, background AI catalog enrichment agent with memory guard, shopping list planning, and competitor pricing intelligence.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

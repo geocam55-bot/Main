@@ -3591,6 +3591,10 @@ Result:
         sku: product.sku,
         name: product.productName,
         description: product.description,
+        short_description: product.shortDescription || product.short_description,
+        brand: product.brand,
+        search_keywords: product.searchKeywords || product.search_keywords,
+        attributes: product.attributes,
         mfg: product.mfgPartNumber,
         upc: product.upc,
         category: product.category,
@@ -3619,9 +3623,9 @@ Result:
             kentTitle = kentMatch.candidate.title;
             kentUrl = kentMatch.candidate.url;
             kentSku = kentUrl.split('/').pop() || '';
-            kentMethod = 'PLAYWRIGHT_SCRAPE';
-            kentConf = 'HIGH';
-            diagnosticLogs.push(`[Kent Playwright] Found match: ${kentTitle} at $${freshKent}`);
+            kentMethod = kentMatch.matchMethod || 'PLAYWRIGHT_SCRAPE';
+            kentConf = kentMatch.confidenceLevel || (kentMatch.score >= 80 ? 'EXACT' : kentMatch.score >= 65 ? 'HIGH' : 'MEDIUM');
+            diagnosticLogs.push(`[Kent Playwright] Found match: ${kentTitle} at $${freshKent} (Score: ${kentMatch.score}, Conf: ${kentConf})`);
         } else {
             diagnosticLogs.push(`[Kent Playwright] No qualified match found (Score: ${kentMatch ? kentMatch.score : 0})`);
         }
@@ -3648,9 +3652,9 @@ Result:
             hdTitle = hdMatch.candidate.title;
             hdUrl = hdMatch.candidate.url;
             hdSku = hdUrl.split('/').pop() || '';
-            hdMethod = 'PLAYWRIGHT_SCRAPE';
-            hdConf = 'HIGH';
-            diagnosticLogs.push(`[Home Depot Playwright] Found match: ${hdTitle} at $${freshHd}`);
+            hdMethod = hdMatch.matchMethod || 'PLAYWRIGHT_SCRAPE';
+            hdConf = hdMatch.confidenceLevel || (hdMatch.score >= 80 ? 'EXACT' : hdMatch.score >= 65 ? 'HIGH' : 'MEDIUM');
+            diagnosticLogs.push(`[Home Depot Playwright] Found match: ${hdTitle} at $${freshHd} (Score: ${hdMatch.score}, Conf: ${hdConf})`);
         } else {
             diagnosticLogs.push(`[Home Depot Playwright] No qualified match found (Score: ${hdMatch ? hdMatch.score : 0})`);
         }
@@ -4929,6 +4933,407 @@ Result:
       }
       
       res.json({ success: true, message: 'Logs cleared successfully.' });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AI CATALOG ENRICHMENT AGENT - BACKGROUND MEMORY & PERFORMANCE OPTIMIZED
+  // ═══════════════════════════════════════════════════════════════════════════
+  let activeCatalogAgentChild: any = null;
+
+  // POST /api/catalog-agent/start
+  app.post('/api/catalog-agent/start', async (req, res) => {
+    try {
+      const { spawn } = await import('child_process');
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      const logPath = path.join(process.cwd(), 'catalog-agent-diagnostic.log');
+      const statusPath = path.join(process.cwd(), 'catalog-agent-status.json');
+      
+      // Open sync log descriptor
+      const outFd = fs.openSync(logPath, 'a');
+      
+      // Clear stop signal
+      const stopSignalPath = path.join(process.cwd(), 'catalog-agent-stop.signal');
+      if (fs.existsSync(stopSignalPath)) {
+        try { fs.unlinkSync(stopSignalPath); } catch (e) {}
+      }
+
+      fs.writeSync(outFd, `\n\n--- CATALOG AGENT STARTED AT ${new Date().toISOString()} ---\n`);
+
+      // Query total inventory count across entire catalog
+      let totalItemsCount = 20543;
+      try {
+        const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
+        if (count && count > 0) totalItemsCount = count;
+      } catch (cntErr) {}
+
+      // Check if already active
+      let currentItem = 0;
+      let enrichedCount = 0;
+      if (fs.existsSync(statusPath)) {
+        try {
+          const prev = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+          if (prev?.isRunning && prev?.progress?.lastUpdated) {
+            const ageMs = Date.now() - new Date(prev.progress.lastUpdated).getTime();
+            if (ageMs < 20000) {
+              return res.json({ success: true, message: 'Catalog enrichment agent is actively running.', status: prev });
+            }
+          }
+          if (prev?.progress?.current) currentItem = prev.progress.current;
+          if (prev?.progress?.enrichedCount) enrichedCount = prev.progress.enrichedCount;
+        } catch (e) {}
+      }
+
+      const initialStatus = {
+        isRunning: true,
+        progress: {
+          current: currentItem,
+          total: totalItemsCount,
+          percent: Number(((currentItem / totalItemsCount) * 100).toFixed(1)),
+          enrichedCount,
+          currentSku: 'Starting...',
+          currentName: `Entire inventory catalog enrichment sweep initialized (${totalItemsCount} SKUs)`,
+          startedAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString()
+        }
+      };
+
+      fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
+
+      try {
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'catalog_agent:status',
+          value: initialStatus
+        });
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'catalog_agent:control',
+          value: { action: 'start', timestamp: new Date().toISOString() }
+        });
+      } catch (kvErr) {}
+
+      const cjsPath = path.join(process.cwd(), 'dist', 'catalog-agent.cjs');
+      const tsPath = path.join(process.cwd(), 'src', 'scripts', 'catalog-agent.ts');
+      const binTsx = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
+
+      // Guarantee dist/catalog-agent.cjs is compiled
+      if (!fs.existsSync(cjsPath) && fs.existsSync(tsPath)) {
+        try {
+          const esbuild = await import('esbuild');
+          esbuild.buildSync({
+            entryPoints: [tsPath],
+            bundle: true,
+            platform: 'node',
+            format: 'cjs',
+            packages: 'external',
+            sourcemap: true,
+            outfile: cjsPath
+          });
+          console.log('[Catalog Agent] Bundled dist/catalog-agent.cjs on demand');
+        } catch (bErr: any) {
+          console.error('[Catalog Agent] Dynamic build failed:', bErr);
+        }
+      }
+
+      const useCompiled = fs.existsSync(cjsPath);
+      const agentScriptPath = useCompiled ? cjsPath : tsPath;
+
+      try {
+        activeCatalogAgentChild = useCompiled
+          ? spawn('node', [agentScriptPath], {
+              detached: true,
+              stdio: ['ignore', outFd, outFd]
+            })
+          : (fs.existsSync(binTsx)
+              ? spawn(binTsx, [agentScriptPath], {
+                  detached: true,
+                  stdio: ['ignore', outFd, outFd]
+                })
+              : spawn('node', [agentScriptPath], {
+                  detached: true,
+                  stdio: ['ignore', outFd, outFd]
+                }));
+
+        activeCatalogAgentChild.on('error', (err: any) => {
+          console.error('[Catalog Agent Process Error]:', err);
+          try {
+            fs.writeSync(outFd, `\n[ERROR]: Failed to start agent process: ${err?.message || err}\n`);
+          } catch (e) {}
+        });
+
+        activeCatalogAgentChild.unref();
+
+        activeCatalogAgentChild.on('close', (code: number) => {
+          console.log(`[Catalog Agent Process] Exited with code ${code}`);
+          activeCatalogAgentChild = null;
+          try {
+            if (fs.existsSync(statusPath)) {
+              const cur = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+              if (cur && cur.isRunning) {
+                cur.isRunning = false;
+                cur.progress = cur.progress || {};
+                cur.progress.currentSku = code === 0 ? 'Completed' : 'Paused';
+                cur.progress.lastUpdated = new Date().toISOString();
+                fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
+                supabase.from('kv_store_8405be07').upsert({ key: 'catalog_agent:status', value: cur });
+              }
+            }
+          } catch (e) {}
+        });
+      } catch (spawnErr: any) {
+        console.error('[Catalog Agent] Spawn error:', spawnErr);
+        return res.status(500).json({ error: `Failed to spawn catalog agent: ${spawnErr?.message || spawnErr}` });
+      }
+
+      res.json({ success: true, message: 'AI Catalog agent started in background across entire inventory.', status: initialStatus });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/catalog-agent/status
+  app.get('/api/catalog-agent/status', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const statusPath = path.join(process.cwd(), 'catalog-agent-status.json');
+
+      let fileData: any = null;
+      if (fs.existsSync(statusPath)) {
+        try {
+          const content = fs.readFileSync(statusPath, 'utf8');
+          fileData = JSON.parse(content);
+        } catch (e) {}
+      }
+
+      if (fileData && fileData.isRunning) {
+        const lastUpdatedMs = fileData.progress?.lastUpdated ? new Date(fileData.progress.lastUpdated).getTime() : 0;
+        const diffMs = Date.now() - lastUpdatedMs;
+
+        let isPidAlive = false;
+        if (fileData.pid) {
+          try {
+            process.kill(fileData.pid, 0);
+            isPidAlive = true;
+          } catch (e) {
+            isPidAlive = false;
+          }
+        }
+
+        if (!isPidAlive && !activeCatalogAgentChild && diffMs > 180 * 1000) {
+          fileData.isRunning = false;
+          try {
+            fs.writeFileSync(statusPath, JSON.stringify(fileData, null, 2));
+            supabase.from('kv_store_8405be07').upsert({ key: 'catalog_agent:status', value: fileData });
+          } catch (e) {}
+        }
+      }
+
+      if (fileData && fileData.progress) {
+        return res.json(fileData);
+      }
+
+      // Fall back to shared Supabase kv_store
+      const { data, error } = await supabase
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', 'catalog_agent:status')
+        .maybeSingle();
+
+      if (!error && data?.value) {
+        const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        return res.json(parsed);
+      }
+
+      res.json({
+        isRunning: false,
+        progress: {
+          current: 0,
+          total: 20543,
+          percent: 0,
+          enrichedCount: 0,
+          currentSku: 'Ready',
+          currentName: 'Catalog enrichment agent ready (entire 20,543 SKUs)',
+          startedAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString()
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/catalog-agent/stop
+  app.post('/api/catalog-agent/stop', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const statusPath = path.join(process.cwd(), 'catalog-agent-status.json');
+      const stopSignalPath = path.join(process.cwd(), 'catalog-agent-stop.signal');
+
+      try {
+        fs.writeFileSync(stopSignalPath, 'stop');
+      } catch (e) {}
+
+      if (activeCatalogAgentChild && activeCatalogAgentChild.pid) {
+        try {
+          process.kill(-activeCatalogAgentChild.pid, 'SIGTERM');
+        } catch (kErr) {
+          try {
+            activeCatalogAgentChild.kill('SIGTERM');
+          } catch (kErr2) {}
+        }
+        activeCatalogAgentChild = null;
+      }
+
+      try {
+        const { exec } = await import('child_process');
+        exec('pkill -f catalog-agent', () => {});
+      } catch (pkErr) {}
+
+      let stoppedData: any = { isRunning: false, stoppedAt: new Date().toISOString() };
+      if (fs.existsSync(statusPath)) {
+        try {
+          const content = fs.readFileSync(statusPath, 'utf8');
+          stoppedData = JSON.parse(content);
+          stoppedData.isRunning = false;
+          stoppedData.stoppedAt = new Date().toISOString();
+          if (stoppedData.progress) {
+            stoppedData.progress.currentSku = 'Stopped';
+            stoppedData.progress.currentName = 'Catalog sweep paused';
+            stoppedData.progress.lastUpdated = new Date().toISOString();
+          }
+          fs.writeFileSync(statusPath, JSON.stringify(stoppedData, null, 2));
+        } catch (e) {}
+      }
+
+      try {
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'catalog_agent:status',
+          value: stoppedData
+        });
+        await supabase.from('kv_store_8405be07').upsert({
+          key: 'catalog_agent:control',
+          value: { action: 'stop', timestamp: new Date().toISOString() }
+        });
+      } catch (kvErr) {}
+
+      res.json({ success: true, message: 'AI Catalog agent stopped.', status: stoppedData });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/catalog-agent/reset
+  app.post('/api/catalog-agent/reset', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const statusPath = path.join(process.cwd(), 'catalog-agent-status.json');
+      const stopSignalPath = path.join(process.cwd(), 'catalog-agent-stop.signal');
+
+      try { fs.writeFileSync(stopSignalPath, 'stop'); } catch (e) {}
+      if (activeCatalogAgentChild) {
+        try { activeCatalogAgentChild.kill('SIGTERM'); } catch (e) {}
+        activeCatalogAgentChild = null;
+      }
+      try {
+        const { exec } = await import('child_process');
+        exec('pkill -f catalog-agent', () => {});
+      } catch (e) {}
+
+      const resetStatus = {
+        isRunning: false,
+        progress: {
+          current: 0,
+          total: 20543,
+          percent: 0,
+          enrichedCount: 0,
+          currentSku: 'Ready',
+          currentName: 'Catalog enrichment agent ready (entire 20,543 SKUs)',
+          startedAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString()
+        }
+      };
+
+      try {
+        fs.writeFileSync(statusPath, JSON.stringify(resetStatus, null, 2));
+      } catch (e) {}
+
+      await supabase.from('kv_store_8405be07').upsert({
+        key: 'catalog_agent:status',
+        value: resetStatus
+      });
+      await supabase.from('kv_store_8405be07').upsert({
+        key: 'catalog_agent:control',
+        value: { action: 'stop', timestamp: new Date().toISOString() }
+      });
+
+      res.json({ success: true, message: 'Catalog agent status reset successfully.', status: resetStatus });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/catalog-agent/logs
+  app.get('/api/catalog-agent/logs', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const logPath = path.join(process.cwd(), 'catalog-agent-diagnostic.log');
+      
+      if (fs.existsSync(logPath)) {
+        const stats = fs.statSync(logPath);
+        if (stats.size > 0) {
+          const MAX_BYTES = 50 * 1024;
+          const startPos = Math.max(0, stats.size - MAX_BYTES);
+          const stream = fs.createReadStream(logPath, { start: startPos, encoding: 'utf-8' });
+          let data = '';
+          for await (const chunk of stream) {
+            data += chunk;
+          }
+          if (startPos > 0) {
+            data = '[...TRUNCATED - SHOWING LAST 50KB...]\n' + data;
+          }
+          if (data.trim()) {
+            return res.json({ logs: data });
+          }
+        }
+      }
+
+      // Check Supabase kv_store
+      const { data: kvData } = await supabase
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', 'catalog_agent:logs')
+        .maybeSingle();
+
+      if (kvData?.value) {
+        const logs = typeof kvData.value === 'string' ? kvData.value : (kvData.value.logs || JSON.stringify(kvData.value));
+        return res.json({ logs });
+      }
+      
+      res.json({ logs: `[Catalog Enrichment Agent] Status: Standby\nHigh-performance background worker ready to sweep all 20,543 SKUs.\nMemory management & concurrency limits primed.\nLast check: ${new Date().toLocaleTimeString()}` });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // DELETE /api/catalog-agent/logs
+  app.delete('/api/catalog-agent/logs', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const logPath = path.join(process.cwd(), 'catalog-agent-diagnostic.log');
+      
+      if (fs.existsSync(logPath)) {
+        fs.writeFileSync(logPath, '');
+      }
+      
+      res.json({ success: true, message: 'Catalog agent logs cleared successfully.' });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
