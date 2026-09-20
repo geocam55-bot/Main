@@ -1,6 +1,12 @@
 // @ts-nocheck
 import { createClient } from './supabase/client';
-import { buildInventoryOrSearchClause, buildInventoryAndSearchClause, expandInventorySearchTerms, STOP_WORDS } from './inventory-keywords';
+import {
+  buildInventoryOrSearchClause,
+  buildInventoryAndSearchClause,
+  buildInventoryRelaxedSearchClause,
+  expandInventorySearchTerms,
+  STOP_WORDS
+} from './inventory-keywords';
 
 const supabase = createClient();
 
@@ -147,9 +153,23 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
             }
           }
 
-          // 2. Category (if present in conversational search)
+          // 2. Category (validate against real database categories or search attributes)
           if (parsedParams.category) {
-            q = q.eq('category', parsedParams.category);
+            const normCat = parsedParams.category.toUpperCase().trim();
+            const validCategories = ['BUILDING MATERIALS', 'APPLIANCES', 'AUTOMOBILE'];
+            const matched = validCategories.find(c => c === normCat || (c === 'BUILDING MATERIALS' && ['TIMBER', 'PLANKS', 'LUMBER', 'FRAMING', 'DECKING'].includes(normCat)));
+            if (matched) {
+              q = q.eq('category', matched);
+            } else {
+              // If domain term (e.g. Tools, Paint, Fasteners), ensure it is searched across text/attributes
+              if (!parsedParams.searchTerms || !parsedParams.searchTerms.toLowerCase().includes(parsedParams.category.toLowerCase())) {
+                const combined = `${parsedParams.searchTerms || ''} ${parsedParams.category}`.trim();
+                const andClause = buildInventoryAndSearchClause(combined);
+                if (andClause) {
+                  q = q.or(andClause);
+                }
+              }
+            }
           }
 
           // 3. Price Filter
@@ -236,12 +256,52 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
       .order('name', { ascending: true })
       .range(from, to);
 
-    const { data, error, count } = await query;
+    // Execute main query and low-stock count concurrently to reduce latency and prevent timeouts
+    const [mainResult, lowStockResult] = await Promise.allSettled([
+      query,
+      lowStockQuery
+    ]);
+
+    if (mainResult.status === 'rejected') {
+      throw mainResult.reason;
+    }
+
+    let { data, error, count } = mainResult.value;
     if (error) {
       throw new Error(`Database error: ${error.message} (Code: ${error.code || 'unknown'})`);
     }
 
-    const { count: lowStockCount } = await lowStockQuery;
+    const lowStockCount = lowStockResult.status === 'fulfilled' && lowStockResult.value?.count ? lowStockResult.value.count : 0;
+
+    // Progressive relaxation fallback: If strict conjunction returned 0 rows on a human query,
+    // execute relaxed disjunction across keywords, attributes, and text columns
+    if ((!data || data.length === 0) && searchQuery && searchQuery.trim()) {
+      const relaxedClause = buildInventoryRelaxedSearchClause(searchQuery.trim());
+      if (relaxedClause) {
+        let fallbackQuery = supabase
+          .from('inventory')
+          .select('*', { count: 'exact' })
+          .eq('organization_id', organizationId)
+          .or(relaxedClause);
+
+        if (categoryFilter && categoryFilter !== 'all') {
+          fallbackQuery = fallbackQuery.eq('category', categoryFilter);
+        }
+
+        fallbackQuery = fallbackQuery
+          .order('name', { ascending: true })
+          .range(from, to);
+
+        const fallbackRes = await fallbackQuery;
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          data = fallbackRes.data;
+          count = fallbackRes.count || fallbackRes.data.length;
+          if (!aiExplanation) {
+            aiExplanation = `Showing relevant items for "${searchQuery.trim()}"`;
+          }
+        }
+      }
+    }
 
     const endTime = performance.now();
     const loadTime = endTime - startTime;

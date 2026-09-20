@@ -2596,16 +2596,18 @@ async function startServer() {
       cleanQuery = cleanQuery.replace(/low stock/gi, ' ');
     }
 
-    // 3. Extract categories
-    const categories = ['Timber', 'Fasteners', 'Planks', 'Hardware', 'Tools', 'Paint', 'Decking'];
+    // 3. Extract categories - map known domains to catalog categories or keep in searchTerms
     let matchedCategory: string | null = null;
-    for (const cat of categories) {
-      const reg = new RegExp(`\\b${cat}\\b`, 'i');
-      if (cleanQuery.match(reg)) {
-        matchedCategory = cat;
-        cleanQuery = cleanQuery.replace(reg, ' ');
-        break;
-      }
+    if (/\b(building materials|timber|lumber|framing|planks|decking|drywall|insulation|roofing|siding)\b/i.test(cleanQuery)) {
+      matchedCategory = 'BUILDING MATERIALS';
+      // Keep specific terms in search query for attribute/name matching, but clean generic category phrases
+      cleanQuery = cleanQuery.replace(/\b(building materials)\b/gi, ' ');
+    } else if (/\b(appliances?)\b/i.test(cleanQuery)) {
+      matchedCategory = 'APPLIANCES';
+      cleanQuery = cleanQuery.replace(/\b(appliances?)\b/gi, ' ');
+    } else if (/\b(automobile|automotive)\b/i.test(cleanQuery)) {
+      matchedCategory = 'AUTOMOBILE';
+      cleanQuery = cleanQuery.replace(/\b(automobile|automotive)\b/gi, ' ');
     }
 
     // 4. Clean search terms
@@ -2665,17 +2667,28 @@ async function startServer() {
     try {
       const prompt = `Analyze the following conversational search query for an inventory management system: "${query}".
 
-Extract structured search parameters. Standard categories include: Timber, Fasteners, Planks, Hardware, Tools, Paint, Decking.
+Extract structured search parameters.
+Valid top-level database categories are ONLY: "BUILDING MATERIALS", "APPLIANCES", "AUTOMOBILE".
+For specific items, materials, tools, dimensions, species, or hardware (e.g., SPF, 2x4x8, 2x4, lumber, stud, screws, nails, tools, drill, paint, siding, roofing, decking), ALWAYS keep or place them in "searchTerms".
+If the query mentions lumber, wood, framing, timber, decking, drywall, or roofing, set category to "BUILDING MATERIALS" or null, and preserve the item descriptors in searchTerms.
 Return a JSON object matching the requested schema.
 
 If a field is not specified or implied by the query, make it null.
 Examples:
+Query: "SPF 2x4x8"
+Result:
+{
+  "searchTerms": "SPF 2x4x8",
+  "category": "BUILDING MATERIALS",
+  "explanation": "Searching for SPF 2x4x8 dimensional lumber and framing materials"
+}
+
 Query: "tools under $50"
 Result:
 {
   "searchTerms": "tools",
   "priceFilter": { "operator": "lt", "value": 50 },
-  "explanation": "Searching for items in tools with price under $50"
+  "explanation": "Searching for tools with price under $50"
 }
 
 Query: "red paint in stock"
