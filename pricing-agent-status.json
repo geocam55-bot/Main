@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 0,
+    "current": 307,
     "total": 20561,
-    "percent": 0,
-    "matchesFound": 1174,
-    "currentSku": "Starting...",
-    "currentName": "Active catalog sweep initialized (20561 SKUs)",
-    "startedAt": "2026-09-21T16:22:59.665Z",
-    "lastUpdated": "2026-09-21T16:22:59.665Z"
+    "percent": 1.5,
+    "matchesFound": 26361,
+    "currentSku": "65165055",
+    "currentName": "Built to exacting standards for commercial builders and craftsmen, the Diablo Professional Trade & Power Tool Hardware (SKU: 65165055) offers superior durability and field-tested longevity. Key specifications include high-efficiency brushless motor technology, impact-resistant reinforced composite housing, and precision cnc machined tolerances. Optimized for electrical rough-in and conduit installation as well as heavy-duty commercial framing and cutting, this unit (EA) complies with applicable safety codes and quality assurance benchmarks.",
+    "startedAt": "2026-09-21T16:58:31.368Z",
+    "lastUpdated": "2026-09-21T16:59:27.919Z"
   },
-  "pid": 316
+  "pid": 546
 }

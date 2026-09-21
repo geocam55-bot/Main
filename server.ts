@@ -2784,7 +2784,7 @@ Result:
 `;
 
       const response = await client.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -4789,16 +4789,19 @@ Result:
         activeAgentChild = useCompiled
           ? spawn('node', [agentScriptPath], {
               detached: true,
-              stdio: ['ignore', outFd, outFd]
+              stdio: ['ignore', outFd, outFd],
+              env: process.env
             })
           : (fs.existsSync(binTsx)
               ? spawn(binTsx, [agentScriptPath], {
                   detached: true,
-                  stdio: ['ignore', outFd, outFd]
+                  stdio: ['ignore', outFd, outFd],
+                  env: process.env
                 })
               : spawn('node', [agentScriptPath], {
                   detached: true,
-                  stdio: ['ignore', outFd, outFd]
+                  stdio: ['ignore', outFd, outFd],
+                  env: process.env
                 }));
 
         initialStatus.progress = initialStatus.progress || ({} as any);
@@ -5197,16 +5200,19 @@ Result:
         activeCatalogAgentChild = useCompiled
           ? spawn('node', [agentScriptPath], {
               detached: true,
-              stdio: ['ignore', outFd, outFd]
+              stdio: ['ignore', outFd, outFd],
+              env: process.env
             })
           : (fs.existsSync(binTsx)
               ? spawn(binTsx, [agentScriptPath], {
                   detached: true,
-                  stdio: ['ignore', outFd, outFd]
+                  stdio: ['ignore', outFd, outFd],
+                  env: process.env
                 })
               : spawn('node', [agentScriptPath], {
                   detached: true,
-                  stdio: ['ignore', outFd, outFd]
+                  stdio: ['ignore', outFd, outFd],
+                  env: process.env
                 }));
 
         activeCatalogAgentChild.on('error', (err: any) => {
