@@ -1,4 +1,8 @@
 import { supabase } from './supabase/client';
+import {
+  buildInventoryAndSearchClause,
+  buildInventoryRelaxedSearchClause,
+} from './inventory-keywords';
 
 export interface AgentProgress {
   current: number;
@@ -108,22 +112,76 @@ function resolveInventoryTitles(rawName = '', rawDescription = '', category = ''
 
 export async function fetchCompetitivePricingDashboardDirect(filters?: any) {
   try {
+    const pageNum = parseInt(filters?.page, 10) || 1;
+    const limitNum = parseInt(filters?.limit, 10) || 150;
+    const searchStr = typeof filters?.search === 'string' ? filters.search.trim() : '';
+
+    let searchClause = '';
+    if (searchStr) {
+      searchClause = buildInventoryAndSearchClause(searchStr);
+    }
+
+    let countQuery = supabase
+      .from('inventory')
+      .select('*', { count: 'exact', head: true });
+
+    if (searchClause) {
+      countQuery = countQuery.or(searchClause);
+    }
+    if (filters?.category && filters.category !== 'all') {
+      countQuery = countQuery.ilike('category', filters.category);
+    }
+
+    let { count: exactTotalCount } = await countQuery;
+
+    // Progressive relaxation fallback: If strict conjunction returned 0, try relaxed clause
+    if ((exactTotalCount === 0 || exactTotalCount === null) && searchStr) {
+      const relaxed = buildInventoryRelaxedSearchClause(searchStr);
+      if (relaxed && relaxed !== searchClause) {
+        let relCountQuery = supabase
+          .from('inventory')
+          .select('*', { count: 'exact', head: true })
+          .or(relaxed);
+        if (filters?.category && filters.category !== 'all') {
+          relCountQuery = relCountQuery.ilike('category', filters.category);
+        }
+        const { count: relCount } = await relCountQuery;
+        if (relCount && relCount > 0) {
+          searchClause = relaxed;
+          exactTotalCount = relCount;
+        }
+      }
+    }
+
+    const isFiltered = !!searchStr || (filters?.category && filters.category !== 'all');
+    const totalItems = isFiltered ? (exactTotalCount || 0) : Math.max(20543, exactTotalCount || 20543);
+
+    const pageOffset = (pageNum - 1) * limitNum;
     let itemsQuery = supabase
       .from('inventory')
       .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
       .order('name', { ascending: true })
-      .range(0, 499);
+      .range(pageOffset, pageOffset + limitNum - 1);
 
-    if (filters?.search && typeof filters.search === 'string' && filters.search.trim()) {
-      const q = filters.search.trim();
-      itemsQuery = itemsQuery.or(`name.ilike.%${q}%,sku.ilike.%${q}%,description.ilike.%${q}%`);
+    if (searchClause) {
+      itemsQuery = itemsQuery.or(searchClause);
     }
-
     if (filters?.category && filters.category !== 'all') {
       itemsQuery = itemsQuery.ilike('category', filters.category);
     }
 
-    const { data: invRows } = await itemsQuery;
+    let { data: invRows, error: invErr } = await itemsQuery;
+    if (invErr && searchStr) {
+      const safeQuery = supabase
+        .from('inventory')
+        .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
+        .order('name', { ascending: true })
+        .or(`name.ilike.%${searchStr}%,sku.ilike.%${searchStr}%,description.ilike.%${searchStr}%`)
+        .range(pageOffset, pageOffset + limitNum - 1);
+      const { data: fallbackRows } = await safeQuery;
+      if (fallbackRows) invRows = fallbackRows;
+    }
+
     const products = invRows || [];
     const productIds = products.map((p: any) => String(p.id));
 
@@ -159,7 +217,7 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: any) {
     let competitiveCount = 0;
     let opportunitiesCount = 0;
 
-    const items = products.map((p: any) => {
+    let items = products.map((p: any) => {
       const { title, description } = resolveInventoryTitles(p.name, p.description, p.category);
       const prs = pricesMap.get(String(p.id)) || [];
       const yourPrice = Number(p.unit_price) || 0;
@@ -210,19 +268,28 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: any) {
       };
     });
 
+    if (filters?.varianceFilter && filters.varianceFilter !== 'all') {
+      if (filters.varianceFilter === 'higher') {
+        items = items.filter((i: any) => i.priceVariance !== null && i.priceVariance > 0);
+      } else if (filters.varianceFilter === 'lower') {
+        items = items.filter((i: any) => i.priceVariance !== null && i.priceVariance < 0);
+      } else if (filters.varianceFilter === 'no_match') {
+        items = items.filter((i: any) => i.competitorPrice === null);
+      }
+    }
+
     const withCompetitivePricing = competitiveCount + higherCount + lowerCount;
     return {
       items,
       metrics: {
-        totalMonitored: 20543,
+        totalMonitored: totalItems,
         withCompetitivePricing,
-        noMatch: Math.max(0, 20543 - withCompetitivePricing),
+        noMatch: Math.max(0, totalItems - withCompetitivePricing),
         ronaHigher: higherCount,
         ronaLower: lowerCount,
         outdatedPrices: 0,
         lastSuccessfulUpdate: new Date().toISOString(),
-        // Legacy compatibility
-        totalProductsTracked: 20543,
+        totalProductsTracked: totalItems,
         monitoredCompetitors: 2,
         competitiveCount,
         higherCount,
@@ -230,10 +297,10 @@ export async function fetchCompetitivePricingDashboardDirect(filters?: any) {
         opportunitiesCount,
       },
       pagination: {
-        page: 1,
-        limit: 150,
-        totalItems: 20543,
-        totalPages: 137,
+        page: pageNum,
+        limit: limitNum,
+        total: totalItems,
+        totalPages: Math.ceil(totalItems / limitNum) || 1,
       },
     };
   } catch (err: any) {

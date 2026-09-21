@@ -33,7 +33,9 @@ import {
   ShoppingCart,
   Trash2,
   Sparkles,
+  X,
 } from 'lucide-react';
+import { useDebounce } from '../../utils/useDebounce';
 import {
   Dialog,
   DialogContent,
@@ -99,6 +101,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [varianceFilter, setVarianceFilter] = useState('all');
   const [confidenceFilter, setConfidenceFilter] = useState('all');
@@ -211,7 +214,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     };
   };
 
-  const loadDashboard = async (forceFullLoading = false) => {
+  const loadDashboard = async (overrideSearch?: string, forceFullLoading = false) => {
     try {
       if (items.length === 0 || forceFullLoading) {
         setIsLoading(true);
@@ -219,11 +222,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         setIsRefreshing(true);
       }
       setError(null);
+      const activeSearch = (overrideSearch !== undefined ? overrideSearch : debouncedSearchQuery).trim();
       const res = await competitivePricingAPI.getDashboard({
         category: categoryFilter !== 'all' ? categoryFilter : undefined,
         varianceFilter: varianceFilter !== 'all' ? varianceFilter : undefined,
         confidenceFilter: confidenceFilter !== 'all' ? confidenceFilter : undefined,
-        search: searchQuery.trim() || undefined,
+        search: activeSearch || undefined,
         page: pagination.page,
         limit: pagination.limit
       });
@@ -232,8 +236,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
       setItems(res.items || []);
       if (res.pagination) {
         setPagination(prev => {
-          const totalItems = res.pagination.totalItems || res.pagination.total || prev.total;
-          const totalPages = res.pagination.totalPages || prev.totalPages;
+          const totalItems = res.pagination.totalItems ?? res.pagination.total ?? prev.total;
+          const totalPages = res.pagination.totalPages ?? prev.totalPages;
           if (
             prev.page === res.pagination.page &&
             prev.limit === res.pagination.limit &&
@@ -253,11 +257,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     } catch (err: any) {
       console.warn('[Dashboard] Primary fetch failed, attempting direct Supabase query:', err);
       try {
+        const activeSearch = (overrideSearch !== undefined ? overrideSearch : debouncedSearchQuery).trim();
         const directRes = await fetchCompetitivePricingDashboardDirect({
           category: categoryFilter !== 'all' ? categoryFilter : undefined,
           varianceFilter: varianceFilter !== 'all' ? varianceFilter : undefined,
           confidenceFilter: confidenceFilter !== 'all' ? confidenceFilter : undefined,
-          search: searchQuery.trim() || undefined,
+          search: activeSearch || undefined,
           page: pagination.page,
           limit: pagination.limit,
         });
@@ -267,7 +272,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           setPagination(prev => ({
             ...prev,
             ...directRes.pagination,
-            total: directRes.pagination.totalItems || directRes.pagination.total || prev.total
+            total: directRes.pagination.totalItems ?? directRes.pagination.total ?? prev.total
           }));
         }
         setError(null);
@@ -280,15 +285,23 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     }
   };
 
+  // Reset pagination to page 1 whenever search query or category filter changes
+  useEffect(() => {
+    setPagination(prev => {
+      if (prev.page === 1) return prev;
+      return { ...prev, page: 1 };
+    });
+  }, [debouncedSearchQuery, categoryFilter, varianceFilter, confidenceFilter]);
+
   useEffect(() => {
     loadDashboard();
-  }, [categoryFilter, varianceFilter, confidenceFilter, pagination.page, pagination.limit]);
+  }, [categoryFilter, varianceFilter, confidenceFilter, debouncedSearchQuery, pagination.page, pagination.limit]);
 
   // Ensure live catalog count query against Supabase guarantees exact catalog total
   useEffect(() => {
     let active = true;
     async function updateExactCatalogCount() {
-      if (!searchQuery.trim() && (!categoryFilter || categoryFilter === 'all')) {
+      if (!debouncedSearchQuery.trim() && (!categoryFilter || categoryFilter === 'all')) {
         try {
           const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
           if (active && count && count > 1000) {
@@ -306,11 +319,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     }
     updateExactCatalogCount();
     return () => { active = false; };
-  }, [categoryFilter, searchQuery]);
+  }, [categoryFilter, debouncedSearchQuery]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    loadDashboard();
+    setPagination(prev => ({ ...prev, page: 1 }));
+    loadDashboard(searchQuery);
   };
 
   // Poll agent status ONLY — do not auto-reload the items table on each poll
@@ -582,8 +596,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
       {/* Competitive Pricing Agent Status Bar - Always Visible */}
       {(() => {
         const isFiltering = !!searchQuery.trim() || (categoryFilter && categoryFilter !== 'all');
-        const displayTotal = (!isFiltering && (!metrics.totalMonitored || metrics.totalMonitored <= 1000))
-          ? 20543
+        const displayTotal = isFiltering
+          ? (pagination.total || items.length)
           : Math.max(metrics.totalMonitored || 20543, 20543);
         const displayMatched = Math.max(metrics?.withCompetitivePricing || 0, 8742);
         const displayUnmatched = Math.max(0, displayTotal - displayMatched);
@@ -894,9 +908,23 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter by SKU, product description, or competitor..."
-                className="pl-9 h-9 text-xs"
+                placeholder="Search products by title, SKU, brand, category, or competitor..."
+                className="pl-9 pr-8 h-9 text-xs"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                    loadDashboard('');
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer transition-colors"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </form>
 
             {/* Category Filter */}
@@ -974,7 +1002,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         <CardHeader className="bg-slate-50 border-b border-slate-200 py-3 px-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold text-slate-800">
-              Pricing Comparison Matrix ({items.length} products displayed)
+              Pricing Comparison Matrix ({pagination.total > items.length ? `${items.length} of ${pagination.total}` : items.length} products displayed)
             </CardTitle>
             <span className="text-xs text-slate-500">
               Prices normalized to per-unit comparison

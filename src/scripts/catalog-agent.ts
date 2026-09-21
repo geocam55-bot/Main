@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
+import { searchRonaByArticle, extractKeywordsFromRonaProduct, loadRonaIndex } from "../services/rona-catalog-service";
 
 // Supabase client with service role key for full write permissions
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://usorqldwroecyxucmtuw.supabase.co';
@@ -198,254 +199,87 @@ function updateStatus(status: {
 }
 
 // ============================================================================
-// COMPREHENSIVE CATEGORY SPECIFICATIONS & BRAND INTELLIGENCE
+// RONA.CA CATALOG ARTICLE ENRICHMENT PROCESSOR
 // ============================================================================
 
-interface CategorySpec {
-  title: string;
-  specs: string[];
-  applications: string[];
-  brands: string[];
-}
-
-const CATEGORY_TAXONOMY: Record<string, CategorySpec> = {
-  'BUILDING MATERIALS': {
-    title: 'Architectural Building Materials & Framing',
-    specs: ['ASTM C1396 certified structural grade', 'Class A flame spread index', 'Kiln-dried SPF engineered stability', 'Weather-resistant barrier coating', 'High load-bearing capacity'],
-    applications: ['Residential load-bearing framing', 'Commercial partition drywall installation', 'Exterior building envelope moisture barrier', 'Structural subfloor and wall decking'],
-    brands: ['Georgia-Pacific', 'CertainTeed', 'Owens Corning', 'LP Building Solutions', 'James Hardie', 'Rockwool', 'Weyerhaeuser', 'RONA Pro']
-  },
-  'ROOFING AND EXTERIOR CLADDING MA': {
-    title: 'Architectural Roofing & Cladding',
-    specs: ['ASTM D3462 certified durability', 'Class A fire rating compliant', '110 MPH wind resistance warranty', 'Algae-resistant granule surface', 'High-tensile fiberglass mat'],
-    applications: ['Steep-slope residential re-roofing', 'Commercial architectural cladding', 'Exterior moisture barrier weatherization', 'Storm-resistant building envelope renovation'],
-    brands: ['GAF', 'BP', 'CertainTeed', 'Owens Corning', 'IKO', 'RONA Pro']
-  },
-  'TOOLS': {
-    title: 'Professional Trade & Power Tool Hardware',
-    specs: ['High-efficiency brushless motor technology', 'Impact-resistant reinforced composite housing', 'Precision CNC machined tolerances', 'Overload and thermal cut-off electronic protection', 'Ergonomic vibration-dampening grip'],
-    applications: ['Heavy-duty commercial framing and cutting', 'Precision architectural carpentry', 'On-site mechanical fastening', 'Electrical rough-in and conduit installation'],
-    brands: ['DEWALT', 'Milwaukee', 'Makita', 'Bosch', 'Stanley', 'Irwin', 'Diablo', 'Klein Tools', 'RONA Toolworks']
-  },
-  'PORTABLE ELECTRIC TOOLS': {
-    title: 'Brushless High-Torque Power Tool',
-    specs: ['High-efficiency brushless motor technology', 'Overload & thermal cut-off electronic protection', 'Die-cast metal gear housing', 'Variable speed trigger with electric brake', 'Ergonomic rubberized grip'],
-    applications: ['Heavy-duty commercial framing and cutting', 'Continuous industrial fabrication', 'On-site mechanical fastening', 'Electrical and plumbing rough-in work'],
-    brands: ['DEWALT', 'Makita', 'Milwaukee', 'Bosch', 'RONA Toolworks']
-  },
-  'HARDWARE': {
-    title: 'Heavy-Duty Hardware & Structural Fasteners',
-    specs: ['Grade 5 hardened alloy steel construction', 'Hot-dip galvanized marine-grade finish (ACQ compliant)', 'Torx/Star drive zero-camout recess', 'Knurled shank for superior pull-out resistance', '1,200 hr salt-spray corrosion tested'],
-    applications: ['Exterior structural deck framing', 'Heavy timber and truss connections', 'Concrete anchor bolting', 'Architectural door and cabinet hardware installation'],
-    brands: ['Simpson Strong-Tie', 'GRK Fasteners', 'Hillman', 'National Hardware', 'Richelieu', 'Schlage', 'Weiser', 'RONA Fasteners']
-  },
-  'PAINT & SUNDRIES': {
-    title: 'Architectural Paint Applicator & Coating',
-    specs: ['High-density lint-free microfiber filament', 'Stainless steel rust-resistant ferrule', 'Solvent-resistant polypropylene core', 'Low-VOC non-toxic formulation', 'Superior self-leveling finish'],
-    applications: ['Interior residential drywall coating', 'Exterior masonry and weather barrier painting', 'Precision trim and architectural millwork finishing', 'Commercial epoxy floor application'],
-    brands: ['Purdy', 'Wooster', '3M', 'Dynamic', 'Bennett', 'Lepage', 'DAP', 'Sico', 'RONA Studio']
-  },
-  'PAINTBRUSHES,ROLLERS AND ACCESSO': {
-    title: 'Pro Paint Applicator & Roller Kit',
-    specs: ['High-density microfiber nap', 'Lint-free finish', 'Stainless steel ferrule', 'Solvent-resistant polypropylene core', 'Ergonomic soft-touch grip'],
-    applications: ['Architectural latex and oil-based coatings', 'Smooth drywall finishing', 'Masonry and textured surface coverage', 'Trim and precision edge work'],
-    brands: ['Purdy', 'Wooster', '3M', 'Dynamic', 'Bennett', 'RONA Studio']
-  },
-  'PLUMBING': {
-    title: 'Commercial & Domestic Plumbing Hardware',
-    specs: ['Lead-free NSF/ANSI 61 certified brass', '200 PSI working pressure rating', 'Dezincification-resistant (DZR) alloy', 'ASTM D1785 schedule specification', 'Chemical and scale resistant EPDM seal'],
-    applications: ['Potable residential water supply rough-in', 'Commercial hydronic heating lines', 'Drain-waste-vent (DWV) piping networks', 'High-traffic commercial fixture connections'],
-    brands: ['Moen', 'Delta', 'Watts', 'SharkBite', 'Kohler', 'Oatey', 'Bow', 'American Standard', 'RONA ProPlumb']
-  },
-  'ELECTRICITY': {
-    title: 'Commercial Spec Electrical Hardware & Devices',
-    specs: ['CSA & cULus listed commercial spec grade', 'Tamper-resistant safety shutter mechanism', 'Impact-resistant polycarbonate enclosure', 'Self-grounding solid brass contact clip', 'Zinc-dichromate coated steel frame'],
-    applications: ['New construction branch circuits', 'Commercial tenant electrical fit-outs', 'High-frequency appliance receptacles', 'Industrial machinery distribution drop boxes'],
-    brands: ['Leviton', 'Hubbell', 'Eaton', 'Legrand', 'Siemens', 'Schneider Electric', 'Klein Tools', 'RONA Electric']
-  },
-  'ELECTRIC ACC.: FUSES,OUTLETS,BOX': {
-    title: 'Commercial Electrical Receptacle & Box',
-    specs: ['CSA & UL listed commercial spec grade', 'Tamper-resistant shutter mechanism', 'Impact-resistant polycarbonate body', 'Self-grounding brass clip', 'Zinc-coated steel enclosure'],
-    applications: ['New construction branch circuits', 'Commercial tenant fit-outs', 'High-frequency appliance receptacles', 'Industrial machinery drop boxes'],
-    brands: ['Leviton', 'Hubbell', 'Eaton', 'Legrand', 'Siemens', 'RONA Electric']
-  },
-  'SEASONAL': {
-    title: 'All-Season Landscape & Grounds Equipment',
-    specs: ['Heavy-duty powder-coated steel frame', 'UV-stabilized impact-resistant polymer', 'Cold-weather composite ergonomic handle', 'Corrosion-resistant sealed drive mechanism', 'Precision high-yield cutting blade'],
-    applications: ['Commercial property groundskeeping', 'Winter snow and ice removal', 'Seasonal turf and landscape maintenance', 'Municipal building exterior upkeep'],
-    brands: ['Scotts', 'Suncast', 'Garant', 'Toro', 'Yardworks', 'Husqvarna', 'True Temper', 'RONA Outdoor']
-  },
-  'APPLIANCES': {
-    title: 'High-Efficiency Architectural Appliance',
-    specs: ['Energy Star high-efficiency rating', 'Whisper-quiet low-decibel operational cycle', 'Commercial grade stainless steel interior', 'Digital LED precision microprocessor control', 'CSA certified electrical and mechanical safety'],
-    applications: ['Residential kitchen installation', 'Multi-unit property developments', 'Commercial staff breakrooms', 'Executive hospitality suites'],
-    brands: ['Whirlpool', 'Frigidaire', 'GE Appliances', 'Bosch', 'Samsung', 'LG', 'Danby', 'RONA Appliance']
-  },
-  'AUTOMOBILE': {
-    title: 'Fleet & Industrial Automotive Maintenance Fluid',
-    specs: ['Full-synthetic thermal stability formulation', 'Anti-wear zinc additive chemistry', 'Sub-zero low-temperature cold start fluid flow', 'API SN PLUS / SP licensed specification', 'Corrosion inhibiting detergent package'],
-    applications: ['Commercial vehicle fleet maintenance', 'Jobsite generator and pump engine servicing', 'Winter freeze-protection fluid change', 'Industrial hydraulic machinery upkeep'],
-    brands: ['Castrol', 'Mobil 1', 'Pennzoil', 'Prestone', 'Rain-X', 'Meguiar\'s', 'RONA Auto']
-  },
-  'FARM': {
-    title: 'Agricultural & Heavy Property Infrastructure',
-    specs: ['Hot-dipped heavy galvanized zinc finish', 'Heavy-gauge tubular steel construction', 'UV8-stabilized resin weather shield', 'High-tensile perimeter containment barrier', 'Impact-resistant livestock proof hardware'],
-    applications: ['Agricultural livestock perimeter fencing', 'Heavy bulk feed and material handling', 'Rural property utility buildings', 'Corrosive outdoor animal shelter facilities'],
-    brands: ['Tarter', 'Behlen Country', 'Gallagher', 'Rubbermaid Commercial', 'True Temper', 'RONA Rural']
-  },
-  'LOCKSMITHING AND RELATED PRODUCT': {
-    title: 'High-Security Commercial Lockset',
-    specs: ['ANSI/BHMA Grade 1 certification', 'Pick and bump-resistant 6-pin cylinder', 'Solid forged brass construction', 'Anti-saw hardened steel deadbolt core', 'Reversible handing design'],
-    applications: ['Heavy-traffic commercial entryways', 'Residential exterior security doors', 'Restricted access facilities', 'Multi-family residential corridors'],
-    brands: ['Schlage', 'Weiser', 'Yale', 'Kwikset', 'Master Lock', 'RONA Security']
-  },
-  'INSULATION AND INSULATING TAPES': {
-    title: 'Thermal Insulation & Weather Barrier Tape',
-    specs: ['R-value thermal barrier optimized', 'Vapor-impermeable cold-weather acrylic adhesive', 'Greenguard Gold certified', 'Tensile tear strength 35 lbs/in', 'Zero flame-spread rating'],
-    applications: ['Building envelope moisture sealing', 'Acoustic wall cavity dampening', 'HVAC duct thermal wrap', 'Attic and perimeter frost barrier'],
-    brands: ['Owens Corning', 'Rockwool', '3M', 'Tuck Tape', 'Johns Manville', 'RONA Eco']
-  },
-  'ADHESIVES,TAPES,JOINT CEMENT AND': {
-    title: 'Structural Adhesive & Joint Sealant',
-    specs: ['Polyurethane hybrid formulation', 'Tensile shear strength exceeding 850 PSI', 'Fast 20-minute skin time', 'VOC compliant low-odor formula', 'Flexible +/- 25% joint movement'],
-    applications: ['Subfloor and drywall structural bonding', 'Heavy trim and moulding installation', 'Expansion joint elastomeric sealing', 'Concrete and masonry anchoring'],
-    brands: ['DAP', 'Lepage', 'Gorilla', 'Titebond', '3M', 'RONA ProBond']
-  },
-  'CLEANING AND MAINTENANCE PRODUCT': {
-    title: 'Industrial Cleaner & Degreaser Formula',
-    specs: ['Biodegradable concentrated formula', 'Rapid emulsification of oils and adhesives', 'Non-corrosive to aluminum & copper', 'NSF registered category A1', 'Zero residue rinse-free finish'],
-    applications: ['Jobsite post-construction cleanup', 'Commercial floor degreasing', 'Heavy machinery degreasing', 'Facility maintenance washdown'],
-    brands: ['Simple Green', 'Zep', 'Krud Kutter', 'Spray Nine', 'RONA ProClean']
-  },
-  'NAILS, SCREWS, BOLTS, MOORINGS A': {
-    title: 'Structural Fastener & Heavy-Duty Hardware',
-    specs: ['Grade 5 hardened alloy steel', 'Hot-dip galvanized marine-grade finish (ACQ compliant)', 'Torx/Star drive zero-camout recess', 'Knurled shank for superior holding power', '1,200 hr salt spray tested'],
-    applications: ['Exterior structural deck framing', 'Heavy timber and truss connections', 'Concrete anchor bolting', 'Demanding architectural carpentry'],
-    brands: ['GRK Fasteners', 'Simpson Strong-Tie', 'Spax', 'Hillman', 'RONA Fasteners']
-  },
-  'HOUSEHOLD ITEMS, GIFTS, AUDIO, V': {
-    title: 'Commercial Facility & Utility Hardware',
-    specs: ['Impact-resistant polymer housing', 'Energy-efficient operation', 'cUL/CSA certified components', 'Compact space-saving design', 'Ergonomic contractor-friendly utility'],
-    applications: ['Jobsite office organization', 'Commercial breakroom facilities', 'Facility utility support', 'Property staging and maintenance'],
-    brands: ['Honeywell', 'Dyson', 'Philips', 'RCA', 'RONA Commercial']
-  },
-  'SPORTS AND LEISURE': {
-    title: 'Heavy-Duty Jobsite & Outdoor Cooler Gear',
-    specs: ['Roto-molded impact-resistant polyethylene', 'Commercial-grade polyurethane insulation', 'Stainless steel corrosion-proof hardware', 'IP65 weather-sealed closure', 'Heavy-duty integrated tie-down slots'],
-    applications: ['Jobsite crew hydration', 'Rugged outdoor equipment transport', 'Contractor mobile storage', 'Outdoor recreational utility'],
-    brands: ['Coleman', 'Igloo', 'Pelican', 'RONA Recreation']
-  }
-};
-
-const DEFAULT_CATEGORY_SPEC: CategorySpec = {
-  title: 'Commercial Hardware & Building Supplies',
-  specs: ['Commercial grade durability benchmarked', 'Tested to national safety specifications', 'Corrosion-resistant component manufacturing', 'High operational duty-cycle rated', 'Precision engineered quality tolerances'],
-  applications: ['General contractor construction', 'Commercial facility maintenance and repair', 'Residential renovation and improvements', 'Trade specialty installation work'],
-  brands: ['DEWALT', 'Simpson Strong-Tie', '3M', 'Owens Corning', 'Purdy', 'Stanley', 'RONA Pro']
-};
-
 /**
- * Intelligent single-item enrichment processor
+ * Real RONA.CA catalog item enrichment processor
+ * Searches Article # on RONA.ca and replaces Item Name with Description from RONA.ca
  */
-function enrichInventoryItem(item: any, idx: number) {
+async function enrichInventoryItem(item: any, idx: number) {
   const rawName = String(item.name || '').trim();
-  const rawDesc = String(item.description || '').trim();
   const sku = String(item.sku || `SKU-${idx + 1}`).trim();
   const category = String(item.category || 'HARDWARE').trim();
   const uom = String(item.unit_of_measure || 'EA').trim();
 
-  // Find best category match
-  let catData = CATEGORY_TAXONOMY[category.toUpperCase()];
-  if (!catData) {
-    for (const key of Object.keys(CATEGORY_TAXONOMY)) {
-      if (category.toUpperCase().includes(key) || key.includes(category.toUpperCase())) {
-        catData = CATEGORY_TAXONOMY[key];
-        break;
-      }
-    }
-  }
-  if (!catData) {
-    for (const key of Object.keys(CATEGORY_TAXONOMY)) {
-      if (rawName.toUpperCase().includes(key)) {
-        catData = CATEGORY_TAXONOMY[key];
-        break;
-      }
-    }
-  }
-  if (!catData) {
-    catData = DEFAULT_CATEGORY_SPEC;
-  }
+  // Search RONA.CA by Article # / SKU
+  const ronaInfo = await searchRonaByArticle(sku);
 
-  // Determine brand: check if already in name, description, or assigned brand
-  let brand = item.brand ? String(item.brand).trim() : '';
-  const combinedText = `${rawName} ${rawDesc}`.toUpperCase();
-
-  if (!brand) {
-    for (const b of catData.brands) {
-      if (combinedText.includes(b.toUpperCase())) {
-        brand = b;
-        break;
-      }
-    }
-  }
-
-  const skuNum = parseInt(sku.replace(/\D/g, '') || String(idx + 1), 10);
-  if (!brand) {
-    brand = catData.brands[skuNum % catData.brands.length];
-  }
-
-  // Preserve existing clean, human-readable item names if concise and not cluttered
   let cleanItemName = rawName;
-  if (!cleanItemName || cleanItemName.length > 55 || cleanItemName.toLowerCase().includes('professional-grade') || cleanItemName.toLowerCase().includes('designed for')) {
-    cleanItemName = `${brand} ${catData.title}`;
+  let brand = item.brand ? String(item.brand).trim() : '';
+  let model = '';
+  let sourceUrl = '';
+  let keywordsArray: string[] = [];
+
+  if (ronaInfo.found) {
+    // Replace the Item Name with the Description from RONA.CA
+    cleanItemName = ronaInfo.title;
+    if (ronaInfo.brand) brand = ronaInfo.brand;
+    if (ronaInfo.model) model = ronaInfo.model;
+    sourceUrl = ronaInfo.url;
+    keywordsArray = extractKeywordsFromRonaProduct(ronaInfo.title, brand, sku);
+  } else {
+    // If not found on RONA.ca, check if item.description has the real product title
+    const rawDesc = String(item.description || '').trim();
+    const isDescProductTitle = rawDesc.length > 0 && 
+      !rawDesc.includes("Engineered specifically") && 
+      !rawDesc.includes("Delivering contractor-grade") && 
+      !rawDesc.includes("Key specifications include") &&
+      !(rawDesc.length > 160 && rawDesc.includes(". ") && rawDesc.split(".").length > 2);
+
+    const genericCategoryWords = [
+      "materials", "accessories", "tools", "parts", "equipment", "hardware",
+      "plumbing", "electricity", "lighting", "paint", "fasteners", "heating",
+      "ventilation", "building", "lumber", "carpentry", "finishing", "roofing",
+      "insulation", "fittings", "hooks", "squares", "locksmithing", "adhesives",
+      "ironwork", "ramps", "gutters", "taps", "household", "seasonal", "appliances",
+      "cleaning", "gardening", "electrical", "frame", "cladding", "extinguishers",
+      "lightbulbs", "fluorescents", "paintbrushes", "rollers", "disposers", "hydrov"
+    ];
+
+    const isGenericCategory = !rawName || 
+      rawName === "" || 
+      rawName.toUpperCase() === "UNDEFINED" || 
+      rawName.startsWith("Product ") ||
+      (category && rawName.toLowerCase() === category.toLowerCase()) ||
+      (rawName === rawName.toUpperCase() && rawName.length >= 4 && (
+        genericCategoryWords.some(w => rawName.toLowerCase().includes(w)) ||
+        rawName.includes(",") || rawName.includes("&") || rawName.includes(" AND ")
+      ));
+
+    if (isGenericCategory && isDescProductTitle) {
+      cleanItemName = rawDesc;
+    } else if (cleanItemName && (cleanItemName.toLowerCase().includes('professional-grade') || cleanItemName.toLowerCase().includes('designed for') || cleanItemName.length > 80)) {
+      cleanItemName = rawName.split(/[,.-]/)[0]?.trim() || rawName;
+    }
+    keywordsArray = [
+      brand.toLowerCase(),
+      category.toLowerCase(),
+      sku.toLowerCase(),
+      ...cleanItemName.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/)
+    ].filter(w => w && w.length > 1);
   }
 
-  let shortDesc = `${brand} ${catData.title}`;
-  if (shortDesc.length > 35) {
-    shortDesc = shortDesc.substring(0, 35).trim();
-  }
+  const extendedDesc = String(item.description || '').trim();
+  const shortDesc = cleanItemName.slice(0, 50).trim();
 
-  // Deterministic specifications based on item identity
-  const specA = catData.specs[skuNum % catData.specs.length];
-  const specB = catData.specs[(skuNum + 1) % catData.specs.length];
-  const specC = catData.specs[(skuNum + 2) % catData.specs.length];
-  const appA = catData.applications[skuNum % catData.applications.length];
-  const appB = catData.applications[(skuNum + 1) % catData.applications.length];
-
-  const openingTemplates = [
-    `Engineered specifically for demanding commercial and trade requirements, the ${brand} ${catData.title} (SKU: ${sku}) combines proven industrial durability with precision performance.`,
-    `Delivering contractor-grade reliability, this ${brand} ${catData.title} (SKU: ${sku}) is manufactured to rigorous specifications to ensure dependable execution in project environments.`,
-    `Designed for high-efficiency trade workflows, the ${brand} ${catData.title} (SKU: ${sku}) features robust construction tailored to withstand heavy jobsite conditions.`,
-    `Built to exacting standards for commercial builders and craftsmen, the ${brand} ${catData.title} (SKU: ${sku}) offers superior durability and field-tested longevity.`
-  ];
-  const opener = openingTemplates[skuNum % openingTemplates.length];
-
-  // Rich extended description for the description column
-  const extendedDesc = `${opener} Key specifications include ${specA.toLowerCase()}, ${specB.toLowerCase()}, and ${specC.toLowerCase()}. Optimized for ${appA.toLowerCase()} as well as ${appB.toLowerCase()}, this unit (${uom}) complies with applicable safety codes and quality assurance benchmarks.`;
-
-  // Keywords array
-  const keywordsArray = [
-    brand.toLowerCase(),
-    category.toLowerCase(),
-    catData.title.toLowerCase(),
-    sku.toLowerCase(),
-    'contractor grade',
-    'building supplies',
-    uom.toLowerCase()
-  ].filter(Boolean);
-
-  // Structured attributes object
   const attributesObj: Record<string, string> = {
     'Brand': brand,
-    'Manufacturer SKU': sku,
+    'RONA Article #': sku,
     'Category': category,
     'Unit of Measure': uom,
-    'Key Specification': specA,
-    'Secondary Feature': specB,
-    'Primary Application': appA,
-    'Quality Standard': specC,
-    'Warranty': 'Manufacturer Standard Commercial Warranty',
-    'Catalog Status': 'Active & Verified'
+    ...(model ? { 'Model #': model } : {}),
+    ...(sourceUrl ? { 'Source': 'RONA.CA', 'RONA URL': sourceUrl } : { 'Catalog Source': 'Local POS Inventory' })
   };
 
   return {
@@ -455,7 +289,8 @@ function enrichInventoryItem(item: any, idx: number) {
     brand,
     category,
     keywordsArray,
-    attributesObj
+    attributesObj,
+    ronaMatched: ronaInfo.found
   };
 }
 
@@ -483,6 +318,11 @@ export async function runCatalogEnrichment() {
 
   const totalItems = count || 20543;
   log(`📊 Total catalog items to enrich: ${totalItems.toLocaleString()}`);
+
+  // Warm up RONA.CA article catalog index
+  log("📦 Loading RONA.CA article catalog index...");
+  await loadRonaIndex();
+  log("✅ RONA.CA catalog index loaded and ready for Article # lookups.");
 
   // Check how many are already enriched
   const { count: enrichedCountRaw } = await supabase
@@ -574,7 +414,7 @@ export async function runCatalogEnrichment() {
 
           try {
             const globalItemIndex = currentIndex + itemIdxInBatch;
-            const enriched = enrichInventoryItem(item, globalItemIndex);
+            const enriched = await enrichInventoryItem(item, globalItemIndex);
 
             const updatePayload: any = {
               name: enriched.cleanItemName,

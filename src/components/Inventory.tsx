@@ -627,19 +627,66 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     let finalDescription = parsedDescription;
     
     const cleanNameLower = finalName ? finalName.trim().toLowerCase() : '';
+    const rawNameUpper = finalName ? finalName.trim().toUpperCase() : '';
     const genericCategoryKeywords = [
-      'accessories for',
-      'pipes, fittings',
-      'hooks, squares',
-      'insulating materials',
-      'paint types',
-      'lawn, garden',
-      'lawn equipment',
+      'materials',
+      'accessories',
+      'tools',
+      'parts',
+      'equipment',
+      'hardware',
+      'plumbing',
+      'electricity',
+      'lighting',
+      'paint',
+      'fasteners',
+      'heating',
+      'ventilation',
+      'building',
+      'lumber',
+      'carpentry',
+      'finishing',
+      'roofing',
+      'insulation',
+      'fittings',
+      'hooks',
+      'squares',
+      'locksmithing',
+      'adhesives',
+      'ironwork',
+      'ramps',
       'gutters',
+      'taps',
+      'household',
+      'seasonal',
+      'appliances',
+      'cleaning',
+      'gardening',
+      'electrical',
+      'frame',
+      'cladding',
+      'extinguishers',
+      'lightbulbs',
+      'fluorescents',
+      'paintbrushes',
+      'rollers',
+      'disposers',
+      'hydrov',
+      'cables',
+      'outlets',
+      'fuses',
+      'boxes',
+      'chains',
+      'steel',
+      'motorized',
+      'furniture',
+      'outdoor living',
+      'home decor',
+      'repair parts',
+      'lawn equipment',
       'tree, plant',
       'electric heating',
       'tools accesso',
-      'repair parts',
       'electric acc.',
       'coverings',
       'cables and accesso',
@@ -647,22 +694,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       'electrical appliances',
       'wall and floor',
       'portable electric',
-      'chains, steel',
-      'motorized lawn',
       'building materials',
-      'fasteners',
-      'hand tools',
-      'power tools',
-      'plumbing',
-      'lighting',
-      'seasonal',
-      'hardware',
-      'outlets,boxes',
-      'fuses,outlets',
-      'ventilation',
-      'heating and cooling',
-      'home decor',
-      'outdoor living',
       'building product',
       'tools & hardware',
       'electrical & lighting',
@@ -670,22 +702,29 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     ];
 
     const hasGenericKeyword = genericCategoryKeywords.some(keyword => cleanNameLower.includes(keyword));
+    const isAllCapsCategory = rawNameUpper.length >= 4 && finalName === rawNameUpper && (
+      genericCategoryKeywords.some(keyword => cleanNameLower.includes(keyword)) ||
+      rawNameUpper.includes(',') || rawNameUpper.includes('&') || rawNameUpper.includes(' AND ')
+    );
 
     const isGenericOrEmpty = !finalName || 
       finalName.trim() === '' || 
       finalName.trim().toUpperCase() === 'UNDEFINED' ||
+      finalName.startsWith('Product ') ||
       (dbItem.category && finalName.trim().toLowerCase() === dbItem.category.trim().toLowerCase()) ||
+      isAllCapsCategory ||
       hasGenericKeyword;
 
-    // Check if description is an extended catalog description (should NEVER become the item name)
+    // Check if description is an extended catalog marketing paragraph (should NOT become the item name)
     const isExtendedDescription = parsedDescription && (
-      parsedDescription.length > 55 ||
       parsedDescription.toLowerCase().includes('professional-grade') ||
       parsedDescription.toLowerCase().includes('designed for superior') ||
       parsedDescription.toLowerCase().includes('exacting industry standards') ||
       parsedDescription.toLowerCase().includes('delivering contractor-grade') ||
       parsedDescription.toLowerCase().includes('engineered specifically') ||
-      parsedDescription.toLowerCase().includes('key specifications include')
+      parsedDescription.toLowerCase().includes('key specifications include') ||
+      parsedDescription.toLowerCase().includes('built to exacting standards') ||
+      (parsedDescription.length > 160 && parsedDescription.includes('. ') && parsedDescription.split('.').length > 2)
     );
 
     // Retrieve database short description and brand if present
@@ -1657,7 +1696,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   </span>
                 </div>
                 <p className="text-xs text-purple-200/90 line-clamp-1">
-                  {catalogAgentStatus.progress?.currentName || 'Enriching attributes, brands, technical specs & descriptions across entire inventory. Names left untouched.'}
+                  {catalogAgentStatus.progress?.currentName || 'Enriching item names with real RONA.CA descriptions & article specifications.'}
                 </p>
                 {catalogAgentStatus.progress?.currentSku && (
                   <p className="text-[11px] font-mono text-purple-300">
@@ -2070,7 +2109,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                     <Input
                       placeholder={useAdvancedSearch 
                         ? "Try: 'tools under $50', 'red paint in stock'..." 
-                        : "Search by name, SKU, or description..."
+                        : "Search by name, SKU, or brand..."
                       }
                       value={searchQuery}
                       onChange={(e) => {
@@ -2336,9 +2375,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground mt-1 font-mono">SKU: {item.sku}</p>
-                            {item.description && (
-                              <p className="text-sm text-muted-foreground mt-1 leading-relaxed max-w-4xl">{item.description}</p>
-                            )}
                             {item.attributes && typeof item.attributes === 'object' && (
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {Object.entries(item.attributes).slice(0, 4).map(([k, v]) => (
@@ -2395,11 +2431,8 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                           </div>
                         </div>
 
-                        {/* Mobile Description & Matches */}
+                        {/* Mobile Search Matches & Badges */}
                         <div className="lg:hidden mt-2">
-                          {item.description && (
-                            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">{item.description}</p>
-                          )}
                           {/* Search Match Indicators */}
                           {useAdvancedSearch && item._matchType && searchQuery && (
                             <Badge variant="outline" className={`mt-2 text-[10px] px-1.5 py-0 ${

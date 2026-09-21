@@ -617,8 +617,54 @@ export function getSearchTerms(item: InventoryItem): string[] {
 // SCRAPE SEARCH RESULTS (Puppeteer Engine)
 // ======================================================
 
+/**
+ * Fetches the live, localized store price directly from a Kent product page (Store 10 - Bayers Lake)
+ * to bypass stale or un-localized Klevu search catalog index prices.
+ */
+export async function fetchLiveKentStorePrice(url?: string | null): Promise<number | null> {
+  if (!url || !url.includes('kent.ca')) return null;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
+      },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    // 1. Check OpenGraph / Schema product:price:amount meta tag
+    const metaMatch = html.match(/<meta\s+property="product:price:amount"\s+content="([^"]+)"/i) ||
+                      html.match(/<meta\s+content="([^"]+)"\s+property="product:price:amount"/i);
+    if (metaMatch && parseFloat(metaMatch[1])) {
+      const val = parseFloat(metaMatch[1]);
+      if (!isNaN(val) && val > 0) return val;
+    }
+
+    // 2. Check Magento data-price-amount attribute
+    const dataPriceMatch = html.match(/data-price-amount="([^"]+)"/i);
+    if (dataPriceMatch && parseFloat(dataPriceMatch[1])) {
+      const val = parseFloat(dataPriceMatch[1]);
+      if (!isNaN(val) && val > 0) return val;
+    }
+
+    // 3. Check finalPrice wrapper span
+    const spanPriceMatch = html.match(/data-price-type="finalPrice"[^>]*>.*?<span class="price">\$?([^<]+)<\/span>/is);
+    if (spanPriceMatch) {
+      const parsed = parseFloat(spanPriceMatch[1].replace(/[^0-9.]/g, ''));
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function scrapeSearchResults(
-  page: Page,
+  page: Page | null,
   config: CompetitorConfig,
   searchTerm: string
 ): Promise<CandidateProduct[]> {
@@ -629,7 +675,10 @@ export async function scrapeSearchResults(
   if (config.id === 1) {
     try {
       const searchEndpoint = `https://eucs28.ksearchnet.com/cloud-search/n-search/search?ticket=klevu-164006757741514325&term=${encodeURIComponent(cleanTerm)}&responseType=json`;
-      const res = await fetch(searchEndpoint, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(3000) });
+      const res = await fetch(searchEndpoint, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3500)
+      });
       if (res.ok) {
         const data = await res.json();
         const results = (data.result || []).map((r: any) => ({
@@ -647,51 +696,60 @@ export async function scrapeSearchResults(
         if (results.length > 0) return results;
       }
     } catch (apiErr) {}
-    // If Kent API had no results, don't waste 6s loading page - Kent website uses same backend
     return [];
   }
+
+  // Fast-path direct Home Depot Canada search API (Store 7126 - Halifax Lacewood)
+  if (config.id === 2) {
+    try {
+      const hdApiUrl = `https://www.homedepot.ca/api/search/v1/search?q=${encodeURIComponent(cleanTerm)}&store=7126`;
+      const res = await fetch(hdApiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json'
+        },
+        signal: AbortSignal.timeout(3500)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const hdCandidates: CandidateProduct[] = (data.products || []).map((p: any) => {
+          const priceVal = p.pricing?.displayPrice?.value ?? p.pricing?.value ?? null;
+          return {
+            title: p.name || '',
+            priceText: priceVal != null ? String(priceVal) : '',
+            sku: String(p.code || ''),
+            mfg: p.modelNumber || p.code || '',
+            upc: p.upc || '',
+            dimensions: '',
+            description: p.description || p.name || '',
+            brand: p.brand || '',
+            category: '',
+            url: p.url ? (p.url.startsWith('http') ? p.url : `https://www.homedepot.ca${p.url}`) : ''
+          };
+        });
+        if (hdCandidates.length > 0) {
+          return hdCandidates;
+        }
+      }
+    } catch (hdErr) {
+      // Fallback to browser navigation if API fails
+    }
+  }
+
+  if (!page) return [];
 
   const encodedQuery = encodeURIComponent(cleanTerm).replace(/%20/g, '+');
   const url = config.searchUrl + encodedQuery;
 
   try {
-    // Ultra-fast timeout for competitor page load to prevent blocking the agent
+    // Fast timeout for competitor page load
     await page.goto(url, {
       waitUntil: 'domcontentloaded',
-      timeout: 1200
+      timeout: 3000
     });
 
-    // Kent-specific high-speed in-page evaluation:
-    // If on kent.ca, query Kent's in-page search endpoint directly in the browser context
-    if (config.id === 1) {
-      const kentResults = await page.evaluate(async (term: string) => {
-        try {
-          const cleanQ = term.replace(/[\x27\"]/g, '');
-          const searchEndpoint = `https://eucs28.ksearchnet.com/cloud-search/n-search/search?ticket=klevu-164006757741514325&term=${encodeURIComponent(cleanQ)}&responseType=json`;
-          const res = await fetch(searchEndpoint);
-          const data = await res.json();
-          return (data.result || []).map((r: any) => ({
-            title: r.name || '',
-            priceText: String(r.salePrice || r.price || ''),
-            mfg: r.model_no || r.sku || '',
-            sku: r.sku || '',
-            upc: r.upc || '',
-            dimensions: '',
-            description: r.shortDesc || r.desc || '',
-            url: r.url || ''
-          }));
-        } catch (e: any) {
-          return [];
-        }
-      }, searchTerm);
-
-      if (Array.isArray(kentResults) && kentResults.length > 0) {
-        return kentResults;
-      }
-    }
-
     // Default DOM evaluation for rendered product cards
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 1200));
 
     const candidates = await page.evaluate(({ sel, baseUrl }: { sel: typeof config.selectors; baseUrl: string }) => {
       const cards = document.querySelectorAll(sel.productCard);
@@ -742,7 +800,7 @@ export async function scrapeSearchResults(
 // ======================================================
 
 export async function findBestProductMatch(
-  page: Page,
+  page: Page | null,
   config: CompetitorConfig,
   inventoryItem: InventoryItem
 ): Promise<ScoredMatch | null> {
@@ -754,7 +812,11 @@ export async function findBestProductMatch(
       const results = await scrapeSearchResults(page, config, term);
       if (results && results.length > 0) {
         allCandidates.push(...results);
-        break; // Stop upon finding candidates for first valid term
+        // Check if any candidate in this batch qualifies with a high score (>= matchThreshold)
+        const hasQualifiedMatch = results.some(cand => calculateMatchScore(inventoryItem, cand) >= config.matchThreshold);
+        if (hasQualifiedMatch) {
+          break; // Stop upon finding qualified candidates
+        }
       }
     } catch (err: any) {
       console.error(`[Puppeteer Scraper] Term "${term}" error:`, err.message);
@@ -830,7 +892,21 @@ export async function findBestProductMatch(
   });
 
   scored.sort((a, b) => b.score - a.score);
-  return scored[0];
+  const best = scored[0];
+
+  // If Kent candidate was found and has a URL, resolve live localized store price from the page
+  // to avoid outdated Klevu search catalog pricing
+  if (best && config.id === 1 && best.candidate.url) {
+    try {
+      const liveKentPrice = await fetchLiveKentStorePrice(best.candidate.url);
+      if (liveKentPrice != null && liveKentPrice > 0) {
+        best.price = liveKentPrice;
+        best.candidate.priceText = String(liveKentPrice);
+      }
+    } catch (priceErr) {}
+  }
+
+  return best;
 }
 
 // ======================================================
