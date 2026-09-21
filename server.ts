@@ -4870,8 +4870,8 @@ Result:
           }
         }
 
-        // If PID is gone or no updates for > 25 seconds, mark agent as stopped/completed
-        if ((!isPidAlive && !activeAgentChild) || diffMs > 25000) {
+        // Only mark stopped if PID is definitely gone and no updates for > 10 minutes (600s)
+        if (!isPidAlive && !activeAgentChild && diffMs > 600 * 1000) {
           fileData.isRunning = false;
           fileData.progress.currentSku = fileData.progress.current >= fileData.progress.total ? 'Completed' : 'Stopped';
           try {
