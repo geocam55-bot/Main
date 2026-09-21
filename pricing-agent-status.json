@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 1057,
-    "total": 20543,
-    "percent": 5.1,
-    "matchesFound": 13382,
-    "currentSku": "00005104",
-    "currentName": "GLUE ROCK MULCH 32OZ",
-    "startedAt": "2026-09-19T13:49:08.234Z",
-    "lastUpdated": "2026-09-19T13:49:19.862Z"
+    "current": 1104,
+    "total": 20561,
+    "percent": 5.4,
+    "matchesFound": 23495,
+    "currentSku": "04805722",
+    "currentName": "RECEPTACLE SGL 15AM 250V/AC WH",
+    "startedAt": "2026-09-21T13:48:59.218Z",
+    "lastUpdated": "2026-09-21T13:49:11.078Z"
   },
-  "pid": 938
+  "pid": 566
 }
