@@ -4699,9 +4699,14 @@ Result:
 
   app.post('/api/competitive-pricing/agent/start', async (req, res) => {
     try {
-      const { spawn } = await import('child_process');
+      const { spawn, execSync } = await import('child_process');
       const fs = await import('fs');
       const path = await import('path');
+
+      // Terminate any existing running pricing agent processes first
+      try {
+        execSync('pkill -f pricing-agent || true');
+      } catch (e) {}
       
       const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
@@ -4725,32 +4730,14 @@ Result:
         if (count && count > 0) totalItemsCount = count;
       } catch (cntErr) {}
 
-      // Check for existing progress and active run
-      let currentItem = 0;
-      let matchesFound = 1174;
-      if (fs.existsSync(statusPath)) {
-        try {
-          const prev = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-          if (prev?.isRunning && prev?.progress?.lastUpdated) {
-            const ageMs = Date.now() - new Date(prev.progress.lastUpdated).getTime();
-            if (ageMs < 20000) {
-              // Agent is already actively running and making progress
-              return res.json({ success: true, message: 'Pricing agent is actively running.', status: prev });
-            }
-          }
-          if (prev?.progress?.current) currentItem = prev.progress.current;
-          if (prev?.progress?.matchesFound) matchesFound = prev.progress.matchesFound;
-        } catch (e) {}
-      }
-
       // Initialize status object with catalog count
       const initialStatus = {
         isRunning: true,
         progress: {
-          current: currentItem,
+          current: 0,
           total: totalItemsCount,
-          percent: Number(((currentItem / totalItemsCount) * 100).toFixed(1)),
-          matchesFound,
+          percent: 0,
+          matchesFound: 1174,
           currentSku: 'Starting...',
           currentName: `Active catalog sweep initialized (${totalItemsCount} SKUs)`,
           startedAt: new Date().toISOString(),
@@ -4814,6 +4801,10 @@ Result:
                   stdio: ['ignore', outFd, outFd]
                 }));
 
+        initialStatus.progress = initialStatus.progress || ({} as any);
+        (initialStatus as any).pid = activeAgentChild.pid;
+        fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
+
         activeAgentChild.on('error', (err: any) => {
           console.error('[Pricing Agent Process Error]:', err);
           try {
@@ -4829,14 +4820,12 @@ Result:
           try {
             if (fs.existsSync(statusPath)) {
               const cur = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-              if (cur && cur.isRunning) {
-                cur.isRunning = false;
-                cur.progress = cur.progress || {};
-                cur.progress.currentSku = code === 0 ? 'Completed' : 'Paused';
-                cur.progress.lastUpdated = new Date().toISOString();
-                fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
-                supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
-              }
+              cur.isRunning = false;
+              cur.progress = cur.progress || {};
+              cur.progress.currentSku = code === 0 ? 'Completed' : 'Stopped';
+              cur.progress.lastUpdated = new Date().toISOString();
+              fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
+              supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
             }
           } catch (e) {}
         });
@@ -4881,9 +4870,10 @@ Result:
           }
         }
 
-        // Only mark dead if PID is definitely gone and no updates for > 3 minutes (180s)
-        if (!isPidAlive && !activeAgentChild && diffMs > 180 * 1000) {
+        // If PID is gone or no updates for > 25 seconds, mark agent as stopped/completed
+        if ((!isPidAlive && !activeAgentChild) || diffMs > 25000) {
           fileData.isRunning = false;
+          fileData.progress.currentSku = fileData.progress.current >= fileData.progress.total ? 'Completed' : 'Stopped';
           try {
             fs.writeFileSync(statusPath, JSON.stringify(fileData, null, 2));
             supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: fileData });
@@ -4891,7 +4881,7 @@ Result:
         }
       }
 
-      if (fileData && fileData.progress) {
+      if (fileData) {
         return res.json(fileData);
       }
 

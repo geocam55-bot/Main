@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 1104,
+    "current": 0,
     "total": 20561,
-    "percent": 5.4,
-    "matchesFound": 23495,
-    "currentSku": "04805722",
-    "currentName": "RECEPTACLE SGL 15AM 250V/AC WH",
-    "startedAt": "2026-09-21T13:48:59.218Z",
-    "lastUpdated": "2026-09-21T13:49:11.078Z"
+    "percent": 0,
+    "matchesFound": 1174,
+    "currentSku": "Starting...",
+    "currentName": "Active catalog sweep initialized (20561 SKUs)",
+    "startedAt": "2026-09-21T14:16:51.199Z",
+    "lastUpdated": "2026-09-21T14:16:51.199Z"
   },
-  "pid": 566
+  "pid": 912
 }
