@@ -77,6 +77,16 @@ const DEFAULT_INVENTORY_CATEGORIES = [
   'UNDEFINED',
 ];
 
+const formatPrice = (val: number | null | undefined, fallback: string = '0.00'): string => {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback;
+  return Number(val).toFixed(2);
+};
+
+const formatPct = (val: number | null | undefined, fallback: string = '0.0'): string => {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback;
+  return Number(val).toFixed(1);
+};
+
 interface CompetitivePricingDashboardProps {
   onSelectProduct?: (productOrId: any) => void;
 }
@@ -1081,7 +1091,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
                       {/* RONA Price */}
                       <td className="py-2.5 px-3 text-right font-semibold text-slate-900 whitespace-nowrap">
-                        ${item.yourPrice.toFixed(2)}
+                        ${formatPrice(item.yourPrice)}
                       </td>
 
                       {/* Lowest Competitor */}
@@ -1089,7 +1099,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                         {hasLowest ? (
                           <div>
                             <span className="font-semibold text-slate-800">
-                              ${item.lowestCompetitorPrice!.toFixed(2)}
+                              ${formatPrice(item.lowestCompetitorPrice)}
                             </span>
                             <span className="text-[10px] text-slate-400 block">
                               {item.lowestCompetitorName || 'Competitor'}
@@ -1105,11 +1115,11 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                         {diff !== null ? (
                           diff > 0 ? (
                             <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[11px]">
-                              +${diff.toFixed(2)} (+{varPct}%)
+                              +${formatPrice(diff)} (+{varPct}%)
                             </span>
                           ) : diff < 0 ? (
                             <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[11px]">
-                              -${Math.abs(diff).toFixed(2)} ({varPct}%)
+                              -${formatPrice(Math.abs(diff))} ({varPct}%)
                             </span>
                           ) : (
                             <span className="font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
@@ -1399,12 +1409,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
               <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border">
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase">Your Price (RONA)</span>
-                  <span className="font-bold text-slate-800 text-sm">${inspectTarget.yourPrice.toFixed(2)}</span>
+                  <span className="font-bold text-slate-800 text-sm">${formatPrice(inspectTarget.yourPrice)}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase">Lowest Competitor Price</span>
                   <span className="font-bold text-emerald-700 text-sm">
-                    {inspectTarget.lowestCompetitorPrice !== null ? `$${inspectTarget.lowestCompetitorPrice.toFixed(2)} (${inspectTarget.lowestCompetitorName || 'Competitor'})` : 'No competitor match'}
+                    {inspectTarget.lowestCompetitorPrice !== null ? `$${formatPrice(inspectTarget.lowestCompetitorPrice)} (${inspectTarget.lowestCompetitorName || 'Competitor'})` : 'No competitor match'}
                   </span>
                 </div>
               </div>
@@ -1414,7 +1424,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                 <span className="font-semibold block mb-0.5">Competitive Analysis:</span>
                 {inspectTarget.priceDifference !== null ? (
                   <span>
-                    Price Variance: {inspectTarget.priceDifference > 0 ? `+$${inspectTarget.priceDifference.toFixed(2)}` : `-$${Math.abs(inspectTarget.priceDifference).toFixed(2)}`} ({inspectTarget.variancePct !== null ? `${inspectTarget.variancePct.toFixed(1)}%` : '0%'})
+                    Price Variance: {inspectTarget.priceDifference > 0 ? `+$${formatPrice(inspectTarget.priceDifference)}` : `-$${formatPrice(Math.abs(inspectTarget.priceDifference))}`} ({inspectTarget.variancePct !== null ? `${formatPct(inspectTarget.variancePct)}%` : '0%'})
                   </span>
                 ) : (
                   <span>Awaiting competitor pricing match verification.</span>

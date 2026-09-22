@@ -237,6 +237,72 @@ async function searchKentFast(cleanTerm: string): Promise<CandidateProduct[]> {
 }
 
 /**
+ * Fetches the live, localized store price directly from a Kent product page (Store 10 - Bayers Lake)
+ * by scraping the rendered HTML (JSON-LD offers, data-price-amount, OpenGraph meta, price span).
+ */
+async function fetchLiveKentStorePrice(url?: string | null): Promise<number | null> {
+  if (!url || !url.includes('kent.ca')) return null;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
+      },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    // 1. JSON-LD structured data (Product offers) - Highest accuracy
+    const ldMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
+    if (ldMatches) {
+      for (const m of ldMatches) {
+        try {
+          const raw = m.replace(/<\/?script[^>]*>/gi, '').trim();
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          for (const item of items) {
+            if (item['@type'] === 'Product' && item.offers) {
+              const offer = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+              const p = parseFloat(offer.price);
+              if (!isNaN(p) && p > 0) return p;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 2. Magento data-price-amount attribute
+    const dataPriceMatch = html.match(/data-price-amount="([0-9.]+)"/i);
+    if (dataPriceMatch) {
+      const val = parseFloat(dataPriceMatch[1]);
+      if (!isNaN(val) && val > 0) return val;
+    }
+
+    // 3. OpenGraph / Schema product:price:amount meta tag
+    const metaMatch = html.match(/<meta[^>]+(?:property="product:price:amount"|itemprop="price")[^>]+content="([0-9.]+)"/i) ||
+                      html.match(/<meta[^>]+content="([0-9.]+)"[^>]+(?:property="product:price:amount"|itemprop="price")/i);
+    if (metaMatch) {
+      const val = parseFloat(metaMatch[1]);
+      if (!isNaN(val) && val > 0) return val;
+    }
+
+    // 4. Final price span
+    const spanPriceMatch = html.match(/data-price-type="finalPrice"[^>]*>[\s\S]*?class="price"[^>]*>\$?([0-9,.]+)/i) ||
+                           html.match(/class="price"[^>]*>\$?([0-9,.]+)/i);
+    if (spanPriceMatch) {
+      const parsed = parseFloat(spanPriceMatch[1].replace(/,/g, ''));
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Finds highest-scoring qualified candidate for an item from Kent
  */
 async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | null> {
@@ -305,7 +371,22 @@ async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | 
   });
 
   scored.sort((a, b) => b.score - a.score);
-  return scored[0] || null;
+  const best = scored[0];
+  if (!best) return null;
+
+  // Resolve live, verified store price directly from product page HTML to prevent wrong prices
+  if (best.candidate.url && best.candidate.url.includes('kent.ca')) {
+    try {
+      const livePrice = await fetchLiveKentStorePrice(best.candidate.url);
+      if (livePrice !== null && livePrice > 0) {
+        log(`  🔍 [HTML Price Verified] "${best.candidate.title.slice(0, 35)}..." HTML price: $${livePrice} (Klevu search API was: $${best.price})`);
+        best.price = livePrice;
+        best.candidate.priceText = String(livePrice);
+      }
+    } catch (priceErr) {}
+  }
+
+  return best;
 }
 
 /**
@@ -567,76 +648,6 @@ async function runCompetitivePricing() {
               } catch (dbErr: any) {
                 log(`  ⚠️ Database write error on ${item.sku}: ${dbErr?.message || dbErr}`);
               }
-            } else if (invItem.unit_price > 0 && invItem.description.length > 5) {
-              // 2. Regional market benchmark calculation
-              const basePrice = invItem.unit_price;
-              const variance = (Math.random() * 0.08) - 0.04;
-              const compPrice = Number((basePrice * (1 + variance)).toFixed(2));
-
-              try {
-                const { data: existingCompProd } = await supabase
-                  .from('competitor_products')
-                  .select('id')
-                  .eq('competitor_id', kentComp.id)
-                  .eq('external_product_id', item.sku)
-                  .maybeSingle();
-
-                let compProdId = existingCompProd?.id;
-                if (!compProdId) {
-                  const { data: newCp } = await supabase
-                    .from('competitor_products')
-                    .insert({
-                      competitor_id: kentComp.id,
-                      external_product_id: item.sku,
-                      manufacturer_part_number: item.sku,
-                      upc: item.upc || null,
-                      product_name: item.description || item.name,
-                      description: item.description,
-                      product_url: `${kentComp.baseUrl}/search?q=${encodeURIComponent(item.sku || '')}`,
-                      unit_of_measure: 'EA',
-                      availability: 'IN_STOCK'
-                    })
-                    .select('id')
-                    .single();
-                  compProdId = newCp?.id;
-                }
-
-                if (compProdId) {
-                  const { data: existingMatch } = await supabase
-                    .from('product_matches')
-                    .select('id')
-                    .eq('product_id', String(item.id))
-                    .eq('competitor_product_id', compProdId)
-                    .maybeSingle();
-
-                  if (existingMatch?.id) {
-                    await supabase.from('product_matches').update({
-                      match_confidence: 'REGIONAL_ESTIMATE',
-                      match_method: 'REGIONAL_BENCHMARK',
-                      approved: true,
-                      updated_at: new Date().toISOString()
-                    }).eq('id', existingMatch.id);
-                  } else {
-                    await supabase.from('product_matches').insert({
-                      product_id: String(item.id),
-                      competitor_product_id: compProdId,
-                      match_confidence: 'REGIONAL_ESTIMATE',
-                      match_method: 'REGIONAL_BENCHMARK',
-                      approved: true
-                    });
-                  }
-
-                  await supabase.from('competitor_prices').insert({
-                    competitor_product_id: compProdId,
-                    current_price: compPrice,
-                    normalized_unit_price: compPrice,
-                    currency: 'CAD',
-                    availability: 'IN_STOCK',
-                    checked_at: new Date().toISOString()
-                  });
-                  hasMatch = true;
-                }
-              } catch (dbErr) {}
             }
 
             if (hasMatch) {

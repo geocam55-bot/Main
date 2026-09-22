@@ -4843,6 +4843,19 @@ Result:
     }
   });
 
+  // GET /api/competitive-pricing/live-kent-price
+  app.get('/api/competitive-pricing/live-kent-price', async (req, res) => {
+    try {
+      const url = req.query.url as string;
+      if (!url) return res.status(400).json({ error: 'Missing url parameter' });
+      const { fetchLiveKentStorePrice } = await import('./src/services/playwright-scraper');
+      const price = await fetchLiveKentStorePrice(url);
+      res.json({ url, price, success: price !== null });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // GET /api/competitive-pricing/agent/status
   app.get('/api/competitive-pricing/agent/status', async (req, res) => {
     try {
