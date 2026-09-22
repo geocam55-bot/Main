@@ -2200,6 +2200,24 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // On server startup, ensure pricing-agent-status is not stuck as running
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
+    if (fs.existsSync(statusPath)) {
+      const content = fs.readFileSync(statusPath, 'utf8');
+      const st = JSON.parse(content);
+      if (st && st.isRunning) {
+        st.isRunning = false;
+        st.progress = st.progress || {};
+        st.progress.currentSku = st.progress.current >= st.progress.total ? 'Completed' : 'Stopped';
+        st.progress.lastUpdated = new Date().toISOString();
+        fs.writeFileSync(statusPath, JSON.stringify(st, null, 2));
+      }
+    }
+  } catch (e) {}
+
   // Essential Health Check for Container Ingress & Reverse Proxy
   app.get(['/api/health', '/healthz', '/health'], (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -4886,8 +4904,8 @@ Result:
           }
         }
 
-        // Only mark stopped if PID is definitely gone and no updates for > 30 seconds
-        if (!isPidAlive && !activeAgentChild && diffMs > 30 * 1000) {
+        // Only mark stopped if PID is definitely gone and no updates for > 5 seconds
+        if (!isPidAlive && !activeAgentChild && diffMs > 5000) {
           fileData.isRunning = false;
           fileData.progress.currentSku = fileData.progress.current >= fileData.progress.total ? 'Completed' : 'Stopped';
           try {
