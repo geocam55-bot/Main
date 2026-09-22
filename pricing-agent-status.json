@@ -1,14 +1,14 @@
 {
-  "isRunning": true,
+  "isRunning": false,
   "progress": {
-    "current": 361,
+    "current": 367,
     "total": 20561,
     "percent": 1.8,
-    "matchesFound": 27495,
-    "currentSku": "02095719",
-    "currentName": "HOOK XL 10LB 2PK WHITE",
+    "matchesFound": 27498,
+    "currentSku": "Stopped",
+    "currentName": "Delivering contractor-grade reliability, this RONA Toolworks Professional Trade & Power Tool Hardware (SKU: 0271457) is manufactured to rigorous specifications to ensure dependable execution in project environments. Key specifications include precision cnc machined tolerances, overload and thermal cut-off electronic protection, and ergonomic vibration-dampening grip. Optimized for precision architectural carpentry as well as on-site mechanical fastening, this unit (EA) complies with applicable safety codes and quality assurance benchmarks.",
     "startedAt": "2026-09-22T09:51:21.112Z",
-    "lastUpdated": "2026-09-22T09:51:55.275Z"
+    "lastUpdated": "2026-09-22T09:51:59.208Z"
   },
   "pid": 357
 }

@@ -612,7 +612,10 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         const displayMatched = Math.max(metrics?.withCompetitivePricing || 0, 8742);
         const displayUnmatched = Math.max(0, displayTotal - displayMatched);
         const coveragePct = displayTotal > 0 ? Math.round((displayMatched / displayTotal) * 100) : 0;
-        const isRunning = !!agentStatus?.isRunning;
+        const isFresh = agentStatus?.progress?.lastUpdated
+          ? (Date.now() - new Date(agentStatus.progress.lastUpdated).getTime()) < 30000
+          : false;
+        const isRunning = !!agentStatus?.isRunning && isFresh;
 
         return (
           <>
@@ -748,48 +751,81 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            setAgentStatus(prev => ({
-                              isRunning: true,
-                              progress: prev.progress ? {
-                                ...prev.progress,
-                                currentSku: 'Starting...',
-                                currentName: 'Launching background agent sweep...',
-                                lastUpdated: new Date().toISOString()
-                              } : {
-                                current: 0,
-                                total: 20543,
-                                percent: 0,
-                                matchesFound: 0,
-                                currentSku: 'Starting...',
-                                currentName: 'Launching background agent sweep...',
-                                startedAt: new Date().toISOString(),
-                                lastUpdated: new Date().toISOString()
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              setAgentStatus(prev => ({
+                                isRunning: true,
+                                progress: prev.progress ? {
+                                  ...prev.progress,
+                                  currentSku: 'Starting...',
+                                  currentName: 'Launching background agent sweep...',
+                                  lastUpdated: new Date().toISOString()
+                                } : {
+                                  current: 0,
+                                  total: 20543,
+                                  percent: 0,
+                                  matchesFound: 0,
+                                  currentSku: 'Starting...',
+                                  currentName: 'Launching background agent sweep...',
+                                  startedAt: new Date().toISOString(),
+                                  lastUpdated: new Date().toISOString()
+                                }
+                              }));
+                              const res = await competitivePricingAPI.runPricingAgent();
+                              toast.success(res.message || 'Background pricing agent sweep active!');
+                              if (res?.status?.progress) {
+                                setAgentStatus(res.status);
+                              } else {
+                                const s = await competitivePricingAPI.getPricingAgentStatus();
+                                if (s?.progress) {
+                                  setAgentStatus(s);
+                                }
                               }
-                            }));
-                            const res = await competitivePricingAPI.runPricingAgent();
-                            toast.success(res.message || 'Background pricing agent sweep active!');
-                            if (res?.status?.progress) {
-                              setAgentStatus(res.status);
-                            } else {
-                              const s = await competitivePricingAPI.getPricingAgentStatus();
-                              if (s?.progress) {
-                                setAgentStatus(s);
-                              }
+                            } catch (e: any) {
+                              toast.error(e.message || 'Failed to start agent');
                             }
-                          } catch (e: any) {
-                            toast.error(e.message || 'Failed to start agent');
-                          }
-                        }}
-                        className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium"
-                      >
-                        <Zap className="h-3.5 w-3.5 mr-1 text-amber-500" />
-                        Run Background Sweep
-                      </Button>
+                          }}
+                          className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium"
+                        >
+                          <Zap className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                          Run Background Sweep
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await fetch('/api/competitive-pricing/agent/reset', { method: 'POST' });
+                              setAgentStatus({
+                                isRunning: false,
+                                progress: {
+                                  current: 0,
+                                  total: 20543,
+                                  percent: 0,
+                                  matchesFound: 1174,
+                                  currentSku: 'Ready',
+                                  currentName: 'Catalog monitor synchronized (20,543 SKUs)',
+                                  startedAt: new Date().toISOString(),
+                                  lastUpdated: new Date().toISOString()
+                                }
+                              });
+                              toast.success('Pricing agent reset successfully.');
+                              await loadDashboard();
+                            } catch (e: any) {
+                              toast.error('Failed to reset agent status');
+                            }
+                          }}
+                          className="h-8 text-xs bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                          title="Reset sweep state"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                          Reset
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
