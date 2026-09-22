@@ -527,24 +527,6 @@ async function runCompetitivePricing() {
           const itemIndex = currentIndex + idx + 1;
           const isAlreadyMatched = existingMatchedIds.has(String(item.id)) || existingMatchedIds.has(String(item.sku));
 
-          if (isAlreadyMatched) {
-            const percent = Number(((itemIndex / totalItems) * 100).toFixed(1));
-            updateStatus({
-              isRunning: true,
-              progress: {
-                current: itemIndex,
-                total: totalItems,
-                percent,
-                matchesFound,
-                currentSku: item.sku || '',
-                currentName: item.description || item.name || '',
-                startedAt,
-                lastUpdated: new Date().toISOString()
-              }
-            });
-            return;
-          }
-
           try {
             const parsedAttrs = parseItemAttributes(item.attributes);
             const invItem: InventoryItem = {

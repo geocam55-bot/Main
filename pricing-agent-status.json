@@ -1,14 +1,14 @@
 {
   "isRunning": false,
   "progress": {
-    "current": 367,
+    "current": 369,
     "total": 20561,
     "percent": 1.8,
-    "matchesFound": 27498,
+    "matchesFound": 27478,
     "currentSku": "Stopped",
-    "currentName": "Delivering contractor-grade reliability, this RONA Toolworks Professional Trade & Power Tool Hardware (SKU: 0271457) is manufactured to rigorous specifications to ensure dependable execution in project environments. Key specifications include precision cnc machined tolerances, overload and thermal cut-off electronic protection, and ergonomic vibration-dampening grip. Optimized for precision architectural carpentry as well as on-site mechanical fastening, this unit (EA) complies with applicable safety codes and quality assurance benchmarks.",
-    "startedAt": "2026-09-22T09:51:21.112Z",
-    "lastUpdated": "2026-09-22T09:51:59.208Z"
+    "currentName": "Catalog sweep paused",
+    "startedAt": "2026-09-22T10:29:06.966Z",
+    "lastUpdated": "2026-09-22T10:29:11.287Z"
   },
-  "pid": 357
+  "pid": 1480
 }
