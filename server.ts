@@ -4790,7 +4790,6 @@ Result:
             bundle: true,
             platform: 'node',
             format: 'cjs',
-            packages: 'external',
             sourcemap: true,
             outfile: cjsPath
           });
@@ -4804,23 +4803,16 @@ Result:
       const agentScriptPath = useCompiled ? cjsPath : tsPath;
 
       try {
-        activeAgentChild = useCompiled
-          ? spawn('node', [agentScriptPath], {
-              detached: true,
-              stdio: ['ignore', outFd, outFd],
-              env: process.env
-            })
-          : (fs.existsSync(binTsx)
-              ? spawn(binTsx, [agentScriptPath], {
-                  detached: true,
-                  stdio: ['ignore', outFd, outFd],
-                  env: process.env
-                })
-              : spawn('node', [agentScriptPath], {
-                  detached: true,
-                  stdio: ['ignore', outFd, outFd],
-                  env: process.env
-                }));
+        const binTsx = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
+        const tsxCmd = fs.existsSync(binTsx) ? binTsx : 'npx';
+        const tsxArgs = fs.existsSync(binTsx) ? [tsPath] : ['tsx', tsPath];
+
+        activeAgentChild = spawn(tsxCmd, tsxArgs, {
+          detached: true,
+          stdio: ['ignore', outFd, outFd],
+          env: process.env,
+          cwd: process.cwd()
+        });
 
         initialStatus.progress = initialStatus.progress || ({} as any);
         (initialStatus as any).pid = activeAgentChild.pid;
