@@ -418,11 +418,14 @@ async function runCompetitivePricing() {
   } catch (e) {}
   log(`📦 Catalog contains ${totalItems} items to monitor.`);
 
-  // 3. Pre-load existing verified matches count
+  // 3. Pre-load existing verified matches count (unique products)
   let matchesFound = 1174;
   try {
-    const { count: matchCount } = await supabase.from('product_matches').select('*', { count: 'exact', head: true });
-    if (matchCount && matchCount > 0) matchesFound = matchCount;
+    const { data: matchedProds } = await supabase.from('product_matches').select('product_id');
+    if (matchedProds && matchedProds.length > 0) {
+      const uniqueIds = new Set(matchedProds.map(m => m.product_id));
+      matchesFound = Math.min(uniqueIds.size, totalItems);
+    }
   } catch (e) {}
   log(`ℹ️ Catalog has ${matchesFound} active competitor price matches.`);
 
