@@ -1,14 +1,14 @@
 {
-  "isRunning": false,
+  "isRunning": true,
   "progress": {
-    "current": 369,
+    "current": 406,
     "total": 20561,
-    "percent": 1.8,
-    "matchesFound": 27478,
-    "currentSku": "Stopped",
-    "currentName": "Catalog sweep paused",
-    "startedAt": "2026-09-22T10:29:06.966Z",
-    "lastUpdated": "2026-09-22T10:29:11.287Z"
+    "percent": 2,
+    "matchesFound": 27502,
+    "currentSku": "00336015",
+    "currentName": "HOOK PEG 32 1/8\"GREY",
+    "startedAt": "2026-09-22T11:35:24.644Z",
+    "lastUpdated": "2026-09-22T11:35:46.128Z"
   },
-  "pid": 1480
+  "pid": 1781
 }

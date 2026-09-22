@@ -569,8 +569,10 @@ export async function startDirectClientSweep(onProgress?: (status: AgentStatus) 
 
   try {
     const existing = await getDirectAgentStatus();
-    if (existing?.progress?.current) {
+    if (existing?.progress?.current && existing.progress.current > 0 && existing.progress.current < 20543) {
       startOffset = existing.progress.current;
+    } else {
+      startOffset = 0;
     }
   } catch (e) {}
 
