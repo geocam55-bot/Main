@@ -4800,25 +4800,25 @@ Result:
       }
 
       const useCompiled = fs.existsSync(cjsPath);
-      const scriptCmd = useCompiled 
-        ? `node "${cjsPath}"` 
-        : (fs.existsSync(binTsx) ? `"${binTsx}" "${tsPath}"` : `npx tsx "${tsPath}"`);
-
       try {
-        const { exec } = await import('child_process');
-        const bgExec = exec(`${scriptCmd} >> "${logPath}" 2>&1 &`, {
-          cwd: process.cwd(),
-          env: process.env
-        });
-
-        initialStatus.progress = initialStatus.progress || ({} as any);
-        (initialStatus as any).pid = bgExec.pid;
-        fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
+        const pricingAgentModule = useCompiled 
+          ? await import('./dist/pricing-agent.cjs') 
+          : await import('./src/scripts/pricing-agent.ts');
         
-        console.log(`[Pricing Agent] Launched background sweep via: ${scriptCmd} (PID: ${bgExec.pid})`);
+        if (pricingAgentModule.runCompetitivePricing) {
+          pricingAgentModule.runCompetitivePricing().catch((err: any) => {
+            console.error('[Pricing Agent In-Process Error]:', err);
+          });
+          initialStatus.progress = initialStatus.progress || ({} as any);
+          (initialStatus as any).pid = process.pid;
+          fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
+          console.log('[Pricing Agent] Started in-process background sweep successfully.');
+        } else {
+          throw new Error('runCompetitivePricing export not found');
+        }
       } catch (spawnErr: any) {
-        console.error('[Pricing Agent] Spawn error:', spawnErr);
-        return res.status(500).json({ error: `Failed to spawn agent: ${spawnErr?.message || spawnErr}` });
+        console.error('[Pricing Agent] Start error:', spawnErr);
+        return res.status(500).json({ error: `Failed to start agent: ${spawnErr?.message || spawnErr}` });
       }
 
       res.json({ success: true, message: 'Pricing agent started in background.', status: initialStatus });

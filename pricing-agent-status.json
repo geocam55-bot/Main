@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 10972,
+    "current": 18878,
     "total": 20561,
-    "percent": 53.4,
-    "matchesFound": 1154,
-    "currentSku": "35056258",
-    "currentName": "STANDARD 48\"SHELF DBL.WH.  .",
-    "startedAt": "2026-09-22T16:07:55.116Z",
-    "lastUpdated": "2026-09-22T16:09:26.189Z"
+    "percent": 91.8,
+    "matchesFound": 1294,
+    "currentSku": "02655003",
+    "currentName": "PANEL 8 CIRC.    100A QO8L100S",
+    "startedAt": "2026-09-22T16:46:06.843Z",
+    "lastUpdated": "2026-09-22T16:48:27.560Z"
   },
-  "pid": 710
+  "pid": 979
 }

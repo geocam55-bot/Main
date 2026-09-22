@@ -392,7 +392,7 @@ async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | 
 /**
  * Main Competitive Pricing Agent Runner
  */
-async function runCompetitivePricing() {
+export async function runCompetitivePricing() {
   const startedAt = new Date().toISOString();
   try {
     if (fs.existsSync(STOP_FILE)) fs.unlinkSync(STOP_FILE);
@@ -721,18 +721,20 @@ async function runCompetitivePricing() {
   }
 }
 
-runCompetitivePricing()
-  .catch(async (err) => {
-    log(`💥 Fatal error: ${err?.message || err}`);
-    try {
-      let prev: any = { isRunning: false };
-      if (fs.existsSync(STATUS_FILE)) {
-        try {
-          prev = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8'));
-        } catch (e) {}
-      }
-      prev.isRunning = false;
-      fs.writeFileSync(STATUS_FILE, JSON.stringify(prev, null, 2));
-      await supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: prev });
-    } catch (e) {}
-  });
+if (typeof require !== 'undefined' && require.main === module) {
+  runCompetitivePricing()
+    .catch(async (err) => {
+      log(`💥 Fatal error: ${err?.message || err}`);
+      try {
+        let prev: any = { isRunning: false };
+        if (fs.existsSync(STATUS_FILE)) {
+          try {
+            prev = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8'));
+          } catch (e) {}
+        }
+        prev.isRunning = false;
+        fs.writeFileSync(STATUS_FILE, JSON.stringify(prev, null, 2));
+        await supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: prev });
+      } catch (e) {}
+    });
+}
