@@ -4800,48 +4800,22 @@ Result:
       }
 
       const useCompiled = fs.existsSync(cjsPath);
-      const agentScriptPath = useCompiled ? cjsPath : tsPath;
+      const scriptCmd = useCompiled 
+        ? `node "${cjsPath}"` 
+        : (fs.existsSync(binTsx) ? `"${binTsx}" "${tsPath}"` : `npx tsx "${tsPath}"`);
 
       try {
-        const binTsx = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
-        const tsxCmd = fs.existsSync(binTsx) ? binTsx : 'npx';
-        const tsxArgs = fs.existsSync(binTsx) ? [tsPath] : ['tsx', tsPath];
-
-        activeAgentChild = spawn(tsxCmd, tsxArgs, {
-          detached: true,
-          stdio: ['ignore', outFd, outFd],
-          env: process.env,
-          cwd: process.cwd()
+        const { exec } = await import('child_process');
+        const bgExec = exec(`${scriptCmd} >> "${logPath}" 2>&1 &`, {
+          cwd: process.cwd(),
+          env: process.env
         });
 
         initialStatus.progress = initialStatus.progress || ({} as any);
-        (initialStatus as any).pid = activeAgentChild.pid;
+        (initialStatus as any).pid = bgExec.pid;
         fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
-
-        activeAgentChild.on('error', (err: any) => {
-          console.error('[Pricing Agent Process Error]:', err);
-          try {
-            fs.writeSync(outFd, `\n[ERROR]: Failed to start agent process: ${err?.message || err}\n`);
-          } catch (e) {}
-        });
-
-        activeAgentChild.unref();
-
-        activeAgentChild.on('close', (code: number) => {
-          console.log(`[Pricing Agent Process] Exited with code ${code}`);
-          activeAgentChild = null;
-          try {
-            if (fs.existsSync(statusPath)) {
-              const cur = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-              cur.isRunning = false;
-              cur.progress = cur.progress || {};
-              cur.progress.currentSku = code === 0 ? 'Completed' : 'Stopped';
-              cur.progress.lastUpdated = new Date().toISOString();
-              fs.writeFileSync(statusPath, JSON.stringify(cur, null, 2));
-              supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: cur });
-            }
-          } catch (e) {}
-        });
+        
+        console.log(`[Pricing Agent] Launched background sweep via: ${scriptCmd} (PID: ${bgExec.pid})`);
       } catch (spawnErr: any) {
         console.error('[Pricing Agent] Spawn error:', spawnErr);
         return res.status(500).json({ error: `Failed to spawn agent: ${spawnErr?.message || spawnErr}` });

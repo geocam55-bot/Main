@@ -1,14 +1,14 @@
 {
-  "isRunning": false,
+  "isRunning": true,
   "progress": {
-    "current": 10684,
+    "current": 10972,
     "total": 20561,
-    "percent": 52,
-    "matchesFound": 33161,
-    "currentSku": "Ready",
-    "currentName": "Catalog monitor synchronized (20,543 SKUs)",
-    "startedAt": "2026-09-22T11:35:24.644Z",
-    "lastUpdated": "2026-09-22T12:43:39.637Z"
+    "percent": 53.4,
+    "matchesFound": 1154,
+    "currentSku": "35056258",
+    "currentName": "STANDARD 48\"SHELF DBL.WH.  .",
+    "startedAt": "2026-09-22T16:07:55.116Z",
+    "lastUpdated": "2026-09-22T16:09:26.189Z"
   },
-  "pid": 1781
+  "pid": 710
 }
