@@ -911,17 +911,16 @@ export const competitivePricingAPI = {
   },
   runPricingAgent: async (): Promise<{ success: boolean; message: string; status?: any }> => {
     try {
-      const headers = await getServerHeaders();
       const res = await fetch('/api/competitive-pricing/agent/start', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
       });
       if (res.ok) {
         const data = await safeParseJson(res);
         if (data?.success) return data;
       }
     } catch (err: any) {
-      console.warn('[Competitive Pricing] Server start endpoint unreachable, starting direct cloud sweep:', err.message);
+      console.warn('[Competitive Pricing] Server start endpoint failed:', err.message);
     }
     const { startDirectClientSweep } = await import('./competitive-pricing-client');
     return await startDirectClientSweep();
