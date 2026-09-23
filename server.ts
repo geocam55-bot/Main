@@ -4873,7 +4873,7 @@ Result:
       }
 
       // Automatic staleness detection:
-      // If status says isRunning === true, but no heartbeat update for > 90 seconds,
+      // If status says isRunning === true, but no heartbeat update for > 300 seconds,
       // it means the background sweep has stopped or process died. Auto-clear isRunning!
       if (statusData.isRunning) {
         const lastUpdatedMs = statusData.progress?.lastUpdated
@@ -4881,7 +4881,15 @@ Result:
           : 0;
         const diffMs = Date.now() - lastUpdatedMs;
 
-        if (!isPricingAgentRunningInProcess && diffMs > 90000) {
+        let fileRecent = false;
+        try {
+          const stats = fs.statSync(statusPath);
+          if (Date.now() - stats.mtimeMs < 300000) {
+            fileRecent = true;
+          }
+        } catch (e) {}
+
+        if (!isPricingAgentRunningInProcess && !fileRecent && diffMs > 300000) {
           statusData.isRunning = false;
           if (statusData.progress) {
             statusData.progress.currentSku = statusData.progress.current >= statusData.progress.total ? 'Completed' : 'Stopped';
