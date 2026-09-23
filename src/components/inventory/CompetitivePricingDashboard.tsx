@@ -212,8 +212,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     const isFiltered = !!searchQuery.trim() || (categoryFilter && categoryFilter !== 'all');
     const rawTotal = m?.totalMonitored ?? m?.totalProductsTracked ?? 0;
     const effectiveTotal = (!isFiltered && (!rawTotal || rawTotal <= 1000))
-      ? 20543
-      : Math.max(rawTotal, 20543);
+      ? 20561
+      : Math.max(rawTotal, 20561);
     const withComp = Number(m?.withCompetitivePricing ?? m?.competitiveCount ?? 0) || 0;
     const higher = Number(m?.ronaHigher ?? m?.higherCount ?? 0) || 0;
     const lower = Number(m?.ronaLower ?? m?.lowerCount ?? 0) || 0;
@@ -321,7 +321,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
           if (active && count && count > 1000) {
             setMetrics((prev) => {
-              const safeTotal = Math.max(count, 20543);
+              const safeTotal = Math.max(count, 20561);
               return {
                 ...prev,
                 totalMonitored: safeTotal,
@@ -520,9 +520,9 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                     lastUpdated: new Date().toISOString()
                   } : {
                     current: 0,
-                    total: 20543,
+                    total: 20561,
                     percent: 0,
-                    matchesFound: metrics.withCompetitivePricing || 8742,
+                    matchesFound: metrics.withCompetitivePricing || 0,
                     currentSku: 'Starting...',
                     currentName: 'Launching background agent sweep...',
                     startedAt: new Date().toISOString(),
@@ -619,8 +619,8 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
         const isFiltering = !!searchQuery.trim() || (categoryFilter && categoryFilter !== 'all');
         const displayTotal = isFiltering
           ? (pagination.total || items.length)
-          : Math.max(metrics.totalMonitored || 20543, 20543);
-        const displayMatched = Math.max(metrics?.withCompetitivePricing || 0, 8742);
+          : Math.max(metrics.totalMonitored || 20561, 20561);
+        const displayMatched = Math.max(metrics?.withCompetitivePricing || 0, 0);
         const displayUnmatched = Math.max(0, displayTotal - displayMatched);
         const coveragePct = displayTotal > 0 ? Math.round((displayMatched / displayTotal) * 100) : 0;
         const isFresh = agentStatus?.progress?.lastUpdated
@@ -749,7 +749,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                                   current: 0,
                                   total: 20561,
                                   percent: 0,
-                                  matchesFound: 8742,
+                                  matchesFound: 0,
                                   currentSku: 'Ready',
                                   currentName: 'Catalog monitor synchronized (20,561 SKUs)',
                                   startedAt: new Date().toISOString(),
@@ -788,7 +788,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                                   current: 0,
                                   total: 20561,
                                   percent: 0,
-                                  matchesFound: metrics.withCompetitivePricing || 8742,
+                                  matchesFound: metrics.withCompetitivePricing || 0,
                                   currentSku: 'Starting...',
                                   currentName: 'Launching background agent sweep...',
                                   startedAt: new Date().toISOString(),
@@ -826,7 +826,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                                   current: 0,
                                   total: 20561,
                                   percent: 0,
-                                  matchesFound: 8742,
+                                  matchesFound: 0,
                                   currentSku: 'Ready',
                                   currentName: 'Catalog monitor synchronized (20,561 SKUs)',
                                   startedAt: new Date().toISOString(),

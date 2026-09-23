@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 4925,
+    "current": 10864,
     "total": 20561,
-    "percent": 24,
-    "matchesFound": 31468,
-    "currentSku": "21085157",
-    "currentName": "MASTIC TYPE 1 OFF-WHITE 3.78L",
+    "percent": 52.8,
+    "matchesFound": 34789,
+    "currentSku": "11965016",
+    "currentName": "CARTRIDGE REPLACE.COMPLETE BK",
     "startedAt": "2026-09-23T16:04:05.259Z",
-    "lastUpdated": "2026-09-23T16:04:48.622Z"
+    "lastUpdated": "2026-09-23T16:37:25.107Z"
   },
   "pid": 293
 }
