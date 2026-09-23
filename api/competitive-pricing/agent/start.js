@@ -87,9 +87,28 @@ export default async function handler(req, res) {
 
         const child = spawn(cmd, args, {
           detached: true,
-          stdio: ['ignore', outFd, outFd]
+          stdio: ['ignore', outFd, outFd],
+          env: {
+            ...process.env,
+            SUPABASE_URL: url,
+            SUPABASE_ANON_KEY: anonKey,
+            VITE_SUPABASE_URL: url,
+            VITE_SUPABASE_ANON_KEY: anonKey
+          }
         });
         child.unref();
+
+        // Also trigger in-process as dual redundancy across container and serverless
+        try {
+          const modPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
+          if (fs.existsSync(modPath)) {
+            import(modPath).then(m => {
+              if (m && typeof m.runCompetitivePricing === 'function') {
+                m.runCompetitivePricing().catch(err => console.error('[Pricing Agent Error]:', err));
+              }
+            }).catch(() => {});
+          }
+        } catch (e) {}
       }
     } catch (procErr) {
       console.log('[Agent Start] Child process spawn skipped/handled by cloud worker');

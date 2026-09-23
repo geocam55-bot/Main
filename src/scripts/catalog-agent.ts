@@ -11,7 +11,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
                     process.env.SUPABASE_KEY || 
                     process.env.SUPABASE_ANON_KEY || 
                     process.env.VITE_SUPABASE_ANON_KEY || 
-                    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI5NDc2NTUsImV4cCI6MjAzODUyMzY1NX0.2uS1I2S1I2S1I2S1I2S1I2S1I2S1I2S1I2S1I2S1I2S';
+                    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 

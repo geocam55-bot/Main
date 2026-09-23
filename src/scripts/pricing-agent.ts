@@ -24,7 +24,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
                     process.env.SUPABASE_KEY || 
                     process.env.SUPABASE_ANON_KEY || 
                     process.env.VITE_SUPABASE_ANON_KEY || 
-                    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI5NDc2NTUsImV4cCI6MjAzODUyMzY1NX0.2uS1I2S1I2S1I2S1I2S1I2S1I2S1I2S1I2S1I2S1I2S';
+                    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -102,10 +102,17 @@ function log(msg: string) {
     recentLogs.shift();
   }
 
+  try {
+    fs.appendFileSync(LOG_FILE, line + "\n");
+  } catch (e) {}
+
   const now = Date.now();
-  if (now - lastKvLogFlush > 2500) {
+  const isImportant = msg.includes('===') || msg.includes('🚀') || msg.includes('❌') || 
+                      msg.includes('🛑') || msg.includes('⏸️') || msg.includes('📦') || 
+                      msg.includes('Finished') || msg.includes('📋') || recentLogs.length <= 6;
+  if (now - lastKvLogFlush > 2500 || isImportant) {
     lastKvLogFlush = now;
-    syncKv('pricing_agent:logs', { logs: recentLogs.join('\n') });
+    syncKv('pricing_agent:logs', { logs: recentLogs.join("\n") });
   }
 }
 
@@ -518,11 +525,22 @@ export async function runCompetitivePricing() {
     log("🚀 STARTING OPTIMIZED COMPETITIVE PRICING AGENT");
     log("=================================================");
 
-    // 1. Fetch active competitors
-    const { data: competitors, error: compErr } = await supabase.from('competitors').select('*').eq('active', true);
-    if (compErr || !competitors || competitors.length === 0) {
-      log(`❌ Failed to fetch active competitors: ${compErr?.message || 'No competitors found'}`);
-      return;
+    // 1. Fetch active competitors with resilient fallback
+    const DEFAULT_COMPETITORS = [
+      { id: 1, name: 'KENT Building Supplies', active: true, store_location: 'Halifax - Bayers Lake' },
+      { id: 2, name: 'The Home Depot', active: true, store_location: 'Halifax - Lacewood' }
+    ];
+
+    let competitors: any[] = DEFAULT_COMPETITORS;
+    try {
+      const { data, error: compErr } = await supabase.from('competitors').select('*').eq('active', true);
+      if (!compErr && data && data.length > 0) {
+        competitors = data;
+      } else if (compErr) {
+        log(`⚠️ Competitors query notice: ${compErr.message}. Using default active competitors.`);
+      }
+    } catch (e: any) {
+      log(`⚠️ Competitor lookup error: ${e?.message}. Using default active competitors.`);
     }
     log(`📋 Active competitor(s): ${competitors.map(c => c.name).join(', ')}`);
 
