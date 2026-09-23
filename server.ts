@@ -4872,8 +4872,8 @@ Result:
         };
       }
 
-      // VITAL FIX: Automatic staleness detection!
-      // If status says isRunning === true, but no update for > 20 seconds,
+      // Automatic staleness detection:
+      // If status says isRunning === true, but no heartbeat update for > 90 seconds,
       // it means the background sweep has stopped or process died. Auto-clear isRunning!
       if (statusData.isRunning) {
         const lastUpdatedMs = statusData.progress?.lastUpdated
@@ -4881,7 +4881,7 @@ Result:
           : 0;
         const diffMs = Date.now() - lastUpdatedMs;
 
-        if (!isPricingAgentRunningInProcess && diffMs > 20000) {
+        if (!isPricingAgentRunningInProcess && diffMs > 90000) {
           statusData.isRunning = false;
           if (statusData.progress) {
             statusData.progress.currentSku = statusData.progress.current >= statusData.progress.total ? 'Completed' : 'Stopped';

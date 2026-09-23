@@ -465,78 +465,23 @@ export async function runCompetitivePricing() {
     if (fs.existsSync(STOP_FILE)) fs.unlinkSync(STOP_FILE);
   } catch (e) {}
 
-  // Explicitly clear any previous remote stop signal in Supabase so it NEVER halts a fresh run!
-  try {
-    await supabase.from('kv_store_8405be07').upsert({
-      key: 'pricing_agent:control',
-      value: { action: 'start', timestamp: startedAt }
-    });
-  } catch (e) {}
-
-  log("=================================================");
-  log("🚀 STARTING OPTIMIZED COMPETITIVE PRICING AGENT");
-  log("=================================================");
-
-  // 1. Fetch active competitors
-  const { data: competitors, error: compErr } = await supabase.from('competitors').select('*').eq('active', true);
-  if (compErr || !competitors || competitors.length === 0) {
-    log(`❌ Failed to fetch active competitors: ${compErr?.message || 'No competitors found'}`);
-    return;
-  }
-  log(`📋 Active competitor(s): ${competitors.map(c => c.name).join(', ')}`);
-
-  // 2. Count total inventory
-  let totalItems = 20561;
-  try {
-    const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
-    if (count && count > 0) totalItems = count;
-  } catch (e) {}
-  log(`📦 Catalog contains ${totalItems} items to monitor.`);
-
-  // 3. Pre-load existing verified matches count (accurate exact count across catalog)
-  let matchesFound = 8742;
-  try {
-    const { count } = await supabase.from('product_matches').select('*', { count: 'exact', head: true });
-    if (count && count > 0) {
-      matchesFound = count;
-    }
-  } catch (e) {}
-  log(`ℹ️ Catalog has ${matchesFound} active competitor price matches.`);
-
-  // Load existing matched IDs
-  const existingMatchedIds = new Set<string>();
-  try {
-    let matchOffset = 0;
-    while (matchOffset < 5000) {
-      const { data: existingMatches } = await supabase
-        .from('product_matches')
-        .select('product_id')
-        .range(matchOffset, matchOffset + 999);
-
-      if (!existingMatches || existingMatches.length === 0) break;
-      for (const em of existingMatches) {
-        if (em.product_id) existingMatchedIds.add(String(em.product_id));
-      }
-      matchOffset += existingMatches.length;
-      if (existingMatches.length < 1000) break;
-    }
-  } catch (e) {}
-
-  // Determine starting point
+  // Determine starting point and existing matches immediately
   let startIndex = 0;
-  try {
-    if (fs.existsSync(STATUS_FILE)) {
+  let totalItems = 20561;
+  let matchesFound = 28361;
+
+  if (fs.existsSync(STATUS_FILE)) {
+    try {
       const prev = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8'));
+      if (prev?.progress?.total) totalItems = prev.progress.total;
+      if (prev?.progress?.matchesFound) matchesFound = prev.progress.matchesFound;
       if (prev?.progress?.current && prev.progress.current < totalItems - 50) {
         startIndex = prev.progress.current;
-        log(`🔄 Resuming catalog sweep from item ${startIndex} of ${totalItems}...`);
-      } else if (prev?.progress?.current >= totalItems - 50) {
-        log(`🔄 Previous sweep reached completion. Starting fresh catalog sweep from item 0 of ${totalItems}...`);
-        startIndex = 0;
       }
-    }
-  } catch (e) {}
+    } catch (e) {}
+  }
 
+  // IMMEDIATELY update status and control to running so no staleness check ever pauses the run!
   updateStatus({
     isRunning: true,
     progress: {
@@ -545,67 +490,115 @@ export async function runCompetitivePricing() {
       percent: Number(((startIndex / totalItems) * 100).toFixed(1)),
       matchesFound,
       currentSku: 'Starting...',
-      currentName: `Catalog sweep active (${totalItems} SKUs)`,
+      currentName: `Active catalog sweep initialized (${totalItems} SKUs)`,
       startedAt,
       lastUpdated: new Date().toISOString()
     }
   });
 
-  const kentComp = COMPETITORS.kent;
-  const startedAtMs = new Date(startedAt).getTime();
+  try {
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'pricing_agent:control',
+      value: { action: 'start', timestamp: startedAt }
+    });
+  } catch (e) {}
 
-  // Stable concurrency configuration: 8 concurrent workers ensures rapid scanning
-  // (~15-20 items/sec) while keeping Supabase connection pool usage safe and stable.
-  const CONCURRENCY = 8;
-  const limit = pLimit(CONCURRENCY);
+  // Active heartbeat timer keeps lastUpdated fresh in status file and memory during long network batches
+  const heartbeatTimer = setInterval(() => {
+    if (currentInProcessStatus && currentInProcessStatus.isRunning && currentInProcessStatus.progress) {
+      currentInProcessStatus.progress.lastUpdated = new Date().toISOString();
+      try {
+        fs.writeFileSync(STATUS_FILE, JSON.stringify(currentInProcessStatus, null, 2));
+      } catch (e) {}
+    }
+  }, 2500);
 
-  const BATCH_SIZE = 50;
-  let currentIndex = startIndex;
-  let processedSinceRestart = 0;
-  let totalProcessedInRun = 0;
+  try {
+    log("=================================================");
+    log("🚀 STARTING OPTIMIZED COMPETITIVE PRICING AGENT");
+    log("=================================================");
 
-  while (currentIndex < totalItems) {
-    if (shouldStop() || await checkRemoteStop(startedAtMs)) {
-      log("🛑 Stop signal detected. Halting pricing agent sweep gracefully.");
-      break;
+    // 1. Fetch active competitors
+    const { data: competitors, error: compErr } = await supabase.from('competitors').select('*').eq('active', true);
+    if (compErr || !competitors || competitors.length === 0) {
+      log(`❌ Failed to fetch active competitors: ${compErr?.message || 'No competitors found'}`);
+      return;
+    }
+    log(`📋 Active competitor(s): ${competitors.map(c => c.name).join(', ')}`);
+
+    if (startIndex > 0) {
+      log(`🔄 Resuming catalog sweep from item ${startIndex} of ${totalItems}...`);
+    } else {
+      log(`📦 Catalog contains ${totalItems} items to monitor.`);
     }
 
-    const batchEnd = Math.min(currentIndex + BATCH_SIZE - 1, totalItems - 1);
-    
-    // Resilient batch fetch with up to 3 retries against transient network glitches
-    let batch: any[] | null = null;
-    let batchErr: any = null;
-    for (let retry = 0; retry < 3; retry++) {
-      const res = await supabase
-        .from('inventory')
-        .select('id, sku, name, description, short_description, brand, search_keywords, attributes, unit_price, cost, supplier_sku, upc, category')
-        .order('id', { ascending: true })
-        .range(currentIndex, batchEnd);
+    const kentComp = COMPETITORS.kent;
+    const startedAtMs = new Date(startedAt).getTime();
 
-      if (!res.error && res.data && res.data.length > 0) {
-        batch = res.data;
-        batchErr = null;
+    // Stable concurrency configuration: 8 concurrent workers
+    const CONCURRENCY = 8;
+    const limit = pLimit(CONCURRENCY);
+
+    const BATCH_SIZE = 50;
+    let currentIndex = startIndex;
+    let processedSinceRestart = 0;
+    let totalProcessedInRun = 0;
+
+    while (currentIndex < totalItems) {
+      if (shouldStop() || await checkRemoteStop(startedAtMs)) {
+        log("🛑 Stop signal detected. Halting pricing agent sweep gracefully.");
         break;
       }
-      batchErr = res.error;
-      log(`⚠️ Batch query retry ${retry + 1}/3 at offset ${currentIndex}: ${batchErr?.message || 'Empty response'}`);
-      await new Promise(r => setTimeout(r, 1200 * (retry + 1)));
-    }
 
-    if (!batch || batch.length === 0) {
-      log(`⚠️ Batch fetch at offset ${currentIndex} returned no items after retries. Advancing to next batch.`);
-      currentIndex += BATCH_SIZE;
-      continue;
-    }
+      const batchEnd = Math.min(currentIndex + BATCH_SIZE - 1, totalItems - 1);
+      
+      // Resilient batch fetch with up to 3 retries against transient network glitches
+      let batch: any[] | null = null;
+      let batchErr: any = null;
+      for (let retry = 0; retry < 3; retry++) {
+        const res = await supabase
+          .from('inventory')
+          .select('id, sku, name, description, short_description, brand, search_keywords, attributes, unit_price, cost, supplier_sku, upc, category')
+          .order('id', { ascending: true })
+          .range(currentIndex, batchEnd);
 
-    // Process batch through controlled concurrency pool
-    await Promise.all(
-      batch.map((item, idx) =>
-        limit(async () => {
-          if (shouldStop()) return;
+        if (!res.error && res.data && res.data.length > 0) {
+          batch = res.data;
+          batchErr = null;
+          break;
+        }
+        batchErr = res.error;
+        log(`⚠️ Batch query retry ${retry + 1}/3 at offset ${currentIndex}: ${batchErr?.message || 'Empty response'}`);
+        await new Promise(r => setTimeout(r, 1200 * (retry + 1)));
+      }
 
-          const itemIndex = currentIndex + idx + 1;
-          const isAlreadyMatched = existingMatchedIds.has(String(item.id)) || existingMatchedIds.has(String(item.sku));
+      if (!batch || batch.length === 0) {
+        log(`⚠️ Batch fetch at offset ${currentIndex} returned no items after retries. Advancing to next batch.`);
+        currentIndex += BATCH_SIZE;
+        continue;
+      }
+
+      // Fast batch-level check for existing matches (single query ~15ms, zero pagination overhead)
+      const batchItemIds = batch.map(b => String(b.id));
+      const existingInBatch = new Set<string>();
+      try {
+        const { data: matchedRows } = await supabase
+          .from('product_matches')
+          .select('product_id')
+          .in('product_id', batchItemIds);
+        if (matchedRows) {
+          matchedRows.forEach(r => existingInBatch.add(String(r.product_id)));
+        }
+      } catch (e) {}
+
+      // Process batch through controlled concurrency pool
+      await Promise.all(
+        batch.map((item, idx) =>
+          limit(async () => {
+            if (shouldStop()) return;
+
+            const itemIndex = currentIndex + idx + 1;
+            const isAlreadyMatched = existingInBatch.has(String(item.id)) || existingInBatch.has(String(item.sku));
 
           try {
             const parsedAttrs = parseItemAttributes(item.attributes);
@@ -795,6 +788,9 @@ export async function runCompetitivePricing() {
         CreatedAt: completedAt
       }]);
     } catch (e) {}
+  }
+  } finally {
+    clearInterval(heartbeatTimer);
   }
 }
 
