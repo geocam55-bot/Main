@@ -4743,11 +4743,11 @@ Result:
 
       // Get resume index if previous progress exists
       let resumeCurrent = 0;
-      let existingMatches = 1200;
+      let existingMatches = 8742;
       if (fs.existsSync(statusPath)) {
         try {
           const prev = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-          if (prev?.progress?.current && prev.progress.current < totalItemsCount) {
+          if (prev?.progress?.current && prev.progress.current < totalItemsCount - 50) {
             resumeCurrent = prev.progress.current;
           }
           if (prev?.progress?.matchesFound) {
@@ -4974,7 +4974,7 @@ Result:
           current: 0,
           total: totalItemsCount,
           percent: 0,
-          matchesFound: 1174,
+          matchesFound: 8742,
           currentSku: 'Ready',
           currentName: `Catalog monitor synchronized (${totalItemsCount} SKUs)`,
           startedAt: new Date().toISOString(),

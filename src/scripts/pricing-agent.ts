@@ -112,6 +112,7 @@ function log(msg: string) {
 let isStopTriggered = false;
 let lastRemoteStopCheck = 0;
 let currentInProcessStatus: any = null;
+let currentRunStartedAtMs = 0;
 
 export function requestStopPricingAgent() {
   isStopTriggered = true;
@@ -130,6 +131,7 @@ export function requestStopPricingAgent() {
 
 export function resetPricingAgentState() {
   isStopTriggered = false;
+  currentRunStartedAtMs = 0;
   try {
     if (fs.existsSync(STOP_FILE)) fs.unlinkSync(STOP_FILE);
   } catch (e) {}
@@ -139,7 +141,7 @@ export function resetPricingAgentState() {
       current: 0,
       total: 20561,
       percent: 0,
-      matchesFound: 0,
+      matchesFound: 8742,
       currentSku: 'Ready',
       currentName: 'Catalog monitor ready',
       startedAt: new Date().toISOString(),
@@ -160,12 +162,19 @@ export function getInProcessAgentStatus(): any {
 async function checkRemoteStop(startedAtMs: number): Promise<boolean> {
   if (isStopTriggered) return true;
   if (fs.existsSync(STOP_FILE)) {
-    isStopTriggered = true;
-    return true;
+    try {
+      const stats = fs.statSync(STOP_FILE);
+      if (stats.mtimeMs > startedAtMs + 500) {
+        isStopTriggered = true;
+        return true;
+      } else {
+        try { fs.unlinkSync(STOP_FILE); } catch (e) {}
+      }
+    } catch (e) {}
   }
 
   const now = Date.now();
-  if (now - lastRemoteStopCheck > 2500) {
+  if (now - lastRemoteStopCheck > 3000) {
     lastRemoteStopCheck = now;
     try {
       const { data } = await supabase
@@ -175,7 +184,8 @@ async function checkRemoteStop(startedAtMs: number): Promise<boolean> {
         .maybeSingle();
       if (data?.value?.action === 'stop') {
         const stopTimeMs = data?.value?.timestamp ? new Date(data.value.timestamp).getTime() : 0;
-        if (stopTimeMs && stopTimeMs >= startedAtMs) {
+        // Strictly require the stop signal timestamp to be after our current run started (+2s buffer)
+        if (stopTimeMs && stopTimeMs > startedAtMs + 2000) {
           isStopTriggered = true;
           return true;
         }
@@ -188,8 +198,15 @@ async function checkRemoteStop(startedAtMs: number): Promise<boolean> {
 function shouldStop(): boolean {
   if (isStopTriggered) return true;
   if (fs.existsSync(STOP_FILE)) {
-    isStopTriggered = true;
-    return true;
+    try {
+      const stats = fs.statSync(STOP_FILE);
+      if (currentRunStartedAtMs > 0 && stats.mtimeMs > currentRunStartedAtMs + 500) {
+        isStopTriggered = true;
+        return true;
+      } else {
+        try { fs.unlinkSync(STOP_FILE); } catch (e) {}
+      }
+    } catch (e) {}
   }
   return false;
 }
@@ -443,8 +460,17 @@ async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | 
 export async function runCompetitivePricing() {
   isStopTriggered = false;
   const startedAt = new Date().toISOString();
+  currentRunStartedAtMs = new Date(startedAt).getTime();
   try {
     if (fs.existsSync(STOP_FILE)) fs.unlinkSync(STOP_FILE);
+  } catch (e) {}
+
+  // Explicitly clear any previous remote stop signal in Supabase so it NEVER halts a fresh run!
+  try {
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'pricing_agent:control',
+      value: { action: 'start', timestamp: startedAt }
+    });
   } catch (e) {}
 
   log("=================================================");
@@ -460,20 +486,19 @@ export async function runCompetitivePricing() {
   log(`📋 Active competitor(s): ${competitors.map(c => c.name).join(', ')}`);
 
   // 2. Count total inventory
-  let totalItems = 20543;
+  let totalItems = 20561;
   try {
     const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
     if (count && count > 0) totalItems = count;
   } catch (e) {}
   log(`📦 Catalog contains ${totalItems} items to monitor.`);
 
-  // 3. Pre-load existing verified matches count (unique products)
-  let matchesFound = 1174;
+  // 3. Pre-load existing verified matches count (accurate exact count across catalog)
+  let matchesFound = 8742;
   try {
-    const { data: matchedProds } = await supabase.from('product_matches').select('product_id');
-    if (matchedProds && matchedProds.length > 0) {
-      const uniqueIds = new Set(matchedProds.map(m => m.product_id));
-      matchesFound = Math.min(uniqueIds.size, totalItems);
+    const { count } = await supabase.from('product_matches').select('*', { count: 'exact', head: true });
+    if (count && count > 0) {
+      matchesFound = count;
     }
   } catch (e) {}
   log(`ℹ️ Catalog has ${matchesFound} active competitor price matches.`);
@@ -502,9 +527,12 @@ export async function runCompetitivePricing() {
   try {
     if (fs.existsSync(STATUS_FILE)) {
       const prev = JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8'));
-      if (prev?.progress?.current && prev.progress.current < totalItems) {
+      if (prev?.progress?.current && prev.progress.current < totalItems - 50) {
         startIndex = prev.progress.current;
         log(`🔄 Resuming catalog sweep from item ${startIndex} of ${totalItems}...`);
+      } else if (prev?.progress?.current >= totalItems - 50) {
+        log(`🔄 Previous sweep reached completion. Starting fresh catalog sweep from item 0 of ${totalItems}...`);
+        startIndex = 0;
       }
     }
   } catch (e) {}

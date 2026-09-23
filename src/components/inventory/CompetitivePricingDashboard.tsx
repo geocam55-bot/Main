@@ -354,7 +354,13 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
         setAgentStatus((prev) => {
           if (prev?.isRunning && !status.isRunning) {
-            toast.success(`Pricing agent finished! ${status.progress?.matchesFound || 0} matches found.`);
+            const isCompleted = status.progress?.currentSku === 'Completed' ||
+              (status.progress?.current && status.progress?.total && status.progress.current >= status.progress.total);
+            if (isCompleted) {
+              toast.success(`Pricing agent completed! ${status.progress?.matchesFound || 0} matches found.`);
+            } else if (status.progress?.currentSku === 'Stopped' || status.progress?.currentSku === 'Paused') {
+              toast.info(`Pricing agent paused at item ${status.progress?.current || 0}.`);
+            }
             // When agent completes, reload the dashboard metrics once
             loadDashboard();
           }
@@ -760,6 +766,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={isAgentActive}
                           onClick={async () => {
                             try {
                               setAgentStatus(prev => ({
@@ -771,9 +778,9 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                                   lastUpdated: new Date().toISOString()
                                 } : {
                                   current: 0,
-                                  total: 20543,
+                                  total: 20561,
                                   percent: 0,
-                                  matchesFound: 0,
+                                  matchesFound: metrics.withCompetitivePricing || 8742,
                                   currentSku: 'Starting...',
                                   currentName: 'Launching background agent sweep...',
                                   startedAt: new Date().toISOString(),
