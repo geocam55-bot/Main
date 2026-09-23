@@ -1,14 +1,14 @@
 {
-  "isRunning": false,
+  "isRunning": true,
   "progress": {
-    "current": 19666,
+    "current": 19877,
     "total": 20561,
-    "percent": 95.6,
-    "matchesFound": 28372,
-    "currentSku": "Paused",
-    "currentName": "Processed 19666 items",
-    "startedAt": "2026-09-23T10:20:21.244Z",
-    "lastUpdated": "2026-09-23T10:20:32.721Z"
+    "percent": 96.7,
+    "matchesFound": 28487,
+    "currentSku": "19836812",
+    "currentName": "SAW HOLE IMPACT 1 1/4\"",
+    "startedAt": "2026-09-23T13:19:35.840Z",
+    "lastUpdated": "2026-09-23T13:20:51.122Z"
   },
-  "pid": 707
+  "pid": 674
 }
