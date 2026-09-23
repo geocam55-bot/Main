@@ -259,6 +259,11 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
     } | null;
   } | null>(null);
 
+  const isAgentFresh = agentStatus?.progress?.lastUpdated
+    ? (Date.now() - new Date(agentStatus.progress.lastUpdated).getTime()) < 25000
+    : false;
+  const isAgentActive = !!agentStatus?.isRunning && isAgentFresh;
+
   // Poll Agent Status
   useEffect(() => {
     let isMounted = true;
@@ -1298,12 +1303,12 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
               }
             }}
             className={`h-9 gap-1.5 text-xs ${
-              agentStatus?.isRunning
+              isAgentActive
                 ? 'bg-blue-50 text-blue-700 border-blue-300'
                 : 'border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
           >
-            {agentStatus?.isRunning ? (
+            {isAgentActive ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
                 Agent Active ({agentStatus.progress?.percent || 0}%)

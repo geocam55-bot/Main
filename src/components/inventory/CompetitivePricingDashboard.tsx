@@ -143,6 +143,11 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     progress: null
   });
   const [isAgentStopping, setIsAgentStopping] = useState(false);
+
+  const isAgentFresh = agentStatus?.progress?.lastUpdated
+    ? (Date.now() - new Date(agentStatus.progress.lastUpdated).getTime()) < 25000
+    : false;
+  const isAgentActive = !!agentStatus?.isRunning && isAgentFresh;
   const [isEnriching, setIsEnriching] = useState(false);
 
   const handleRunAiEnrichment = async () => {
@@ -201,7 +206,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
     }
   };
 
-  const [pagination, setPagination] = useState({ page: 1, limit: 150, total: 0, totalPages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
 
   const sanitizeMetrics = (m?: any): PricingDashboardMetrics => {
     const isFiltered = !!searchQuery.trim() || (categoryFilter && categoryFilter !== 'all');
@@ -369,14 +374,14 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
 
     checkStatus();
     // Fast 2.5s poll during active background sweep; responsive 6s poll when idle
-    pollInterval = setInterval(checkStatus, agentStatus?.isRunning ? 2500 : 6000);
+    pollInterval = setInterval(checkStatus, isAgentActive ? 2500 : 6000);
 
     return () => {
       isMounted = false;
       window.removeEventListener('pricing-agent-progress', handleCustomProgress);
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [agentStatus?.isRunning]);
+  }, [isAgentActive]);
 
   // Auto-stream diagnostic logs while diagnostic modal is open
   useEffect(() => {
@@ -497,7 +502,7 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           <Button
             variant="outline"
             size="sm"
-            disabled={agentStatus?.isRunning}
+            disabled={isAgentActive}
             onClick={async () => {
               try {
                 setAgentStatus(prev => ({
@@ -529,12 +534,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
               }
             }}
             className={`h-8 gap-1.5 text-xs ${
-              agentStatus?.isRunning
+              isAgentActive
                 ? 'bg-blue-50 text-blue-700 border-blue-300'
                 : 'text-slate-700'
             }`}
           >
-            {agentStatus?.isRunning ? (
+            {isAgentActive ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
                 Agent Active ({agentStatus.progress?.percent || 0}%)

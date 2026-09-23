@@ -24,6 +24,13 @@ import {
   buildCompetitorSearchUrl,
   isGenericCategoryName,
 } from "./src/utils/building-dimensions";
+import {
+  runCompetitivePricing,
+  requestStopPricingAgent,
+  resetPricingAgentState,
+  getInProcessAgentStatus,
+  getInProcessRecentLogs
+} from "./src/scripts/pricing-agent";
 
 const FALLBACK_PROJECT_ID = "usorqldwroecyxucmtuw";
 const FALLBACK_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
@@ -4715,47 +4722,48 @@ Result:
 
   let activeAgentChild: any = null;
 
+  let isPricingAgentRunningInProcess = false;
+
   app.post('/api/competitive-pricing/agent/start', async (req, res) => {
     try {
-      const { spawn, execSync } = await import('child_process');
       const fs = await import('fs');
       const path = await import('path');
-
-      // Terminate any existing running pricing agent processes first
-      try {
-        execSync('pkill -f pricing-agent || true');
-      } catch (e) {}
-      
-      const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
-      
-      // Open sync so we have a raw file descriptor
-      const outFd = fs.openSync(logPath, 'a');
-      
-      // Clear stop signal
       const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
       if (fs.existsSync(stopSignalPath)) {
         try { fs.unlinkSync(stopSignalPath); } catch (e) {}
       }
 
-      // Write a separator for new runs
-      fs.writeSync(outFd, `\n\n--- AGENT STARTED AT ${new Date().toISOString()} ---\n`);
-
       // Query total inventory count across entire catalog
-      let totalItemsCount = 20543;
+      let totalItemsCount = 20561;
       try {
         const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
         if (count && count > 0) totalItemsCount = count;
       } catch (cntErr) {}
 
-      // Initialize status object with catalog count
+      // Get resume index if previous progress exists
+      let resumeCurrent = 0;
+      let existingMatches = 1200;
+      if (fs.existsSync(statusPath)) {
+        try {
+          const prev = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+          if (prev?.progress?.current && prev.progress.current < totalItemsCount) {
+            resumeCurrent = prev.progress.current;
+          }
+          if (prev?.progress?.matchesFound) {
+            existingMatches = prev.progress.matchesFound;
+          }
+        } catch (e) {}
+      }
+
       const initialStatus = {
         isRunning: true,
+        pid: process.pid,
         progress: {
-          current: 0,
+          current: resumeCurrent,
           total: totalItemsCount,
-          percent: 0,
-          matchesFound: 1174,
+          percent: Number(((resumeCurrent / totalItemsCount) * 100).toFixed(1)),
+          matchesFound: existingMatches,
           currentSku: 'Starting...',
           currentName: `Active catalog sweep initialized (${totalItemsCount} SKUs)`,
           startedAt: new Date().toISOString(),
@@ -4763,9 +4771,10 @@ Result:
         }
       };
 
-      fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
+      try {
+        fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
+      } catch (e) {}
 
-      // Persist immediately to Supabase kv_store for cross-instance and live visibility
       try {
         await supabase.from('kv_store_8405be07').upsert({
           key: 'pricing_agent:status',
@@ -4777,53 +4786,22 @@ Result:
         });
       } catch (kvErr) {}
 
-      const cjsPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
-      const tsPath = path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
-      const binTsx = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
+      // Execute in-process: runs synchronously in the same Node engine across Dev and Live!
+      isPricingAgentRunningInProcess = true;
+      runCompetitivePricing()
+        .then(() => {
+          isPricingAgentRunningInProcess = false;
+          console.log('[Pricing Agent] Background run finished successfully.');
+        })
+        .catch((err: any) => {
+          isPricingAgentRunningInProcess = false;
+          console.error('[Pricing Agent] Run error:', err);
+        });
 
-      // Guarantee dist/pricing-agent.cjs is compiled and available
-      if (!fs.existsSync(cjsPath) && fs.existsSync(tsPath)) {
-        try {
-          const esbuild = await import('esbuild');
-          esbuild.buildSync({
-            entryPoints: [tsPath],
-            bundle: true,
-            platform: 'node',
-            format: 'cjs',
-            sourcemap: true,
-            outfile: cjsPath
-          });
-          console.log('[Pricing Agent] Bundled dist/pricing-agent.cjs on demand');
-        } catch (bErr: any) {
-          console.error('[Pricing Agent] Dynamic build failed:', bErr);
-        }
-      }
-
-      const useCompiled = fs.existsSync(cjsPath);
-      try {
-        const pricingAgentModule = useCompiled 
-          ? await import('./dist/pricing-agent.cjs') 
-          : await import('./src/scripts/pricing-agent.ts');
-        
-        if (pricingAgentModule.runCompetitivePricing) {
-          pricingAgentModule.runCompetitivePricing().catch((err: any) => {
-            console.error('[Pricing Agent In-Process Error]:', err);
-          });
-          initialStatus.progress = initialStatus.progress || ({} as any);
-          (initialStatus as any).pid = process.pid;
-          fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
-          console.log('[Pricing Agent] Started in-process background sweep successfully.');
-        } else {
-          throw new Error('runCompetitivePricing export not found');
-        }
-      } catch (spawnErr: any) {
-        console.error('[Pricing Agent] Start error:', spawnErr);
-        return res.status(500).json({ error: `Failed to start agent: ${spawnErr?.message || spawnErr}` });
-      }
-
-      res.json({ success: true, message: 'Pricing agent started in background.', status: initialStatus });
+      return res.json({ success: true, message: 'Pricing agent sweep started in background.', status: initialStatus });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error('[Pricing Agent Start Error]:', e);
+      return res.status(500).json({ error: e.message });
     }
   });
 
@@ -4847,119 +4825,111 @@ Result:
       const path = await import('path');
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
 
-      let fileData: any = null;
-      if (fs.existsSync(statusPath)) {
+      let statusData: any = null;
+
+      // 1. In-process progress first
+      const inProc = getInProcessAgentStatus();
+      if (inProc && inProc.progress) {
+        statusData = inProc;
+      }
+
+      // 2. Local status file
+      if (!statusData && fs.existsSync(statusPath)) {
         try {
           const content = fs.readFileSync(statusPath, 'utf8');
-          fileData = JSON.parse(content);
+          statusData = JSON.parse(content);
         } catch (e) {}
       }
 
-      // Check if process has died or finished - avoid false positives
-      if (fileData && fileData.isRunning) {
-        const lastUpdatedMs = fileData.progress?.lastUpdated ? new Date(fileData.progress.lastUpdated).getTime() : 0;
+      // 3. Fall back to shared Supabase kv_store
+      if (!statusData) {
+        try {
+          const { data, error } = await supabase
+            .from('kv_store_8405be07')
+            .select('value')
+            .eq('key', 'pricing_agent:status')
+            .maybeSingle();
+
+          if (!error && data?.value) {
+            statusData = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+          }
+        } catch (e) {}
+      }
+
+      if (!statusData) {
+        statusData = {
+          isRunning: false,
+          progress: {
+            current: 0,
+            total: 20561,
+            percent: 0,
+            matchesFound: 1174,
+            currentSku: 'Ready',
+            currentName: 'Catalog monitor synchronized (20,561 SKUs)',
+            startedAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString()
+          }
+        };
+      }
+
+      // VITAL FIX: Automatic staleness detection!
+      // If status says isRunning === true, but no update for > 20 seconds,
+      // it means the background sweep has stopped or process died. Auto-clear isRunning!
+      if (statusData.isRunning) {
+        const lastUpdatedMs = statusData.progress?.lastUpdated
+          ? new Date(statusData.progress.lastUpdated).getTime()
+          : 0;
         const diffMs = Date.now() - lastUpdatedMs;
 
-        let isPidAlive = false;
-        if (fileData.pid) {
-          try {
-            process.kill(fileData.pid, 0);
-            isPidAlive = true;
-          } catch (e) {
-            isPidAlive = false;
+        if (!isPricingAgentRunningInProcess && diffMs > 20000) {
+          statusData.isRunning = false;
+          if (statusData.progress) {
+            statusData.progress.currentSku = statusData.progress.current >= statusData.progress.total ? 'Completed' : 'Stopped';
+            statusData.progress.currentName = statusData.progress.current >= statusData.progress.total ? 'Catalog sweep complete' : 'Sweep idle';
           }
-        }
-
-        // Only mark stopped if PID is definitely gone and no updates for > 5 seconds
-        if (!isPidAlive && !activeAgentChild && diffMs > 5000) {
-          fileData.isRunning = false;
-          fileData.progress.currentSku = fileData.progress.current >= fileData.progress.total ? 'Completed' : 'Stopped';
           try {
-            fs.writeFileSync(statusPath, JSON.stringify(fileData, null, 2));
-            supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: fileData });
+            fs.writeFileSync(statusPath, JSON.stringify(statusData, null, 2));
+            await supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: statusData });
           } catch (e) {}
         }
       }
 
-      if (fileData) {
-        return res.json(fileData);
-      }
-
-      // Fall back to shared Supabase kv_store
-      const { data, error } = await supabase
-        .from('kv_store_8405be07')
-        .select('value')
-        .eq('key', 'pricing_agent:status')
-        .maybeSingle();
-
-      if (!error && data?.value) {
-        const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-        return res.json(parsed);
-      }
-
-      res.json({
-        isRunning: false,
-        progress: {
-          current: 0,
-          total: 20543,
-          percent: 0,
-          matchesFound: 1174,
-          currentSku: 'Ready',
-          currentName: 'Catalog monitor synchronized (20,543 SKUs)',
-          startedAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString()
-        }
-      });
+      return res.json(statusData);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      return res.status(500).json({ error: e.message });
     }
   });
 
   // POST /api/competitive-pricing/agent/stop
   app.post('/api/competitive-pricing/agent/stop', async (req, res) => {
     try {
+      isPricingAgentRunningInProcess = false;
+      requestStopPricingAgent();
+
       const fs = await import('fs');
       const path = await import('path');
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
       const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
 
-      // Write stop signal file
-      try {
-        fs.writeFileSync(stopSignalPath, 'stop');
-      } catch (e) {}
-
-      if (activeAgentChild && activeAgentChild.pid) {
-        try {
-          process.kill(-activeAgentChild.pid, 'SIGTERM');
-        } catch (kErr) {
-          try {
-            activeAgentChild.kill('SIGTERM');
-          } catch (kErr2) {}
-        }
-        activeAgentChild = null;
-      }
-
-      // Proactively terminate any orphan or background agent process instances
-      try {
-        const { exec } = await import('child_process');
-        exec('pkill -f pricing-agent', () => {});
-      } catch (pkErr) {}
+      try { fs.writeFileSync(stopSignalPath, 'stop'); } catch (e) {}
 
       let stoppedData: any = { isRunning: false, stoppedAt: new Date().toISOString() };
       if (fs.existsSync(statusPath)) {
         try {
           const content = fs.readFileSync(statusPath, 'utf8');
           stoppedData = JSON.parse(content);
-          stoppedData.isRunning = false;
-          stoppedData.stoppedAt = new Date().toISOString();
-          if (stoppedData.progress) {
-            stoppedData.progress.currentSku = 'Stopped';
-            stoppedData.progress.currentName = 'Catalog sweep paused';
-            stoppedData.progress.lastUpdated = new Date().toISOString();
-          }
-          fs.writeFileSync(statusPath, JSON.stringify(stoppedData, null, 2));
         } catch (e) {}
       }
+      stoppedData.isRunning = false;
+      stoppedData.stoppedAt = new Date().toISOString();
+      if (stoppedData.progress) {
+        stoppedData.progress.currentSku = 'Stopped';
+        stoppedData.progress.currentName = 'Catalog sweep paused';
+        stoppedData.progress.lastUpdated = new Date().toISOString();
+      }
+      try {
+        fs.writeFileSync(statusPath, JSON.stringify(stoppedData, null, 2));
+      } catch (e) {}
 
       try {
         await supabase.from('kv_store_8405be07').upsert({
@@ -4972,39 +4942,41 @@ Result:
         });
       } catch (kvErr) {}
 
-      res.json({ success: true, message: 'Pricing agent stopped.', status: stoppedData });
+      return res.json({ success: true, message: 'Pricing agent stopped.', status: stoppedData });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      return res.status(500).json({ error: e.message });
     }
   });
 
   // POST /api/competitive-pricing/agent/reset
   app.post('/api/competitive-pricing/agent/reset', async (req, res) => {
     try {
+      isPricingAgentRunningInProcess = false;
+      resetPricingAgentState();
+
       const fs = await import('fs');
       const path = await import('path');
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
       const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
-
-      try { fs.writeFileSync(stopSignalPath, 'stop'); } catch (e) {}
-      if (activeAgentChild) {
-        try { activeAgentChild.kill('SIGTERM'); } catch (e) {}
-        activeAgentChild = null;
+      if (fs.existsSync(stopSignalPath)) {
+        try { fs.unlinkSync(stopSignalPath); } catch (e) {}
       }
+
+      let totalItemsCount = 20561;
       try {
-        const { exec } = await import('child_process');
-        exec('pkill -f pricing-agent', () => {});
-      } catch (e) {}
+        const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
+        if (count && count > 0) totalItemsCount = count;
+      } catch (cntErr) {}
 
       const resetStatus = {
         isRunning: false,
         progress: {
           current: 0,
-          total: 20543,
+          total: totalItemsCount,
           percent: 0,
           matchesFound: 1174,
           currentSku: 'Ready',
-          currentName: 'Catalog monitor synchronized (20,543 SKUs)',
+          currentName: `Catalog monitor synchronized (${totalItemsCount} SKUs)`,
           startedAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString()
         }
@@ -5023,15 +4995,20 @@ Result:
         value: { action: 'stop', timestamp: new Date().toISOString() }
       });
 
-      res.json({ success: true, message: 'Pricing agent status reset successfully.', status: resetStatus });
+      return res.json({ success: true, message: 'Pricing agent status reset successfully.', status: resetStatus });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      return res.status(500).json({ error: e.message });
     }
   });
 
   // GET /api/competitive-pricing/agent/logs
   app.get('/api/competitive-pricing/agent/logs', async (req, res) => {
     try {
+      const inProcLogs = getInProcessRecentLogs();
+      if (inProcLogs && inProcLogs.trim().length > 50) {
+        return res.json({ logs: inProcLogs });
+      }
+
       const fs = await import('fs');
       const path = await import('path');
       const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');

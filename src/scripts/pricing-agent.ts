@@ -111,6 +111,51 @@ function log(msg: string) {
 
 let isStopTriggered = false;
 let lastRemoteStopCheck = 0;
+let currentInProcessStatus: any = null;
+
+export function requestStopPricingAgent() {
+  isStopTriggered = true;
+  try {
+    fs.writeFileSync(STOP_FILE, 'stop');
+  } catch (e) {}
+  if (currentInProcessStatus) {
+    currentInProcessStatus.isRunning = false;
+    if (currentInProcessStatus.progress) {
+      currentInProcessStatus.progress.currentSku = 'Stopped';
+      currentInProcessStatus.progress.lastUpdated = new Date().toISOString();
+    }
+    updateStatus(currentInProcessStatus);
+  }
+}
+
+export function resetPricingAgentState() {
+  isStopTriggered = false;
+  try {
+    if (fs.existsSync(STOP_FILE)) fs.unlinkSync(STOP_FILE);
+  } catch (e) {}
+  currentInProcessStatus = {
+    isRunning: false,
+    progress: {
+      current: 0,
+      total: 20561,
+      percent: 0,
+      matchesFound: 0,
+      currentSku: 'Ready',
+      currentName: 'Catalog monitor ready',
+      startedAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString()
+    }
+  };
+  updateStatus(currentInProcessStatus);
+}
+
+export function getInProcessRecentLogs(): string {
+  return recentLogs.slice(-200).join('\n');
+}
+
+export function getInProcessAgentStatus(): any {
+  return currentInProcessStatus;
+}
 
 async function checkRemoteStop(startedAtMs: number): Promise<boolean> {
   if (isStopTriggered) return true;
@@ -130,7 +175,7 @@ async function checkRemoteStop(startedAtMs: number): Promise<boolean> {
         .maybeSingle();
       if (data?.value?.action === 'stop') {
         const stopTimeMs = data?.value?.timestamp ? new Date(data.value.timestamp).getTime() : 0;
-        if (!stopTimeMs || stopTimeMs >= startedAtMs) {
+        if (stopTimeMs && stopTimeMs >= startedAtMs) {
           isStopTriggered = true;
           return true;
         }
@@ -149,28 +194,30 @@ function shouldStop(): boolean {
   return false;
 }
 
-process.on('SIGTERM', () => {
-  log("🛑 Process received SIGTERM. Halting immediately...");
-  isStopTriggered = true;
-  try {
-    const prev = fs.existsSync(STATUS_FILE) ? JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')) : {};
-    prev.isRunning = false;
-    prev.pid = process.pid;
-    if (prev.progress) {
-      prev.progress.currentSku = 'Stopped';
-      prev.progress.currentName = 'Catalog sweep paused';
-      prev.progress.lastUpdated = new Date().toISOString();
-    }
-    fs.writeFileSync(STATUS_FILE, JSON.stringify(prev, null, 2));
-    syncKv('pricing_agent:status', prev);
-  } catch (e) {}
-  process.exit(0);
-});
+if (typeof require !== 'undefined' && require.main === module) {
+  process.on('SIGTERM', () => {
+    log("🛑 Standalone process received SIGTERM. Halting immediately...");
+    isStopTriggered = true;
+    try {
+      const prev = fs.existsSync(STATUS_FILE) ? JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')) : {};
+      prev.isRunning = false;
+      prev.pid = process.pid;
+      if (prev.progress) {
+        prev.progress.currentSku = 'Stopped';
+        prev.progress.currentName = 'Catalog sweep paused';
+        prev.progress.lastUpdated = new Date().toISOString();
+      }
+      fs.writeFileSync(STATUS_FILE, JSON.stringify(prev, null, 2));
+      syncKv('pricing_agent:status', prev);
+    } catch (e) {}
+    process.exit(0);
+  });
 
-process.on('SIGINT', () => {
-  isStopTriggered = true;
-  process.exit(0);
-});
+  process.on('SIGINT', () => {
+    isStopTriggered = true;
+    process.exit(0);
+  });
+}
 
 function updateStatus(status: {
   isRunning: boolean;
@@ -187,6 +234,7 @@ function updateStatus(status: {
     completedAt?: string;
   };
 }) {
+  currentInProcessStatus = status;
   status.pid = process.pid;
   if (isStopTriggered && status.isRunning) {
     status.isRunning = false;
@@ -393,6 +441,7 @@ async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | 
  * Main Competitive Pricing Agent Runner
  */
 export async function runCompetitivePricing() {
+  isStopTriggered = false;
   const startedAt = new Date().toISOString();
   try {
     if (fs.existsSync(STOP_FILE)) fs.unlinkSync(STOP_FILE);
