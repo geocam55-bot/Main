@@ -632,49 +632,57 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
           <>
             {agentStatus?.progress && (
               <div className={`border rounded-xl p-4 transition-all shadow-xs ${
-                isRunning ? 'bg-blue-50/85 border-blue-200' : 'bg-slate-50/90 border-slate-200'
+                isRunning ? 'bg-blue-50/90 border-blue-300 shadow-sm' : 'bg-white border-slate-200'
               }`}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                      isRunning ? 'bg-blue-100' : 'bg-emerald-100'
+                      isRunning ? 'bg-blue-100' : 'bg-slate-100 text-slate-500'
                     }`}>
                       {isRunning ? (
                         <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
                       ) : (
-                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                        <CheckCircle2 className="h-5 w-5 text-slate-500" />
                       )}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-semibold text-sm ${isRunning ? 'text-blue-950' : 'text-slate-900'}`}>
                           {isRunning
-                            ? 'Catalog Sweep In Progress'
-                            : 'Competitive Pricing Monitor: Synchronized'}
+                            ? 'Catalog Price Sweep In Progress'
+                            : 'Competitive Pricing Catalog Monitor'}
                         </span>
-                        <Badge variant="secondary" className={isRunning ? 'bg-blue-100 text-blue-700 text-[10px] font-medium border-blue-200' : 'bg-slate-200 text-slate-700 text-[10px] font-medium'}>
-                          {isRunning ? 'Direct Scraper Scanning' : 'Direct Real-Time Engine'}
-                        </Badge>
-                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-[10px] font-medium border-emerald-200">
-                          {displayMatched.toLocaleString()} Total Matches Active
+                        {isRunning ? (
+                          <Badge className="bg-blue-600 text-white animate-pulse text-[10px] font-bold">
+                            SWEEP RUNNING
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-[10px] font-medium">
+                            Idle (Standby)
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 text-[10px] font-medium border-emerald-200">
+                          {displayMatched.toLocaleString()} Products Matched
                         </Badge>
                         {isRunning && (
                           <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[10px] font-medium border-amber-200">
                             +{agentStatus.progress.matchesFound} In Current Run
                           </Badge>
                         )}
-                        <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-[10px] font-medium border-purple-200">
+                        <Badge variant="secondary" className="bg-purple-50 text-purple-700 text-[10px] font-medium border-purple-200">
                           {displayTotal.toLocaleString()} Catalog Items
                         </Badge>
                       </div>
                       <div className={`text-xs mt-1 flex items-center gap-2 flex-wrap ${isRunning ? 'text-blue-700' : 'text-slate-600'}`}>
-                        <span className="font-mono bg-white px-1.5 py-0.5 rounded text-[11px] font-semibold border border-slate-200">
-                          {isRunning ? (agentStatus.progress.currentSku || 'Scanning') : 'Active'}
+                        <span className={`font-mono px-1.5 py-0.5 rounded text-[11px] font-semibold border ${
+                          isRunning ? 'bg-blue-100 text-blue-900 border-blue-200' : 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}>
+                          {isRunning ? (agentStatus.progress.currentSku || 'Scanning') : 'Idle'}
                         </span>
-                        <span className="text-slate-700 truncate max-w-md font-medium">
+                        <span className="truncate max-w-md font-medium text-slate-600">
                           {isRunning
                             ? (agentStatus.progress.currentName || 'Analyzing competitor products...')
-                            : `Catalog monitor online (${displayTotal.toLocaleString()} SKUs) • ${displayMatched.toLocaleString()} competitor matches tracked in database`}
+                            : `Catalog monitor is on standby. Click "Run Background Sweep" to scan competitor pricing.`}
                         </span>
                       </div>
                     </div>
@@ -739,11 +747,11 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                                 isRunning: false,
                                 progress: {
                                   current: 0,
-                                  total: 20543,
+                                  total: 20561,
                                   percent: 0,
-                                  matchesFound: 1174,
+                                  matchesFound: 8742,
                                   currentSku: 'Ready',
-                                  currentName: 'Catalog monitor synchronized (20,543 SKUs)',
+                                  currentName: 'Catalog monitor synchronized (20,561 SKUs)',
                                   startedAt: new Date().toISOString(),
                                   lastUpdated: new Date().toISOString()
                                 }
@@ -801,9 +809,9 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                               toast.error(e.message || 'Failed to start agent');
                             }
                           }}
-                          className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium"
+                          className="h-8 text-xs bg-blue-600 text-white border-blue-600 hover:bg-blue-700 font-medium"
                         >
-                          <Zap className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                          <Zap className="h-3.5 w-3.5 mr-1 text-amber-300" />
                           Run Background Sweep
                         </Button>
                         <Button
@@ -816,11 +824,11 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                                 isRunning: false,
                                 progress: {
                                   current: 0,
-                                  total: 20543,
+                                  total: 20561,
                                   percent: 0,
-                                  matchesFound: 1174,
+                                  matchesFound: 8742,
                                   currentSku: 'Ready',
-                                  currentName: 'Catalog monitor synchronized (20,543 SKUs)',
+                                  currentName: 'Catalog monitor synchronized (20,561 SKUs)',
                                   startedAt: new Date().toISOString(),
                                   lastUpdated: new Date().toISOString()
                                 }
@@ -846,16 +854,16 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                   <div className="flex justify-between text-[11px] text-slate-700 font-medium mb-1">
                     <span>
                       {isRunning
-                        ? `Current Sweep Run: Item ${agentStatus.progress.current} of ${agentStatus.progress.total} analyzed`
-                        : `Catalog Match Coverage: ${displayMatched.toLocaleString()} of ${displayTotal.toLocaleString()} products with competitive pricing`}
+                        ? `Current Sweep Run: Item ${(agentStatus.progress.current || 0).toLocaleString()} of ${(agentStatus.progress.total || displayTotal).toLocaleString()} analyzed`
+                        : `Stored Competitive Coverage: ${displayMatched.toLocaleString()} of ${displayTotal.toLocaleString()} catalog products with price history`}
                     </span>
-                    <span className="font-bold text-slate-900">
-                      {isRunning ? `${agentStatus.progress.percent}%` : `${coveragePct}% coverage`}
+                    <span className={`font-bold ${isRunning ? 'text-blue-900' : 'text-slate-700'}`}>
+                      {isRunning ? `${agentStatus.progress.percent}%` : `${coveragePct}% stored`}
                     </span>
                   </div>
-                  <div className={`w-full h-2 rounded-full overflow-hidden ${isRunning ? 'bg-blue-200/70' : 'bg-slate-200'}`}>
+                  <div className={`w-full rounded-full overflow-hidden ${isRunning ? 'h-2 bg-blue-200/80' : 'h-1.5 bg-slate-100'}`}>
                     <div
-                      className={`h-full transition-all duration-300 rounded-full ${isRunning ? 'bg-blue-600' : 'bg-emerald-600'}`}
+                      className={`h-full transition-all duration-300 rounded-full ${isRunning ? 'bg-blue-600' : 'bg-slate-400'}`}
                       style={{
                         width: isRunning
                           ? `${Math.min(Math.max(agentStatus.progress.percent, 1.5), 100)}%`

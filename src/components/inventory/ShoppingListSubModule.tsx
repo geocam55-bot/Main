@@ -1297,7 +1297,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
           <Button
             variant="outline"
             size="sm"
-            disabled={agentStatus?.isRunning}
+            disabled={isAgentActive}
             onClick={async () => {
               try {
                 await competitivePricingAPI.runPricingAgent();
