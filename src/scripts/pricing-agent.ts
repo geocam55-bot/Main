@@ -725,7 +725,7 @@ export async function runCompetitivePricing() {
 
             if (hasMatch) {
               matchesFound++;
-              existingMatchedIds.add(String(item.id));
+              existingInBatch.add(String(item.id));
             }
 
             processedSinceRestart++;

@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 19877,
+    "current": 16,
     "total": 20561,
-    "percent": 96.7,
-    "matchesFound": 28487,
-    "currentSku": "19836812",
-    "currentName": "SAW HOLE IMPACT 1 1/4\"",
-    "startedAt": "2026-09-23T13:19:35.840Z",
-    "lastUpdated": "2026-09-23T13:20:51.122Z"
+    "percent": 0.1,
+    "matchesFound": 28854,
+    "currentSku": "90195012",
+    "currentName": "BAR PRY 2PK 9 1/4\"-7 1/4\"",
+    "startedAt": "2026-09-23T14:25:16.286Z",
+    "lastUpdated": "2026-09-23T14:25:24.341Z"
   },
-  "pid": 674
+  "pid": 1083
 }
