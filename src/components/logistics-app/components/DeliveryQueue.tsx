@@ -1,11 +1,12 @@
 import { formatPhoneNumber } from '../lib/formatters';
 import { useState, FormEvent } from 'react';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, getDeliveryPhotos, AdditionalDeliveryStop } from '../types';
+import { toast } from 'sonner';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, getDeliveryPhotos, AdditionalDeliveryStop, generateTrackingNumber } from '../types';
 import { 
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
   Truck as TruckIcon, MoreVertical, Edit, Trash2, Plus, X, ExternalLink,
-  List, LayoutGrid
+  List, LayoutGrid, Mail
 } from 'lucide-react';
 import DragDropFreightBoard from './DragDropFreightBoard';
 import { PhysicalDocumentModal } from './PhysicalDocumentModal';
@@ -472,6 +473,56 @@ export default function DeliveryQueue({
   const [editingRecord, setEditingRecord] = useState<DeliveryRecord | null>(null);
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
   const [previewDocDelivery, setPreviewDocDelivery] = useState<DeliveryRecord | null>(null);
+  const [emailStatusBanner, setEmailStatusBanner] = useState<{
+    message: string;
+    details?: string;
+    type: 'success' | 'error';
+  } | null>(null);
+
+  const handleResendEmail = async (delivery: DeliveryRecord) => {
+    try {
+      setEmailStatusBanner({
+        message: `Dispatched tracking email for Ticket ${delivery.id} to ${delivery.customerEmail || 'customer@ronaatlantic.ca'}...`,
+        details: `Connecting to email dispatch & diagnostic trace engine...`,
+        type: 'success'
+      });
+
+      const res = await fetch('/api/v1/deliveries/resend-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deliveryId: delivery.id,
+          customerEmail: delivery.customerEmail || 'customer@ronaatlantic.ca',
+          trackingNumber: delivery.trackingNumber || delivery.id,
+          customerName: delivery.customerName || 'Valued Customer'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const diag = data.diagnostics || {};
+        setEmailStatusBanner({
+          message: `✅ Tracking Email Dispatch Logged (${diag.transportStatus || 'SIMULATED'}) for Ticket ${delivery.id}`,
+          details: `Recipient: ${data.recipient || delivery.customerEmail || 'customer@ronaatlantic.ca'} | Transport: ${diag.transportStatus || 'SIMULATED'} | DB Logged: ${diag.dbLogged ? 'Yes' : 'No'} — ${diag.diagnosticNote || data.message}`,
+          type: 'success'
+        });
+        toast.success(`Email Dispatched: ${data.recipient}`);
+      } else {
+        setEmailStatusBanner({
+          message: `❌ Failed to Resend Tracking Email for Ticket ${delivery.id}`,
+          details: `Reason: ${data.error || 'Server rejected email dispatch or invalid recipient address.'}`,
+          type: 'error'
+        });
+        toast.error(`⚠️ Failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      setEmailStatusBanner({
+        message: `❌ Critical Error Resending Email for Ticket ${delivery.id}`,
+        details: `Error Details: ${err?.message || String(err)}`,
+        type: 'error'
+      });
+      toast.error(`❌ Error: ${err?.message || err}`);
+    }
+  };
 
   // Form Field States
   const [formId, setFormId] = useState('');
@@ -480,6 +531,8 @@ export default function DeliveryQueue({
   const [formCustomerName, setFormCustomerName] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formCustomerEmail, setFormCustomerEmail] = useState('');
+  const [formTrackingNumber, setFormTrackingNumber] = useState('');
   const [formOriginBranch, setFormOriginBranch] = useState('');
   const [formWeight, setFormWeight] = useState('');
   const [formOrderTotal, setFormOrderTotal] = useState('');
@@ -623,6 +676,8 @@ export default function DeliveryQueue({
     setFormCustomerName('');
     setFormAddress('');
     setFormPhone('');
+    setFormCustomerEmail('');
+    setFormTrackingNumber(generateTrackingNumber());
     setFormOriginBranch(BRANCHES[0]?.id || 'WINDMILL_DC');
     setFormWeight('');
     setFormOrderTotal('');
@@ -652,6 +707,8 @@ export default function DeliveryQueue({
     setFormCustomerName(record.customerName || '');
     setFormAddress(record.deliveryAddress || '');
     setFormPhone(record.phone || '');
+    setFormCustomerEmail(record.customerEmail || '');
+    setFormTrackingNumber(record.trackingNumber || generateTrackingNumber());
     setFormOriginBranch(record.originBranch || BRANCHES[0]?.id || 'WINDMILL_DC');
     setFormWeight(record.weight || '');
     setFormOrderTotal(record.orderTotal || '');
@@ -677,6 +734,12 @@ export default function DeliveryQueue({
     e.preventDefault();
     if (!formId.trim() || !formCustomerName.trim() || !formAddress.trim()) {
       alert("Please enter a valid ticket reference ID, customer name, and customer address.");
+      return;
+    }
+
+    // Enforce customer email entry on registration
+    if (!formCustomerEmail.trim() || !formCustomerEmail.includes('@')) {
+      alert("Customer email address is required to register a delivery. This is needed so tracking links and automated milestone updates can be sent to the customer.");
       return;
     }
 
@@ -738,6 +801,8 @@ export default function DeliveryQueue({
         customerName: formCustomerName,
         deliveryAddress: formAddress,
         phone: formPhone,
+        customerEmail: formCustomerEmail.trim(),
+        trackingNumber: formTrackingNumber || editingRecord.trackingNumber || generateTrackingNumber(),
         originBranch: formOriginBranch,
         weight: formWeight || undefined,
         orderTotal: formOrderTotal || undefined,
@@ -784,6 +849,8 @@ export default function DeliveryQueue({
         });
       }
 
+      const trackingCode = formTrackingNumber || generateTrackingNumber();
+
       const newRecord: DeliveryRecord = {
         id: formId,
         invoiceNumber: formInvoiceNumber,
@@ -791,6 +858,8 @@ export default function DeliveryQueue({
         customerName: formCustomerName,
         deliveryAddress: formAddress,
         phone: formPhone,
+        customerEmail: formCustomerEmail.trim(),
+        trackingNumber: trackingCode,
         originBranch: formOriginBranch,
         weight: formWeight || undefined,
         orderTotal: formOrderTotal || undefined,
@@ -1258,6 +1327,24 @@ export default function DeliveryQueue({
                           )}
                         </div>
                       )}
+
+                      {/* Customer Email & Tracking link */}
+                      {(delivery.trackingNumber || delivery.customerEmail) && (
+                        <div className="flex items-center flex-wrap gap-2 mt-1.5 text-[10px]">
+                          {delivery.trackingNumber && (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-800 font-mono font-bold">
+                              <span>Tracking:</span>
+                              <span className="text-sky-950">{delivery.trackingNumber}</span>
+                            </span>
+                          )}
+                          {delivery.customerEmail && (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono">
+                              <Mail className="h-3 w-3 text-slate-400 mr-0.5" />
+                              <span>{delivery.customerEmail}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1401,6 +1488,33 @@ export default function DeliveryQueue({
                     )}
 
                     <div className="flex items-center space-x-2 relative" onClick={(e) => e.stopPropagation()}>
+                      {/* Customer Live Tracking Portal quick link */}
+                      <a
+                        href={`/track?num=${encodeURIComponent(delivery.trackingNumber || delivery.id)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-900 border border-sky-200 rounded-lg text-[11px] font-bold flex items-center space-x-1 transition shadow-2xs cursor-pointer"
+                        title="Open Customer Live Tracking Portal in new window"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span className="hidden sm:inline">Track</span>
+                      </a>
+
+                      {/* Resend Customer Tracking Email button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleResendEmail(delivery);
+                        }}
+                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-[11px] font-bold flex items-center space-x-1 transition shadow-2xs cursor-pointer"
+                        title="Resend Customer Tracking Email"
+                      >
+                        <Mail className="h-3 w-3 text-amber-600" />
+                        <span className="hidden md:inline">Resend Email</span>
+                      </button>
+
                       {/* Action Menu dropdown trigger */}
                       {!isViewOnly && (
                         <button
@@ -1427,8 +1541,19 @@ export default function DeliveryQueue({
                             }}
                           />
                           <div 
-                            className="absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                            className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden py-1"
                           >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleResendEmail(delivery);
+                                setActiveDropdownId(null);
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs text-amber-800 hover:bg-amber-50 flex items-center space-x-2 font-semibold transition-colors border-b border-slate-50"
+                            >
+                              <Mail className="h-3.5 w-3.5 text-amber-600" />
+                              <span>Resend Tracking Email</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -2105,6 +2230,43 @@ export default function DeliveryQueue({
                   </div>
                 </div>
 
+                {/* Customer Email (Enforced for Tracking) */}
+                <div className="bg-sky-50/60 p-2.5 rounded-xl border border-sky-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sky-900 font-bold font-mono uppercase text-[10px] flex items-center">
+                      <Mail className="h-3.5 w-3.5 text-sky-600 mr-1" />
+                      <span>Customer Email *</span>
+                    </label>
+                    <span className="text-[9px] font-semibold text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded">Enforced for Live Tracking</span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type="email"
+                      required
+                      value={formCustomerEmail}
+                      onChange={(e) => setFormCustomerEmail(e.target.value)}
+                      className="w-full bg-white border border-sky-200 p-2 text-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-mono text-slate-800"
+                      placeholder="customer@domain.com"
+                    />
+                  </div>
+                  <p className="text-[10px] text-sky-600 mt-1">Used to send direct tracking link &amp; real-time delivery notifications.</p>
+                </div>
+
+                {/* Tracking Number */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-600 font-bold font-mono uppercase text-[10px]">Tracking Number</label>
+                    <span className="text-[9px] font-mono text-slate-400">ProSpaces Portal Code</span>
+                  </div>
+                  <input 
+                    type="text"
+                    value={formTrackingNumber}
+                    onChange={(e) => setFormTrackingNumber(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-2 text-xs rounded-lg font-mono text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase"
+                    placeholder="PSL-784512"
+                  />
+                </div>
+
                 {/* Transport truck assignment */}
                 <div>
                   <label className="block text-slate-600 font-bold mb-1 font-mono uppercase text-[10px]">Allocate Truck & Driver</label>
@@ -2457,6 +2619,31 @@ export default function DeliveryQueue({
           delivery={previewDocDelivery} 
           onClose={() => setPreviewDocDelivery(null)} 
         />
+      )}
+
+      {/* Bottom Screen Sticky Email Dispatch Status & Reason Banner */}
+      {emailStatusBanner && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 max-w-xl w-full mx-4 px-4 py-3.5 rounded-xl shadow-2xl border flex items-center justify-between gap-3 transition-all bg-slate-900 text-white border-slate-700 animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-start space-x-3">
+            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${emailStatusBanner.type === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+              {emailStatusBanner.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+            </div>
+            <div>
+              <p className="text-xs font-extrabold font-sans tracking-wide">{emailStatusBanner.message}</p>
+              {emailStatusBanner.details && (
+                <p className="text-[11px] text-slate-300 font-mono mt-1 leading-relaxed">{emailStatusBanner.details}</p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEmailStatusBanner(null)}
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+            title="Dismiss status banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
     </div>

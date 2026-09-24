@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { formatPhoneNumber } from '../lib/formatters';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser } from '../types';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, generateTrackingNumber } from '../types';
 import { 
   Scan, 
   Truck as TruckIcon, 
@@ -10,6 +10,7 @@ import {
   MapPin, 
   Eye, 
   Phone, 
+  Mail,
   CheckSquare, 
   Sparkles, 
   X, 
@@ -105,6 +106,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
   // Form states for registrations
   const [shippingAddress, setShippingAddress] = useState('');
   const [shippingPhone, setShippingPhone] = useState('');
+  const [shippingEmail, setShippingEmail] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
   const [originBranch, setOriginBranch] = useState('WINDMILL_DC');
   const [customerName, setCustomerName] = useState('');
@@ -846,6 +848,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
       setCustomerName('');
       setShippingAddress('');
       setShippingPhone('');
+      setShippingEmail('');
       setShippingNotes('Barcode scanned at loading gate.');
       setOriginBranch(BRANCHES[0]?.id || 'WINDMILL_DC');
       setInvoiceNo('INV-' + code);
@@ -863,7 +866,14 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
     e.preventDefault();
     if (!manualSalesOrder) return;
 
+    // Enforce customer email on registration
+    if (!shippingEmail || !shippingEmail.trim() || !shippingEmail.includes('@')) {
+      alert("Customer email address is required to register a delivery. This is required so automated live tracking updates can be delivered to the customer.");
+      return;
+    }
+
     const selectedTruckDetails = trucks.find(t => t.id === registerSelectedTruck);
+    const trackingCode = generateTrackingNumber();
 
     const brandNew: DeliveryRecord = {
       id: manualSalesOrder.barcode,
@@ -872,6 +882,8 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
       customerName: customerName || 'Walk-in Customer',
       deliveryAddress: shippingAddress || 'Hold at Store Depot Pickup',
       phone: shippingPhone || 'No Phone Registered',
+      customerEmail: shippingEmail.trim(),
+      trackingNumber: trackingCode,
       originBranch: originBranch,
       destinationNotes: shippingNotes,
       status: DeliveryStatus.REGISTERED,
@@ -885,8 +897,8 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
           location: BRANCHES.find(b => b.id === originBranch)?.name || 'Central Dispatch Store',
           operator: 'Dispatch Counter Gate Operator',
           notes: registerSelectedTruck 
-            ? `Delivery plan registered under ${BRANCHES.find(b => b.id === originBranch)?.name || 'Depot'}. Assigned to ${selectedTruckDetails?.name} (Driver: ${selectedTruckDetails?.driver || 'N/A'}).`
-            : 'Delivery details and routing plan registered into tracking system.'
+            ? `Delivery plan registered under ${BRANCHES.find(b => b.id === originBranch)?.name || 'Depot'}. Assigned to ${selectedTruckDetails?.name} (Driver: ${selectedTruckDetails?.driver || 'N/A'}). Tracking #${trackingCode}`
+            : `Delivery details and routing plan registered into tracking system. Tracking #${trackingCode}`
         }
       ]
     };
@@ -896,6 +908,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
     setManualSalesOrder(null);
     setActiveFormType('IDLE');
     setBarcodeInput('');
+    setShippingEmail('');
   };
 
   const handlePickSubmit = (e: React.FormEvent) => {
@@ -1592,14 +1605,21 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
                       <label className="text-xs font-semibold text-slate-700 block">Customer Name</label>
                       <input type="text" required placeholder="Enter purchaser name..." value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full border border-slate-200 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500" />
                     </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block">Delivery Site Address</label>
+                      <input type="text" required placeholder="E.g., 22 Waverley Rd..." value={shippingAddress} onChange={(e) => setShippingAddress(e.target.value)} className="w-full border border-slate-200 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500" />
+                    </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-700 block">Delivery Site Address</label>
-                        <input type="text" required placeholder="E.g., 22 Waverley Rd..." value={shippingAddress} onChange={(e) => setShippingAddress(e.target.value)} className="w-full border border-slate-200 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500" />
-                      </div>
                       <div>
                         <label className="text-xs font-semibold text-slate-700 block">Contact Phone Number</label>
                         <input type="text" placeholder="(902) 555-xxxx" value={shippingPhone} onChange={(e) => setShippingPhone(formatPhoneNumber(e.target.value))} className="w-full border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-mono focus:ring-1 focus:ring-emerald-500" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-emerald-800 block flex items-center justify-between">
+                          <span>Customer Email *</span>
+                          <span className="text-[9px] text-emerald-600 font-normal">Tracking Enforced</span>
+                        </label>
+                        <input type="email" required placeholder="customer@domain.com" value={shippingEmail} onChange={(e) => setShippingEmail(e.target.value)} className="w-full border border-emerald-300 bg-emerald-50/30 px-3 py-1.5 rounded-lg text-xs font-mono focus:ring-1 focus:ring-emerald-500 text-slate-900" />
                       </div>
                     </div>
                     <div>
@@ -2120,6 +2140,14 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
                         <label className="text-xs font-semibold text-slate-700 block">Phone Site</label>
                         <input type="text" placeholder="Contact number..." value={shippingPhone} onChange={(e) => setShippingPhone(formatPhoneNumber(e.target.value))} className="w-full border border-slate-200 px-3 py-2 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500" />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-emerald-800 block flex items-center justify-between">
+                        <span>Customer Email *</span>
+                        <span className="text-[9px] text-emerald-600 font-normal">Tracking Enforced</span>
+                      </label>
+                      <input type="email" required placeholder="customer@domain.com" value={shippingEmail} onChange={(e) => setShippingEmail(e.target.value)} className="w-full border border-emerald-300 bg-emerald-50/30 px-3 py-2 rounded-xl text-xs font-mono focus:ring-1 focus:ring-emerald-500 text-slate-900" />
                     </div>
 
                     <div>

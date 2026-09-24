@@ -5,7 +5,7 @@ import {
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
   ChevronDown, ChevronUp, Layers, Sparkles, MapPin, User, Clock, ShieldCheck, Check,
-  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink, FileText, MoreVertical
+  Calendar, Sun, Moon, ChevronLeft, ChevronRight, BarChart3, Zap, Store, Maximize2, Eye, Camera, Info, ExternalLink, FileText, MoreVertical, Mail
 } from 'lucide-react';
 import { isTruckAssignedToBranch } from '../lib/mapHelpers';
 import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/schedulingUtils';
@@ -2908,18 +2908,51 @@ function UnassignedDeliveryCard({
             </span>
           )}
           {!isViewOnly && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAssignClick();
-              }}
-              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-[10px] font-bold font-mono tracking-wide uppercase transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center space-x-1"
-              title="Tap to assign to a vehicle"
-            >
-              <span>Assign</span>
-              <ArrowRight className="h-3 w-3" />
-            </button>
+            <div className="flex items-center space-x-1.5">
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const res = await fetch('/api/v1/deliveries/resend-email', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        deliveryId: delivery.id,
+                        customerEmail: delivery.customerEmail || 'customer@ronaatlantic.ca',
+                        trackingNumber: delivery.trackingNumber || delivery.id,
+                        customerName: delivery.customerName || 'Valued Customer'
+                      })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      alert(`✅ ${data.message}`);
+                    } else {
+                      alert(`⚠️ Failed to resend email: ${data.error || 'Unknown error'}`);
+                    }
+                  } catch (err: any) {
+                    alert(`❌ Error sending email: ${err?.message || err}`);
+                  }
+                }}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white rounded-lg text-[10px] font-bold font-mono tracking-wide uppercase transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center space-x-1"
+                title="Resend customer tracking email"
+              >
+                <Mail className="h-3 w-3 text-amber-400" />
+                <span>Email</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssignClick();
+                }}
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-[10px] font-bold font-mono tracking-wide uppercase transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center space-x-1"
+                title="Tap to assign to a vehicle"
+              >
+                <span>Assign</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
           )}
         </div>
       </div>

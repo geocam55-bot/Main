@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Wand2, Building2, ChevronRight, TrendingUp, BarChart3, Package, Monitor, MessageSquare, LogOut, Truck } from 'lucide-react';
+import { Wand2, Building2, ChevronRight, TrendingUp, BarChart3, Package, Monitor, MessageSquare, LogOut, Truck } from 'lucide-react';
 import { Logo } from './Logo';
 import { TrialCountdown } from './TrialCountdown';
 import { canAccessSpace, canView, onPermissionsChanged } from '../utils/permissions';
@@ -149,15 +149,18 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Sales Space → CRM */}
           {canAccessSpace('sales', userRole, 'view') && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.15 }}
             onClick={onSelectSalesSpace}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectSalesSpace(); } }}
             onMouseEnter={() => setHoveredCard('sales')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -212,20 +215,23 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 <ChevronRight className="h-4 w-4" />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
 
           {/* Design Space → Project Wizards */}
           {canAccessSpace('design', userRole, 'view') && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.25 }}
             onClick={() => handleDesktopOnlyClick('Design Space', onSelectDesignSpace)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Design Space', onSelectDesignSpace); } }}
             onMouseEnter={() => setHoveredCard('design')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -280,20 +286,23 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 <ChevronRight className="h-4 w-4" />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
 
           {/* Marketing Space */}
           {canAccessSpace('marketing', userRole, 'view') && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.35 }}
             onClick={() => handleDesktopOnlyClick('Marketing Space', onSelectMarketingSpace)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Marketing Space', onSelectMarketingSpace); } }}
             onMouseEnter={() => setHoveredCard('marketing')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -348,20 +357,23 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 <ChevronRight className="h-4 w-4" />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
 
           {/* Insights Space → Reports */}
           {canAccessSpace('insights', userRole, 'view') && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.45 }}
             onClick={() => handleDesktopOnlyClick('Insights Space', onSelectInsightsSpace)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Insights Space', onSelectInsightsSpace); } }}
             onMouseEnter={() => setHoveredCard('insights')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -416,20 +428,23 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 <ChevronRight className="h-4 w-4" />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
 
           {/* Inventory Space */}
           {canAccessSpace('inventory', userRole, 'view') && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.55 }}
             onClick={() => handleDesktopOnlyClick('Inventory Space', onSelectInventorySpace)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Inventory Space', onSelectInventorySpace); } }}
             onMouseEnter={() => setHoveredCard('inventory')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -484,20 +499,23 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 <ChevronRight className="h-4 w-4" />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
 
           {/* Logistics & Fleet Space */}
           {canAccessSpace('logistics', userRole, 'view') && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.6 }}
             onClick={() => handleDesktopOnlyClick('Logistics & Fleet Space', onSelectLogisticsSpace || (() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics?from=crm'; }))}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Logistics & Fleet Space', onSelectLogisticsSpace || (() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics?from=crm'; })); } }}
             onMouseEnter={() => setHoveredCard('logistics')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -546,26 +564,43 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 Commercial fleet tracking, GPS telemetry, barcode scanning, proof-of-delivery, and multi-depot distribution.
               </p>
 
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#2563EB', fontWeight: 600, fontSize: 14 }}>
-                Open Logistics Space
-                <ChevronRight className="h-4 w-4" />
+              {/* Arrow link & Customer Portal Quick Link */}
+              <div className="flex items-center justify-between gap-2 mt-auto pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#2563EB', fontWeight: 600, fontSize: 14 }}>
+                  Open Logistics Space
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open('/track', '_blank');
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 transition flex items-center gap-1 cursor-pointer border border-blue-200/60"
+                  title="Open Customer Live Delivery Tracking Portal in new window"
+                >
+                  <Package className="h-3.5 w-3.5" />
+                  <span>Customer Portal ↗</span>
+                </button>
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
 
           {/* IT Space */}
           {canAccessSpace('it', userRole, 'view') && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.65 }}
             onClick={onSelectITSpace}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectITSpace(); } }}
             onMouseEnter={() => setHoveredCard('it')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -620,20 +655,23 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 <ChevronRight className="h-4 w-4" />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
 
           {/* Messaging Space */}
           {canView('messages', userRole) && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.75 }}
             onClick={onSelectMessagingSpace}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectMessagingSpace(); } }}
             onMouseEnter={() => setHoveredCard('messaging')}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            className="group text-left cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
           >
             <div
               className="relative overflow-hidden transition-all duration-300"
@@ -688,7 +726,7 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
                 <ChevronRight className="h-4 w-4" />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
           )}
         </div>
 

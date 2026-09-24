@@ -49,8 +49,9 @@ import {
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
   Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2, Radio,
-  Sun, Moon, Monitor, Palette
+  Sun, Moon, Monitor, Palette, ExternalLink, Package
 } from 'lucide-react';
+import CustomerTrackingPortal from '../CustomerTrackingPortal';
 import { useTheme, type ThemeMode } from '../ThemeProvider';
 import { PROSPACES_LOGISTICS_LOGO, PROSPACES_LOGISTICS_LOGO_DARK, LOGO_BASE64 } from '../LogoBase64';
 
@@ -262,7 +263,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed) {
-          if (['prospaces', 'prospaces-dev', 'prospaces-prod', 'agfydicwfv8u0rqr5apc', 'default', 'null', 'undefined'].includes(String(parsed.id).toLowerCase()) || !parsed.id) {
+          const tid = String(parsed.id || '').toLowerCase().trim();
+          if (['prospaces', 'prospaces-dev', 'prospaces-prod', 'agfydicwfv8u0rqr5apc', 'default', 'null', 'undefined', 'rona', 'rona-atlantic', 'rona atlantic'].includes(tid) || tid.startsWith('rona') || !parsed.id) {
             parsed.id = 'rona_atlantic';
             parsed.name = 'RONA Atlantic Logistics';
             localStorage.setItem('prospaces_active_tenant', JSON.stringify(parsed));
@@ -277,7 +279,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         const crmUser = JSON.parse(activeUserStr || crmUserStr || '{}');
         if (crmUser && (crmUser.email || crmUser.id)) {
           const defaultTenant: Tenant = {
-            id: crmUser?.organization_id || crmUser?.organizationId || 'rona_atlantic',
+            id: 'rona_atlantic',
             name: 'RONA Atlantic Logistics',
             code: 'RONA',
             description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
@@ -291,7 +293,15 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       }
     } catch (e) {}
 
-    return null;
+    return TENANTS[0] || {
+      id: 'rona_atlantic',
+      name: 'RONA Atlantic Logistics',
+      code: 'RONA',
+      description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
+      logoBadge: '🏢',
+      regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
+      primaryColor: 'blue'
+    };
   });
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -1337,7 +1347,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         if (data.supabaseActive) {
           // Populate React state directly from live Supabase Tables and filter out recently deleted IDs
           const rawDeliveries = (data.deliveries || []).filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id));
-          const filteredTrucks = (Array.isArray(data.trucks) ? data.trucks : []).filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
+          const serverTrucks = (Array.isArray(data.trucks) && data.trucks.length > 0) ? data.trucks : DEFAULT_TRUCKS;
+          const filteredTrucks = serverTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
           const filteredBranches = (data.branches && data.branches.length > 0 ? data.branches : DEFAULT_BRANCHES).filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id));
           const filteredUsers = (data.users && data.users.length > 0 ? data.users : DEFAULT_USERS).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
 
@@ -1382,18 +1393,23 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           let rawDeliveries, rawTrucks, rawBranches, rawUsers;
           let loadedFromCache = false;
 
+          const parsedCachedTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : [];
+          const availableTrucks = (Array.isArray(data.trucks) && data.trucks.length > 0)
+            ? data.trucks
+            : (Array.isArray(parsedCachedTrucks) && parsedCachedTrucks.length > 0 ? parsedCachedTrucks : DEFAULT_TRUCKS);
+
           if (isFirstLoadRef.current) {
             // First load on boot: prioritize local storage so we restore state correctly
             if (cachedBranches) {
               rawDeliveries = cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES;
-              rawTrucks = cachedTrucks ? JSON.parse(cachedTrucks) : (Array.isArray(data.trucks) ? data.trucks : []);
+              rawTrucks = availableTrucks;
               rawBranches = JSON.parse(cachedBranches);
               rawUsers = cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS;
               loadedFromCache = true;
             } else {
               // No cache found, use backend's default seed data or defaults
               rawDeliveries = (data.deliveries && data.deliveries.length > 0) ? data.deliveries : DEFAULT_DELIVERIES;
-              rawTrucks = Array.isArray(data.trucks) ? data.trucks : [];
+              rawTrucks = availableTrucks;
               rawBranches = (data.branches && data.branches.length > 0) ? data.branches : DEFAULT_BRANCHES;
               rawUsers = (data.users && data.users.length > 0) ? data.users : DEFAULT_USERS;
             }
@@ -1401,14 +1417,14 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           } else {
             // Subsequent polls: prefer server's latest data (with updated GPS coordinates)
             rawDeliveries = (data.deliveries && data.deliveries.length > 0) ? data.deliveries : (cachedDeliveries ? JSON.parse(cachedDeliveries) : DEFAULT_DELIVERIES);
-            rawTrucks = Array.isArray(data.trucks) ? data.trucks : (cachedTrucks ? JSON.parse(cachedTrucks) : []);
+            rawTrucks = availableTrucks;
             rawBranches = (data.branches && data.branches.length > 0) ? data.branches : (cachedBranches ? JSON.parse(cachedBranches) : DEFAULT_BRANCHES);
             rawUsers = (data.users && data.users.length > 0) ? data.users : (cachedUsers ? JSON.parse(cachedUsers) : DEFAULT_USERS);
           }
 
-          // Ensure not empty for branches/users if unconfigured, but keep trucks strictly to configured trucks
+          // Ensure not empty for branches/users/trucks
           if (!rawBranches || rawBranches.length === 0) rawBranches = DEFAULT_BRANCHES;
-          if (!rawTrucks) rawTrucks = [];
+          if (!rawTrucks || rawTrucks.length === 0) rawTrucks = DEFAULT_TRUCKS;
           if (!rawUsers || rawUsers.length === 0) rawUsers = DEFAULT_USERS;
 
           // Keep localStorage warm with current state
@@ -2381,6 +2397,17 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 <LayoutDashboard className="h-3.5 w-3.5" />
                 <span>Launch App Workspace</span>
               </button>
+              <a
+                href="/track"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 bg-sky-600 hover:bg-sky-500 text-white shadow-sm border border-sky-400/30"
+                title="Preview Customer Delivery Live Tracking Portal in new tab"
+              >
+                <Package className="h-3.5 w-3.5" />
+                <span>Customer Delivery Portal</span>
+                <ExternalLink className="h-3 w-3 opacity-80" />
+              </a>
             </div>
 
             {/* Quick Status Bar */}
@@ -3165,6 +3192,24 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                             <Settings className="h-4 w-4" />
                             <span>System Config</span>
                           </button>
+
+                          <button
+                            onClick={() => {
+                              setActiveTab('tracking-portal');
+                              setIsMobileNavOpen(false);
+                            }}
+                            className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center justify-between transition-all cursor-pointer ${
+                              activeTab === 'tracking-portal'
+                                ? 'bg-sky-700 text-white shadow-sm'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2.5">
+                              <Package className="h-4 w-4 text-sky-500" />
+                              <span>Customer Delivery Portal</span>
+                            </div>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-bold uppercase">Live</span>
+                          </button>
                         </>
                       )}
 
@@ -3396,10 +3441,55 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                         <Settings className="h-4 w-4" />
                         <span>System Config</span>
                       </button>
+
+                      <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
+
+                      {/* Customer Delivery Tracking Portal Quick Launch */}
+                      <button
+                        onClick={() => { setActiveTab('tracking-portal'); setActiveNavDropdown(null); }}
+                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center justify-between transition-all cursor-pointer ${
+                          activeTab === 'tracking-portal' ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <Package className="h-4 w-4 text-sky-500" />
+                          <span>Customer Delivery Portal</span>
+                        </div>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300 font-bold uppercase tracking-wider">Preview</span>
+                      </button>
+
+                      <a
+                        href="/track"
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setActiveNavDropdown(null)}
+                        className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 flex items-center justify-between transition-all rounded-lg"
+                        title="Open Customer Delivery Tracking Portal in a new window"
+                      >
+                        <span className="pl-6.5 text-[10.5px]">Open in New Window</span>
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                      </a>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* Direct Quick Launch: Customer Delivery Portal */}
+              <button
+                onClick={() => {
+                  setActiveTab('tracking-portal');
+                  setActiveNavDropdown(null);
+                }}
+                className={`ml-auto flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs ${
+                  activeTab === 'tracking-portal'
+                    ? 'bg-sky-600 text-white shadow-sky-500/20'
+                    : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/60 border border-sky-200/80 dark:border-sky-800'
+                }`}
+                title="Preview Customer Delivery Live Tracking Portal"
+              >
+                <Package className="h-3.5 w-3.5 text-current" />
+                <span>Customer Portal</span>
+              </button>
 
               {/* Direct Quick Launch: Driver App */}
               <button
@@ -3408,7 +3498,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                   setActiveNavDropdown(null);
                   try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
                 }}
-                className={`ml-auto flex items-center space-x-2 px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer shadow-sm ${
+                className={`flex items-center space-x-2 px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer shadow-sm ${
                   activeTab === 'driver' || activeTab === 'epod'
                     ? 'bg-emerald-600 text-white shadow-emerald-500/20'
                     : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800'
@@ -3637,6 +3727,11 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               defaultSegment="blueprint"
               allowedSegments={['blueprint', 'supabase-db']}
             />
+          )}
+          {activeTab === 'tracking-portal' && (
+            <div className="w-full bg-slate-900 min-h-screen">
+              <CustomerTrackingPortal />
+            </div>
           )}
           {activeTab === 'landing-preview' && (
             <div className="bg-white border border-slate-200/60 rounded-2xl shadow-xs overflow-hidden">

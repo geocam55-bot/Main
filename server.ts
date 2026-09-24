@@ -4130,9 +4130,11 @@ Result:
         }
       }
 
-      // If competitor results are missing or have 0/empty prices, execute live competitor search
+      // Only execute dynamic competitor search if explicitly requested via query parameter (?refresh=true)
+      // Do not refresh by default when opening the Inventory Edit or Inspect screen
+      const isExplicitRefresh = req.query.refresh === 'true' || req.query.autoRefresh === 'true';
       const hasCompleteValidPrices = competitorsData.length >= 2 && competitorsData.every((c: any) => c.price && Number(c.price) > 0);
-      if (!hasCompleteValidPrices && (product.description || product.productName || product.mfgPartNumber || product.upc || req.query.description || req.query.name || req.query.productName || req.query.searchQuery)) {
+      if (isExplicitRefresh && !hasCompleteValidPrices && (product.description || product.productName || product.mfgPartNumber || product.upc || req.query.description || req.query.name || req.query.productName || req.query.searchQuery)) {
         const freshData = await executeDynamicCompetitorSearch(product, req.query);
         if (freshData && freshData.length > 0) {
           competitorsData = freshData;

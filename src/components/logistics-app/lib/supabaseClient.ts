@@ -84,7 +84,11 @@ export function deserializeFromPhone(user: any): any {
 export function normalizeTenantId(rawTenantId: any): string {
   if (!rawTenantId) return "rona_atlantic";
   const tid = String(rawTenantId).trim();
-  if (["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc", "default", "undefined", "null"].includes(tid.toLowerCase())) {
+  const lower = tid.toLowerCase();
+  if (
+    ["prospaces", "prospaces-dev", "prospaces-prod", "agfydicwfv8u0rqr5apc", "default", "undefined", "null", "rona", "rona-atlantic", "rona atlantic"].includes(lower) ||
+    lower.startsWith("rona")
+  ) {
     return "rona_atlantic";
   }
   return tid;
@@ -262,7 +266,9 @@ export function deserializeType(truck: any): any {
     userField1: truck.user_field_1 || truck.userField1,
     userField2: truck.user_field_2 || truck.userField2,
     isRefrigerated: truck.is_refrigerated !== undefined ? Boolean(truck.is_refrigerated) : Boolean(truck.isRefrigerated),
-    isLiftgateEquipped: truck.is_liftgate_equipped !== undefined ? Boolean(truck.is_liftgate_equipped) : Boolean(truck.isLiftgateEquipped)
+    isLiftgateEquipped: truck.is_liftgate_equipped !== undefined ? Boolean(truck.is_liftgate_equipped) : Boolean(truck.isLiftgateEquipped),
+    isActive: truck.is_active !== false && truck.isActive !== false,
+    is_active: truck.is_active !== false && truck.isActive !== false
   };
 }
 
@@ -574,6 +580,38 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     throw new Error(errorMsg || "Failed to query tables directly from Supabase.");
   }
 
+  let rawBranches = rBranches?.data || [];
+  let rawTrucks = rTrucks?.data || [];
+  let rawUsers = rUsers?.data || [];
+  let rawDeliveries = rDeliveries?.data || [];
+
+  if (rawTrucks.length === 0) {
+    try {
+      const fallbackT = await supabase.from("trucks").select("*");
+      if (fallbackT.data && fallbackT.data.length > 0) {
+        rawTrucks = fallbackT.data;
+      }
+    } catch (e) {}
+  }
+
+  if (rawBranches.length === 0) {
+    try {
+      const fallbackB = await supabase.from("branches").select("*");
+      if (fallbackB.data && fallbackB.data.length > 0) {
+        rawBranches = fallbackB.data;
+      }
+    } catch (e) {}
+  }
+
+  if (rawUsers.length === 0) {
+    try {
+      const fallbackU = await supabase.from("users").select("*");
+      if (fallbackU.data && fallbackU.data.length > 0) {
+        rawUsers = fallbackU.data;
+      }
+    } catch (e) {}
+  }
+
   const gpsUnits = rGpsUnits?.data || [];
   const gpsMap = new Map<string, any>();
   gpsUnits.forEach((g: any) => {
@@ -581,8 +619,8 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     if (g.deviceId) gpsMap.set(String(g.deviceId).toLowerCase(), g);
   });
 
-  const deserializedUsers = (rUsers.data || []).map((u: any) => deserializeFromPhone(u));
-  const deserializedTrucks = (rTrucks.data || []).map((t: any) => {
+  const deserializedUsers = rawUsers.map((u: any) => deserializeFromPhone(u));
+  const deserializedTrucks = rawTrucks.map((t: any) => {
     const dt = deserializeType(t);
     const matchedGps = gpsMap.get(String(t.id).toLowerCase()) || (t.gps_device_id ? gpsMap.get(String(t.gps_device_id).toLowerCase()) : null);
     if (matchedGps) {
@@ -607,7 +645,6 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     return dt;
   });
 
-  const rawDeliveries = rDeliveries.data || [];
   const enrichedDeliveries = rawDeliveries.map((d: any) => {
     let meta: any = {};
     if (d.items && Array.isArray(d.items) && d.items.length > 0) {
@@ -627,6 +664,9 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     const customerName = d.customerName || meta.customerName || d.customer || "N/A";
     const deliveryAddress = d.deliveryAddress || meta.deliveryAddress || d.destination || "N/A";
     const phone = d.phone !== undefined ? d.phone : (meta.phone !== undefined ? meta.phone : "");
+    const customerEmail = d.customer_email || d.customerEmail || meta.customerEmail || meta.customer_email || "";
+    const trackingNumber = d.tracking_number || d.trackingNumber || meta.trackingNumber || meta.tracking_number || `PSL-${Math.abs(String(d.id || '').split('').reduce((a: number, b: string) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 900000 + 100000}`;
+    const trackingToken = d.tracking_token || d.trackingToken || meta.trackingToken || meta.tracking_token || d.id;
     const originBranch = d.originBranch || meta.originBranch || d.pickup_location || "prospaces-dc";
     const registeredAt = d.registeredAt || meta.registeredAt || d.date || d.scheduled_date || new Date().toISOString();
     const status = d.status || meta.status || "REGISTERED";
@@ -656,6 +696,9 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
       customerName,
       deliveryAddress,
       phone,
+      customerEmail,
+      trackingNumber,
+      trackingToken,
       originBranch,
       weight,
       orderTotal,
@@ -683,7 +726,6 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
   });
 
   // Support branches table and Store/stores table fallback
-  let rawBranches = rBranches.data || [];
   if (!rawBranches || rawBranches.length === 0) {
     try {
       const rStore = await supabase.from("Store").select("*").eq("tenantId", tenantId);
@@ -923,6 +965,10 @@ export async function saveTenantStateDirect(
   });
 
   const mappedDeliveries = uniqueDeliveries.map(d => {
+    const customerEmailVal = d.customerEmail || d.customer_email || "";
+    const trackingNumberVal = d.trackingNumber || d.tracking_number || `PSL-${Math.abs(String(d.id || '').split('').reduce((a: number, b: string) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 900000 + 100000}`;
+    const trackingTokenVal = d.trackingToken || d.tracking_token || String(d.id);
+
     const fullMeta = {
       id: d.id,
       tenantId: String(tenantId),
@@ -931,6 +977,9 @@ export async function saveTenantStateDirect(
       customerName: d.customerName || d.customer || "N/A",
       deliveryAddress: d.deliveryAddress || d.destination || "N/A",
       phone: d.phone || "",
+      customerEmail: customerEmailVal,
+      trackingNumber: trackingNumberVal,
+      trackingToken: trackingTokenVal,
       originBranch: d.originBranch || "prospaces-dc",
       weight: d.weight,
       orderTotal: d.orderTotal,
@@ -968,8 +1017,12 @@ export async function saveTenantStateDirect(
       status: String(d.status || "REGISTERED"),
       eta: String(d.eta || "N/A"),
       pickup_location: String(d.originBranch || "prospaces-dc"),
+      tracking_number: trackingNumberVal,
       items: [JSON.stringify({ _meta: fullMeta })]
     };
+    if (customerEmailVal) {
+      obj.customer_email = customerEmailVal;
+    }
     
     return obj;
   });

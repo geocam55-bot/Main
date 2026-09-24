@@ -25,6 +25,9 @@ export interface DeliveryRecord {
   customerName: string;
   deliveryAddress: string;
   phone: string;
+  customerEmail?: string; // Enforced when delivery is Registered (required for tracking & milestone notifications)
+  trackingNumber?: string; // e.g. "PSL-784512" (ProSpaces Logistics tracking code)
+  trackingToken?: string; // URL-safe direct lookup token
   originBranch: string; // WINDMILL_DC or specific Store
   weight?: string;
   orderTotal?: string;
@@ -49,6 +52,15 @@ export interface DeliveryRecord {
   additionalStops?: AdditionalDeliveryStop[]; // List of additional stops along the route
   history: HistoryEvent[];
   tenantId?: string;
+}
+
+/**
+ * Generates a clean, authentic ProSpaces Logistics tracking number
+ * Formatted as PSL-XXXXXX (e.g. PSL-784512 matching the official reference portal)
+ */
+export function generateTrackingNumber(): string {
+  const digits = Math.floor(100000 + Math.random() * 900000);
+  return `PSL-${digits}`;
 }
 
 export type ClosureType = 'NONE' | 'CLOSED_ALL' | 'CLOSED_RETAIL' | 'CLOSED_PRO';

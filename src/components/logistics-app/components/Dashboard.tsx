@@ -72,6 +72,7 @@ import {
   STORE_COLOR_MAP
 } from '../lib/mapHelpers';
 import { isDeliveryValidForDriverPortal } from '../lib/schedulingUtils';
+import { DEFAULT_TRUCKS } from '../data';
 
 export {
   cleanAddressText,
@@ -236,7 +237,8 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
         )
     : deliveries;
 
-  const displayTrucks = trucks.filter(t => t.isActive !== false);
+  const activeTrucks = trucks.filter(t => t.isActive !== false && (t as any).is_active !== false);
+  const displayTrucks = activeTrucks.length > 0 ? activeTrucks : (trucks.length > 0 ? trucks : DEFAULT_TRUCKS);
 
   const isDriverOnline = (driverName: string): boolean => {
     if (!driverName) return false;

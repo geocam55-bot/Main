@@ -314,13 +314,7 @@ export default function FleetSetup({
             </button>
 
             {branches.map(branch => {
-              const count = trucks.filter(t => {
-                if (t.branchId === branch.id) return true;
-                if (branch.id === '01070' && (t.branchId === 'DC-ELMSDALE' || t.branchId === 'ELMSDALE')) return true;
-                if (branch.id === 'DC-ELMSDALE' && t.branchId === '01070') return true;
-                if (branch.id === 'DC-WINAMILL' && (t.branchId === '500' || t.branchId === 'WINAMILL')) return true;
-                return false;
-              }).length;
+              const count = trucks.filter(t => isTruckAssignedToBranch(t, branch)).length;
               return (
                 <button
                   key={branch.id}

@@ -66,6 +66,7 @@ const OAuthCallback = lazyNamed(() => import('./components/OAuthCallback'), 'OAu
 const PrivacyPolicy = lazyNamed(() => import('./components/PrivacyPolicy'), 'PrivacyPolicy');
 const TermsOfService = lazyNamed(() => import('./components/TermsOfService'), 'TermsOfService');
 const CustomerPortal = lazyNamed(() => import('./components/portal/CustomerPortal'), 'CustomerPortal');
+const CustomerTrackingPortal = React.lazy(() => import('./components/CustomerTrackingPortal'));
 const PublicLandingPage = lazyNamed(() => import('./components/marketing/PublicLandingPage'), 'PublicLandingPage');
 const TrackingRedirect = lazyNamed(() => import('./components/TrackingRedirect'), 'TrackingRedirect');
 const PublicQuoteView = lazyNamed(() => import('./components/PublicQuoteView'), 'PublicQuoteView');
@@ -232,6 +233,20 @@ function getPublicRoute(): React.ReactElement | null {
   if (urlParams.get('view') === 'privacy-policy' || path === '/privacy-policy') return <PrivacyPolicy />;
   if (urlParams.get('view') === 'terms-of-service' || path === '/terms-of-service') return <TermsOfService />;
   if (urlParams.get('view') === 'customer-portal' || path === '/portal') return <CustomerPortal />;
+  if (
+    path === '/track' ||
+    path.startsWith('/track/') ||
+    path === '/tracking' ||
+    path.startsWith('/tracking/') ||
+    urlParams.get('view') === 'track' ||
+    urlParams.get('view') === 'tracking'
+  ) {
+    return (
+      <React.Suspense fallback={<div className="h-screen w-screen flex items-center justify-center bg-slate-950 text-white font-medium">Loading ProSpaces Tracking Portal...</div>}>
+        <CustomerTrackingPortal />
+      </React.Suspense>
+    );
+  }
   if (
     path.startsWith('/logistics') ||
     path.startsWith('/driver') ||
