@@ -1302,6 +1302,73 @@ export function getSmtpConfig() {
   return { smtpHost, smtpUser, smtpPass, smtpPort, smtpFrom, isConfigured };
 }
 
+/**
+ * Robust helper to resolve the public-facing application base URL for external emails and links.
+ * Prioritizes public Cloud / production domain over internal container localhost addresses.
+ */
+export function resolveAppBaseUrl(req?: any): string {
+  const envUrl = (
+    process.env.APP_URL ||
+    process.env.VITE_APP_URL ||
+    process.env.PUBLIC_URL ||
+    process.env.BASE_URL ||
+    process.env.AIS_DEV_URL ||
+    ""
+  ).trim().replace(/\/+$/, "");
+
+  // 1. Explicit clientOrigin sent from frontend in request body
+  const bodyOrigin = (req?.body?.clientOrigin || req?.body?.origin || req?.body?.appUrl || "").trim().replace(/\/+$/, "");
+  if (bodyOrigin && !bodyOrigin.includes("localhost") && !bodyOrigin.includes("127.0.0.1") && !bodyOrigin.includes("0.0.0.0")) {
+    return bodyOrigin;
+  }
+
+  // 2. HTTP Origin header from browser
+  const reqOrigin = (req?.get?.("origin") || "").trim().replace(/\/+$/, "");
+  if (reqOrigin && !reqOrigin.includes("localhost") && !reqOrigin.includes("127.0.0.1") && !reqOrigin.includes("0.0.0.0")) {
+    return reqOrigin;
+  }
+
+  // 3. HTTP Referer header from browser
+  const reqReferer = (req?.get?.("referer") || "").trim();
+  if (reqReferer) {
+    try {
+      const u = new URL(reqReferer);
+      if (!u.hostname.includes("localhost") && !u.hostname.includes("127.0.0.1") && !u.hostname.includes("0.0.0.0")) {
+        return u.origin.replace(/\/+$/, "");
+      }
+    } catch (_) {}
+  }
+
+  // 4. Reverse Proxy forwarded headers (Cloud Run, ingress, load balancer)
+  const xHost = (req?.get?.("x-forwarded-host") || "").trim();
+  const xProto = (req?.get?.("x-forwarded-proto") || req?.protocol || "https").trim();
+  if (xHost && !xHost.includes("localhost") && !xHost.includes("127.0.0.1") && !xHost.includes("0.0.0.0")) {
+    return `${xProto}://${xHost}`.replace(/\/+$/, "");
+  }
+
+  // 5. Environment URL (e.g. Google Cloud Run service URL in AI Studio)
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1") && !envUrl.includes("0.0.0.0")) {
+    return envUrl;
+  }
+
+  // 6. Direct host header if not localhost
+  const host = (req?.get?.("host") || "").trim();
+  if (host && !host.includes("localhost") && !host.includes("127.0.0.1") && !host.includes("0.0.0.0")) {
+    const proto = (req?.protocol === "https" || req?.get?.("x-forwarded-proto") === "https") ? "https" : "http";
+    return `${proto}://${host}`.replace(/\/+$/, "");
+  }
+
+  // 7. Fallback to env URL even if local, or body origin, or standard domain
+  if (envUrl) return envUrl;
+  if (bodyOrigin) return bodyOrigin;
+  if (host) {
+    const proto = (req?.protocol === "https" || req?.get?.("x-forwarded-proto") === "https") ? "https" : "http";
+    return `${proto}://${host}`.replace(/\/+$/, "");
+  }
+
+  return "https://ais-dev-npwbfu6x7fl7e7s5fjpce7-546909315029.us-west2.run.app";
+}
+
 export async function sendSystemEmail(options: SendEmailOptions): Promise<{
   success: boolean;
   transport: string;
@@ -3730,71 +3797,122 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       }
 
       console.log(`[Tracking Portal] Querying delivery for tracking param: "${param}"`);
+      const supabase = getSupabase(req, true);
+      const cleanParam = param.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-      // 1. Direct query on deliveries table by tracking_number, id, or orderNumber
       let matchedRow: any = null;
 
-      try {
-        const { data: dbMatches, error: dbErr } = await supabase
-          .from("deliveries")
-          .select("*")
-          .or(`tracking_number.ilike.${param},id.eq.${param},orderNumber.ilike.${param}`)
-          .limit(5);
-
-        if (!dbErr && dbMatches && dbMatches.length > 0) {
-          matchedRow = dbMatches[0];
-        }
-      } catch (err) {
-        console.warn("[Tracking Portal] Direct indexed search warning:", err);
-      }
-
-      // 2. Fallback: Search all recent deliveries and check items metadata
-      if (!matchedRow) {
+      // 1. Direct query on deliveries table by tracking_number, id, or orderNumber
+      if (supabase) {
         try {
-          const { data: allDeliveries } = await supabase
+          const { data: dbMatches, error: dbErr } = await supabase
             .from("deliveries")
             .select("*")
-            .order("id", { ascending: false })
-            .limit(100);
+            .or(`tracking_number.ilike.${param},id.eq.${param},orderNumber.ilike.${param}`)
+            .limit(10);
 
-          if (allDeliveries) {
-            const cleanParam = param.toLowerCase().replace(/[^a-z0-9]/g, "");
-            for (const d of allDeliveries) {
-              const dId = String(d.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-              const dOrder = String(d.orderNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-              const dTrack = String(d.tracking_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-              
-              if (dId === cleanParam || dOrder === cleanParam || dTrack === cleanParam) {
-                matchedRow = d;
-                break;
-              }
+          if (!dbErr && dbMatches && dbMatches.length > 0) {
+            matchedRow = dbMatches[0];
+          }
+        } catch (err) {
+          console.warn("[Tracking Portal] Direct indexed search warning:", err);
+        }
 
-              // Check metadata in items
-              if (d.items && Array.isArray(d.items) && d.items.length > 0) {
-                try {
-                  const firstItem = d.items[0];
-                  const parsed = typeof firstItem === "string" ? JSON.parse(firstItem) : firstItem;
-                  const meta = parsed?._meta || {};
-                  const mTrack = String(meta.trackingNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                  const mInv = String(meta.invoiceNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                  const mSales = String(meta.epicorSalesOrder || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                  const mEmail = String(meta.customerEmail || "").toLowerCase();
+        // 2. Fallback: Search all recent deliveries and check items metadata
+        if (!matchedRow) {
+          try {
+            const { data: allDeliveries } = await supabase
+              .from("deliveries")
+              .select("*")
+              .order("id", { ascending: false })
+              .limit(200);
 
-                  if (
-                    mTrack === cleanParam ||
-                    mInv === cleanParam ||
-                    mSales === cleanParam ||
-                    mEmail === param.toLowerCase()
-                  ) {
-                    matchedRow = d;
-                    break;
-                  }
-                } catch (_) {}
+            if (allDeliveries) {
+              for (const d of allDeliveries) {
+                const dId = String(d.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dOrder = String(d.orderNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dTrack = String(d.tracking_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dEmail = String(d.customer_email || "").toLowerCase().trim();
+                
+                if (
+                  dTrack === cleanParam ||
+                  dId === cleanParam ||
+                  dOrder === cleanParam ||
+                  dEmail === param.toLowerCase() ||
+                  (d.tracking_number && d.tracking_number.toLowerCase() === param.toLowerCase())
+                ) {
+                  matchedRow = d;
+                  break;
+                }
+
+                // Check metadata in items
+                if (d.items && Array.isArray(d.items) && d.items.length > 0) {
+                  try {
+                    const firstItem = d.items[0];
+                    const parsed = typeof firstItem === "string" ? JSON.parse(firstItem) : firstItem;
+                    const meta = parsed?._meta || {};
+                    const mTrack = String(meta.trackingNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const mInv = String(meta.invoiceNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const mSales = String(meta.epicorSalesOrder || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const mEmail = String(meta.customerEmail || "").toLowerCase();
+
+                    if (
+                      mTrack === cleanParam ||
+                      mInv === cleanParam ||
+                      mSales === cleanParam ||
+                      mEmail === param.toLowerCase()
+                    ) {
+                      matchedRow = d;
+                      break;
+                    }
+                  } catch (_) {}
+                }
               }
             }
+          } catch (searchErr) {
+            console.warn("[Tracking Portal] Scan error:", searchErr);
           }
-        } catch (searchErr) {
-          console.warn("[Tracking Portal] Scan error:", searchErr);
+        }
+      }
+
+      // 3. Fallback: Search in-memory tenant deliveries if not found in database table
+      if (!matchedRow && inMemoryTenantStates) {
+        for (const tid of Object.keys(inMemoryTenantStates)) {
+          const tenantState = inMemoryTenantStates[tid];
+          const dels = tenantState?.deliveries || [];
+          for (const d of dels) {
+            const dId = String(d.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const dOrder = String(d.orderNumber || d.invoiceNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const dTrack = String(d.trackingNumber || d.tracking_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const dEmail = String(d.customerEmail || d.customer_email || "").toLowerCase().trim();
+
+            if (
+              dTrack === cleanParam ||
+              dId === cleanParam ||
+              dOrder === cleanParam ||
+              dEmail === param.toLowerCase() ||
+              (d.trackingNumber && d.trackingNumber.toLowerCase() === param.toLowerCase())
+            ) {
+              matchedRow = {
+                id: d.id,
+                tenantId: d.tenantId || tid,
+                orderNumber: d.invoiceNumber || d.orderNumber || d.id,
+                customer: d.customerName || d.customer || "Valued Customer",
+                destination: d.deliveryAddress || d.destination || "Standard Delivery Address",
+                assignedTruckId: d.assignedTruck || d.assignedTruckId,
+                assignedDriverId: d.assignedDriver || d.assignedDriverId,
+                status: d.status || "REGISTERED",
+                tracking_number: d.trackingNumber || d.tracking_number,
+                customer_email: d.customerEmail || d.customer_email,
+                items: d.items || [{ _meta: d }],
+                pickup_location: d.originBranch || "RONA-03510",
+                scheduled_date: d.scheduledDate,
+                scheduled_slot: d.scheduledSlot
+              };
+              break;
+            }
+          }
+          if (matchedRow) break;
         }
       }
 
@@ -3947,11 +4065,16 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         return res.json({ success: true, results: [] });
       }
 
-      const { data: dbDeliveries } = await supabase
-        .from("deliveries")
-        .select("*")
-        .order("id", { ascending: false })
-        .limit(50);
+      const supabase = getSupabase(req, true);
+      let dbDeliveries: any[] = [];
+      if (supabase) {
+        const { data } = await supabase
+          .from("deliveries")
+          .select("*")
+          .order("id", { ascending: false })
+          .limit(100);
+        dbDeliveries = data || [];
+      }
 
       const matches: any[] = [];
       const cleanQ = q.replace(/[^a-z0-9]/g, "");
@@ -4012,8 +4135,10 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
 
       console.log(`[Customer Notification] Milestone: ${milestone} -> ${customerEmail} (Delivery: ${deliveryId}, Tracking: ${trackingNumber})`);
 
-      const trackingLink = `/track?num=${encodeURIComponent(trackingNumber || deliveryId)}`;
-      const subject = `[ProSpaces Logistics] Delivery Status Update: ${milestone.replace(/_/g, ' ')} (${trackingNumber || deliveryId})`;
+      const baseUrl = resolveAppBaseUrl(req);
+      const trackingNumToUse = trackingNumber || deliveryId || "DEL-GENERIC";
+      const trackingLink = `${baseUrl}/track?num=${encodeURIComponent(trackingNumToUse)}`;
+      const subject = `[ProSpaces Logistics] Delivery Status Update: ${milestone.replace(/_/g, ' ')} (${trackingNumToUse})`;
 
       // Also dispatch real email notification if customer email is provided
       try {
@@ -4025,7 +4150,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
             </div>
             <p style="font-size: 15px; color: #334155;">Hello,</p>
             <p style="font-size: 14px; color: #475569;">
-              Your delivery order <strong>${deliveryId || trackingNumber}</strong> has reached a new milestone:
+              Your delivery order <strong>${deliveryId || trackingNumToUse}</strong> has reached a new milestone:
             </p>
             <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
               <span style="font-size: 16px; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px;">
@@ -4034,13 +4159,17 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
               ${note ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #3b82f6;">${note}</p>` : ''}
             </div>
             <p style="font-size: 14px; color: #475569;">
-              Tracking Number: <strong>${trackingNumber || deliveryId}</strong>
+              Tracking Number: <strong>${trackingNumToUse}</strong>
             </p>
             <div style="margin: 24px 0; text-align: center;">
-              <a href="${req.protocol}://${req.get('host')}${trackingLink}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 700; display: inline-block;">
-                View Live Delivery Tracker
+              <a href="${trackingLink}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 700; display: inline-block;">
+                View Live Delivery Tracker &rarr;
               </a>
             </div>
+            <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 18px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
+              Direct tracking link: <br />
+              <a href="${trackingLink}" style="color: #2563eb; word-break: break-all;">${trackingLink}</a>
+            </p>
             <div style="margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 14px; font-size: 12px; color: #94a3b8; text-align: center;">
               ProSpaces Logistics Fleet &bull; support@prospacescrm.ca
             </div>
@@ -4089,11 +4218,10 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
 
       const emailToUse = (customerEmail || "").trim() || "customer@ronaatlantic.ca";
       const trackingNumToUse = trackingNumber || deliveryId || "DEL-300908";
-      const host = req.get('host') || 'localhost:3000';
-      const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-      const trackingLink = `${protocol}://${host}/track?num=${encodeURIComponent(trackingNumToUse)}`;
+      const baseUrl = resolveAppBaseUrl(req);
+      const trackingLink = `${baseUrl}/track?num=${encodeURIComponent(trackingNumToUse)}`;
 
-      console.log(`[Resend Delivery Email] Preparing dispatch for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse}`);
+      console.log(`[Resend Delivery Email] Preparing dispatch for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse} (Resolved Base: ${baseUrl})`);
 
       const emailSubject = `[ProSpaces Logistics] Delivery Tracking: Ticket #${deliveryId || trackingNumToUse}`;
       const emailHtml = `
@@ -4388,13 +4516,10 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         if (matchWeight) extractedValue = matchWeight[1];
       }
 
-      // 7. If not found in text, fallback to template coordinate baseline value, NEVER a mock string
-      if (!extractedValue) {
-        if (fObj?.value && fObj.value !== "MOCK_VALUE" && fObj.value !== "undefined") {
-          extractedValue = fObj.value;
-        } else {
-          extractedValue = "";
-        }
+      // 7. If not found in text, fallback to template field default value
+      const invalidWords = ["created", "job no", "order #", "date", "subtotal", "total", "customer name", "ship to", "gross weight", "n/a", "undefined"];
+      if (!extractedValue || invalidWords.includes(extractedValue.toLowerCase().trim())) {
+        extractedValue = (fObj?.value && fObj.value !== "MOCK_VALUE" && fObj.value !== "undefined") ? fObj.value : "";
       }
 
       result[fieldKey] = extractedValue;
@@ -4502,7 +4627,7 @@ Output schema keys:
       if (usedGemini && aiClient) {
         try {
           const response = await aiClient.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-flash-latest",
             contents: {
               parts: [
                 {
@@ -4825,7 +4950,7 @@ Return the structured results in the required JSON format.`;
       if (usedGemini && aiClient) {
         try {
           const response = await aiClient.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-flash-latest",
             contents: {
               parts: [
                 {
@@ -4853,6 +4978,18 @@ Return the structured results in the required JSON format.`;
           const rawText = response.text;
           if (rawText) {
             const parsedJson = JSON.parse(rawText.trim());
+
+            // Ensure all fields have valid values (fallback to template default if N/A or empty)
+            Object.keys(fieldsToExtract).forEach((fieldKey) => {
+              const val = parsedJson[fieldKey];
+              const defaultVal = fieldsToExtract[fieldKey]?.value || '';
+              const strVal = (val !== undefined && val !== null) ? String(val).trim() : '';
+              if (!strVal || strVal === "N/A" || strVal === "undefined" || strVal === "") {
+                parsedJson[fieldKey] = (defaultVal && defaultVal !== "MOCK_VALUE") ? defaultVal : "";
+              } else {
+                parsedJson[fieldKey] = strVal;
+              }
+            });
 
             // Save document OCR scan image to server folder
             const savedImage = saveBase64ScanImage(fileData, "ocr_doc", {

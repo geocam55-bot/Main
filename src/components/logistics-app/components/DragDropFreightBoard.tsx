@@ -1883,7 +1883,7 @@ export default function DragDropFreightBoard({
                                     type="button"
                                     onClick={() => {
                                       setActiveTruckMenuId(null);
-                                      const shareLink = `https://prospaces.ca/track/${truck.id}`;
+                                      const shareLink = `${window.location.origin}/track?num=${encodeURIComponent(truck.id)}`;
                                       navigator.clipboard.writeText(shareLink);
                                     }}
                                     className="w-full text-left px-3.5 py-1.5 hover:bg-slate-50 hover:text-slate-900 transition-colors text-slate-700"
@@ -2917,6 +2917,12 @@ function UnassignedDeliveryCard({
                   const targetEmail = (delivery.customerEmail || (delivery as any).customer_email || '').trim() || 'customer@ronaatlantic.ca';
                   toast.info(`Dispatching tracking email for #${delivery.id} to ${targetEmail}...`);
                   try {
+                    let activeTenant: any = null;
+                    try {
+                      const stored = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+                      if (stored) activeTenant = JSON.parse(stored);
+                    } catch (_) {}
+
                     const res = await fetch('/api/v1/deliveries/resend-email', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -2926,7 +2932,11 @@ function UnassignedDeliveryCard({
                         trackingNumber: delivery.trackingNumber || delivery.id,
                         customerName: delivery.customerName || 'Valued Customer',
                         destinationAddress: delivery.deliveryAddress,
-                        status: delivery.status
+                        status: delivery.status,
+                        tenantId: (delivery as any).tenantId || activeTenant?.id || 'rona_atlantic',
+                        tenantName: activeTenant?.name || 'RONA',
+                        tenantColor: activeTenant?.primaryColor === 'emerald' ? '#059669' : '#1e3a8a',
+                        clientOrigin: typeof window !== 'undefined' ? window.location.origin : ''
                       })
                     });
                     const rawText = await res.text();

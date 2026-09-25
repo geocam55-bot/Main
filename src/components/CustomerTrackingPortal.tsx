@@ -17,9 +17,6 @@ import {
   Package, 
   Navigation, 
   FileText, 
-  ArrowLeft, 
-  Smartphone, 
-  Monitor,
   Share2,
   X
 } from 'lucide-react';
@@ -34,9 +31,19 @@ interface JourneyStep {
   isActive: boolean;
 }
 
+export interface TenantBrand {
+  id?: string;
+  name: string;
+  code: string;
+  color?: string;
+  supportEmail?: string;
+  regionalFocus?: string;
+}
+
 interface TrackingData {
   id: string;
   trackingNumber: string;
+  tenantBrand?: TenantBrand | null;
   customerEmail?: string;
   customerName: string;
   destination: string;
@@ -64,91 +71,41 @@ interface TrackingData {
   } | null;
 }
 
-// Sample fallback delivery matching the exact screenshot reference: PSL-784512
-const DEMO_REFERENCE_DELIVERY: TrackingData = {
-  id: 'DEL-784512',
-  trackingNumber: 'PSL-784512',
-  customerEmail: 'customer@example.com',
-  customerName: 'Commercial Site Project #44',
-  destination: '1980 Upper Water St, Halifax, NS B3J 3J5',
-  originBranch: 'Windmill DC - Dartmouth',
-  orderNumber: 'INV-48201-B',
-  status: 'IN_TRANSIT',
-  registeredAt: '2025-04-25T10:24:00Z',
-  scheduledDate: '2025-04-26',
-  scheduledSlot: 'AM',
-  pickedAt: '2025-04-25T14:18:00Z',
-  deliveredAt: null,
-  destinationNotes: 'Call site manager 15 mins prior to arrival. Crane unloading space cleared at Gate 2.',
-  journeySteps: [
-    {
-      key: 'REGISTERED',
-      title: 'Order Registered',
-      subtitle: 'Order received and registered into logistics ledger',
-      timestamp: '2025-04-25T10:24:00Z',
-      isCompleted: true,
-      isActive: false
-    },
-    {
-      key: 'PROCESSING',
-      title: 'Processing at Warehouse',
-      subtitle: 'Materials staged and verified at loading dock',
-      timestamp: '2025-04-25T14:18:00Z',
-      isCompleted: true,
-      isActive: false
-    },
-    {
-      key: 'OUT_FOR_DELIVERY',
-      title: 'Out for Delivery',
-      subtitle: 'Flatbed freight truck is currently en route to destination',
-      timestamp: '2025-04-26T08:43:00Z',
-      isCompleted: false,
-      isActive: true
-    },
-    {
-      key: 'DELIVERED',
-      title: 'Delivered',
-      subtitle: 'Cargo safely unloaded and receipt verified',
-      timestamp: null,
-      isCompleted: false,
-      isActive: false
-    }
-  ],
-  truck: {
-    id: 'TRK-01',
-    name: 'Flatbed Western Star 49X',
-    driver: 'Marc Leblanc',
-    type: 'Heavy 53ft Tandem Flatbed',
-    lat: 44.65107,
-    lng: -63.57865,
-    speed: 48
-  }
-};
-
 export default function CustomerTrackingPortal() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTrackingNumber, setActiveTrackingNumber] = useState('PSL-784512');
-  const [trackingData, setTrackingData] = useState<TrackingData | null>(DEMO_REFERENCE_DELIVERY);
+  const [activeTrackingNumber, setActiveTrackingNumber] = useState('');
+  const [trackingData, setTrackingData] = useState<TrackingData | null>(null);
+  const [activeTenant, setActiveTenant] = useState<TenantBrand | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedNum, setCopiedNum] = useState(false);
-  const [viewMode, setViewMode] = useState<'responsive' | 'desktop' | 'mobile'>('responsive');
   const [showContactModal, setShowContactModal] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
 
-  // Initialize from URL param if present (e.g. ?num=PSL-784512 or ?tracking=...)
+  // Initialize tenant branding from cached local storage if available
+  useEffect(() => {
+    try {
+      const stored = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.name && !parsed.name.toLowerCase().includes('prospaces')) {
+          setActiveTenant(parsed);
+        }
+      }
+    } catch (_) {}
+  }, []);
+
+  // Initialize from URL param if present (e.g. ?num=PSL-965112 or ?tracking=...)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const queryParam = params.get('num') || params.get('tracking') || params.get('id') || params.get('track');
       if (queryParam) {
-        setSearchQuery(queryParam);
-        setActiveTrackingNumber(queryParam);
-        fetchTrackingDetails(queryParam);
-      } else {
-        // Fetch latest active delivery if available, or fallback to the screenshot reference
-        fetchTrackingDetails('PSL-784512');
+        const clean = queryParam.trim();
+        setSearchQuery(clean);
+        setActiveTrackingNumber(clean);
+        fetchTrackingDetails(clean);
       }
     }
   }, []);
@@ -160,14 +117,6 @@ export default function CustomerTrackingPortal() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    // If query matches demo reference, instantly set it
-    if (clean.toUpperCase() === 'PSL-784512') {
-      setTrackingData(DEMO_REFERENCE_DELIVERY);
-      setActiveTrackingNumber('PSL-784512');
-      setIsLoading(false);
-      return;
-    }
-
     try {
       const res = await fetch(`/api/tracking/${encodeURIComponent(clean)}`);
       const json = await res.json();
@@ -175,6 +124,7 @@ export default function CustomerTrackingPortal() {
       if (json.success && json.delivery) {
         setTrackingData(json.delivery);
         setActiveTrackingNumber(json.delivery.trackingNumber || clean);
+        setErrorMessage(null);
       } else {
         // Fallback: search query endpoint
         const searchRes = await fetch(`/api/tracking-search?q=${encodeURIComponent(clean)}`);
@@ -187,16 +137,19 @@ export default function CustomerTrackingPortal() {
           if (fullJson.success && fullJson.delivery) {
             setTrackingData(fullJson.delivery);
             setActiveTrackingNumber(fullJson.delivery.trackingNumber || first.trackingNumber);
+            setErrorMessage(null);
             setIsLoading(false);
             return;
           }
         }
 
-        setErrorMessage(json.error || `Could not find delivery matching "${clean}". Please verify your tracking number or invoice reference.`);
+        setTrackingData(null);
+        setErrorMessage(json.error || `No delivery found matching "${clean}". Please verify your tracking number or sales order number.`);
       }
     } catch (err: any) {
       console.error('Tracking fetch error:', err);
-      setErrorMessage('Unable to connect to the tracking server. Please check your connection and try again.');
+      setTrackingData(null);
+      setErrorMessage('Unable to connect to the tracking server. Please check your network connection and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -238,7 +191,7 @@ export default function CustomerTrackingPortal() {
   };
 
   const formatExpectedDelivery = (dateStr?: string) => {
-    if (!dateStr) return 'Apr 26, 2025';
+    if (!dateStr) return 'Scheduled for Today';
     try {
       const d = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`);
       if (isNaN(d.getTime())) return dateStr;
@@ -265,124 +218,57 @@ export default function CustomerTrackingPortal() {
   };
 
   const statusInfo = getStatusDisplay(trackingData?.status || 'IN_TRANSIT');
-
-  // Preview container class based on viewMode
-  const containerClass = viewMode === 'mobile' 
-    ? 'max-w-[420px] mx-auto border-8 border-slate-800 rounded-[44px] overflow-hidden shadow-2xl my-8 bg-white ring-1 ring-slate-900/10'
-    : viewMode === 'desktop'
-      ? 'max-w-6xl mx-auto shadow-2xl rounded-2xl overflow-hidden border border-slate-200 my-8 bg-white'
-      : 'w-full bg-white';
+  const currentBrandName = trackingData?.tenantBrand?.name || activeTenant?.name || 'RONA';
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
-      {/* Top Device / Viewport Mode Switcher (Allows testing both the Desktop and Mobile views from the user's reference image!) */}
-      <header className="bg-slate-900 text-slate-300 border-b border-slate-800 px-4 py-2 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <span className="text-xs font-semibold text-white tracking-wide flex items-center">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
-              ProSpaces Live Tracking Portal
-            </span>
-            <span className="hidden md:inline text-[11px] text-slate-400 font-mono">
-              Public Customer Service
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-slate-400 hidden sm:inline mr-1">Preview Format:</span>
-            <div className="flex bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
-              <button
-                type="button"
-                onClick={() => setViewMode('responsive')}
-                className={`px-2.5 py-1 rounded flex items-center space-x-1.5 transition cursor-pointer ${
-                  viewMode === 'responsive' ? 'bg-blue-600 text-white font-medium shadow-sm' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Responsive View (Default screen width)"
-              >
-                <span>Auto</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('desktop')}
-                className={`px-2.5 py-1 rounded flex items-center space-x-1.5 transition cursor-pointer ${
-                  viewMode === 'desktop' ? 'bg-blue-600 text-white font-medium shadow-sm' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Desktop Reference Mockup"
-              >
-                <Monitor className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Desktop</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('mobile')}
-                className={`px-2.5 py-1 rounded flex items-center space-x-1.5 transition cursor-pointer ${
-                  viewMode === 'mobile' ? 'bg-blue-600 text-white font-medium shadow-sm' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Mobile Phone Reference Mockup"
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Mobile</span>
-              </button>
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
+      {/* Navigation Bar (Clean Customer Facing Style) */}
+      <nav className="bg-slate-950/95 backdrop-blur-md text-white border-b border-white/10 px-5 sm:px-8 py-4 sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          {/* Active Tenant LOGISTICS Brand Logo */}
+          <a href="/track" className="flex items-center space-x-2.5 group">
+            {/* Isometric 3D Box Emblem */}
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 p-1.5 shadow-md shadow-blue-500/30 flex items-center justify-center transform group-hover:scale-105 transition">
+              <Package className="w-5 h-5 text-white" />
             </div>
+            <div className="flex flex-col">
+              <span className="text-lg font-extrabold tracking-tight text-white leading-none">
+                {currentBrandName}
+              </span>
+              <span className="text-[10px] font-bold text-sky-400 tracking-[0.2em] leading-none uppercase mt-0.5">
+                DELIVERY TRACKING
+              </span>
+            </div>
+          </a>
 
-            <a
-              href="/logistics"
-              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1 rounded-lg transition flex items-center ml-2"
+          {/* Navigation Tabs */}
+          <div className="flex items-center space-x-6 sm:space-x-8">
+            <a 
+              href="/track" 
+              className="text-sm font-semibold text-white relative py-1 border-b-2 border-sky-400 flex items-center"
             >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              <span>Back to Dispatch</span>
+              Track Delivery
             </a>
+            <button 
+              type="button"
+              onClick={() => setShowContactModal(true)} 
+              className="text-sm font-medium text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              Contact Support
+            </button>
           </div>
         </div>
-      </header>
+      </nav>
 
-      {/* Main Container Wrapper */}
-      <div className={containerClass}>
-        {/* Navigation Bar (Directly matching reference image brand style) */}
-        <nav className="bg-slate-950/95 backdrop-blur-md text-white border-b border-white/10 px-5 sm:px-8 py-4 sticky top-0 z-40">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            {/* ProSpaces LOGISTICS Brand Logo */}
-            <a href="/track" className="flex items-center space-x-2.5 group">
-              {/* Isometric 3D Box Emblem */}
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 p-1.5 shadow-md shadow-blue-500/30 flex items-center justify-center transform group-hover:scale-105 transition">
-                <Package className="w-5 h-5 text-white" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-lg font-extrabold tracking-tight text-white leading-none">
-                  ProSpaces
-                </span>
-                <span className="text-[10px] font-bold text-sky-400 tracking-[0.2em] leading-none uppercase mt-0.5">
-                  LOGISTICS
-                </span>
-              </div>
-            </a>
-
-            {/* Navigation Tabs */}
-            <div className="flex items-center space-x-6 sm:space-x-8">
-              <a 
-                href="#track" 
-                className="text-sm font-semibold text-white relative py-1 border-b-2 border-sky-400 flex items-center"
-              >
-                Track Delivery
-              </a>
-              <button 
-                type="button"
-                onClick={() => setShowContactModal(true)} 
-                className="text-sm font-medium text-slate-300 hover:text-white transition cursor-pointer"
-              >
-                Contact
-              </button>
-            </div>
-          </div>
-        </nav>
-
+      {/* Main Container */}
+      <div className="w-full">
         {/* Hero Section with Truck Curving Highway Photograph */}
-        <section className="relative overflow-hidden bg-slate-950 text-white min-h-[340px] sm:min-h-[400px] flex items-center justify-center">
-          {/* Background Image of Blue ProSpaces Semi Truck on Mountain Highway */}
+        <section className="relative overflow-hidden bg-slate-950 text-white min-h-[300px] sm:min-h-[360px] flex items-center justify-center">
+          {/* Background Image of Freight Semi Truck on Highway */}
           <div className="absolute inset-0 z-0">
             <img 
               src={heroTruckImage} 
-              alt="ProSpaces Logistics Highway Freight Fleet"
+              alt={`${currentBrandName} Logistics Highway Freight Fleet`}
               className="w-full h-full object-cover object-center opacity-45 scale-105 transform hover:scale-100 transition-all duration-1000"
             />
             {/* Gradient Overlays for optimal readability */}
@@ -390,15 +276,15 @@ export default function CustomerTrackingPortal() {
             <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/80" />
           </div>
 
-          <div className="relative z-10 max-w-3xl mx-auto px-5 py-12 sm:py-16 text-center w-full">
+          <div className="relative z-10 max-w-3xl mx-auto px-5 py-10 sm:py-14 text-center w-full">
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white mb-3 drop-shadow-md">
               Track Your Delivery
             </h1>
             <p className="text-sm sm:text-base text-slate-200 max-w-xl mx-auto mb-8 font-normal drop-shadow">
-              Enter your tracking number below to view the current status of your delivery.
+              Enter your tracking number or sales order number below to view the live status of your shipment.
             </p>
 
-            {/* Tracking Search Input Form (Adapts between Desktop inline bar and Mobile stacked button) */}
+            {/* Tracking Search Input Form */}
             <form onSubmit={handleSearchSubmit} className="max-w-xl mx-auto">
               <div className="flex flex-col sm:flex-row items-stretch gap-2.5 sm:gap-0 bg-white p-1.5 rounded-2xl sm:rounded-full shadow-2xl shadow-black/40 border border-white/20">
                 <div className="relative flex-1 flex items-center pl-4 pr-3 py-2 sm:py-1.5">
@@ -407,7 +293,7 @@ export default function CustomerTrackingPortal() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Enter tracking number (e.g. PSL-784512)..."
+                    placeholder="Enter tracking number, ticket ID, or sales order reference..."
                     className="w-full text-slate-900 placeholder-slate-400 text-sm font-medium focus:outline-none bg-transparent"
                   />
                   {searchQuery && (
@@ -436,56 +322,62 @@ export default function CustomerTrackingPortal() {
                   )}
                 </button>
               </div>
-
-              {/* Quick sample chips for instant testing */}
-              <div className="flex items-center justify-center flex-wrap gap-2 mt-4 text-[11px] text-slate-300">
-                <span className="text-slate-400">Quick Test:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('PSL-784512');
-                    fetchTrackingDetails('PSL-784512');
-                  }}
-                  className="bg-white/10 hover:bg-white/20 border border-white/20 px-2.5 py-1 rounded-full text-sky-300 font-mono transition cursor-pointer"
-                >
-                  PSL-784512 (Sample)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('DEL-8902');
-                    fetchTrackingDetails('DEL-8902');
-                  }}
-                  className="bg-white/10 hover:bg-white/20 border border-white/20 px-2.5 py-1 rounded-full text-sky-300 font-mono transition cursor-pointer"
-                >
-                  DEL-8902
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('DEL-300908');
-                    fetchTrackingDetails('DEL-300908');
-                  }}
-                  className="bg-white/10 hover:bg-white/20 border border-white/20 px-2.5 py-1 rounded-full text-sky-300 font-mono transition cursor-pointer"
-                >
-                  DEL-300908
-                </button>
-              </div>
             </form>
           </div>
         </section>
 
+        {/* Loading Indicator */}
+        {isLoading && (
+          <div className="max-w-4xl mx-auto px-5 py-12 text-center">
+            <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-sm text-slate-600 font-medium">Looking up live delivery docket...</p>
+          </div>
+        )}
+
         {/* Error notification if not found */}
-        {errorMessage && (
-          <div className="max-w-4xl mx-auto px-5 mt-6">
-            <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-start space-x-3 text-sm">
+        {errorMessage && !isLoading && (
+          <div className="max-w-4xl mx-auto px-5 mt-8">
+            <div className="bg-red-50 border border-red-200 text-red-800 p-5 rounded-2xl flex items-start space-x-3.5 text-sm shadow-xs">
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-semibold text-red-900">Tracking Number Not Found</p>
-                <p className="mt-0.5 text-xs text-red-700">{errorMessage}</p>
-                <p className="mt-2 text-xs text-red-600">
-                  Tip: Try searching by your sales order number (e.g. <span className="font-mono font-bold">SO-10293-A</span>) or invoice number.
+                <p className="font-bold text-red-900 text-base">Tracking Number Not Found</p>
+                <p className="mt-1 text-xs text-red-700 leading-relaxed">{errorMessage}</p>
+                <p className="mt-3 text-xs text-red-600 border-t border-red-200/60 pt-2.5">
+                  Tip: Please verify the tracking number provided in your dispatch notification email, or search using your ticket or invoice reference.
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State Welcome Guide (When no search has been performed yet) */}
+        {!trackingData && !errorMessage && !isLoading && (
+          <div className="max-w-4xl mx-auto px-5 py-12">
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 sm:p-10 shadow-sm text-center">
+              <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xs">
+                <Package className="w-7 h-7" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Live {currentBrandName} Delivery Portal</h3>
+              <p className="text-sm text-slate-600 max-w-lg mx-auto mb-8">
+                Enter your shipment tracking number (provided in your confirmation email) or sales order number above to view real-time transit status, route telemetry, and proof-of-delivery receipts.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left border-t border-slate-100 pt-6">
+                <div className="p-4 bg-slate-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center mb-2 font-bold text-sm">1</div>
+                  <h4 className="font-semibold text-slate-900 text-sm">Real-Time Transit</h4>
+                  <p className="text-xs text-slate-500 mt-1">Track milestone progress from warehouse dock to jobsite dropoff.</p>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 font-bold text-sm">2</div>
+                  <h4 className="font-semibold text-slate-900 text-sm">Proof of Delivery</h4>
+                  <p className="text-xs text-slate-500 mt-1">Access signed delivery receipts and on-site arrival photographic evidence.</p>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center mb-2 font-bold text-sm">3</div>
+                  <h4 className="font-semibold text-slate-900 text-sm">Direct Support</h4>
+                  <p className="text-xs text-slate-500 mt-1">Instant dispatch contact for delivery adjustments or gate access notes.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -854,7 +746,7 @@ export default function CustomerTrackingPortal() {
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
               <Package className="w-4 h-4 text-sky-400" />
-              <span className="font-bold text-white">ProSpaces Logistics</span>
+              <span className="font-bold text-white">{currentBrandName} Logistics</span>
               <span>© {new Date().getFullYear()} All Rights Reserved.</span>
             </div>
 
@@ -883,7 +775,7 @@ export default function CustomerTrackingPortal() {
                   <Phone className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Contact Logistics Dispatch</h3>
+                  <h3 className="font-bold text-slate-900 text-base">Contact {currentBrandName} Logistics Dispatch</h3>
                   <p className="text-xs text-slate-500">Live Customer Delivery Support</p>
                 </div>
               </div>
@@ -905,13 +797,13 @@ export default function CustomerTrackingPortal() {
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                 <span className="font-bold text-slate-800 block text-xs mb-1">Customer Support Email</span>
-                <p className="font-mono text-slate-800">logistics-tracking@prospaces.com</p>
+                <p className="font-mono text-slate-800">{trackingData?.tenantBrand?.supportEmail || activeTenant?.supportEmail || 'support@prospacescrm.ca'}</p>
               </div>
 
               <div className="p-3 bg-sky-50 rounded-xl border border-sky-100 text-sky-900">
                 <p className="font-semibold">Have your tracking number ready:</p>
                 <p className="font-mono font-bold text-sm text-sky-700 mt-0.5">
-                  {trackingData?.trackingNumber || 'PSL-784512'}
+                  {trackingData?.trackingNumber || (activeTrackingNumber ? activeTrackingNumber : 'Order Reference')}
                 </p>
               </div>
             </div>
@@ -966,7 +858,7 @@ export default function CustomerTrackingPortal() {
                   GPS: {trackingData.truck.lat.toFixed(5)}° N, {trackingData.truck.lng.toFixed(5)}° W
                 </p>
                 <p className="text-[11px] text-emerald-400 font-semibold mt-1">
-                  Speed: {trackingData.truck.speed || 48} km/h • ETA: Scheduled for today
+                  Speed: {trackingData.truck.speed ?? 0} km/h • ETA: Scheduled for today
                 </p>
               </div>
             </div>

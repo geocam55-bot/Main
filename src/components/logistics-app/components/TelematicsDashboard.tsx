@@ -813,7 +813,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                                       type="button"
                                       onClick={() => {
                                         setActiveActionMenuId(null);
-                                        navigator.clipboard.writeText(`https://prospaces.ca/track/${v.vehicleId}`);
+                                        navigator.clipboard.writeText(`${window.location.origin}/track?num=${encodeURIComponent(v.vehicleId)}`);
                                       }}
                                       className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-[#282A2E] hover:text-slate-900 dark:hover:text-white transition-colors text-slate-700 dark:text-slate-300"
                                     >

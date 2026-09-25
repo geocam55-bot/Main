@@ -1128,7 +1128,7 @@ function MapInner({
                                   type="button"
                                   onClick={() => {
                                     setPopupActionMenuOpen(false);
-                                    const shareLink = `https://prospaces.ca/track/${truck.id}`;
+                                    const shareLink = `${window.location.origin}/track?num=${encodeURIComponent(truck.id)}`;
                                     navigator.clipboard.writeText(shareLink);
                                     setSysLogs(prev => [`[${new Date().toLocaleTimeString()}] Tracking link copied: ${shareLink}`, ...prev.slice(0, 3)]);
                                   }}

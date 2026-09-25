@@ -488,6 +488,12 @@ export default function DeliveryQueue({
         type: 'success'
       });
 
+      let activeTenant: any = null;
+      try {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+        if (stored) activeTenant = JSON.parse(stored);
+      } catch (_) {}
+
       const res = await fetch('/api/v1/deliveries/resend-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -497,7 +503,11 @@ export default function DeliveryQueue({
           trackingNumber: delivery.trackingNumber || delivery.id,
           customerName: delivery.customerName || 'Valued Customer',
           destinationAddress: delivery.deliveryAddress,
-          status: delivery.status
+          status: delivery.status,
+          tenantId: delivery.tenantId || activeTenant?.id || 'rona_atlantic',
+          tenantName: activeTenant?.name || 'RONA',
+          tenantColor: activeTenant?.primaryColor === 'emerald' ? '#059669' : '#1e3a8a',
+          clientOrigin: typeof window !== 'undefined' ? window.location.origin : ''
         })
       });
 

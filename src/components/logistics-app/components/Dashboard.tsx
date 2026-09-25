@@ -2885,7 +2885,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                                     type="button"
                                     onClick={() => {
                                       setActiveActionMenuTruckId(null);
-                                      const shareLink = `https://prospaces.ca/track/${truckRow.id}`;
+                                      const shareLink = `${window.location.origin}/track?num=${encodeURIComponent(truckRow.id)}`;
                                       navigator.clipboard.writeText(shareLink);
                                       setToastMessage("Live share link copied to clipboard!");
                                       setSysLogs(prev => [`[${new Date().toLocaleTimeString()}] Live tracking hash generated: ${shareLink}`, ...prev.slice(0, 3)]);

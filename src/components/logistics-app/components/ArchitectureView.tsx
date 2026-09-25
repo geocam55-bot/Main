@@ -1347,16 +1347,16 @@ const mapExtractedFieldsToTemplateKeys = (
 ): Record<string, string> => {
   const result: Record<string, string> = {};
   
-  // Initialize fields. If we are running real OCR, default them to empty string instead of the template's demo baseline.
+  // Initialize fields with template default values so they never stay blank
   Object.keys(templateFields).forEach(key => {
-    result[key] = useDemoFallback ? (templateFields[key].value || '') : '';
+    result[key] = templateFields[key].value || '';
   });
 
   // Helper to normalize keys for comparison (remove spaces, symbols, lowercase)
   const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   Object.entries(extracted).forEach(([extractedKey, extractedVal]) => {
-    if (!extractedVal || extractedVal === 'N/A') return;
+    if (!extractedVal || extractedVal === 'N/A' || extractedVal === 'undefined') return;
 
     const normExtracted = normalize(extractedKey);
 
@@ -1754,20 +1754,12 @@ export default function ArchitectureView({
     };
   });
 
-  // Keep track of base64 uploaded files from local user PC (per document type template)
-  const [uploadedFiles, setUploadedFiles] = useState<Record<DocType, string | null>>(() => {
-    const saved = localStorage.getItem('prospaces_ocr_uploaded_files');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return {
-      'Order': null,
-      'Credit': null,
-      'Supplier Pickup': null,
-      'RMA': null
-    };
+  // Keep track of base64 uploaded files from local user PC (per document type template) - start blank by default
+  const [uploadedFiles, setUploadedFiles] = useState<Record<DocType, string | null>>({
+    'Order': null,
+    'Credit': null,
+    'Supplier Pickup': null,
+    'RMA': null
   });
 
   // Select OCR engine mode (default is 'tesseract' for keyless, 100% free offline execution)
