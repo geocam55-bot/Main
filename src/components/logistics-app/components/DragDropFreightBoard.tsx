@@ -12,6 +12,7 @@ import { rolloverUncompletedDeliveries, DEFAULT_STORE_CONFIG } from '../lib/sche
 import { getTruckImage } from '../lib/truckImages';
 import { getEffectivePdfUrl, openScannedDocumentInNewTab } from './DeliveryQueue';
 import { PhysicalDocumentModal } from './PhysicalDocumentModal';
+import { toast } from 'sonner';
 
 interface DragDropFreightBoardProps {
   deliveries: DeliveryRecord[];
@@ -2913,25 +2914,35 @@ function UnassignedDeliveryCard({
                 type="button"
                 onClick={async (e) => {
                   e.stopPropagation();
+                  const targetEmail = (delivery.customerEmail || (delivery as any).customer_email || '').trim() || 'customer@ronaatlantic.ca';
+                  toast.info(`Dispatching tracking email for #${delivery.id} to ${targetEmail}...`);
                   try {
                     const res = await fetch('/api/v1/deliveries/resend-email', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         deliveryId: delivery.id,
-                        customerEmail: delivery.customerEmail || 'customer@ronaatlantic.ca',
+                        customerEmail: targetEmail,
                         trackingNumber: delivery.trackingNumber || delivery.id,
-                        customerName: delivery.customerName || 'Valued Customer'
+                        customerName: delivery.customerName || 'Valued Customer',
+                        destinationAddress: delivery.deliveryAddress,
+                        status: delivery.status
                       })
                     });
-                    const data = await res.json();
-                    if (data.success) {
-                      alert(`✅ ${data.message}`);
+                    const rawText = await res.text();
+                    let data: any = {};
+                    try {
+                      data = rawText ? JSON.parse(rawText) : {};
+                    } catch {
+                      throw new Error(`Server returned non-JSON (${res.status}): ${rawText.slice(0, 120) || 'Empty body'}`);
+                    }
+                    if (res.ok && data.success) {
+                      toast.success(`✅ Dispatched to ${data.recipient || targetEmail}`);
                     } else {
-                      alert(`⚠️ Failed to resend email: ${data.error || 'Unknown error'}`);
+                      toast.error(`⚠️ Delivery failed: ${data.error || 'Server error'}`);
                     }
                   } catch (err: any) {
-                    alert(`❌ Error sending email: ${err?.message || err}`);
+                    toast.error(`❌ Error sending email: ${err?.message || err}`);
                   }
                 }}
                 className="px-2 py-1 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white rounded-lg text-[10px] font-bold font-mono tracking-wide uppercase transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center space-x-1"

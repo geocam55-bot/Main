@@ -1166,11 +1166,22 @@ export async function saveDeliveryDirect(d: any, tenantId: string) {
   if (!supabase) return;
   const tid = String(tenantId);
 
+  const customerEmailVal = d.customerEmail || d.customer_email || "";
+  const trackingNumberVal = d.trackingNumber || d.tracking_number || "";
+  const trackingTokenVal = d.trackingToken || d.tracking_token || "";
+
   const fullMeta = {
     ...d,
     id: String(d.id),
     tenantId: tid,
     invoiceNumber: String(d.invoiceNumber || d.orderNumber || d.id || ""),
+    epicorSalesOrder: String(d.epicorSalesOrder || d.orderNumber || d.id || ""),
+    customerName: String(d.customerName || d.customer || "N/A"),
+    deliveryAddress: String(d.deliveryAddress || d.destination || "N/A"),
+    phone: String(d.phone || ""),
+    customerEmail: customerEmailVal,
+    trackingNumber: trackingNumberVal,
+    trackingToken: trackingTokenVal,
   };
 
   const payload: any = {
@@ -1187,6 +1198,16 @@ export async function saveDeliveryDirect(d: any, tenantId: string) {
     pickup_location: String(d.originBranch || d.pickup_location || "DC-WINAMILL"),
     items: [JSON.stringify({ _meta: fullMeta })]
   };
+
+  if (customerEmailVal) {
+    payload.customer_email = customerEmailVal;
+  }
+  if (trackingNumberVal) {
+    payload.tracking_number = trackingNumberVal;
+  }
+  if (trackingTokenVal) {
+    payload.tracking_token = trackingTokenVal;
+  }
   let obj = { ...payload };
   for (let attempt = 0; attempt < 35; attempt++) {
     const { error } = await supabase.from("deliveries").upsert(obj);

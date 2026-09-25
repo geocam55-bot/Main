@@ -1270,6 +1270,97 @@ ALTER TABLE api_connections ADD COLUMN IF NOT EXISTS retry_count integer DEFAULT
 
 `;
 
+export interface SendEmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  from?: string;
+}
+
+export function getSmtpConfig() {
+  let smtpHost = (process.env.SMTP_HOST || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  const smtpUser = (process.env.SMTP_USER || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  const smtpPass = (process.env.SMTP_PASS || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  let smtpPort = parseInt((process.env.SMTP_PORT || "587").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, ''), 10);
+  const smtpFrom = (process.env.SMTP_FROM || "ProSpaces Logistics <support@prospacescrm.ca>").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+
+  if (smtpPort === 485) {
+    smtpPort = 465;
+  } else if (smtpPort === 585) {
+    smtpPort = 587;
+  }
+
+  // Auto-correct common misconfigured hostnames for IONOS
+  if (smtpHost && (smtpHost.toLowerCase() === "smtp.ionos.ca" || smtpHost.toLowerCase() === "ionos.ca" || smtpHost.toLowerCase() === "mail.ionos.ca" || smtpHost.toLowerCase() === "ionos.com")) {
+    smtpHost = "smtp.ionos.com";
+  } else if (!smtpHost && (smtpUser.toLowerCase().includes("ionos") || smtpFrom.toLowerCase().includes("ionos"))) {
+    smtpHost = "smtp.ionos.com";
+  }
+
+  const isConfigured = !!(smtpHost && smtpUser && smtpPass);
+  return { smtpHost, smtpUser, smtpPass, smtpPort, smtpFrom, isConfigured };
+}
+
+export async function sendSystemEmail(options: SendEmailOptions): Promise<{
+  success: boolean;
+  transport: string;
+  messageId?: string;
+  error?: string;
+}> {
+  const config = getSmtpConfig();
+  if (!config.isConfigured) {
+    console.warn(`[SMTP Warning] SMTP not configured. Missing required credentials. Simulating delivery to ${options.to}`);
+    return {
+      success: true,
+      transport: "SIMULATED_LOCAL_DISPATCH",
+      error: "SMTP credentials not configured on server. Email was logged locally."
+    };
+  }
+
+  try {
+    const nodemailer = await import("nodemailer");
+    const isSecure = config.smtpPort === 465;
+    const transporter = nodemailer.createTransport({
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: isSecure,
+      auth: {
+        user: config.smtpUser,
+        pass: config.smtpPass
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000
+    });
+
+    const info = await transporter.sendMail({
+      from: options.from || config.smtpFrom,
+      to: options.to,
+      subject: options.subject,
+      text: options.text || options.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      html: options.html
+    });
+
+    console.log(`[SMTP Success] Email successfully dispatched to ${options.to}. MessageId: ${info.messageId}`);
+    return {
+      success: true,
+      transport: "SMTP_LIVE_TRANSPORT",
+      messageId: info.messageId
+    };
+  } catch (err: any) {
+    console.error(`[SMTP Error] Failed sending email to ${options.to}:`, err);
+    return {
+      success: false,
+      transport: "SMTP_FAILED",
+      error: err.message || String(err)
+    };
+  }
+}
+
 export function registerLogisticsServer(app: any) {
 const PORT = 3000;
 
@@ -2063,112 +2154,32 @@ app.use((req, res, next) => {
         console.warn("Could not insert password reset notification:", notifErr);
       }
 
-      // Send password email
-      // Trigger redeploy to apply Vercel environment variables
-      let smtpHost = (process.env.SMTP_HOST || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
-      const smtpUser = (process.env.SMTP_USER || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
-      const smtpPass = (process.env.SMTP_PASS || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
-      let smtpPort = parseInt((process.env.SMTP_PORT || "587").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, ''), 10);
-      const smtpFrom = (process.env.SMTP_FROM || "ProSpaces Logistics <noreply@prospaces.com>").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+      // Send password email via unified system SMTP helper
+      const passwordResetHtml = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <h2 style="color: #1e3a8a; margin-bottom: 20px;">ProSpaces Logistics</h2>
+          <p>Hi <strong>${user.name}</strong>,</p>
+          <p>We received a request to reset your password. A temporary password has been successfully generated for you:</p>
+          <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; letter-spacing: 1px; display: inline-block; margin: 15px 0; color: #0f172a; border-radius: 6px;">
+            ${tempPassword}
+          </div>
+          <p>Please use this temporary password to sign in to ProSpaces, and immediately update your password under your User Profile settings.</p>
+          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
+          <p style="font-size: 12px; color: #64748b; line-height: 1.5;">
+            If you did not make this request, please contact a dispatcher or system administrator. This is an automated notification.
+          </p>
+        </div>
+      `;
 
-      // Auto-correct port typos
-      let portWasCorrected = false;
-      const originalPort = smtpPort;
-      if (smtpPort === 485) {
-        console.warn("[SMTP Diagnostics] Detected SMTP_PORT set to 485. This is highly likely a typo for port 465 (secure SSL). Auto-correcting to 465.");
-        smtpPort = 465;
-        portWasCorrected = true;
-      } else if (smtpPort === 585) {
-        console.warn("[SMTP Diagnostics] Detected SMTP_PORT set to 585. This is highly likely a typo for port 587 (STARTTLS). Auto-correcting to 587.");
-        smtpPort = 587;
-        portWasCorrected = true;
-      }
-
-      // Server-side Diagnostics
-      const maskString = (str: string) => {
-        if (!str) return "NOT_SET";
-        if (str.length <= 4) return "****";
-        return str.substring(0, 2) + "****" + str.substring(str.length - 2);
-      };
-      console.log("[SMTP Diagnostics] Environment variables parsed:", {
-        SMTP_HOST: smtpHost ? `${smtpHost} (length: ${smtpHost.length})` : "MISSING/EMPTY",
-        SMTP_USER: maskString(smtpUser),
-        SMTP_PASS: smtpPass ? `SET (length: ${smtpPass.length})` : "MISSING/EMPTY",
-        SMTP_PORT: smtpPort,
-        SMTP_PORT_ORIGINAL: originalPort,
-        SMTP_PORT_WAS_CORRECTED: portWasCorrected,
-        SMTP_FROM: smtpFrom
+      const mailDispatch = await sendSystemEmail({
+        to: user.email,
+        subject: "Your ProSpaces Password Reset",
+        html: passwordResetHtml,
+        text: `Hi ${user.name},\n\nYou requested a password reset for your ProSpaces account.\n\nYour new temporary password is: ${tempPassword}\n\nPlease sign in with this password and update it in your user profile immediately.\n\nBest regards,\nProSpaces Fleet Support`
       });
 
-      // Auto-correct common misconfigured hostnames for IONOS
-      if (smtpHost && (smtpHost.toLowerCase() === "smtp.ionos.ca" || smtpHost.toLowerCase() === "ionos.ca" || smtpHost.toLowerCase() === "mail.ionos.ca" || smtpHost.toLowerCase() === "ionos.com")) {
-        smtpHost = "smtp.ionos.com";
-      } else if (!smtpHost && (smtpUser.toLowerCase().includes("ionos") || smtpFrom.toLowerCase().includes("ionos"))) {
-        smtpHost = "smtp.ionos.com";
-      }
-
-      let emailSent = false;
-      let emailError = "";
-
-      const hasAllSMTP = !!(smtpHost && smtpUser && smtpPass);
-      console.log(`[SMTP Diagnostics] Checking if required SMTP vars are present: ${hasAllSMTP}`);
-
-      if (hasAllSMTP) {
-        try {
-          console.log("[SMTP Diagnostics] Importing nodemailer...");
-          const nodemailer = await import("nodemailer");
-          console.log("[SMTP Diagnostics] Creating transporter...");
-          const transporter = nodemailer.createTransport({
-            host: smtpHost,
-            port: smtpPort,
-            secure: smtpPort === 465,
-            auth: {
-              user: smtpUser,
-              pass: smtpPass
-            },
-            tls: {
-              rejectUnauthorized: false
-            }
-          });
-
-          const mailOptions = {
-            from: smtpFrom,
-            to: user.email,
-            subject: "Your ProSpaces Password Reset",
-            text: `Hi ${user.name},\n\nYou requested a password reset for your ProSpaces account.\n\nYour new temporary password is: ${tempPassword}\n\nPlease sign in with this password and update it in your user profile immediately.\n\nBest regards,\nProSpaces Fleet Support`,
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-                <h2 style="color: #1e3a8a; margin-bottom: 20px;">ProSpaces Logistics</h2>
-                <p>Hi <strong>${user.name}</strong>,</p>
-                <p>We received a request to reset your password. A temporary password has been successfully generated for you:</p>
-                <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; letter-spacing: 1px; display: inline-block; margin: 15px 0; color: #0f172a; border-radius: 6px;">
-                  ${tempPassword}
-                </div>
-                <p>Please use this temporary password to sign in to ProSpaces, and immediately update your password under your User Profile settings.</p>
-                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
-                <p style="font-size: 12px; color: #64748b; line-height: 1.5;">
-                  If you did not make this request, please contact a dispatcher or system administrator. This is an automated notification.
-                </p>
-              </div>
-            `
-          };
-
-          console.log(`[SMTP Diagnostics] Sending email via transporter to: ${user.email}...`);
-          await transporter.sendMail(mailOptions);
-          emailSent = true;
-          console.log(`[SMTP Diagnostics] Email sent successfully to ${user.email}`);
-        } catch (mailErr: any) {
-          console.error("[SMTP Diagnostics] Error occurred during SMTP setup/delivery:", mailErr);
-          emailError = mailErr.message || String(mailErr);
-        }
-      } else {
-        const missingVars = [];
-        if (!smtpHost) missingVars.push("SMTP_HOST");
-        if (!smtpUser) missingVars.push("SMTP_USER");
-        if (!smtpPass) missingVars.push("SMTP_PASS");
-        console.warn(`[SMTP Warning] Real email delivery is disabled because of missing env variables in production: ${missingVars.join(", ")}`);
-        console.log(`[SIMULATION] Password reset request for ${user.email}. New temporary password is: ${tempPassword}`);
-      }
+      const emailSent = mailDispatch.success;
+      const emailError = mailDispatch.error || "";
 
       return res.json({
         success: true,
@@ -4004,6 +4015,46 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       const trackingLink = `/track?num=${encodeURIComponent(trackingNumber || deliveryId)}`;
       const subject = `[ProSpaces Logistics] Delivery Status Update: ${milestone.replace(/_/g, ' ')} (${trackingNumber || deliveryId})`;
 
+      // Also dispatch real email notification if customer email is provided
+      try {
+        const notifHtml = `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
+            <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">
+              <h1 style="color: #1e3a8a; font-size: 22px; margin: 0 0 6px 0; font-weight: 800;">ProSpaces Logistics</h1>
+              <p style="color: #64748b; font-size: 13px; margin: 0; text-transform: uppercase; font-weight: 600;">Delivery Milestone Update</p>
+            </div>
+            <p style="font-size: 15px; color: #334155;">Hello,</p>
+            <p style="font-size: 14px; color: #475569;">
+              Your delivery order <strong>${deliveryId || trackingNumber}</strong> has reached a new milestone:
+            </p>
+            <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
+              <span style="font-size: 16px; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px;">
+                ${milestone.replace(/_/g, ' ')}
+              </span>
+              ${note ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #3b82f6;">${note}</p>` : ''}
+            </div>
+            <p style="font-size: 14px; color: #475569;">
+              Tracking Number: <strong>${trackingNumber || deliveryId}</strong>
+            </p>
+            <div style="margin: 24px 0; text-align: center;">
+              <a href="${req.protocol}://${req.get('host')}${trackingLink}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 700; display: inline-block;">
+                View Live Delivery Tracker
+              </a>
+            </div>
+            <div style="margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 14px; font-size: 12px; color: #94a3b8; text-align: center;">
+              ProSpaces Logistics Fleet &bull; support@prospacescrm.ca
+            </div>
+          </div>
+        `;
+        await sendSystemEmail({
+          to: customerEmail,
+          subject,
+          html: notifHtml
+        }).catch(e => console.warn("[Milestone Email Warning]:", e.message || e));
+      } catch (err) {
+        console.warn("[Milestone Email Warning]:", err);
+      }
+
       try {
         await supabase.from("customer_delivery_notifications").insert({
           delivery_id: deliveryId || "DEL-GENERIC",
@@ -4030,20 +4081,85 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
     }
   });
 
-  // Resend Delivery Email Endpoint
-  app.post("/api/v1/deliveries/resend-email", async (req, res) => {
+  // Resend Delivery Email Endpoint (supports both /api/v1/deliveries/resend-email and /api/deliveries/resend-email)
+  app.post(["/api/v1/deliveries/resend-email", "/api/deliveries/resend-email"], async (req, res) => {
     try {
-      const { deliveryId, customerEmail, trackingNumber, customerName } = req.body;
+      const { deliveryId, customerEmail, trackingNumber, customerName, destinationAddress, status } = req.body || {};
       const supabaseInstance = getSupabase(req);
 
-      const emailToUse = customerEmail || "customer@ronaatlantic.ca";
+      const emailToUse = (customerEmail || "").trim() || "customer@ronaatlantic.ca";
       const trackingNumToUse = trackingNumber || deliveryId || "DEL-300908";
-      const trackingLink = `${req.protocol}://${req.get('host')}/track?num=${encodeURIComponent(trackingNumToUse)}`;
+      const host = req.get('host') || 'localhost:3000';
+      const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+      const trackingLink = `${protocol}://${host}/track?num=${encodeURIComponent(trackingNumToUse)}`;
 
-      const smtpConfigured = !!(process.env.SMTP_HOST || process.env.SENDGRID_API_KEY || process.env.RESEND_API_KEY);
-      const transportStatus = smtpConfigured ? "SMTP_LIVE_TRANSPORT" : "SIMULATED_LOCAL_DISPATCH";
+      console.log(`[Resend Delivery Email] Preparing dispatch for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse}`);
 
-      console.log(`[Resend Delivery Email] Dispatching delivery tracking email for ${deliveryId} to ${emailToUse} (Transport: ${transportStatus})`);
+      const emailSubject = `[ProSpaces Logistics] Delivery Tracking: Ticket #${deliveryId || trackingNumToUse}`;
+      const emailHtml = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
+          <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">
+            <h1 style="color: #1e3a8a; font-size: 22px; margin: 0 0 6px 0; font-weight: 800; letter-spacing: -0.5px;">ProSpaces Logistics</h1>
+            <p style="color: #64748b; font-size: 13px; margin: 0; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Delivery Tracking & Status Notification</p>
+          </div>
+
+          <p style="font-size: 15px; line-height: 1.5; color: #334155;">
+            Hello <strong>${customerName || "Valued Customer"}</strong>,
+          </p>
+          <p style="font-size: 14px; line-height: 1.5; color: #475569;">
+            Your delivery order <strong>${deliveryId || trackingNumToUse}</strong> is in our logistics operations queue. You can track live driver location, transit progress, and proof-of-delivery photos directly via our secure portal.
+          </p>
+
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; width: 140px;">Tracking Number:</td>
+                <td style="padding: 6px 0; font-weight: 700; color: #0f172a; font-family: monospace;">${trackingNumToUse}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">Ticket Reference:</td>
+                <td style="padding: 6px 0; font-weight: 600; color: #0f172a;">${deliveryId || "N/A"}</td>
+              </tr>
+              ${destinationAddress ? `
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">Destination:</td>
+                <td style="padding: 6px 0; color: #334155;">${destinationAddress}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding: 6px 0; color: #64748b;">Current Status:</td>
+                <td style="padding: 6px 0;">
+                  <span style="background-color: #dbeafe; color: #1e40af; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 9999px; text-transform: uppercase;">
+                    ${status || 'IN TRANSIT'}
+                  </span>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${trackingLink}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
+              Track Your Delivery Live &rarr;
+            </a>
+          </div>
+
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+            If the button above does not open the tracking portal, copy and paste this link into your browser:<br />
+            <a href="${trackingLink}" style="color: #2563eb; word-break: break-all;">${trackingLink}</a>
+          </p>
+
+          <div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8; text-align: center;">
+            <p style="margin: 0 0 4px 0;">ProSpaces Fleet & Logistics Operations &bull; Direct Support: support@prospacescrm.ca</p>
+            <p style="margin: 0;">This automated notification was dispatched for Ticket #${deliveryId || trackingNumToUse}.</p>
+          </div>
+        </div>
+      `;
+
+      // Perform real SMTP email dispatch
+      const mailResult = await sendSystemEmail({
+        to: emailToUse,
+        subject: emailSubject,
+        html: emailHtml
+      });
 
       let dbLogged = false;
       try {
@@ -4052,7 +4168,13 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
             delivery_id: deliveryId || trackingNumToUse,
             tracking_number: trackingNumToUse,
             customer_email: emailToUse,
-            status: "SENT"
+            status: mailResult.success ? "SENT" : "FAILED",
+            metadata: {
+              transport: mailResult.transport,
+              messageId: mailResult.messageId || null,
+              error: mailResult.error || null,
+              dispatchedAt: new Date().toISOString()
+            }
           });
           if (!insertError) dbLogged = true;
           else console.warn("[Resend Delivery Email] DB insert notice:", insertError);
@@ -4061,19 +4183,33 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         console.warn("[Resend Delivery Email] DB log notice:", dbLogErr);
       }
 
-      const diagnosticNote = smtpConfigured
-        ? `Email successfully sent via configured mail provider to ${emailToUse}.`
-        : `[Diagnostic Notice] Email logged in database ("delivery_emails_log") and simulated successfully. Note: External mailbox delivery requires configuring an SMTP relay or SendGrid/Resend API key in environment variables.`;
+      if (!mailResult.success) {
+        return res.status(502).json({
+          success: false,
+          error: `SMTP delivery failed: ${mailResult.error || 'Unknown error'}`,
+          diagnostics: {
+            transportStatus: mailResult.transport,
+            error: mailResult.error,
+            recipient: emailToUse,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
 
-      res.json({
+      const diagnosticNote = mailResult.transport === 'SMTP_LIVE_TRANSPORT'
+        ? `Email successfully delivered to recipient mailbox (${emailToUse}) via IONOS SMTP relay. MessageId: ${mailResult.messageId || 'OK'}`
+        : `Email logged locally in simulation mode. Configure SMTP_HOST, SMTP_USER, SMTP_PASS to enable external mailbox delivery.`;
+
+      return res.status(200).json({
         success: true,
-        message: `Delivery tracking email successfully dispatched to ${emailToUse} with secure tracking link.`,
+        message: `Delivery tracking email successfully dispatched to ${emailToUse}.`,
         trackingLink,
         recipient: emailToUse,
         diagnostics: {
-          transportStatus,
-          smtpConfigured,
+          transportStatus: mailResult.transport,
+          smtpConfigured: true,
           dbLogged,
+          messageId: mailResult.messageId || null,
           timestamp: new Date().toISOString(),
           deliveryId: deliveryId || trackingNumToUse,
           trackingNumber: trackingNumToUse,
@@ -4082,8 +4218,15 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         }
       });
     } catch (err: any) {
-      console.error("[Resend Delivery Email] Error:", err);
-      res.status(500).json({ success: false, error: err.message, diagnostics: { timestamp: new Date().toISOString() } });
+      console.error("[Resend Delivery Email] Unexpected error:", err);
+      return res.status(500).json({
+        success: false,
+        error: err.message || "Internal server error occurred while processing email dispatch.",
+        diagnostics: {
+          timestamp: new Date().toISOString(),
+          error: err.message
+        }
+      });
     }
   });
 

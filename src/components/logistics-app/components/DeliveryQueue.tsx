@@ -481,9 +481,10 @@ export default function DeliveryQueue({
 
   const handleResendEmail = async (delivery: DeliveryRecord) => {
     try {
+      const emailTarget = (delivery.customerEmail || (delivery as any).customer_email || '').trim() || 'customer@ronaatlantic.ca';
       setEmailStatusBanner({
-        message: `Dispatched tracking email for Ticket ${delivery.id} to ${delivery.customerEmail || 'customer@ronaatlantic.ca'}...`,
-        details: `Connecting to email dispatch & diagnostic trace engine...`,
+        message: `Dispatched tracking email for Ticket ${delivery.id} to ${emailTarget}...`,
+        details: `Connecting to email dispatch & diagnostic trace engine via IONOS SMTP relay...`,
         type: 'success'
       });
 
@@ -492,28 +493,43 @@ export default function DeliveryQueue({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           deliveryId: delivery.id,
-          customerEmail: delivery.customerEmail || 'customer@ronaatlantic.ca',
+          customerEmail: emailTarget,
           trackingNumber: delivery.trackingNumber || delivery.id,
-          customerName: delivery.customerName || 'Valued Customer'
+          customerName: delivery.customerName || 'Valued Customer',
+          destinationAddress: delivery.deliveryAddress,
+          status: delivery.status
         })
       });
-      const data = await res.json();
-      if (data.success) {
-        const diag = data.diagnostics || {};
+
+      const rawText = await res.text();
+      let data: any = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (parseErr) {
+        throw new Error(`Server returned non-JSON response (${res.status} ${res.statusText}): ${rawText.slice(0, 150) || 'Empty response'}`);
+      }
+
+      if (!res.ok || data.success === false) {
+        const errMsg = data.error || `Server returned error status ${res.status} (${res.statusText})`;
         setEmailStatusBanner({
-          message: `✅ Tracking Email Dispatch Logged (${diag.transportStatus || 'SIMULATED'}) for Ticket ${delivery.id}`,
-          details: `Recipient: ${data.recipient || delivery.customerEmail || 'customer@ronaatlantic.ca'} | Transport: ${diag.transportStatus || 'SIMULATED'} | DB Logged: ${diag.dbLogged ? 'Yes' : 'No'} — ${diag.diagnosticNote || data.message}`,
-          type: 'success'
-        });
-        toast.success(`Email Dispatched: ${data.recipient}`);
-      } else {
-        setEmailStatusBanner({
-          message: `❌ Failed to Resend Tracking Email for Ticket ${delivery.id}`,
-          details: `Reason: ${data.error || 'Server rejected email dispatch or invalid recipient address.'}`,
+          message: `❌ Failed to Dispatch Tracking Email for Ticket ${delivery.id}`,
+          details: `Reason: ${errMsg}`,
           type: 'error'
         });
-        toast.error(`⚠️ Failed: ${data.error || 'Unknown error'}`);
+        toast.error(`⚠️ Delivery Failed: ${errMsg}`);
+        return;
       }
+
+      const diag = data.diagnostics || {};
+      const isLiveSmtp = diag.transportStatus === 'SMTP_LIVE_TRANSPORT';
+      const transportLabel = isLiveSmtp ? 'Live IONOS SMTP' : (diag.transportStatus || 'Simulated Dispatch');
+
+      setEmailStatusBanner({
+        message: `✅ Tracking Email Dispatched (${transportLabel}) for Ticket ${delivery.id}`,
+        details: `Recipient: ${data.recipient || emailTarget} | Transport: ${transportLabel} | DB Audit: ${diag.dbLogged ? 'Verified' : 'Bypassed'} — ${diag.diagnosticNote || data.message}`,
+        type: 'success'
+      });
+      toast.success(`Tracking Email Dispatched to: ${data.recipient || emailTarget}`);
     } catch (err: any) {
       setEmailStatusBanner({
         message: `❌ Critical Error Resending Email for Ticket ${delivery.id}`,
@@ -707,7 +723,7 @@ export default function DeliveryQueue({
     setFormCustomerName(record.customerName || '');
     setFormAddress(record.deliveryAddress || '');
     setFormPhone(record.phone || '');
-    setFormCustomerEmail(record.customerEmail || '');
+    setFormCustomerEmail(record.customerEmail || (record as any).customer_email || '');
     setFormTrackingNumber(record.trackingNumber || generateTrackingNumber());
     setFormOriginBranch(record.originBranch || BRANCHES[0]?.id || 'WINDMILL_DC');
     setFormWeight(record.weight || '');
@@ -802,6 +818,7 @@ export default function DeliveryQueue({
         deliveryAddress: formAddress,
         phone: formPhone,
         customerEmail: formCustomerEmail.trim(),
+        customer_email: formCustomerEmail.trim(),
         trackingNumber: formTrackingNumber || editingRecord.trackingNumber || generateTrackingNumber(),
         originBranch: formOriginBranch,
         weight: formWeight || undefined,
@@ -859,6 +876,7 @@ export default function DeliveryQueue({
         deliveryAddress: formAddress,
         phone: formPhone,
         customerEmail: formCustomerEmail.trim(),
+        customer_email: formCustomerEmail.trim(),
         trackingNumber: trackingCode,
         originBranch: formOriginBranch,
         weight: formWeight || undefined,
