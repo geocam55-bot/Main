@@ -4210,8 +4210,8 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
     }
   });
 
-  // Resend Delivery Email Endpoint (supports both /api/v1/deliveries/resend-email and /api/deliveries/resend-email)
-  app.post(["/api/v1/deliveries/resend-email", "/api/deliveries/resend-email"], async (req, res) => {
+  // Resend Delivery Email Handler
+  const handleResendDeliveryEmail = async (req: any, res: any) => {
     try {
       const { deliveryId, customerEmail, trackingNumber, customerName, destinationAddress, status } = req.body || {};
       const supabaseInstance = getSupabase(req);
@@ -4356,7 +4356,11 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         }
       });
     }
-  });
+  };
+
+  app.all("/api/v1/deliveries/resend-email", handleResendDeliveryEmail);
+  app.all("/api/deliveries/resend-email", handleResendDeliveryEmail);
+  app.options(["/api/v1/deliveries/resend-email", "/api/deliveries/resend-email"], (req, res) => res.sendStatus(204));
 
   // API Route for performing local Tesseract OCR on the server side (immune to standard browser sandbox issues)
   app.post("/api/ocr-tesseract", async (req, res) => {
