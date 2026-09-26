@@ -2752,7 +2752,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       
       {/* Enterprise Sticky Brand Header & Unified Navigation (Hidden when in standalone Driver App) */}
       {!['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
-        <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs transition-all duration-200" id="prospaces-header">
+        <header className="sticky top-0 z-[999] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs transition-all duration-200" id="prospaces-header">
         <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-3">
           
           {/* Logo & title context */}
@@ -3756,7 +3756,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           )}
           {activeTab === 'tracking-portal' && (
             <div className="w-full bg-slate-900 min-h-screen">
-              <CustomerTrackingPortal />
+              <CustomerTrackingPortal isEmbedded={true} />
             </div>
           )}
           {activeTab === 'landing-preview' && (

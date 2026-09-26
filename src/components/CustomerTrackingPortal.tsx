@@ -72,7 +72,7 @@ interface TrackingData {
   } | null;
 }
 
-export default function CustomerTrackingPortal() {
+export default function CustomerTrackingPortal({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTrackingNumber, setActiveTrackingNumber] = useState('');
   const [trackingData, setTrackingData] = useState<TrackingData | null>(null);
@@ -423,42 +423,44 @@ export default function CustomerTrackingPortal() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
       {/* Navigation Bar (Clean Customer Facing Style) */}
-      <nav className="bg-slate-950/95 backdrop-blur-md text-white border-b border-white/10 px-5 sm:px-8 py-4 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          {/* Active Tenant LOGISTICS Brand Logo */}
-          <a href="/track" className="flex items-center space-x-2.5 group">
-            {/* Isometric 3D Box Emblem */}
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 p-1.5 shadow-md shadow-blue-500/30 flex items-center justify-center transform group-hover:scale-105 transition">
-              <Package className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-lg font-extrabold tracking-tight text-white leading-none">
-                {currentBrandName}
-              </span>
-              <span className="text-[10px] font-bold text-sky-400 tracking-[0.2em] leading-none uppercase mt-0.5">
-                DELIVERY TRACKING
-              </span>
-            </div>
-          </a>
-
-          {/* Navigation Tabs */}
-          <div className="flex items-center space-x-6 sm:space-x-8">
-            <a 
-              href="/track" 
-              className="text-sm font-semibold text-white relative py-1 border-b-2 border-sky-400 flex items-center"
-            >
-              Track Delivery
+      {!isEmbedded && (
+        <nav className="bg-slate-950/95 backdrop-blur-md text-white border-b border-white/10 px-5 sm:px-8 py-4 sticky top-0 z-40">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
+            {/* Active Tenant LOGISTICS Brand Logo */}
+            <a href="/track" className="flex items-center space-x-2.5 group">
+              {/* Isometric 3D Box Emblem */}
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 p-1.5 shadow-md shadow-blue-500/30 flex items-center justify-center transform group-hover:scale-105 transition">
+                <Package className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg font-extrabold tracking-tight text-white leading-none">
+                  {currentBrandName}
+                </span>
+                <span className="text-[10px] font-bold text-sky-400 tracking-[0.2em] leading-none uppercase mt-0.5">
+                  DELIVERY TRACKING
+                </span>
+              </div>
             </a>
-            <button 
-              type="button"
-              onClick={() => setShowContactModal(true)} 
-              className="text-sm font-medium text-slate-300 hover:text-white transition cursor-pointer"
-            >
-              Contact Support
-            </button>
+
+            {/* Navigation Tabs */}
+            <div className="flex items-center space-x-6 sm:space-x-8">
+              <a 
+                href="/track" 
+                className="text-sm font-semibold text-white relative py-1 border-b-2 border-sky-400 flex items-center"
+              >
+                Track Delivery
+              </a>
+              <button 
+                type="button"
+                onClick={() => setShowContactModal(true)} 
+                className="text-sm font-medium text-slate-300 hover:text-white transition cursor-pointer"
+              >
+                Contact Support
+              </button>
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+      )}
 
       {/* Main Container */}
       <div className="w-full">
