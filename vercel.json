@@ -22,6 +22,10 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/tracking/:trackingNumber", "destination": "/api/tracking/[trackingNumber]" },
+    { "source": "/api/tracking-search", "destination": "/api/tracking-search" },
+    { "source": "/api/v1/deliveries/resend-email", "destination": "/api/v1/deliveries/resend-email" },
+    { "source": "/api/deliveries/resend-email", "destination": "/api/deliveries/resend-email" },
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/inventory.html", "destination": "/inventory.html" },
     { "source": "/inventory", "destination": "/inventory.html" },

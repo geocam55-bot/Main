@@ -21,6 +21,7 @@ import {
   X
 } from 'lucide-react';
 import heroTruckImage from '../assets/images/tracking_hero_banner_1790245493337.jpg';
+import { createClient } from '../utils/supabase/client';
 
 interface JourneyStep {
   key: string;
@@ -110,6 +111,92 @@ export default function CustomerTrackingPortal() {
     }
   }, []);
 
+  // Helper to format a raw delivery record into the rich TrackingData interface
+  const formatRawDelivery = (d: any, cleanParam: string): TrackingData => {
+    let meta: any = {};
+    if (d.items && Array.isArray(d.items) && d.items.length > 0) {
+      try {
+        const itemZero = d.items[0];
+        const parsed = typeof itemZero === "string" ? JSON.parse(itemZero) : itemZero;
+        if (parsed?._meta) meta = parsed._meta;
+      } catch (_) {}
+    }
+
+    const fallbackDigits = Math.abs(String(d.id || cleanParam).split("").reduce((a: number, b: string) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 900000 + 100000;
+    const trackingNumber = d.trackingNumber || d.tracking_number || meta.trackingNumber || (cleanParam.startsWith("PSL-") ? cleanParam : `PSL-${fallbackDigits}`);
+    const customerName = d.customerName || d.customer || d.customer_name || meta.customerName || "Valued Customer";
+    const destination = d.deliveryAddress || d.destination || d.dropoff_location || meta.deliveryAddress || "Standard Delivery Address";
+    const originBranch = d.originBranch || d.pickup_location || meta.originBranch || "RONA Dartmouth (Store 7020)";
+    const orderNumber = d.invoiceNumber || d.orderNumber || d.epicorSalesOrder || meta.invoiceNumber || d.id;
+    const status = d.status || meta.status || "REGISTERED";
+    const regTime = meta.registeredAt || d.created_at || d.registeredAt || new Date().toISOString();
+    const pickTime = meta.pickedAt || d.pickedAt || null;
+    const delTime = meta.deliveredAt || d.deliveredAt || null;
+
+    const journeySteps: JourneyStep[] = [
+      {
+        key: "REGISTERED",
+        title: "Order Registered",
+        subtitle: "Order received and queued for staging",
+        timestamp: regTime,
+        isCompleted: true,
+        isActive: status === "REGISTERED"
+      },
+      {
+        key: "PROCESSING",
+        title: "Processing at Warehouse",
+        subtitle: "Cargo staged and verified at loading dock",
+        timestamp: pickTime || (status !== "REGISTERED" ? regTime : null),
+        isCompleted: status === "PICKED_AND_LOADED" || status === "IN_TRANSIT" || status === "DELIVERED",
+        isActive: status === "PICKED_AND_LOADED"
+      },
+      {
+        key: "OUT_FOR_DELIVERY",
+        title: "Out for Delivery",
+        subtitle: "Flatbed dispatched on route to project site",
+        timestamp: (status === "IN_TRANSIT" || status === "DELIVERED") ? (pickTime || regTime) : null,
+        isCompleted: status === "DELIVERED",
+        isActive: status === "IN_TRANSIT"
+      },
+      {
+        key: "DELIVERED",
+        title: "Delivered",
+        subtitle: "Drop-off completed and receipt signed",
+        timestamp: delTime,
+        isCompleted: status === "DELIVERED",
+        isActive: status === "DELIVERED"
+      }
+    ];
+
+    return {
+      id: d.id,
+      trackingNumber,
+      customerEmail: d.customerEmail || d.customer_email || meta.customerEmail,
+      customerName,
+      destination,
+      originBranch,
+      orderNumber,
+      status,
+      registeredAt: regTime,
+      scheduledDate: d.scheduledDate || d.scheduled_date || meta.scheduledDate,
+      scheduledSlot: d.scheduledSlot || d.scheduled_slot || meta.scheduledSlot,
+      pickedAt: pickTime,
+      deliveredAt: delTime,
+      customerSignature: meta.customerSignature || d.customerSignature || null,
+      deliveryPhotos: meta.deliveryPhotos || (meta.deliveryPhoto ? [meta.deliveryPhoto] : (d.deliveryPhotos || [])),
+      destinationNotes: meta.destinationNotes || d.destinationNotes || null,
+      journeySteps,
+      truck: d.truck || (d.assignedTruck ? {
+        id: d.assignedTruck,
+        name: d.assignedTruck,
+        driver: d.assignedDriver || "Assigned Driver",
+        type: "Curtain-side Flatbed",
+        lat: 44.6855,
+        lng: -63.5825
+      } : null)
+    };
+  };
+
   const fetchTrackingDetails = async (trackingCode: string) => {
     const clean = trackingCode.trim();
     if (!clean) return;
@@ -117,42 +204,155 @@ export default function CustomerTrackingPortal() {
     setIsLoading(true);
     setErrorMessage(null);
 
+    // 1. Try serverless endpoint /api/tracking/:clean
     try {
       const res = await fetch(`/api/tracking/${encodeURIComponent(clean)}`);
-      const json = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const json = await res.json();
+        if (json?.success && json?.delivery) {
+          setTrackingData(json.delivery);
+          setActiveTrackingNumber(json.delivery.trackingNumber || clean);
+          setErrorMessage(null);
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch (_) {}
 
-      if (json.success && json.delivery) {
-        setTrackingData(json.delivery);
-        setActiveTrackingNumber(json.delivery.trackingNumber || clean);
-        setErrorMessage(null);
-      } else {
-        // Fallback: search query endpoint
-        const searchRes = await fetch(`/api/tracking-search?q=${encodeURIComponent(clean)}`);
+    // 2. Try search endpoint /api/tracking-search?q=:clean
+    try {
+      const searchRes = await fetch(`/api/tracking-search?q=${encodeURIComponent(clean)}`);
+      const searchType = searchRes.headers.get("content-type") || "";
+      if (searchRes.ok && searchType.includes("application/json")) {
         const searchJson = await searchRes.json();
-        
-        if (searchJson.success && searchJson.results && searchJson.results.length > 0) {
+        if (searchJson?.success && searchJson.results && searchJson.results.length > 0) {
           const first = searchJson.results[0];
           const fullRes = await fetch(`/api/tracking/${encodeURIComponent(first.trackingNumber || first.id)}`);
-          const fullJson = await fullRes.json();
-          if (fullJson.success && fullJson.delivery) {
-            setTrackingData(fullJson.delivery);
-            setActiveTrackingNumber(fullJson.delivery.trackingNumber || first.trackingNumber);
-            setErrorMessage(null);
-            setIsLoading(false);
-            return;
+          const fullType = fullRes.headers.get("content-type") || "";
+          if (fullRes.ok && fullType.includes("application/json")) {
+            const fullJson = await fullRes.json();
+            if (fullJson?.success && fullJson.delivery) {
+              setTrackingData(fullJson.delivery);
+              setActiveTrackingNumber(fullJson.delivery.trackingNumber || first.trackingNumber);
+              setErrorMessage(null);
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Resilient Direct Supabase Fallback (ensures live tracking functions even if server is offline)
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        const cleanParam = clean.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+        // Direct query on deliveries table
+        const { data: dbMatches } = await supabase
+          .from("deliveries")
+          .select("*")
+          .or(`tracking_number.ilike.${clean},id.eq.${clean},orderNumber.ilike.${clean}`)
+          .limit(10);
+
+        if (dbMatches && dbMatches.length > 0) {
+          const formatted = formatRawDelivery(dbMatches[0], clean);
+          setTrackingData(formatted);
+          setActiveTrackingNumber(formatted.trackingNumber);
+          setErrorMessage(null);
+          setIsLoading(false);
+          return;
+        }
+
+        // Query by scanning all recent deliveries table rows
+        const { data: allDels } = await supabase
+          .from("deliveries")
+          .select("*")
+          .order("id", { ascending: false })
+          .limit(150);
+
+        if (allDels && allDels.length > 0) {
+          for (const d of allDels) {
+            const dId = String(d.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const dTrack = String(d.tracking_number || d.trackingNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const dOrder = String(d.orderNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const dEmail = String(d.customer_email || "").toLowerCase().trim();
+
+            if (dTrack === cleanParam || dId === cleanParam || dOrder === cleanParam || dEmail === clean.toLowerCase() || dTrack.includes(cleanParam)) {
+              const formatted = formatRawDelivery(d, clean);
+              setTrackingData(formatted);
+              setActiveTrackingNumber(formatted.trackingNumber);
+              setErrorMessage(null);
+              setIsLoading(false);
+              return;
+            }
           }
         }
 
-        setTrackingData(null);
-        setErrorMessage(json.error || `No delivery found matching "${clean}". Please verify your tracking number or sales order number.`);
+        // Check kv_store tenant states
+        const { data: kvStates } = await supabase
+          .from("kv_store_8405be07")
+          .select("value")
+          .like("key", "%tenant_state%");
+
+        if (kvStates) {
+          for (const row of kvStates) {
+            const dels = row.value?.deliveries || row.value?.state?.deliveries || [];
+            for (const d of dels) {
+              const dId = String(d.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+              const dTrack = String(d.trackingNumber || d.tracking_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+              const dOrder = String(d.orderNumber || d.invoiceNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (dTrack === cleanParam || dId === cleanParam || dOrder === cleanParam || dTrack.includes(cleanParam) || cleanParam.includes(dTrack)) {
+                const formatted = formatRawDelivery(d, clean);
+                setTrackingData(formatted);
+                setActiveTrackingNumber(formatted.trackingNumber);
+                setErrorMessage(null);
+                setIsLoading(false);
+                return;
+              }
+            }
+          }
+        }
       }
-    } catch (err: any) {
-      console.error('Tracking fetch error:', err);
-      setTrackingData(null);
-      setErrorMessage('Unable to connect to the tracking server. Please check your network connection and try again.');
-    } finally {
-      setIsLoading(false);
+    } catch (sbErr) {
+      console.warn("Direct Supabase tracking fallback notice:", sbErr);
     }
+
+    // 4. LocalStorage cache fallback
+    try {
+      const cleanParam = clean.toLowerCase().replace(/[^a-z0-9]/g, "");
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i) || "";
+        if (key.includes("deliveries")) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              for (const d of parsed) {
+                const dId = String(d.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dTrack = String(d.trackingNumber || d.tracking_number || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dOrder = String(d.orderNumber || d.invoiceNumber || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                if (dTrack === cleanParam || dId === cleanParam || dOrder === cleanParam || dTrack.includes(cleanParam) || cleanParam.includes(dTrack)) {
+                  const formatted = formatRawDelivery(d, clean);
+                  setTrackingData(formatted);
+                  setActiveTrackingNumber(formatted.trackingNumber);
+                  setErrorMessage(null);
+                  setIsLoading(false);
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Not found
+    setTrackingData(null);
+    setErrorMessage(`No delivery record found matching "${clean}". Please verify your tracking number or search using your ticket or invoice reference.`);
+    setIsLoading(false);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
