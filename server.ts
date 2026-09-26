@@ -16,7 +16,7 @@ import os from 'os';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { GoogleGenAI, Type } from "@google/genai";
-import { registerLogisticsServer, sendSystemEmail, getSmtpConfig } from "./src/server/logistics-server";
+import { registerLogisticsServer, sendSystemEmail, getSmtpConfig, resolveTenantBranding, buildTenantDeliveryEmailHtml } from "./src/server/logistics-server";
 import {
   resolveInventoryTitles,
   extractBuildingDimensions,
@@ -2234,7 +2234,20 @@ async function startServer() {
   // Top-level Resend Delivery Email Endpoints (guaranteed active in LIVE production server)
   const handleTopLevelResendEmail = async (req: any, res: any) => {
     try {
-      const { deliveryId, customerEmail, trackingNumber, customerName, destinationAddress, status } = req.body || {};
+      const { 
+        deliveryId, 
+        customerEmail, 
+        trackingNumber, 
+        customerName, 
+        destinationAddress, 
+        status,
+        tenantId,
+        tenantName,
+        tenantCode,
+        tenantBadge,
+        tenantColor,
+        originBranchName
+      } = req.body || {};
       let emailToUse = (customerEmail || "").trim();
       if (!emailToUse || !emailToUse.includes("@")) {
         if (customerName?.toLowerCase().includes("campbell") || deliveryId === "DEL-300908") {
@@ -2254,36 +2267,36 @@ async function startServer() {
       const proto = req.protocol === "https" || req.get?.("x-forwarded-proto") === "https" ? "https" : "http";
       const trackingLink = `${proto}://${host}/track?num=${encodeURIComponent(trackingNumToUse)}`;
 
-      console.log(`[TopLevel Resend Email] Dispatching for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse}`);
+      // Resolve Tenant Branding for the sending tenant's shipping department
+      const branding = resolveTenantBranding({
+        tenantId,
+        tenantName,
+        tenantCode,
+        tenantBadge,
+        tenantColor,
+        originBranchName
+      });
+
+      console.log(`[TopLevel Resend Email] Dispatching for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse} (Tenant: ${branding.tenantName}, Sender: ${branding.departmentName})`);
 
       const smtpCfg = getSmtpConfig();
-      console.log(`[TopLevel Resend Email] SMTP Configured Status: ${smtpCfg.isConfigured} (Host: ${smtpCfg.smtpHost}, User: ${smtpCfg.smtpUser})`);
+      const senderAddress = smtpCfg.smtpUser || "support@prospacescrm.ca";
+      const fromHeader = `"${branding.departmentName}" <${senderAddress}>`;
 
-      const emailSubject = `[ProSpaces Logistics] Delivery Tracking: Ticket #${deliveryId || trackingNumToUse}`;
-      const emailHtml = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
-          <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">
-            <h1 style="color: #1e3a8a; font-size: 22px; margin: 0 0 6px 0; font-weight: 800;">ProSpaces Logistics</h1>
-            <p style="color: #64748b; font-size: 13px; margin: 0; text-transform: uppercase; font-weight: 600;">Delivery Tracking & Status Notification</p>
-          </div>
-          <p style="font-size: 15px; line-height: 1.5; color: #334155;">Hello <strong>${customerName || "Valued Customer"}</strong>,</p>
-          <p style="font-size: 14px; line-height: 1.5; color: #475569;">Your delivery order <strong>${deliveryId || trackingNumToUse}</strong> is dispatched. You can track live driver location and transit progress below.</p>
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-            <p style="margin: 4px 0;"><strong>Tracking Number:</strong> <span style="font-family:monospace;">${trackingNumToUse}</span></p>
-            <p style="margin: 4px 0;"><strong>Ticket ID:</strong> ${deliveryId || "N/A"}</p>
-            ${destinationAddress ? `<p style="margin: 4px 0;"><strong>Destination:</strong> ${destinationAddress}</p>` : ''}
-            <p style="margin: 4px 0;"><strong>Status:</strong> ${status || 'IN TRANSIT'}</p>
-          </div>
-          <div style="text-align: center; margin: 28px 0;">
-            <a href="${trackingLink}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; display: inline-block;">Track Your Delivery Live &rarr;</a>
-          </div>
-          <p style="font-size: 13px; color: #64748b; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-            Or paste this link into your browser: <a href="${trackingLink}" style="color: #2563eb;">${trackingLink}</a>
-          </p>
-        </div>
-      `;
+      const emailSubject = `[${branding.tenantName} Shipping] Delivery Tracking: Order #${deliveryId || trackingNumToUse}`;
+      const emailHtml = buildTenantDeliveryEmailHtml({
+        branding,
+        deliveryId,
+        trackingNumber: trackingNumToUse,
+        customerName,
+        destinationAddress,
+        status,
+        trackingLink,
+        originBranchName: branding.originBranchName
+      });
 
       const mailResult = await sendSystemEmail({
+        from: fromHeader,
         to: emailToUse,
         subject: emailSubject,
         html: emailHtml

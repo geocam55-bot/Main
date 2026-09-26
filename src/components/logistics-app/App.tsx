@@ -3680,6 +3680,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               branches={branches}
               users={users}
               currentUser={currentUser}
+              currentTenant={currentTenant}
               manualFullTrucks={manualFullTrucks}
               onUpdateManualFullTrucks={handleUpdateManualFullTrucks}
             />

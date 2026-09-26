@@ -1278,6 +1278,178 @@ export interface SendEmailOptions {
   from?: string;
 }
 
+export interface TenantBranding {
+  tenantId: string;
+  tenantName: string;
+  shortName: string;
+  departmentName: string;
+  badge: string;
+  primaryHex: string;
+  originBranchName?: string;
+}
+
+export function resolveTenantBranding(data?: {
+  tenantId?: string;
+  tenantName?: string;
+  tenantCode?: string;
+  tenantBadge?: string;
+  tenantColor?: string;
+  originBranchName?: string;
+  delivery?: any;
+}): TenantBranding {
+  const tid = (data?.tenantId || data?.delivery?.tenantId || "").toLowerCase().trim();
+  let name = (data?.tenantName || "").trim();
+  let code = (data?.tenantCode || "").trim();
+  let badge = (data?.tenantBadge || "").trim();
+  let color = (data?.tenantColor || "").trim();
+
+  // If tenant indicates RONA or empty fallback for default tenant
+  if (tid.includes("rona") || name.toLowerCase().includes("rona") || (!name && !tid)) {
+    name = "RONA Atlantic";
+    code = "RONA";
+    badge = "🏢";
+    color = "#0055a5";
+  } else if (!name) {
+    name = "Shipping & Logistics";
+    code = "DEPOT";
+    badge = "🚚";
+    color = "#1e3a8a";
+  }
+
+  // Normalize color to hex
+  let primaryHex = "#0055a5";
+  if (color === "emerald" || color === "green") primaryHex = "#059669";
+  else if (color === "indigo") primaryHex = "#4f46e5";
+  else if (color === "slate" || color === "gray") primaryHex = "#334155";
+  else if (color.startsWith("#")) primaryHex = color;
+  else if (color === "blue") primaryHex = "#0055a5";
+
+  let cleanName = name.replace(/\s+Logistics$/i, '').trim();
+  if (!cleanName) cleanName = name;
+
+  const shortName = code || cleanName.split(' ')[0] || "Store";
+  const departmentName = `${cleanName} - Shipping Department`;
+
+  return {
+    tenantId: tid || "rona_atlantic",
+    tenantName: cleanName,
+    shortName,
+    departmentName,
+    badge: badge || "🏢",
+    primaryHex,
+    originBranchName: data?.originBranchName || data?.delivery?.originBranch || ""
+  };
+}
+
+export function buildTenantDeliveryEmailHtml(params: {
+  branding: TenantBranding;
+  deliveryId: string;
+  trackingNumber: string;
+  customerName?: string;
+  destinationAddress?: string;
+  status?: string;
+  trackingLink: string;
+  originBranchName?: string;
+}) {
+  const { branding, deliveryId, trackingNumber, customerName, destinationAddress, status, trackingLink, originBranchName } = params;
+  const ticketRef = deliveryId || trackingNumber || "N/A";
+  const brandColor = branding.primaryHex;
+  const tenantName = branding.tenantName;
+  const shortName = branding.shortName;
+  const facilityDisplay = originBranchName || branding.originBranchName || "";
+
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 620px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); color: #0f172a;">
+      <!-- Tenant Branded Header -->
+      <div style="background-color: ${brandColor}; padding: 22px 28px; text-align: left;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="vertical-align: middle;">
+              <span style="font-size: 24px; vertical-align: middle; margin-right: 8px;">${branding.badge}</span>
+              <span style="color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: -0.4px; vertical-align: middle;">${tenantName}</span>
+            </td>
+            <td style="text-align: right; vertical-align: middle;">
+              <span style="background: rgba(255, 255, 255, 0.2); color: #ffffff; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.6px; display: inline-block;">
+                Shipping Department
+              </span>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Main Body -->
+      <div style="padding: 28px 28px 24px 28px;">
+        <h2 style="font-size: 18px; margin: 0 0 12px 0; color: #0f172a; font-weight: 700; letter-spacing: -0.2px;">
+          Delivery Tracking &amp; Shipment Status
+        </h2>
+        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 14px 0;">
+          Hello <strong>${customerName || "Valued Customer"}</strong>,
+        </p>
+        <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+          Your order <strong>#${ticketRef}</strong> has been scheduled and processed by the <strong>${tenantName} Shipping Department</strong>. You can follow your live driver location, transit progress, and delivery confirmation via our secure tracking portal.
+        </p>
+
+        <!-- Order Detail Card -->
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid ${brandColor}; border-radius: 8px; padding: 18px 20px; margin: 22px 0;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; width: 140px; font-weight: 500;">Tracking Number:</td>
+              <td style="padding: 6px 0; font-weight: 700; color: #0f172a; font-family: monospace; font-size: 15px;">${trackingNumber}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Order Reference:</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #0f172a;">${ticketRef}</td>
+            </tr>
+            ${facilityDisplay ? `
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Shipping Facility:</td>
+              <td style="padding: 6px 0; color: #1e293b; font-weight: 600;">${facilityDisplay}</td>
+            </tr>` : ''}
+            ${destinationAddress ? `
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Delivery Address:</td>
+              <td style="padding: 6px 0; color: #334155;">${destinationAddress}</td>
+            </tr>` : ''}
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Current Status:</td>
+              <td style="padding: 6px 0;">
+                <span style="background-color: #e0f2fe; color: #0284c7; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase;">
+                  ${status || 'IN TRANSIT'}
+                </span>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Call to Action Button -->
+        <div style="text-align: center; margin: 28px 0 24px 0;">
+          <a href="${trackingLink}" style="background-color: ${brandColor}; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+            Track Your Delivery with ${shortName} &rarr;
+          </a>
+        </div>
+
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 22px 0 0 0; padding-top: 16px; border-top: 1px solid #f1f5f9;">
+          If the tracking button above is not clickable, copy and paste this address into your web browser:<br />
+          <a href="${trackingLink}" style="color: ${brandColor}; word-break: break-all; text-decoration: underline;">${trackingLink}</a>
+        </p>
+      </div>
+
+      <!-- Tenant Footer -->
+      <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 24px; font-size: 12px; color: #64748b; text-align: center; line-height: 1.6;">
+        <p style="margin: 0 0 4px 0; font-weight: 700; color: #334155;">
+          ${tenantName} &bull; Shipping &amp; Logistics Department
+        </p>
+        <p style="margin: 0 0 4px 0;">
+          This tracking notification was dispatched on behalf of your local ${shortName} store shipping counter.
+        </p>
+        <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+          Order #${ticketRef} &bull; For questions or delivery changes, please contact your store customer service counter.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
 export function getSmtpConfig() {
   let smtpHost = (process.env.SMTP_HOST || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
   const smtpUser = (process.env.SMTP_USER || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
@@ -4138,44 +4310,71 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       const baseUrl = resolveAppBaseUrl(req);
       const trackingNumToUse = trackingNumber || deliveryId || "DEL-GENERIC";
       const trackingLink = `${baseUrl}/track?num=${encodeURIComponent(trackingNumToUse)}`;
-      const subject = `[ProSpaces Logistics] Delivery Status Update: ${milestone.replace(/_/g, ' ')} (${trackingNumToUse})`;
+      
+      const branding = resolveTenantBranding({
+        tenantId: req.body?.tenantId,
+        tenantName: req.body?.tenantName,
+        tenantCode: req.body?.tenantCode,
+        tenantBadge: req.body?.tenantBadge,
+        tenantColor: req.body?.tenantColor
+      });
+
+      const subject = `[${branding.tenantName} Shipping] Delivery Status Update: ${milestone.replace(/_/g, ' ')} (${trackingNumToUse})`;
 
       // Also dispatch real email notification if customer email is provided
       try {
         const notifHtml = `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
-            <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">
-              <h1 style="color: #1e3a8a; font-size: 22px; margin: 0 0 6px 0; font-weight: 800;">ProSpaces Logistics</h1>
-              <p style="color: #64748b; font-size: 13px; margin: 0; text-transform: uppercase; font-weight: 600;">Delivery Milestone Update</p>
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 620px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); color: #0f172a;">
+            <div style="background-color: ${branding.primaryHex}; padding: 20px 24px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="vertical-align: middle;">
+                    <span style="font-size: 22px; vertical-align: middle; margin-right: 8px;">${branding.badge}</span>
+                    <span style="color: #ffffff; font-size: 20px; font-weight: 800; letter-spacing: -0.3px; vertical-align: middle;">${branding.tenantName}</span>
+                  </td>
+                  <td style="text-align: right; vertical-align: middle;">
+                    <span style="background: rgba(255, 255, 255, 0.2); color: #ffffff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; text-transform: uppercase;">
+                      Shipping Department
+                    </span>
+                  </td>
+                </tr>
+              </table>
             </div>
-            <p style="font-size: 15px; color: #334155;">Hello,</p>
-            <p style="font-size: 14px; color: #475569;">
-              Your delivery order <strong>${deliveryId || trackingNumToUse}</strong> has reached a new milestone:
-            </p>
-            <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
-              <span style="font-size: 16px; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px;">
-                ${milestone.replace(/_/g, ' ')}
-              </span>
-              ${note ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #3b82f6;">${note}</p>` : ''}
+
+            <div style="padding: 24px 28px;">
+              <p style="font-size: 15px; color: #334155; margin: 0 0 12px 0;">Hello,</p>
+              <p style="font-size: 14px; color: #475569; margin: 0 0 18px 0;">
+                Your delivery order <strong>#${deliveryId || trackingNumToUse}</strong> has reached an update milestone with the <strong>${branding.tenantName} Shipping Department</strong>:
+              </p>
+              <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid ${branding.primaryHex}; border-radius: 8px; padding: 16px; margin: 18px 0; text-align: center;">
+                <span style="font-size: 16px; font-weight: 800; color: #15803d; text-transform: uppercase; letter-spacing: 0.5px;">
+                  ${milestone.replace(/_/g, ' ')}
+                </span>
+                ${note ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #166534;">${note}</p>` : ''}
+              </div>
+              <p style="font-size: 14px; color: #475569;">
+                Tracking Number: <strong style="font-family: monospace;">${trackingNumToUse}</strong>
+              </p>
+              <div style="margin: 24px 0; text-align: center;">
+                <a href="${trackingLink}" style="background-color: ${branding.primaryHex}; color: #ffffff; text-decoration: none; padding: 12px 26px; border-radius: 8px; font-weight: 700; display: inline-block;">
+                  View Live Delivery Tracker &rarr;
+                </a>
+              </div>
+              <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
+                Direct tracking link: <br />
+                <a href="${trackingLink}" style="color: ${branding.primaryHex}; word-break: break-all;">${trackingLink}</a>
+              </p>
             </div>
-            <p style="font-size: 14px; color: #475569;">
-              Tracking Number: <strong>${trackingNumToUse}</strong>
-            </p>
-            <div style="margin: 24px 0; text-align: center;">
-              <a href="${trackingLink}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 700; display: inline-block;">
-                View Live Delivery Tracker &rarr;
-              </a>
-            </div>
-            <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 18px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
-              Direct tracking link: <br />
-              <a href="${trackingLink}" style="color: #2563eb; word-break: break-all;">${trackingLink}</a>
-            </p>
-            <div style="margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 14px; font-size: 12px; color: #94a3b8; text-align: center;">
-              ProSpaces Logistics Fleet &bull; support@prospacescrm.ca
+            <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 20px; font-size: 12px; color: #64748b; text-align: center;">
+              <strong>${branding.tenantName} &bull; Shipping &amp; Logistics Department</strong><br />
+              Ticket #${deliveryId || trackingNumToUse} &bull; For inquiries, contact your local store customer desk.
             </div>
           </div>
         `;
+        const smtpCfg = getSmtpConfig();
+        const senderAddress = smtpCfg.smtpUser || "support@prospacescrm.ca";
         await sendSystemEmail({
+          from: `"${branding.departmentName}" <${senderAddress}>`,
           to: customerEmail,
           subject,
           html: notifHtml
@@ -4213,7 +4412,20 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
   // Resend Delivery Email Handler
   const handleResendDeliveryEmail = async (req: any, res: any) => {
     try {
-      const { deliveryId, customerEmail, trackingNumber, customerName, destinationAddress, status } = req.body || {};
+      const { 
+        deliveryId, 
+        customerEmail, 
+        trackingNumber, 
+        customerName, 
+        destinationAddress, 
+        status,
+        tenantId,
+        tenantName,
+        tenantCode,
+        tenantBadge,
+        tenantColor,
+        originBranchName
+      } = req.body || {};
       const supabaseInstance = getSupabase(req);
 
       let emailToUse = (customerEmail || "").trim();
@@ -4234,69 +4446,37 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       const baseUrl = resolveAppBaseUrl(req);
       const trackingLink = `${baseUrl}/track?num=${encodeURIComponent(trackingNumToUse)}`;
 
-      console.log(`[Resend Delivery Email] Preparing dispatch for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse} (Resolved Base: ${baseUrl})`);
+      // Resolve Tenant Branding so it carries the look, feel and identity of the sending tenant's shipping department
+      const branding = resolveTenantBranding({
+        tenantId,
+        tenantName,
+        tenantCode,
+        tenantBadge,
+        tenantColor,
+        originBranchName
+      });
 
-      const emailSubject = `[ProSpaces Logistics] Delivery Tracking: Ticket #${deliveryId || trackingNumToUse}`;
-      const emailHtml = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
-          <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">
-            <h1 style="color: #1e3a8a; font-size: 22px; margin: 0 0 6px 0; font-weight: 800; letter-spacing: -0.5px;">ProSpaces Logistics</h1>
-            <p style="color: #64748b; font-size: 13px; margin: 0; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Delivery Tracking & Status Notification</p>
-          </div>
+      console.log(`[Resend Delivery Email] Dispatching for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse} (Tenant: ${branding.tenantName}, Sender: ${branding.departmentName})`);
 
-          <p style="font-size: 15px; line-height: 1.5; color: #334155;">
-            Hello <strong>${customerName || "Valued Customer"}</strong>,
-          </p>
-          <p style="font-size: 14px; line-height: 1.5; color: #475569;">
-            Your delivery order <strong>${deliveryId || trackingNumToUse}</strong> is in our logistics operations queue. You can track live driver location, transit progress, and proof-of-delivery photos directly via our secure portal.
-          </p>
+      const emailSubject = `[${branding.tenantName} Shipping] Delivery Tracking: Order #${deliveryId || trackingNumToUse}`;
+      const emailHtml = buildTenantDeliveryEmailHtml({
+        branding,
+        deliveryId,
+        trackingNumber: trackingNumToUse,
+        customerName,
+        destinationAddress,
+        status,
+        trackingLink,
+        originBranchName: branding.originBranchName
+      });
 
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; width: 140px;">Tracking Number:</td>
-                <td style="padding: 6px 0; font-weight: 700; color: #0f172a; font-family: monospace;">${trackingNumToUse}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b;">Ticket Reference:</td>
-                <td style="padding: 6px 0; font-weight: 600; color: #0f172a;">${deliveryId || "N/A"}</td>
-              </tr>
-              ${destinationAddress ? `
-              <tr>
-                <td style="padding: 6px 0; color: #64748b;">Destination:</td>
-                <td style="padding: 6px 0; color: #334155;">${destinationAddress}</td>
-              </tr>` : ''}
-              <tr>
-                <td style="padding: 6px 0; color: #64748b;">Current Status:</td>
-                <td style="padding: 6px 0;">
-                  <span style="background-color: #dbeafe; color: #1e40af; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 9999px; text-transform: uppercase;">
-                    ${status || 'IN TRANSIT'}
-                  </span>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <div style="text-align: center; margin: 28px 0;">
-            <a href="${trackingLink}" style="background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
-              Track Your Delivery Live &rarr;
-            </a>
-          </div>
-
-          <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-            If the button above does not open the tracking portal, copy and paste this link into your browser:<br />
-            <a href="${trackingLink}" style="color: #2563eb; word-break: break-all;">${trackingLink}</a>
-          </p>
-
-          <div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8; text-align: center;">
-            <p style="margin: 0 0 4px 0;">ProSpaces Fleet & Logistics Operations &bull; Direct Support: support@prospacescrm.ca</p>
-            <p style="margin: 0;">This automated notification was dispatched for Ticket #${deliveryId || trackingNumToUse}.</p>
-          </div>
-        </div>
-      `;
+      const smtpCfg = getSmtpConfig();
+      const senderAddress = smtpCfg.smtpUser || "support@prospacescrm.ca";
+      const fromHeader = `"${branding.departmentName}" <${senderAddress}>`;
 
       // Perform real SMTP email dispatch
       const mailResult = await sendSystemEmail({
+        from: fromHeader,
         to: emailToUse,
         subject: emailSubject,
         html: emailHtml

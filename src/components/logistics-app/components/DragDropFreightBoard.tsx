@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { DeliveryRecord, Truck, Branch, User as AppUser } from '../types';
+import type { DeliveryRecord, Truck, Branch, User as AppUser, Tenant } from '../types';
 import { DeliveryStatus, getDeliveryPhotos } from '../types';
 import { 
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
@@ -20,6 +20,7 @@ interface DragDropFreightBoardProps {
   onAddOrUpdateDelivery: (record: DeliveryRecord) => void;
   branches?: Branch[];
   users?: AppUser[];
+  currentTenant?: Tenant | null;
   onCloseModal?: () => void;
   manualFullTrucks?: Record<string, boolean>;
   onUpdateManualFullTrucks?: (updated: Record<string, boolean>) => void;
@@ -311,6 +312,7 @@ export default function DragDropFreightBoard({
   onAddOrUpdateDelivery,
   branches = [],
   users = [],
+  currentTenant,
   manualFullTrucks,
   onUpdateManualFullTrucks,
   isViewOnly = false
@@ -2938,7 +2940,10 @@ function UnassignedDeliveryCard({
                     (delivery as any).customer_email = targetEmail;
                   }
 
-                  toast.info(`Dispatching tracking email for #${delivery.id} to ${targetEmail}...`);
+                  const originBranchName = branches.find(b => b.id === delivery.originBranch)?.name || delivery.originBranch || '';
+                  const tenantDisplayName = currentTenant?.name || 'RONA Atlantic';
+
+                  toast.info(`Dispatching ${tenantDisplayName} tracking email for #${delivery.id} to ${targetEmail}...`);
                   try {
                     let res: Response;
                     try {
@@ -2952,7 +2957,13 @@ function UnassignedDeliveryCard({
                           customerName: delivery.customerName || 'Valued Customer',
                           destinationAddress: delivery.deliveryAddress,
                           status: delivery.status,
-                          clientOrigin: typeof window !== 'undefined' ? window.location.origin : ''
+                          clientOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+                          tenantId: currentTenant?.id || delivery.tenantId || 'rona_atlantic',
+                          tenantName: currentTenant?.name || 'RONA Atlantic',
+                          tenantCode: currentTenant?.code || 'RONA',
+                          tenantBadge: currentTenant?.logoBadge || '🏢',
+                          tenantColor: currentTenant?.primaryColor || 'blue',
+                          originBranchName: originBranchName
                         })
                       });
                     } catch {
@@ -2972,7 +2983,7 @@ function UnassignedDeliveryCard({
                     }
 
                     if (data.success !== false) {
-                      toast.success(`✅ Dispatched to ${data.recipient || targetEmail}`);
+                      toast.success(`✅ Dispatched from ${tenantDisplayName} Shipping Dept to ${data.recipient || targetEmail}`);
                     } else {
                       toast.error(`⚠️ Delivery failed: ${data.error || 'Server error'}`);
                     }

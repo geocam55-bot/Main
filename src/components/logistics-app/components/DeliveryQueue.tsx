@@ -1,7 +1,7 @@
 import { formatPhoneNumber } from '../lib/formatters';
 import { useState, FormEvent } from 'react';
 import { toast } from 'sonner';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, getDeliveryPhotos, AdditionalDeliveryStop, generateTrackingNumber } from '../types';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, Tenant, getDeliveryPhotos, AdditionalDeliveryStop, generateTrackingNumber } from '../types';
 import { 
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
@@ -19,6 +19,7 @@ interface DeliveryQueueProps {
   branches?: Branch[];
   users: AppUser[];
   currentUser?: AppUser;
+  currentTenant?: Tenant | null;
   manualFullTrucks?: Record<string, boolean>;
   onUpdateManualFullTrucks?: (updated: Record<string, boolean>) => void;
 }
@@ -447,6 +448,7 @@ export default function DeliveryQueue({
   branches, 
   users,
   currentUser,
+  currentTenant,
   manualFullTrucks,
   onUpdateManualFullTrucks
 }: DeliveryQueueProps) {
@@ -513,9 +515,13 @@ export default function DeliveryQueue({
         }
       }
 
+      const originBranchName = BRANCHES.find(b => b.id === delivery.originBranch)?.name || delivery.originBranch || '';
+      const tenantDisplayName = currentTenant?.name || 'RONA Atlantic';
+      const tenantShortName = currentTenant?.code || 'RONA';
+
       setEmailStatusBanner({
         message: `Dispatched tracking email for Ticket ${delivery.id} to ${emailTarget}...`,
-        details: `Connecting to email dispatch & diagnostic trace engine via IONOS SMTP relay...`,
+        details: `Connecting to ${tenantDisplayName} Shipping Dept email dispatch via IONOS SMTP relay...`,
         type: 'success'
       });
 
@@ -531,7 +537,13 @@ export default function DeliveryQueue({
             customerName: delivery.customerName || 'Valued Customer',
             destinationAddress: delivery.deliveryAddress,
             status: delivery.status,
-            clientOrigin: typeof window !== 'undefined' ? window.location.origin : ''
+            clientOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+            tenantId: currentTenant?.id || delivery.tenantId || 'rona_atlantic',
+            tenantName: currentTenant?.name || 'RONA Atlantic',
+            tenantCode: currentTenant?.code || 'RONA',
+            tenantBadge: currentTenant?.logoBadge || '🏢',
+            tenantColor: currentTenant?.primaryColor || 'blue',
+            originBranchName: originBranchName
           })
         });
       } catch (networkErr) {
@@ -1214,6 +1226,7 @@ export default function DeliveryQueue({
           onAddOrUpdateDelivery={onAddOrUpdateDelivery}
           branches={BRANCHES}
           users={users}
+          currentTenant={currentTenant}
           manualFullTrucks={manualFullTrucks}
           onUpdateManualFullTrucks={onUpdateManualFullTrucks}
           isViewOnly={isViewOnly}
