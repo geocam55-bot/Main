@@ -83,6 +83,31 @@ async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promis
   return window.fetch(input, init);
 }
 
+// Resilient localStorage wrapper to prevent QuotaExceededError crashes
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const originalSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = (key: string, value: string) => {
+      try {
+        originalSetItem(key, value);
+      } catch (err: any) {
+        console.warn(`[LocalStorage Quota Exceeded] Key "${key}" exceeded storage quota. Clearing old cache keys and retrying...`, err);
+        try {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && (k.startsWith('prospaces_deliveries_tenant_') || k.startsWith('prospaces_trucks_tenant_')) && k !== key) {
+              localStorage.removeItem(k);
+            }
+          }
+          originalSetItem(key, value);
+        } catch (retryErr) {
+          console.error(`[LocalStorage Quota Error] Failed to persist "${key}" after cache eviction:`, retryErr);
+        }
+      }
+    };
+  }
+} catch (e) {}
+
 const getThemeClasses = (color: string) => {
   // Always return the classic corporate blue styling to match previous design
   return {

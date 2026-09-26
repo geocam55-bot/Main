@@ -481,7 +481,38 @@ export default function DeliveryQueue({
 
   const handleResendEmail = async (delivery: DeliveryRecord) => {
     try {
-      const emailTarget = (delivery.customerEmail || (delivery as any).customer_email || '').trim() || 'customer@ronaatlantic.ca';
+      let emailTarget = (
+        delivery.customerEmail || 
+        (delivery as any).customer_email || 
+        (delivery as any).email || 
+        (delivery as any).contactEmail ||
+        (delivery as any).clientEmail ||
+        (delivery as any).customerInfo?.email ||
+        ''
+      ).trim();
+
+      if (!emailTarget || !emailTarget.includes('@')) {
+        const defaultPromptVal = delivery.customerName?.toLowerCase().includes('campbell') ? 'geocam55@gmail.com' : '';
+        const entered = window.prompt(
+          `Customer email address is not configured for Ticket #${delivery.id} (${delivery.customerName || 'Customer'}).\n\nPlease enter the customer's email address:`,
+          defaultPromptVal
+        );
+        if (!entered || !entered.trim() || !entered.includes('@')) {
+          toast.error("Valid customer email is required to send delivery tracking notification.");
+          return;
+        }
+        emailTarget = entered.trim();
+        delivery.customerEmail = emailTarget;
+        (delivery as any).customer_email = emailTarget;
+        if (onAddOrUpdateDelivery) {
+          onAddOrUpdateDelivery({
+            ...delivery,
+            customerEmail: emailTarget,
+            customer_email: emailTarget
+          });
+        }
+      }
+
       setEmailStatusBanner({
         message: `Dispatched tracking email for Ticket ${delivery.id} to ${emailTarget}...`,
         details: `Connecting to email dispatch & diagnostic trace engine via IONOS SMTP relay...`,

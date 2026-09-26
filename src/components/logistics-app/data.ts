@@ -132,6 +132,7 @@ export const DEFAULT_DELIVERIES: DeliveryRecord[] = [
     tenantId: 'rona_atlantic',
     orderNumber: '300908',
     customerName: 'GEORGE CAMPBELL',
+    customerEmail: 'geocam55@gmail.com',
     customerPhone: '902-476-8800',
     deliveryAddress: '17 SPARROW LANE  HUBLEY   NS B3Z 1A3',
     originBranch: 'RONA-03510',

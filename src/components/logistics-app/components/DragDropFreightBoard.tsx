@@ -2914,7 +2914,30 @@ function UnassignedDeliveryCard({
                 type="button"
                 onClick={async (e) => {
                   e.stopPropagation();
-                  const targetEmail = (delivery.customerEmail || (delivery as any).customer_email || '').trim() || 'customer@ronaatlantic.ca';
+                  let targetEmail = (
+                    delivery.customerEmail || 
+                    (delivery as any).customer_email || 
+                    (delivery as any).email || 
+                    (delivery as any).contactEmail ||
+                    (delivery as any).clientEmail ||
+                    ''
+                  ).trim();
+
+                  if (!targetEmail || !targetEmail.includes('@')) {
+                    const defaultVal = delivery.customerName?.toLowerCase().includes('campbell') ? 'geocam55@gmail.com' : '';
+                    const entered = window.prompt(
+                      `No customer email found for Ticket #${delivery.id} (${delivery.customerName || 'Customer'}).\n\nPlease enter the recipient's email address:`,
+                      defaultVal
+                    );
+                    if (!entered || !entered.trim() || !entered.includes('@')) {
+                      toast.error("Valid customer email is required to dispatch tracking link.");
+                      return;
+                    }
+                    targetEmail = entered.trim();
+                    delivery.customerEmail = targetEmail;
+                    (delivery as any).customer_email = targetEmail;
+                  }
+
                   toast.info(`Dispatching tracking email for #${delivery.id} to ${targetEmail}...`);
                   try {
                     let res: Response;
