@@ -2283,7 +2283,7 @@ async function startServer() {
       const senderAddress = smtpCfg.smtpUser || "support@prospacescrm.ca";
       const fromHeader = `"${branding.departmentName}" <${senderAddress}>`;
 
-      const emailSubject = `[${branding.tenantName} Shipping] Delivery Tracking: Order #${deliveryId || trackingNumToUse}`;
+      const emailSubject = `${branding.tenantName} Delivery Tracking - Order #${deliveryId || trackingNumToUse}`;
       const emailHtml = buildTenantDeliveryEmailHtml({
         branding,
         deliveryId,

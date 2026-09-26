@@ -1559,36 +1559,65 @@ export async function sendSystemEmail(options: SendEmailOptions): Promise<{
 
   try {
     const nodemailer = await import("nodemailer");
-    const isSecure = config.smtpPort === 465;
-    const transporter = nodemailer.createTransport({
-      host: config.smtpHost,
-      port: config.smtpPort,
-      secure: isSecure,
-      auth: {
-        user: config.smtpUser,
-        pass: config.smtpPass
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 20000
-    });
+    const senderEmail = (options.from || config.smtpFrom || config.smtpUser).replace(/.*<([^>]+)>.*/, '$1').trim();
+    const portsToTry = config.smtpPort === 465 ? [465, 587] : [587, 465];
+    let sendResult: any = null;
+    let lastError: any = null;
 
-    const info = await transporter.sendMail({
-      from: options.from || config.smtpFrom,
-      to: options.to,
-      subject: options.subject,
-      text: options.text || options.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-      html: options.html
-    });
+    for (const port of portsToTry) {
+      const isSecure = port === 465;
+      try {
+        const transporter = nodemailer.createTransport({
+          host: config.smtpHost,
+          port: port,
+          secure: isSecure,
+          auth: {
+            user: config.smtpUser,
+            pass: config.smtpPass
+          },
+          tls: {
+            rejectUnauthorized: false
+          },
+          connectionTimeout: 8000,
+          greetingTimeout: 6000,
+          socketTimeout: 12000
+        });
 
-    console.log(`[SMTP Success] Email successfully dispatched to ${options.to}. MessageId: ${info.messageId}`);
+        const info = await transporter.sendMail({
+          from: options.from || config.smtpFrom,
+          sender: senderEmail,
+          replyTo: senderEmail,
+          envelope: {
+            from: senderEmail,
+            to: [options.to]
+          },
+          to: options.to,
+          subject: options.subject,
+          text: options.text || options.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+          html: options.html,
+          headers: {
+            'X-Auto-Response-Suppress': 'OOF, AutoReply',
+            'Precedence': 'bulk'
+          }
+        });
+
+        sendResult = info;
+        break;
+      } catch (err) {
+        lastError = err;
+        console.warn(`[sendSystemEmail] Port ${port} failed, testing next port:`, err.message || err);
+      }
+    }
+
+    if (!sendResult) {
+      throw lastError || new Error("Failed connecting to SMTP transport on all ports.");
+    }
+
+    console.log(`[SMTP Success] Email successfully dispatched to ${options.to}. MessageId: ${sendResult.messageId}`);
     return {
       success: true,
       transport: "SMTP_LIVE_TRANSPORT",
-      messageId: info.messageId
+      messageId: sendResult.messageId
     };
   } catch (err: any) {
     console.error(`[SMTP Error] Failed sending email to ${options.to}:`, err);
@@ -4458,7 +4487,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
 
       console.log(`[Resend Delivery Email] Dispatching for Ticket ${deliveryId || trackingNumToUse} to ${emailToUse} (Tenant: ${branding.tenantName}, Sender: ${branding.departmentName})`);
 
-      const emailSubject = `[${branding.tenantName} Shipping] Delivery Tracking: Order #${deliveryId || trackingNumToUse}`;
+      const emailSubject = `${branding.tenantName} Delivery Tracking - Order #${deliveryId || trackingNumToUse}`;
       const emailHtml = buildTenantDeliveryEmailHtml({
         branding,
         deliveryId,
