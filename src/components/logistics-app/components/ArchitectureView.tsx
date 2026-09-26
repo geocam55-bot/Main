@@ -2670,7 +2670,7 @@ export default function ArchitectureView({
       registeredAt: new Date().toISOString(),
       pdfUrl: finalPdfUrl,
       documentType: selectedDocType,
-      destinationNotes: `[Automated PDF Capture - Type: ${selectedDocType}] PO#: ${recordId} | Supplier/Customer: ${customerVal} | Date: ${dateVal}. Matches OCR template regional Nova_Scotia_Regional_Core with confidence 98.5%.${finalPdfUrl ? ` Physical Document stored: ${finalPdfUrl}` : ''}`,
+      destinationNotes: undefined,
       history: [
         {
           status: DeliveryStatus.REGISTERED,

@@ -840,6 +840,30 @@ export default function DriverMobileApp({
       } catch (err) {
         console.warn('Supabase direct sync notice:', err);
       }
+
+      // 3. Automatically send delivery completion confirmation email to customer with driver photo
+      try {
+        const customerEmail = updated.customerEmail || (updated as any).customer_email;
+        if (customerEmail && customerEmail.includes('@')) {
+          await fetch('/api/v1/deliveries/resend-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              deliveryId: updated.id,
+              customerEmail: customerEmail,
+              trackingNumber: updated.trackingNumber || updated.id,
+              customerName: updated.customerName,
+              destinationAddress: updated.deliveryAddress,
+              status: 'DELIVERED',
+              tenantId: updated.tenantId || (driverUser as any)?.organization_id,
+              deliveryPhoto: cargoPhoto || photosArray[0] || undefined,
+              deliveryPhotos: photosArray
+            })
+          });
+        }
+      } catch (emailErr) {
+        console.warn('Automated delivery completion email notice:', emailErr);
+      }
     }
 
     setIsSubmittingPOD(false);
@@ -1059,7 +1083,7 @@ export default function DriverMobileApp({
                 </div>
               </div>
 
-              {/* Fast 1-Tap Demo Driver Quick-Select Chips */}
+              {/* Fast 1-Tap Driver Quick-Select Chips */}
               <div className="mb-4">
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-0.5">
                   Fast Driver Quick-Select:

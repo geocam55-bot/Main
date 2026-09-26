@@ -1350,13 +1350,17 @@ export function buildTenantDeliveryEmailHtml(params: {
   status?: string;
   trackingLink: string;
   originBranchName?: string;
+  deliveryPhoto?: string;
+  deliveryPhotos?: string[];
 }) {
-  const { branding, deliveryId, trackingNumber, customerName, destinationAddress, status, trackingLink, originBranchName } = params;
+  const { branding, deliveryId, trackingNumber, customerName, destinationAddress, status, trackingLink, originBranchName, deliveryPhoto, deliveryPhotos } = params;
   const ticketRef = deliveryId || trackingNumber || "N/A";
   const brandColor = branding.primaryHex;
   const tenantName = branding.tenantName;
   const shortName = branding.shortName;
   const facilityDisplay = originBranchName || branding.originBranchName || "";
+  const isDelivered = status === 'DELIVERED';
+  const photoUrl = deliveryPhoto || (Array.isArray(deliveryPhotos) && deliveryPhotos.length > 0 ? deliveryPhotos[0] : null);
 
   return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 620px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); color: #0f172a;">
@@ -1380,14 +1384,28 @@ export function buildTenantDeliveryEmailHtml(params: {
       <!-- Main Body -->
       <div style="padding: 28px 28px 24px 28px;">
         <h2 style="font-size: 18px; margin: 0 0 12px 0; color: #0f172a; font-weight: 700; letter-spacing: -0.2px;">
-          Delivery Tracking &amp; Shipment Status
+          ${isDelivered ? 'Delivery Confirmation &amp; Proof of Delivery' : 'Delivery Tracking &amp; Shipment Status'}
         </h2>
         <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 14px 0;">
           Hello <strong>${customerName || "Valued Customer"}</strong>,
         </p>
         <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
-          Your order <strong>#${ticketRef}</strong> has been scheduled and processed by the <strong>${tenantName} Shipping Department</strong>. You can follow your live driver location, transit progress, and delivery confirmation via our secure tracking portal.
+          ${isDelivered 
+            ? `Your order <strong>#${ticketRef}</strong> has been successfully delivered and signed. Below is your delivery confirmation and the proof of delivery photo captured on arrival by our driver.`
+            : `Your order <strong>#${ticketRef}</strong> has been scheduled and processed by the <strong>${tenantName} Shipping Department</strong>. You can follow your live driver location, transit progress, and delivery confirmation via our secure tracking portal.`
+          }
         </p>
+
+        ${isDelivered ? `
+          <div style="background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+            <p style="font-size: 15px; font-weight: 700; color: #065f46; margin: 0 0 4px 0;">
+              ✓ Delivery Successfully Completed &amp; Signed
+            </p>
+            <p style="font-size: 13px; color: #047857; margin: 0;">
+              Delivered and signed on location. Thank you for choosing ${tenantName}!
+            </p>
+          </div>
+        ` : ''}
 
         <!-- Order Detail Card -->
         <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid ${brandColor}; border-radius: 8px; padding: 18px 20px; margin: 22px 0;">
@@ -1413,7 +1431,7 @@ export function buildTenantDeliveryEmailHtml(params: {
             <tr>
               <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Current Status:</td>
               <td style="padding: 6px 0;">
-                <span style="background-color: #e0f2fe; color: #0284c7; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase;">
+                <span style="background-color: ${isDelivered ? '#d1fae5' : '#e0f2fe'}; color: ${isDelivered ? '#065f46' : '#0284c7'}; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase;">
                   ${status || 'IN TRANSIT'}
                 </span>
               </td>
@@ -1421,10 +1439,19 @@ export function buildTenantDeliveryEmailHtml(params: {
           </table>
         </div>
 
+        ${photoUrl ? `
+          <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin: 22px 0; text-align: center;">
+            <p style="font-size: 13px; font-weight: 700; color: #334155; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">
+              📸 Proof of Delivery Photo (Captured by Driver)
+            </p>
+            <img src="${photoUrl}" alt="Proof of Delivery Photo" style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #cbd5e1; max-height: 300px; object-fit: cover; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" />
+          </div>
+        ` : ''}
+
         <!-- Call to Action Button -->
         <div style="text-align: center; margin: 28px 0 24px 0;">
           <a href="${trackingLink}" style="background-color: ${brandColor}; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
-            Track Your Delivery with ${shortName} &rarr;
+            View Full Tracking &amp; Receipt &rarr;
           </a>
         </div>
 
@@ -4453,7 +4480,9 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         tenantCode,
         tenantBadge,
         tenantColor,
-        originBranchName
+        originBranchName,
+        deliveryPhoto,
+        deliveryPhotos
       } = req.body || {};
       const supabaseInstance = getSupabase(req);
 
@@ -4496,7 +4525,9 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         destinationAddress,
         status,
         trackingLink,
-        originBranchName: branding.originBranchName
+        originBranchName: branding.originBranchName,
+        deliveryPhoto,
+        deliveryPhotos
       });
 
       const smtpCfg = getSmtpConfig();
