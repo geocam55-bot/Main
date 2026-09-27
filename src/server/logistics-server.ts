@@ -5871,15 +5871,17 @@ async function getFleetId(token: string): Promise<string | null> {
       let totalSpeed = 0;
       let totalFuel = 0;
 
+      const isSunday = new Date().getDay() === 0;
+
       trucks.forEach((t: any) => {
-        const speed = Number(t.telematics?.speed || t.telematics?.speedMph || t.speed || 0);
+        const speed = isSunday ? 0 : Number(t.telematics?.speed || t.telematics?.speedMph || t.speed || 0);
         const ign = String(t.telematics?.ignitionStatus || t.ignitionStatus || '').toUpperCase();
         totalSpeed += speed;
         totalFuel += Number(t.telematics?.fuelPercent || t.telematics?.fuelLevel || 75);
 
-        if (speed > 3 || (ign === 'ON' && speed > 0)) {
+        if (!isSunday && (speed > 3 || (ign === 'ON' && speed > 0))) {
           movingCount++;
-        } else if (ign === 'IDLE' || ign === 'IDLING' || (ign === 'ON' && speed <= 3)) {
+        } else if (!isSunday && (ign === 'IDLE' || ign === 'IDLING' || (ign === 'ON' && speed <= 3))) {
           idleCount++;
         } else {
           stoppedCount++;
@@ -6292,21 +6294,24 @@ async function getFleetId(token: string): Promise<string | null> {
         else if (rawIgnition === 'IDLE' || rawIgnition === 'IDLING') ignitionStatus = 'IDLE';
         else ignitionStatus = 'OFF';
 
+        const isSunday = new Date().getDay() === 0;
+
         // Evaluate vehicle state: MOVING, IDLE, or STOPPED
         let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
-        if (liveMatch?.status) {
+        if (liveMatch?.status && !isSunday) {
           status = liveMatch.status;
           if (status !== 'MOVING') {
             rawSpeed = 0;
           }
-        } else if (rawSpeed >= 5 && ignitionStatus === 'ON') {
+        } else if (!isSunday && rawSpeed >= 5 && ignitionStatus === 'ON') {
           status = 'MOVING';
-        } else if (ignitionStatus === 'IDLE' || (ignitionStatus === 'ON' && rawSpeed < 5)) {
+        } else if (!isSunday && (ignitionStatus === 'IDLE' || (ignitionStatus === 'ON' && rawSpeed < 5))) {
           status = 'IDLE';
           rawSpeed = 0;
         } else {
           status = 'STOPPED';
           rawSpeed = 0;
+          ignitionStatus = 'OFF';
         }
 
         const fuelLevel = typeof deserialized.fuelLevel === 'number' ? deserialized.fuelLevel : Math.max(25, Math.min(100, 85 - (index * 4)));

@@ -779,19 +779,19 @@ function MapInner({
         {displayTrucks.map((truck: any) => {
           const storeInfo = getTruckStoreInfo(truck, activeBranches);
           const isOnline = isTruckOnline(truck);
+          const isSunday = new Date().getDay() === 0;
           const isNoDriver = !truck.driver || truck.driver.toLowerCase() === 'no driver' || truck.driver.toLowerCase() === 'unassigned';
           const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
 
           const hasGpsSpeed = typeof truck.gpsSpeed === 'number' && truck.gpsSpeed > 0;
-          const hasActiveDelivery = Boolean(assignedDelivery);
-          const isExplicitDriving = truck.status === 'Driving' || truck.status === 'In Transit' || truck.status === 'En Route' || truck.status === 'Active' || truck.ignitionStatus === 'ON' || truck.isDriving === true;
-          const isExplicitIdling = truck.status === 'Idling' || truck.ignitionStatus === 'IDLING' || (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0) || truck.isIdling === true;
-
-          const isMoving = isOnline && (
+          const hasActiveTransitDelivery = Boolean(assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED);
+          const isExplicitDriving = !isSunday && (
             hasGpsSpeed ||
-            isExplicitDriving ||
-            (!isNoDriver && (hasActiveDelivery || (truck.status !== 'Parked' && truck.status !== 'Stationary' && truck.status !== 'Off')))
+            (!isNoDriver && hasActiveTransitDelivery && (truck.status === 'Driving' || truck.status === 'In Transit' || truck.status === 'En Route' || truck.status === 'Active' || truck.ignitionStatus === 'ON' || truck.isDriving === true))
           );
+          const isExplicitIdling = !isSunday && !isExplicitDriving && (truck.status === 'Idling' || truck.ignitionStatus === 'IDLING' || (typeof truck.gpsIdlingMins === 'number' && truck.gpsIdlingMins > 0) || truck.isIdling === true);
+
+          const isMoving = isOnline && isExplicitDriving;
           const isIdling = !isMoving && isOnline && isExplicitIdling;
 
           const coords = getTruckCoords(truck, simProgress, activeBranches);

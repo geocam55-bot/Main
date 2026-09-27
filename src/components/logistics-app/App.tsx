@@ -1380,7 +1380,14 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           // Auto-rollover uncompleted past deliveries to the first available slot in the next day
           const { updatedDeliveries: filteredDeliveries, movedCount } = rolloverUncompletedDeliveries(rawDeliveries, filteredBranches);
 
-          const dedupedTrucks = deduplicateTrucks(filteredTrucks);
+          const isSunday = new Date().getDay() === 0;
+          const dedupedTrucks = deduplicateTrucks(filteredTrucks).map((t: any) => {
+            const hasNoDriver = !t.driver || ['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase());
+            if (isSunday || hasNoDriver) {
+              return { ...t, status: (t.status === 'In Transit' || t.status === 'Driving' || t.status === 'MOVING') ? 'Parked' : (t.status || 'Parked') };
+            }
+            return t;
+          });
           const dedupedUsers = deduplicateUsers(filteredUsers);
 
           setDeliveries(filteredDeliveries);
@@ -1458,8 +1465,17 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           localStorage.setItem(`prospaces_branches_tenant_${tenantId}`, JSON.stringify(rawBranches));
           localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(rawUsers));
 
+          const isSunday = new Date().getDay() === 0;
+          const normalizedRawTrucks = deduplicateTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id))).map((t: any) => {
+            const hasNoDriver = !t.driver || ['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase());
+            if (isSunday || hasNoDriver) {
+              return { ...t, status: (t.status === 'In Transit' || t.status === 'Driving' || t.status === 'MOVING') ? 'Parked' : (t.status || 'Parked') };
+            }
+            return t;
+          });
+
           setDeliveries(rawDeliveries.filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id)));
-          setTrucks(deduplicateTrucks(rawTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id))));
+          setTrucks(normalizedRawTrucks);
           setBranches(rawBranches.filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id)));
           setUsers(deduplicateUsers(rawUsers.filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id))));
           setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Local Cache)`);

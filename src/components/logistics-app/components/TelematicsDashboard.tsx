@@ -123,8 +123,12 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       if (matchedRaw) {
         if (matchedRaw.vehicleId) matchedRawIds.add(matchedRaw.vehicleId.toLowerCase());
         if (matchedRaw.truckName) matchedRawIds.add(matchedRaw.truckName.toLowerCase());
+        const isSunday = new Date().getDay() === 0;
+        const rawSpd = matchedRaw.telematics?.speedMph ?? matchedRaw.telematics?.speed ?? 0;
+        const normalizedStatus = (isSunday && rawSpd <= 0) ? 'STOPPED' : matchedRaw.status;
         return {
           ...matchedRaw,
+          status: normalizedStatus,
           vehicleId: t.id,
           truckName: t.name,
           vin: t.vin || matchedRaw.vin,
@@ -144,8 +148,14 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       // If not in raw telemetry, construct valid VehicleRecord from truck
       const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : ((typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (typeof t.currentLatitude === 'number' && !isNaN(t.currentLatitude) ? t.currentLatitude : (44.69098 + (index * 0.012))));
       const lng = (typeof t.lng === 'number' && !isNaN(t.lng)) ? t.lng : ((typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (typeof t.currentLongitude === 'number' && !isNaN(t.currentLongitude) ? t.currentLongitude : (-63.59854 + (index * 0.008))));
-      const isMoving = t.status === 'In Transit' || t.status === 'MOVING' || (!t.status && index % 2 === 0);
-      const isIdle = t.status === 'Idling' || t.status === 'IDLE';
+      
+      const rawSpeed = (typeof t.speed === 'number' && !isNaN(t.speed)) ? t.speed : ((typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : 0);
+      const isSunday = new Date().getDay() === 0;
+      const hasDriver = t.driver && !['no driver', 'unassigned', ''].includes(t.driver.trim().toLowerCase());
+      
+      // On Sunday the delivery department is closed; fleet is parked unless verified hardware telematics sends active speed
+      const isMoving = !isSunday && Boolean(hasDriver) && (t.status === 'In Transit' || t.status === 'MOVING' || t.status === 'Driving') && rawSpeed > 0;
+      const isIdle = !isSunday && (t.status === 'Idling' || t.status === 'IDLE' || t.ignitionStatus === 'IDLE') && !isMoving;
       const status: 'MOVING' | 'IDLE' | 'STOPPED' = isMoving ? 'MOVING' : (isIdle ? 'IDLE' : 'STOPPED');
 
       const telemetryObj = {
@@ -153,16 +163,16 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         longitude: lng,
         lat,
         lng,
-        speed: isMoving ? 52 : (isIdle ? 0 : 0),
-        speedMph: isMoving ? 52 : (isIdle ? 0 : 0),
+        speed: isMoving ? rawSpeed : 0,
+        speedMph: isMoving ? rawSpeed : 0,
         heading: (index * 45) % 360,
         ignitionOn: status !== 'STOPPED',
         ignitionStatus: isMoving ? 'ON' : (isIdle ? 'IDLE' : 'OFF'),
         fuelPercent: 85,
         fuelLevel: 85,
         odometer: 54200 + index * 2100,
-        batteryVoltage: 13.8,
-        coolantTemp: 88,
+        batteryVoltage: isMoving ? 14.1 : 12.6,
+        coolantTemp: isMoving ? 88 : 22,
         lastUpdated: new Date().toISOString()
       };
 
@@ -343,6 +353,26 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
             </button>
           </div>
         </div>
+
+        {/* ── Sunday Delivery Department Closure Notice ── */}
+        {new Date().getDay() === 0 && (
+          <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center space-x-2.5">
+              <span className="text-lg">📅</span>
+              <div>
+                <p className="text-xs font-bold text-amber-900 dark:text-amber-300">
+                  Delivery Department Closed Today (Sunday)
+                </p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Operational shipping and driver routes are offline on Sundays according to regional scheduling rules. All 16 fleet trucks are stationary and parked at terminal depot yards.
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-black rounded-lg border border-amber-300 dark:border-amber-700 uppercase tracking-wider self-start sm:self-center shrink-0">
+              Fleet Parked
+            </span>
+          </div>
+        )}
 
         {/* ── Interactive KPI Filter Ribbon Bar ── */}
         <div className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-3 pt-3 border-t border-slate-100 dark:border-[#303237]">

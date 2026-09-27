@@ -94,13 +94,18 @@ export function useTelematics({
             ignitionStatus = 'ON';
           }
 
+          const isSunday = new Date().getDay() === 0;
           let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
-          if (v.status === 'MOVING' || v.status === 'IDLE' || v.status === 'STOPPED') {
-            status = v.status;
-          } else if (speed > 3 || (ignitionStatus === 'ON' && speed > 0)) {
+          if (speed > 3 || (ignitionStatus === 'ON' && speed > 0)) {
             status = 'MOVING';
           } else if (ignitionStatus === 'IDLE' || (ignitionStatus === 'ON' && speed <= 3)) {
             status = 'IDLE';
+          } else if (v.status === 'MOVING' && speed > 0 && !isSunday) {
+            status = 'MOVING';
+          } else if (v.status === 'IDLE' && !isSunday) {
+            status = 'IDLE';
+          } else {
+            status = 'STOPPED';
           }
 
           const fuelLevel = typeof tel.fuelPercent === 'number' ? tel.fuelPercent : (typeof tel.fuelLevel === 'number' ? tel.fuelLevel : 75);

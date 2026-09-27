@@ -1412,10 +1412,13 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                 const rawSpeedVal = typeof trAny?.speed === 'number' && !isNaN(trAny.speed) ? trAny.speed : (typeof trAny?.gpsSpeed === 'number' && !isNaN(trAny.gpsSpeed) ? trAny.gpsSpeed : 0);
                 const activeSpeed = Math.max(0, Math.round(rawSpeedVal));
 
-                const isExplicitDriving = trAny?.status === 'Driving' || trAny?.status === 'In Transit' || trAny?.status === 'En Route' || trAny?.isDriving === true;
-                const isExplicitIdling = trAny?.status === 'Idling' || trAny?.ignitionStatus === 'IDLING' || (trAny?.gpsIdlingMins || trAny?.idlingMins || 0) > 0;
+                const isSunday = new Date().getDay() === 0;
+                const hasDriver = t.driver && !['no driver', 'unassigned', ''].includes(t.driver.trim().toLowerCase());
+                const hasActiveTransitDelivery = assignedDelivery && assignedDelivery.status === DeliveryStatus.PICKED_AND_LOADED;
+                const isExplicitDriving = !isSunday && (activeSpeed > 0 || (Boolean(hasDriver) && Boolean(hasActiveTransitDelivery) && (trAny?.status === 'Driving' || trAny?.status === 'In Transit' || trAny?.status === 'En Route' || trAny?.isDriving === true)));
+                const isExplicitIdling = !isSunday && !isExplicitDriving && (trAny?.status === 'Idling' || trAny?.ignitionStatus === 'IDLING' || (trAny?.gpsIdlingMins || trAny?.idlingMins || 0) > 0);
 
-                const isDriving = activeSpeed > 0 || isExplicitDriving;
+                const isDriving = isExplicitDriving;
                 const isIdling = !isDriving && isExplicitIdling;
                 const isParked = !isDriving && !isIdling;
 
