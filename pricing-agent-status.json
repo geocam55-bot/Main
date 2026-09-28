@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 11286,
+    "current": 12966,
     "total": 20561,
-    "percent": 54.9,
-    "matchesFound": 35013,
-    "currentSku": "35056260",
-    "currentName": "BRACKET SHELF TITANIUM 8\"",
+    "percent": 63.1,
+    "matchesFound": 35942,
+    "currentSku": "51206852",
+    "currentName": "PT BALUSTER BROWN 2X2X42",
     "startedAt": "2026-09-28T14:25:11.351Z",
-    "lastUpdated": "2026-09-28T14:28:43.414Z"
+    "lastUpdated": "2026-09-28T14:40:23.493Z"
   },
   "pid": 2489
 }

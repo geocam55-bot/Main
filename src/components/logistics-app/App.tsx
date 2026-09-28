@@ -402,10 +402,38 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     return () => window.removeEventListener('storage', syncUserAndTenant);
   }, [currentUser, currentTenant]);
 
-  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>(() => DEFAULT_DELIVERIES);
-  const [trucks, setTrucks] = useState<Truck[]>(() => DEFAULT_TRUCKS);
-  const [branches, setBranches] = useState<Branch[]>(() => DEFAULT_BRANCHES);
-  const [users, setUsers] = useState<User[]>(() => DEFAULT_USERS);
+  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>(() => {
+    try {
+      const tid = (typeof window !== 'undefined' && localStorage.getItem('prospaces_active_tenant')) ? JSON.parse(localStorage.getItem('prospaces_active_tenant')!).id : 'rona_atlantic';
+      const cached = localStorage.getItem(`prospaces_deliveries_tenant_${tid}`);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return DEFAULT_DELIVERIES;
+  });
+  const [trucks, setTrucks] = useState<Truck[]>(() => {
+    try {
+      const tid = (typeof window !== 'undefined' && localStorage.getItem('prospaces_active_tenant')) ? JSON.parse(localStorage.getItem('prospaces_active_tenant')!).id : 'rona_atlantic';
+      const cached = localStorage.getItem(`prospaces_trucks_tenant_${tid}`);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return DEFAULT_TRUCKS;
+  });
+  const [branches, setBranches] = useState<Branch[]>(() => {
+    try {
+      const tid = (typeof window !== 'undefined' && localStorage.getItem('prospaces_active_tenant')) ? JSON.parse(localStorage.getItem('prospaces_active_tenant')!).id : 'rona_atlantic';
+      const cached = localStorage.getItem(`prospaces_branches_tenant_${tid}`);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return DEFAULT_BRANCHES;
+  });
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const tid = (typeof window !== 'undefined' && localStorage.getItem('prospaces_active_tenant')) ? JSON.parse(localStorage.getItem('prospaces_active_tenant')!).id : 'rona_atlantic';
+      const cached = localStorage.getItem(`prospaces_users_tenant_${tid}`);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return DEFAULT_USERS;
+  });
   const [isFleetDropdownOpen, setIsFleetDropdownOpen] = useState(false);
 
   // User Profile Menu & Modal states
@@ -687,11 +715,28 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
 
   // Trigger login session handlers
   const handleLoginSuccess = (tenant: Tenant, user: User) => {
-    // Clear operational state immediately to prevent stale cross-tenant contamination
-    setDeliveries([]);
-    setTrucks([]);
-    setBranches([]);
-    setUsers([]);
+    // Populate immediately with cached tenant state if available, or defaults, so UI never flashes 0 Regs • 0 Vehs
+    const tid = tenant?.id || 'rona_atlantic';
+    let initialBranches = DEFAULT_BRANCHES;
+    let initialTrucks = DEFAULT_TRUCKS;
+    let initialUsers = DEFAULT_USERS;
+    let initialDeliveries = DEFAULT_DELIVERIES;
+
+    try {
+      const cachedB = localStorage.getItem(`prospaces_branches_tenant_${tid}`);
+      const cachedT = localStorage.getItem(`prospaces_trucks_tenant_${tid}`);
+      const cachedU = localStorage.getItem(`prospaces_users_tenant_${tid}`);
+      const cachedD = localStorage.getItem(`prospaces_deliveries_tenant_${tid}`);
+      if (cachedB) initialBranches = JSON.parse(cachedB);
+      if (cachedT) initialTrucks = JSON.parse(cachedT);
+      if (cachedU) initialUsers = JSON.parse(cachedU);
+      if (cachedD) initialDeliveries = JSON.parse(cachedD);
+    } catch (e) {}
+
+    setBranches(initialBranches);
+    setTrucks(initialTrucks);
+    setUsers(initialUsers);
+    setDeliveries(initialDeliveries);
     setCurrentTenant(tenant);
     setCurrentUser(user);
     sessionStorage.setItem('prospaces_session_active', 'true');
@@ -1348,7 +1393,16 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           }
         } else {
           try {
-            const res = await customFetch(`/api/tenant/state?tenantId=${tenantId}&_t=${Date.now()}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            let res: Response;
+            try {
+              res = await customFetch(`/api/tenant/state?tenantId=${tenantId}&_t=${Date.now()}`, {
+                signal: controller.signal
+              });
+            } finally {
+              clearTimeout(timeoutId);
+            }
             if (!res.ok) {
               throw new Error(`Server returned error status ${res.status}`);
             }
