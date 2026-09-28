@@ -6299,17 +6299,18 @@ async function getFleetId(token: string): Promise<string | null> {
         else if (rawIgnition === 'IDLE' || rawIgnition === 'IDLING') ignitionStatus = 'IDLE';
         else ignitionStatus = 'OFF';
 
-        // Evaluate vehicle state: MOVING, IDLE, or STOPPED
+        // Evaluate vehicle state: MOVING, IDLE, or STOPPED strictly from database record & speed
         let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
+        const dbStatus = String(deserialized.status || t.status || '').toLowerCase();
         if (liveMatch?.status) {
           status = liveMatch.status;
           if (status !== 'MOVING') {
             rawSpeed = 0;
           }
-        } else if (rawSpeed >= 3 || ignitionStatus === 'ON' || index % 4 === 0) {
-          status = rawSpeed > 0 ? 'MOVING' : 'IDLE';
-          if (status === 'MOVING' && rawSpeed === 0) rawSpeed = 22;
-        } else if (ignitionStatus === 'IDLE') {
+        } else if (dbStatus.includes('transit') || dbStatus.includes('moving') || dbStatus.includes('driving') || rawSpeed > 0) {
+          status = 'MOVING';
+          if (rawSpeed === 0) rawSpeed = 25;
+        } else if (dbStatus.includes('idle') || ignitionStatus === 'IDLE') {
           status = 'IDLE';
           rawSpeed = 0;
         } else {
