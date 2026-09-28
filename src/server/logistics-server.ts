@@ -2638,8 +2638,8 @@ app.use((req, res, next) => {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
+    const tenantId = normalizeTenantId(req.query.tenantId);
     try {
-      const tenantId = normalizeTenantId(req.query.tenantId);
 
       // Proactive Fleet Complete Token Refresh & Sync on App Open/State Load
       const hasConfig = !!(process.env.FLEET_COMPLETE_API_KEY || (process.env.FLEET_COMPLETE_USERNAME && process.env.FLEET_COMPLETE_PASSWORD) || inMemoryFcApiKey || (inMemoryFcUsername && inMemoryFcPassword));
@@ -2713,7 +2713,7 @@ app.use((req, res, next) => {
       const deletedUserIds = deletes['users'] || new Set();
       const deletedDeliveryIds = deletes['deliveries'] || new Set();
 
-      fetchedTrucks = fetchedTrucks.filter((t: any) => !deletedTrucks.has(String(t.id)));
+      fetchedTrucks = fetchedTrucks.filter((t: any) => !deletedTruckIds.has(String(t.id)));
       fetchedBranches = fetchedBranches.filter((b: any) => !deletedBranchIds.has(String(b.id)) && String(b.id) !== '500');
       fetchedUsers = fetchedUsers.filter((u: any) => !deletedUserIds.has(String(u.id)));
       fetchedDeliveries = fetchedDeliveries.filter((d: any) => !deletedDeliveryIds.has(String(d.id)));
@@ -2730,7 +2730,7 @@ app.use((req, res, next) => {
             supabase.from("deliveries").select("*").eq("tenantId", tenantId)
           ]);
           fetchedBranches = (seedB.data || []).filter((b: any) => !deletedBranchIds.has(String(b.id)));
-          fetchedTrucks = (seedT.data || []).filter((t: any) => !deletedTrucks.has(String(t.id)));
+          fetchedTrucks = (seedT.data || []).filter((t: any) => !deletedTruckIds.has(String(t.id)));
           fetchedUsers = (seedU.data || []).filter((u: any) => !deletedUserIds.has(String(u.id)));
           fetchedDeliveries = (seedD.data || []).filter((d: any) => !deletedDeliveryIds.has(String(d.id)));
         } catch (seedErr) {
@@ -3018,6 +3018,7 @@ app.use((req, res, next) => {
         deliveries: enrichedDeliveries
       });
     } catch (err: any) {
+      console.error("[API /api/tenant/state Error caught]:", err);
       // Trigger circuit breaker for timeout or network unreachable errors
       const errMsg = err.message || String(err);
       if (errMsg.includes("timed out") || errMsg.includes("fetch failed") || errMsg.includes("ENOTFOUND") || errMsg.includes("ECONNREFUSED")) {
