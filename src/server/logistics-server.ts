@@ -3815,7 +3815,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       const tblStr = String(table);
       const idStr = String(id);
 
-      // Record delete in deletedTenantRecords in-memory map
+      // Record delete in deletedTenantRecords in-memory map permanently
       if (!deletedTenantRecords[tidStr]) {
         deletedTenantRecords[tidStr] = {};
       }
@@ -3826,18 +3826,6 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       if (tblStr === "branches" && idStr === "DC-WINAMILL") {
         deletedTenantRecords[tidStr][tblStr].add("500");
       }
-
-      // Expire this delete mark after 10 minutes to prevent resurrection from stale frontend heartbeats
-      setTimeout(() => {
-        try {
-          if (deletedTenantRecords[tidStr] && deletedTenantRecords[tidStr][tblStr]) {
-            deletedTenantRecords[tidStr][tblStr].delete(idStr);
-            if (tblStr === "branches" && idStr === "DC-WINAMILL") {
-              deletedTenantRecords[tidStr][tblStr].delete("500");
-            }
-          }
-        } catch (e) {}
-      }, 600000);
 
       // Always update in-memory tenant state immediately
       const state = inMemoryTenantStates[tidStr];
@@ -3886,7 +3874,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         ]);
       }
 
-      // If deletion succeeded on Supabase, also register the explicit delete marker
+      // If deletion succeeded on Supabase, register the permanent explicit delete marker
       try {
         const tid = String(tenantId);
         const tbl = String(table);
@@ -3894,15 +3882,6 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         if (!deletedTenantRecords[tid]) deletedTenantRecords[tid] = {};
         if (!deletedTenantRecords[tid][tbl]) deletedTenantRecords[tid][tbl] = new Set();
         deletedTenantRecords[tid][tbl].add(recordId);
-
-        // Expire this delete mark after 10 minutes
-        setTimeout(() => {
-          try {
-            if (deletedTenantRecords[tid] && deletedTenantRecords[tid][tbl]) {
-              deletedTenantRecords[tid][tbl].delete(recordId);
-            }
-          } catch (e) {}
-        }, 600000);
       } catch (e) {
         console.warn('Failed to record explicit delete marker in memory:', e);
       }
