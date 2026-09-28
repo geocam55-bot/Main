@@ -237,8 +237,80 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
         )
     : deliveries;
 
+  const [liveTelemetryVehicles, setLiveTelemetryVehicles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchLiveTelemetry = async () => {
+      try {
+        const res = await fetch('/api/v1/telematics/vehicles', { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && Array.isArray(data.vehicles)) {
+            setLiveTelemetryVehicles(data.vehicles);
+          }
+        }
+      } catch (e) {
+        // Ignore network hiccups
+      }
+    };
+
+    fetchLiveTelemetry();
+    const interval = setInterval(fetchLiveTelemetry, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const activeTrucks = trucks.filter(t => t.isActive !== false && (t as any).is_active !== false);
-  const displayTrucks = activeTrucks.length > 0 ? activeTrucks : (trucks.length > 0 ? trucks : DEFAULT_TRUCKS);
+  const baseTrucks = activeTrucks.length > 0 ? activeTrucks : (trucks.length > 0 ? trucks : DEFAULT_TRUCKS);
+
+  const displayTrucks = React.useMemo(() => {
+    if (liveTelemetryVehicles.length === 0) return baseTrucks;
+
+    return baseTrucks.map((t, index) => {
+      const tId = (t.id || "").toLowerCase();
+      const tName = (t.name || "").toLowerCase();
+      const tVin = (t.vin || "").toLowerCase();
+      const tUnitMatch = tName.match(/\d+/) || tId.match(/\d+/);
+      const tUnitNum = tUnitMatch ? tUnitMatch[0] : null;
+
+      const matchedLive = liveTelemetryVehicles.find(v => {
+        const vId = (v.vehicleId || "").toLowerCase();
+        const vName = (v.truckName || "").toLowerCase();
+        const vVin = (v.vin || "").toLowerCase();
+        const vUnitMatch = vName.match(/\d+/) || vId.match(/\d+/);
+        const vUnitNum = vUnitMatch ? vUnitMatch[0] : null;
+
+        return (
+          tId === vId ||
+          tName === vName ||
+          (tVin && vVin && tVin === vVin) ||
+          (vUnitNum && tUnitNum && vUnitNum === tUnitNum)
+        );
+      });
+
+      if (matchedLive) {
+        const tel = matchedLive.telematics || matchedLive.telemetry || {};
+        const lat = typeof tel.latitude === 'number' ? tel.latitude : (typeof tel.lat === 'number' ? tel.lat : t.lat);
+        const lng = typeof tel.longitude === 'number' ? tel.longitude : (typeof tel.lng === 'number' ? tel.lng : t.lng);
+        const speed = typeof tel.speedMph === 'number' ? tel.speedMph : (typeof tel.speed === 'number' ? tel.speed : 0);
+        const heading = typeof tel.heading === 'number' ? tel.heading : (t.heading || 0);
+
+        return {
+          ...t,
+          lat,
+          lng,
+          gpsLat: lat,
+          gpsLng: lng,
+          speed,
+          gpsSpeed: speed,
+          heading,
+          isDriving: speed > 0,
+          isParked: speed === 0,
+          statusText: speed > 0 ? `${speed} km/h` : 'Parked'
+        };
+      }
+      return t;
+    });
+  }, [baseTrucks, liveTelemetryVehicles]);
 
   const isDriverOnline = (driverName: string): boolean => {
     if (!driverName) return false;
