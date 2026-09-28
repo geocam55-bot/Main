@@ -2705,6 +2705,19 @@ app.use((req, res, next) => {
       let fetchedUsers = rUsers.data || [];
       let fetchedDeliveries = rDeliveries.data || [];
 
+      // Filter out any explicitly deleted records using permanent tombstones
+      const tidStr = String(tenantId);
+      const deletes = deletedTenantRecords[tidStr] || {};
+      const deletedTruckIds = deletes['trucks'] || new Set();
+      const deletedBranchIds = deletes['branches'] || new Set();
+      const deletedUserIds = deletes['users'] || new Set();
+      const deletedDeliveryIds = deletes['deliveries'] || new Set();
+
+      fetchedTrucks = fetchedTrucks.filter((t: any) => !deletedTrucks.has(String(t.id)));
+      fetchedBranches = fetchedBranches.filter((b: any) => !deletedBranchIds.has(String(b.id)) && String(b.id) !== '500');
+      fetchedUsers = fetchedUsers.filter((u: any) => !deletedUserIds.has(String(u.id)));
+      fetchedDeliveries = fetchedDeliveries.filter((d: any) => !deletedDeliveryIds.has(String(d.id)));
+
       if (fetchedBranches.length === 0 && fetchedTrucks.length === 0 && fetchedUsers.length === 0) {
         console.log(`[API] Database is empty for tenant ${tenantId}. Auto-seeding default records...`);
         try {
@@ -2716,10 +2729,10 @@ app.use((req, res, next) => {
             supabase.from("users").select("*").eq("tenantId", tenantId),
             supabase.from("deliveries").select("*").eq("tenantId", tenantId)
           ]);
-          fetchedBranches = seedB.data || [];
-          fetchedTrucks = seedT.data || [];
-          fetchedUsers = seedU.data || [];
-          fetchedDeliveries = seedD.data || [];
+          fetchedBranches = (seedB.data || []).filter((b: any) => !deletedBranchIds.has(String(b.id)));
+          fetchedTrucks = (seedT.data || []).filter((t: any) => !deletedTrucks.has(String(t.id)));
+          fetchedUsers = (seedU.data || []).filter((u: any) => !deletedUserIds.has(String(u.id)));
+          fetchedDeliveries = (seedD.data || []).filter((d: any) => !deletedDeliveryIds.has(String(d.id)));
         } catch (seedErr) {
           console.warn("[API] Failed to auto-seed default state:", seedErr);
         }
