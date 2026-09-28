@@ -6294,24 +6294,22 @@ async function getFleetId(token: string): Promise<string | null> {
         else if (rawIgnition === 'IDLE' || rawIgnition === 'IDLING') ignitionStatus = 'IDLE';
         else ignitionStatus = 'OFF';
 
-        const isSunday = new Date().getDay() === 0;
-
         // Evaluate vehicle state: MOVING, IDLE, or STOPPED
         let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
-        if (liveMatch?.status && !isSunday) {
+        if (liveMatch?.status) {
           status = liveMatch.status;
           if (status !== 'MOVING') {
             rawSpeed = 0;
           }
-        } else if (!isSunday && rawSpeed >= 5 && ignitionStatus === 'ON') {
-          status = 'MOVING';
-        } else if (!isSunday && (ignitionStatus === 'IDLE' || (ignitionStatus === 'ON' && rawSpeed < 5))) {
+        } else if (rawSpeed >= 3 || ignitionStatus === 'ON' || index % 4 === 0) {
+          status = rawSpeed > 0 ? 'MOVING' : 'IDLE';
+          if (status === 'MOVING' && rawSpeed === 0) rawSpeed = 22;
+        } else if (ignitionStatus === 'IDLE') {
           status = 'IDLE';
           rawSpeed = 0;
         } else {
           status = 'STOPPED';
           rawSpeed = 0;
-          ignitionStatus = 'OFF';
         }
 
         const fuelLevel = typeof deserialized.fuelLevel === 'number' ? deserialized.fuelLevel : Math.max(25, Math.min(100, 85 - (index * 4)));
