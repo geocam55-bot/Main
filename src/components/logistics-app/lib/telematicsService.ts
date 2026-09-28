@@ -95,20 +95,21 @@ export function useTelematics({
           }
 
           let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
-          if (speed > 3 || (ignitionStatus === 'ON' && speed > 0)) {
+          let effectiveSpeed = speed;
+          if (speed > 3 || (ignitionStatus === 'ON' && speed > 3)) {
             status = 'MOVING';
-          } else if (ignitionStatus === 'IDLE' || (ignitionStatus === 'ON' && speed <= 3)) {
+            effectiveSpeed = speed;
+          } else if (ignitionStatus === 'IDLE') {
             status = 'IDLE';
-          } else if (v.status === 'MOVING' && speed > 0) {
+            effectiveSpeed = 0;
+          } else if (v.status === 'MOVING' || v.status === 'In Transit' || v.status === 'Driving' || (index % 4 === 0 && v.status !== 'Parked')) {
             status = 'MOVING';
-          } else if (v.status === 'IDLE') {
-            status = 'IDLE';
-          } else if (index % 4 === 0) {
-            status = 'MOVING';
-            speed = 22;
+            effectiveSpeed = effectiveSpeed > 3 ? effectiveSpeed : 35;
           } else {
             status = 'STOPPED';
+            effectiveSpeed = 0;
           }
+          speed = effectiveSpeed;
 
           const fuelLevel = typeof tel.fuelPercent === 'number' ? tel.fuelPercent : (typeof tel.fuelLevel === 'number' ? tel.fuelLevel : 75);
 

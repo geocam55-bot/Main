@@ -6306,10 +6306,12 @@ async function getFleetId(token: string): Promise<string | null> {
           status = liveMatch.status;
           if (status !== 'MOVING') {
             rawSpeed = 0;
+          } else if (rawSpeed <= 3) {
+            rawSpeed = 35;
           }
-        } else if (dbStatus.includes('transit') || dbStatus.includes('moving') || dbStatus.includes('driving') || rawSpeed > 0) {
+        } else if (dbStatus.includes('transit') || dbStatus.includes('moving') || dbStatus.includes('driving') || rawSpeed > 3) {
           status = 'MOVING';
-          if (rawSpeed === 0) rawSpeed = 25;
+          if (rawSpeed <= 3) rawSpeed = 35;
         } else if (dbStatus.includes('idle') || ignitionStatus === 'IDLE') {
           status = 'IDLE';
           rawSpeed = 0;

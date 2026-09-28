@@ -148,19 +148,22 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : ((typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (typeof t.currentLatitude === 'number' && !isNaN(t.currentLatitude) ? t.currentLatitude : (44.69098 + (index * 0.012))));
       const lng = (typeof t.lng === 'number' && !isNaN(t.lng)) ? t.lng : ((typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (typeof t.currentLongitude === 'number' && !isNaN(t.currentLongitude) ? t.currentLongitude : (-63.59854 + (index * 0.008))));
       
-      const rawSpeed = (typeof t.speed === 'number' && !isNaN(t.speed)) ? t.speed : ((typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : (index % 4 === 0 ? 25 : 0));
+      const baseSpeed = (typeof t.speed === 'number' && !isNaN(t.speed)) ? t.speed : ((typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : 0);
+      const shouldBeMoving = t.status === 'In Transit' || t.status === 'MOVING' || t.status === 'Driving' || (index % 4 === 0 && t.status !== 'Parked' && t.status !== 'Stopped');
+      const rawSpeed = baseSpeed > 3 ? baseSpeed : (shouldBeMoving ? 35 : 0);
       
-      const isMoving = rawSpeed > 0 || t.status === 'In Transit' || t.status === 'MOVING' || t.status === 'Driving' || index % 4 === 0;
+      const isMoving = rawSpeed > 3;
       const isIdle = !isMoving && (t.status === 'Idling' || t.status === 'IDLE' || t.ignitionStatus === 'IDLE');
       const status: 'MOVING' | 'IDLE' | 'STOPPED' = isMoving ? 'MOVING' : (isIdle ? 'IDLE' : 'STOPPED');
+      const effectiveSpeed = isMoving ? rawSpeed : 0;
 
       const telemetryObj = {
         latitude: lat,
         longitude: lng,
         lat,
         lng,
-        speed: isMoving ? rawSpeed : 0,
-        speedMph: isMoving ? rawSpeed : 0,
+        speed: effectiveSpeed,
+        speedMph: effectiveSpeed,
         heading: (index * 45) % 360,
         ignitionOn: status !== 'STOPPED',
         ignitionStatus: isMoving ? 'ON' : (isIdle ? 'IDLE' : 'OFF'),
