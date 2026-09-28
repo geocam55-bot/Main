@@ -218,7 +218,7 @@ function shouldStop(): boolean {
   return false;
 }
 
-if (typeof require !== 'undefined' && require.main === module) {
+if (typeof require !== 'undefined' && require.main === module && process.argv[1] && path.basename(process.argv[1]).includes('pricing-agent')) {
   process.on('SIGTERM', () => {
     log("🛑 Standalone process received SIGTERM. Halting immediately...");
     isStopTriggered = true;
@@ -812,7 +812,7 @@ export async function runCompetitivePricing() {
   }
 }
 
-if (typeof require !== 'undefined' && require.main === module) {
+if (typeof require !== 'undefined' && require.main === module && process.argv[1] && path.basename(process.argv[1]).includes('pricing-agent')) {
   runCompetitivePricing()
     .catch(async (err) => {
       log(`💥 Fatal error: ${err?.message || err}`);

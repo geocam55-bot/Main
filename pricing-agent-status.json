@@ -1,14 +1,14 @@
 {
   "isRunning": true,
   "progress": {
-    "current": 10864,
+    "current": 11286,
     "total": 20561,
-    "percent": 52.8,
-    "matchesFound": 34789,
-    "currentSku": "11965016",
-    "currentName": "CARTRIDGE REPLACE.COMPLETE BK",
-    "startedAt": "2026-09-23T16:04:05.259Z",
-    "lastUpdated": "2026-09-23T16:37:25.107Z"
+    "percent": 54.9,
+    "matchesFound": 35013,
+    "currentSku": "35056260",
+    "currentName": "BRACKET SHELF TITANIUM 8\"",
+    "startedAt": "2026-09-28T14:25:11.351Z",
+    "lastUpdated": "2026-09-28T14:28:43.414Z"
   },
-  "pid": 293
+  "pid": 2489
 }

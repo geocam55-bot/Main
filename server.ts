@@ -2206,7 +2206,7 @@ setInterval(runSchedulerTick, 10000);
 async function startServer() {
   const app = express();
   app.set('trust proxy', true);
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // On server startup, ensure pricing-agent-status is not stuck as running
   try {
