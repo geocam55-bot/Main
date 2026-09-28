@@ -253,6 +253,17 @@ function MapCameraController({
   const map = useMap();
   const initialFitDone = useRef(false);
 
+  // Pan & zoom to selected vehicle when clicked in the asset list
+  useEffect(() => {
+    if (!map || !window.google?.maps || !selectedVehicle) return;
+    const vLat = getVehicleLat(selectedVehicle);
+    const vLng = getVehicleLng(selectedVehicle);
+    if (!isNaN(vLat) && !isNaN(vLng) && vLat !== 0 && vLng !== 0) {
+      map.panTo({ lat: vLat, lng: vLng });
+      map.setZoom(15);
+    }
+  }, [map, selectedVehicle]);
+
   // Fit all vehicles & stores into view on initial load or when manually triggered
   useEffect(() => {
     if (!map || !window.google?.maps) return;
