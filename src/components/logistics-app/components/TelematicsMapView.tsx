@@ -430,7 +430,7 @@ export default function TelematicsMapView({
 
   const [mapTypeId, setMapTypeId] = useState<string>('roadmap');
   const [showTraffic, setShowTraffic] = useState<boolean>(false);
-  const [followSelected, setFollowSelected] = useState<boolean>(true);
+  const [followSelected, setFollowSelected] = useState<boolean>(false);
   const [fitKey, setFitKey] = useState<number>(0);
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [manualKeyInput, setManualKeyInput] = useState<string>('');

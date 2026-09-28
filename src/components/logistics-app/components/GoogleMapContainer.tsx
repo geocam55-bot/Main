@@ -641,7 +641,7 @@ function MapInner({
 
     const { lat: truckLat, lng: truckLng } = getTruckCoords(truck, simProgress, activeBranches);
     const isSelected = selectedTrackTruckId === truck.id;
-    if (isSelected || (!selectedTrackTruckId && displayTrucks[0]?.id === truck.id)) {
+    if (isSelected) {
       activeTruckGps = { lat: truckLat, lng: truckLng };
     }
 

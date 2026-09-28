@@ -376,7 +376,7 @@ export default function LiveVehicleMap({
 
   // Map Controls State
   const [showTraffic, setShowTraffic] = useState<boolean>(false);
-  const [followVehicle, setFollowVehicle] = useState<boolean>(true);
+  const [followVehicle, setFollowVehicle] = useState<boolean>(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MOVING' | 'IDLE' | 'STOPPED'>('ALL');
   const [mapTypeId, setMapTypeId] = useState<string>('roadmap');
 

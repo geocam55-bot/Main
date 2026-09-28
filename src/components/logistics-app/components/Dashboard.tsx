@@ -257,7 +257,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
   };
   
   const [selectedTrackTruckId, setSelectedTrackTruckId] = useState<string | null>(null);
-  const selectedTruck = selectedTrackTruckId ? displayTrucks.find(t => t.id === selectedTrackTruckId) : (displayTrucks[0] || trucks[0]);
+  const selectedTruck = selectedTrackTruckId ? displayTrucks.find(t => t.id === selectedTrackTruckId) : null;
   const [simProgress, setSimProgress] = useState<Record<string, number>>({});
   const [telemetryTick, setTelemetryTick] = useState<number>(0);
 
@@ -1029,7 +1029,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-15" xmlns="http://www.w3.org/2000/svg">
               {(() => {
                 const hqPercent = getPercentCoordsFromGps(hqCoords.lat, hqCoords.lng);
-                const matchedTruck = selectedTrackTruckId ? displayTrucks.find(t => t.id === selectedTrackTruckId) : displayTrucks[0];
+                const matchedTruck = selectedTrackTruckId ? displayTrucks.find(t => t.id === selectedTrackTruckId) : null;
                 if (!matchedTruck) return null;
 
                 let origLat: number;
