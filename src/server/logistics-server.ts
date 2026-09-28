@@ -2568,6 +2568,11 @@ app.use((req, res, next) => {
         type: t.type || 'Commercial Truck',
         driver: t.driver || 'No Driver',
         branchId: t.branchId || 'RONA-03485',
+        status: t.status || 'Parked',
+        lat: t.currentLatitude || t.lat || 44.69098,
+        lng: t.currentLongitude || t.lng || -63.59854,
+        currentLatitude: t.currentLatitude || t.lat || 44.69098,
+        currentLongitude: t.currentLongitude || t.lng || -63.59854,
         is_active: t.isActive !== false
       }));
 
