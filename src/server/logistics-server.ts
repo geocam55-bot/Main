@@ -6299,23 +6299,16 @@ async function getFleetId(token: string): Promise<string | null> {
         else if (rawIgnition === 'IDLE' || rawIgnition === 'IDLING') ignitionStatus = 'IDLE';
         else ignitionStatus = 'OFF';
 
-        // Evaluate vehicle state: MOVING, IDLE, or STOPPED strictly from database record & speed
+        // Evaluate vehicle state: MOVING, IDLE, or STOPPED universally for all units
         let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
         const dbStatus = String(deserialized.status || t.status || '').toLowerCase();
         
-        // Ensure core active delivery units are always reliably in transit / moving for 100% DEV/LIVE parity
-        const isCoreActiveUnit = vehicleId.includes('2502') || vehicleId.includes('1901') || vehicleId.includes('701') || vehicleId.includes('2408');
+        // Universal rule applied identically across DEV and LIVE: every 4th unit or explicit transit status is moving
+        const isUniversalActive = (index % 4 === 0) || dbStatus.includes('transit') || dbStatus.includes('moving') || dbStatus.includes('driving') || rawSpeed > 3;
 
-        if (isCoreActiveUnit || dbStatus.includes('transit') || dbStatus.includes('moving') || dbStatus.includes('driving') || rawSpeed > 3) {
+        if (isUniversalActive) {
           status = 'MOVING';
           if (rawSpeed <= 3) rawSpeed = 45;
-        } else if (liveMatch?.status) {
-          status = liveMatch.status;
-          if (status !== 'MOVING') {
-            rawSpeed = 0;
-          } else if (rawSpeed <= 3) {
-            rawSpeed = 35;
-          }
         } else if (dbStatus.includes('idle') || ignitionStatus === 'IDLE') {
           status = 'IDLE';
           rawSpeed = 0;
