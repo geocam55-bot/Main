@@ -772,10 +772,12 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
                     ) : (
                       <div className="flex items-center gap-1.5">
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           disabled={isAgentActive}
-                          onClick={async () => {
+                          onClick={async (event) => {
+                            event.preventDefault();
                             try {
                               setAgentStatus(prev => ({
                                 isRunning: true,
