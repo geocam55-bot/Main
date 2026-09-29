@@ -5957,10 +5957,12 @@ self.addEventListener('activate', (event) => {
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true,  },
-      appType: "custom",
-    });
+  const vite = await createViteServer({
+    // Express owns the HTTP server in development; disable Vite's standalone
+    // HMR websocket so stale dev processes cannot collide on its fixed port.
+    server: { middlewareMode: true, hmr: false },
+    appType: "custom",
+  });
     app.use(vite.middlewares);
 
     app.get('*all', async (req, res, next) => {
