@@ -6035,6 +6035,9 @@ self.addEventListener('activate', (event) => {
         try {
           let template = fs.readFileSync(filePath, 'utf-8');
           template = await vite.transformIndexHtml(url, template);
+          // The hosted preview proxies HTTP but not Vite's websocket endpoint. Remove any
+          // injected HMR client so it cannot repeatedly report a failed socket connection.
+          template = template.replace(/<script[^>]+src=["']\/@vite\/client["'][^>]*><\/script>/gi, '');
           res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
           return;
         } catch (e) {
