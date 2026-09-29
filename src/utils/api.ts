@@ -918,9 +918,12 @@ export const competitivePricingAPI = {
       if (res.ok) {
         const data = await safeParseJson(res);
         if (data?.success) return data;
+        console.warn('[v0] Pricing agent start returned an unusable response; switching to direct client sweep.');
+      } else {
+        console.warn(`[v0] Pricing agent start failed with HTTP ${res.status}; switching to direct client sweep.`);
       }
     } catch (err: any) {
-      console.warn('[Competitive Pricing] Server start endpoint failed:', err.message);
+      console.warn('[v0] Pricing agent server start unavailable; switching to direct client sweep:', err.message);
     }
     const { startDirectClientSweep } = await import('./competitive-pricing-client');
     return await startDirectClientSweep();
