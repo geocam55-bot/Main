@@ -9,8 +9,10 @@
  * Fully integrated with the ProSpaces CRM Inventory Table schema.
  */
 
-import { chromium } from 'playwright';
+import playwright from 'playwright';
 import type { Browser, Page } from 'playwright';
+
+const { chromium } = playwright;
 import similarity from 'string-similarity';
 
 // ======================================================
