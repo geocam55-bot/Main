@@ -5981,15 +5981,12 @@ self.addEventListener('activate', (event) => {
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({
-    // Express owns the HTTP server in development; disable Vite's standalone
-    // HMR websocket so stale dev processes cannot collide on its fixed port.
-    server: {
-      middlewareMode: true,
-      // Express owns the socket lifecycle in the preview; prevent Vite from
-      // injecting a client that reconnects to an unavailable HMR port.
-      hmr: false,
-      ws: false,
-    },
+  // Express owns the HTTP server in development. Keep Vite in middleware
+  // mode and disable HMR because the preview does not expose Vite's socket.
+  server: {
+  middlewareMode: true,
+  hmr: false,
+  },
     appType: "custom",
   });
     app.use(vite.middlewares);
