@@ -64,7 +64,7 @@ export const DEFAULT_AGENT_STATUS: AgentStatus = {
 let isClientSweepRunning = false;
 let clientSweepAbortController: AbortController | null = null;
 
-async function appendDirectAgentLog(message: string): Promise<void> {
+export async function appendDirectAgentLog(message: string): Promise<void> {
   const line = `[${new Date().toISOString()}] [Client Agent] ${message}`;
   try {
     const { data } = await supabase
