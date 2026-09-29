@@ -12,7 +12,9 @@
  * node scraper.js [--competitor=kent|homedepot|all] [--limit=5] [--sku=...] [--search="..."]
  */
 
-import { chromium } from "playwright";
+import playwright from "playwright";
+
+const { chromium } = playwright;
 import similarity from "string-similarity";
 import fs from "fs";
 import path from "path";

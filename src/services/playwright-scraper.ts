@@ -13,6 +13,10 @@ import playwright from 'playwright';
 import type { Browser, Page } from 'playwright';
 
 const { chromium } = playwright;
+
+if (!chromium) {
+  throw new Error('Playwright Chromium is unavailable. Verify the installed playwright package and browser runtime.');
+}
 import similarity from 'string-similarity';
 
 // ======================================================
