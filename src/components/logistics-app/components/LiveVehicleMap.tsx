@@ -90,58 +90,54 @@ function AnimatedTruckMarker({ vehicle, isSelected, onClick }: AnimatedTruckMark
     lng: vLng
   });
 
-  // Track previous target coordinates to animate transitions
-  const prevTargetRef = useRef<{ lat: number; lng: number }>({
-    lat: vLat,
-    lng: vLng
-  });
-
+  // Keep the rendered position as the next animation's starting point. Using the
+  // previous target here caused overlapping polls to restart from stale GPS data,
+  // which made markers visibly bounce between locations.
+  const currentPosRef = useRef(currentPos);
   const animationFrameRef = useRef<number | null>(null);
 
-  // Smooth position interpolation when vehicle telematics updates
   useEffect(() => {
-    const targetLat = vLat;
-    const targetLng = vLng;
+    currentPosRef.current = currentPos;
+  }, [currentPos]);
 
-    const startLat = prevTargetRef.current.lat;
-    const startLng = prevTargetRef.current.lng;
+  useEffect(() => {
+    const target = { lat: vLat, lng: vLng };
+    const start = currentPosRef.current;
 
-    // If position changed, animate smoothly over 1.8 seconds using cubic ease-out
-    if (startLat !== targetLat || startLng !== targetLng) {
-      const startTime = performance.now();
-      const duration = 1800; // 1.8s interpolation
+    if (start.lat === target.lat && start.lng === target.lng) return;
 
-      const animate = (currentTime: number) => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
+    const startTime = performance.now();
+    const duration = 1800;
 
-        // Cubic ease-out formula: 1 - Math.pow(1 - progress, 3)
-        const ease = 1 - Math.pow(1 - progress, 3);
-
-        const nextLat = startLat + (targetLat - startLat) * ease;
-        const nextLng = startLng + (targetLng - startLng) * ease;
-
-        setCurrentPos({ lat: nextLat, lng: nextLng });
-
-        if (progress < 1) {
-          animationFrameRef.current = requestAnimationFrame(animate);
-        } else {
-          prevTargetRef.current = { lat: targetLat, lng: targetLng };
-          setCurrentPos({ lat: targetLat, lng: targetLng });
-        }
+    const animate = (currentTime: number) => {
+      const progress = Math.min((currentTime - startTime) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const next = {
+        lat: start.lat + (target.lat - start.lat) * ease,
+        lng: start.lng + (target.lng - start.lng) * ease
       };
 
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      currentPosRef.current = next;
+      setCurrentPos(next);
+
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        currentPosRef.current = target;
+        setCurrentPos(target);
+        animationFrameRef.current = null;
       }
-      animationFrameRef.current = requestAnimationFrame(animate);
-    } else {
-      setCurrentPos({ lat: targetLat, lng: targetLng });
+    };
+
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
     }
+    animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (animationFrameRef.current) {
+      if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
     };
   }, [vLat, vLng]);

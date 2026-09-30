@@ -910,17 +910,26 @@ export const competitivePricingAPI = {
     }
   },
   runPricingAgent: async (): Promise<{ success: boolean; message: string; status?: any }> => {
-    try {
-      const res = await fetch('/api/competitive-pricing/agent/start', {
+  const { appendDirectAgentLog } = await import('./competitive-pricing-client');
+  // Persist this before the request so the Diagnostics panel proves the click reached the client.
+  await appendDirectAgentLog('Pricing sweep start requested from Competitive Price module.');
+  try {
+  const res = await fetch('/api/competitive-pricing/agent/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      if (res.ok) {
-        const data = await safeParseJson(res);
-        if (data?.success) return data;
+  if (res.ok) {
+  const data = await safeParseJson(res);
+  if (data?.success) {
+    await appendDirectAgentLog(`Pricing sweep server start accepted: ${data.message || 'background agent started'}`);
+    return data;
+  }
+  console.warn('[v0] Pricing agent start returned an unusable response; switching to direct client sweep.');
+      } else {
+        console.warn(`[v0] Pricing agent start failed with HTTP ${res.status}; switching to direct client sweep.`);
       }
     } catch (err: any) {
-      console.warn('[Competitive Pricing] Server start endpoint failed:', err.message);
+      console.warn('[v0] Pricing agent server start unavailable; switching to direct client sweep:', err.message);
     }
     const { startDirectClientSweep } = await import('./competitive-pricing-client');
     return await startDirectClientSweep();

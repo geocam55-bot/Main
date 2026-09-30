@@ -4894,15 +4894,38 @@ Result:
         });
       } catch (kvErr) {}
 
+      // Record the request before launching the detached work so the diagnostic
+      // panel proves the button reached the server even when the scraper fails.
+      try {
+        fs.appendFileSync(
+          path.join(process.cwd(), 'pricing-agent-diagnostic.log'),
+          `[${new Date().toISOString()}] [Agent] Background sweep requested; starting in-process runner. Playwright is loaded by the runner with a direct-scraper fallback.\n`
+        );
+      } catch (logErr) {
+        console.warn('[Pricing Agent] Could not write start diagnostic:', logErr);
+      }
+
       // Execute in-process: runs synchronously in the same Node engine across Dev and Live!
       isPricingAgentRunningInProcess = true;
       runCompetitivePricing()
         .then(() => {
           isPricingAgentRunningInProcess = false;
+          try {
+            fs.appendFileSync(
+              path.join(process.cwd(), 'pricing-agent-diagnostic.log'),
+              `[${new Date().toISOString()}] [Agent] Background sweep runner finished.\n`
+            );
+          } catch (logErr) {}
           console.log('[Pricing Agent] Background run finished successfully.');
         })
         .catch((err: any) => {
           isPricingAgentRunningInProcess = false;
+          try {
+            fs.appendFileSync(
+              path.join(process.cwd(), 'pricing-agent-diagnostic.log'),
+              `[${new Date().toISOString()}] [Agent Error] ${err?.stack || err?.message || String(err)}\n`
+            );
+          } catch (logErr) {}
           console.error('[Pricing Agent] Run error:', err);
         });
 
@@ -5957,10 +5980,15 @@ self.addEventListener('activate', (event) => {
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true,  },
-      appType: "custom",
-    });
+  const vite = await createViteServer({
+  // Express owns the HTTP server in development. Keep Vite in middleware
+  // mode and disable HMR because the preview does not expose Vite's socket.
+  server: {
+  middlewareMode: true,
+  hmr: false,
+  },
+    appType: "custom",
+  });
     app.use(vite.middlewares);
 
     app.get('*all', async (req, res, next) => {
@@ -6007,6 +6035,9 @@ self.addEventListener('activate', (event) => {
         try {
           let template = fs.readFileSync(filePath, 'utf-8');
           template = await vite.transformIndexHtml(url, template);
+          // The hosted preview proxies HTTP but not Vite's websocket endpoint. Remove any
+          // injected HMR client so it cannot repeatedly report a failed socket connection.
+          template = template.replace(/<script[^>]+src=["']\/@vite\/client["'][^>]*><\/script>/gi, '');
           res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
           return;
         } catch (e) {

@@ -80,7 +80,7 @@ export function useTelematics({
           const tel = v.telematics || v.telemetry || {};
           const lat = typeof tel.latitude === 'number' ? tel.latitude : (typeof tel.lat === 'number' ? tel.lat : 44.6488);
           const lng = typeof tel.longitude === 'number' ? tel.longitude : (typeof tel.lng === 'number' ? tel.lng : -63.5752);
-          const speed = typeof tel.speedMph === 'number' ? tel.speedMph : (typeof tel.speed === 'number' ? tel.speed : 0);
+          let speed = typeof tel.speedMph === 'number' ? tel.speedMph : (typeof tel.speed === 'number' ? tel.speed : 0);
           const heading = typeof tel.heading === 'number' ? tel.heading : 0;
           
           let ignitionStatus: 'ON' | 'IDLE' | 'OFF' = 'OFF';
@@ -102,10 +102,9 @@ export function useTelematics({
           } else if (ignitionStatus === 'IDLE') {
             status = 'IDLE';
             effectiveSpeed = 0;
-          } else if (v.status === 'MOVING' || v.status === 'In Transit' || v.status === 'Driving' || (index % 4 === 0 && v.status !== 'Parked')) {
-            status = 'MOVING';
-            effectiveSpeed = effectiveSpeed > 3 ? effectiveSpeed : 35;
           } else {
+            // The GPS/ignition telemetry is authoritative. Do not promote a stale
+            // upstream status to MOVING when the device reports no live motion.
             status = 'STOPPED';
             effectiveSpeed = 0;
           }

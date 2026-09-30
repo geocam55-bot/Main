@@ -6,6 +6,19 @@ const FALLBACK_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3M
 const DEFAULT_FLEET_ID = 'f273b680-2105-427a-9e57-4dcef2979ec1';
 const DEFAULT_USER_ID = '453ef6dd-e61f-416d-88c2-fa5ff3fc408f';
 
+function getConfiguredFleetId() {
+  const configuredUrl = process.env.FLEET_COMPLETE_URL;
+  if (configuredUrl) {
+    try {
+      const orgUuid = new URL(configuredUrl).searchParams.get('org_uuid');
+      if (orgUuid) return orgUuid;
+    } catch (_) {
+      // Ignore malformed optional configuration and use the known organization.
+    }
+  }
+  return DEFAULT_FLEET_ID;
+}
+
 export function isJwtExpired(token) {
   if (!token) return true;
   try {
@@ -191,21 +204,21 @@ export async function getFleetCompleteToken(conn, forceRefresh = false) {
   const tokenUrl = activeConn.api_url || "https://api.fleetcomplete.com/login/token";
 
   if (isApiKeyMode && apiKey) {
-    return { token: apiKey, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
+    return { token: apiKey, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
   }
 
   // If we already have a valid access_token and not force refreshing
   if (!forceRefresh && activeConn.access_token) {
     const isExpired = isJwtExpired(activeConn.access_token) || (activeConn.token_expires_at ? new Date(activeConn.token_expires_at).getTime() <= Date.now() : false);
     if (!isExpired) {
-      return { token: activeConn.access_token, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
+      return { token: activeConn.access_token, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
     }
   }
 
   if (!username || !password) {
     return { 
       token: activeConn.access_token || null, 
-      fleetId: DEFAULT_FLEET_ID, 
+      fleetId: getConfiguredFleetId(),
       userId: DEFAULT_USER_ID, 
       error: !activeConn.access_token ? 'No Fleet Complete credentials provided' : null 
     };
@@ -299,7 +312,7 @@ export async function getFleetCompleteToken(conn, forceRefresh = false) {
     console.error('[Fleet Complete Auth Error]', err?.message || err);
   }
 
-  return { token: activeConn.access_token || null, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
+  return { token: activeConn.access_token || null, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
 }
 
 export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic') {
@@ -394,9 +407,9 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
                 : 0;
               const isStale = ageMinutes > 60;
 
-              const lat = typeof gps.latitude === 'number' ? gps.latitude : 44.69098 + (idx * 0.01);
-              const lng = typeof gps.longitude === 'number' ? gps.longitude : -63.59854 + (idx * 0.01);
-              const heading = typeof gps.direction === 'number' ? Math.round(gps.direction) : 0;
+              const lat = typeof gps.latitude === 'number' && Number.isFinite(gps.latitude) ? gps.latitude : null;
+              const lng = typeof gps.longitude === 'number' && Number.isFinite(gps.longitude) ? gps.longitude : null;
+              const heading = typeof gps.direction === 'number' && Number.isFinite(gps.direction) ? Math.round(gps.direction) : 0;
               const engineIdleTime = typeof canBus.engineIdleTime === 'number' ? canBus.engineIdleTime : 0;
               const idlingMins = Math.floor(engineIdleTime / 60);
 
@@ -404,14 +417,18 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
               let ignitionStatus = 'OFF';
               let status = 'STOPPED';
 
-              const rawGpsSpeed = typeof gps.speed === 'number' && !isNaN(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
-              const isEngineOn = ignition.engineStatus === true;
+              const rawGpsSpeed = typeof gps.speed === 'number' && Number.isFinite(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
+              const rawEngineStatus = ignition.engineStatus;
+              const isEngineOn = rawEngineStatus === true || ['ON', 'IDLE', 'RUNNING', 'STARTED'].includes(String(rawEngineStatus || '').toUpperCase());
+              const hasFreshGps = rawTimestamp > 0 && !isStale;
 
-              if (rawGpsSpeed >= 5 || (isEngineOn && rawGpsSpeed >= 3)) {
+              // Fleet Complete can retain a previous speed while an asset is offline.
+              // Only expose motion when the position is fresh and the ignition agrees.
+              if (hasFreshGps && rawGpsSpeed >= 3 && isEngineOn) {
                 speed = rawGpsSpeed;
                 ignitionStatus = 'ON';
                 status = 'MOVING';
-              } else if (isEngineOn || (rawGpsSpeed > 0 && rawGpsSpeed < 5)) {
+              } else if (hasFreshGps && isEngineOn) {
                 speed = rawGpsSpeed;
                 ignitionStatus = 'IDLE';
                 status = 'IDLE';
@@ -426,8 +443,8 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
               const telemetryObj = {
                 latitude: lat,
                 longitude: lng,
-                lat,
-                lng,
+                lat: lat ?? 0,
+                lng: lng ?? 0,
                 speed,
                 speedMph: speed,
                 heading,
@@ -503,22 +520,24 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
             const ageMinutes = rawTimestamp > 0 && !isNaN(rawTimestamp) ? (Date.now() - rawTimestamp) / 60000 : 0;
             const isStale = ageMinutes > 60;
 
-            const lat = typeof item.latitude === 'number' ? item.latitude : (item.lat || 44.69098 + (idx * 0.01));
-            const lng = typeof item.longitude === 'number' ? item.longitude : (item.lng || -63.59854 + (idx * 0.01));
+            const lat = typeof item.latitude === 'number' && Number.isFinite(item.latitude) ? item.latitude : (typeof item.lat === 'number' ? item.lat : null);
+            const lng = typeof item.longitude === 'number' && Number.isFinite(item.longitude) ? item.longitude : (typeof item.lng === 'number' ? item.lng : null);
             const heading = typeof item.direction === 'number' ? item.direction : (item.heading || 0);
 
             let speed = 0;
             let status = 'STOPPED';
             let ignitionStatus = 'OFF';
 
-            const rawSpeed = typeof item.speed === 'number' && !isNaN(item.speed) ? Math.max(0, Math.min(135, Math.round(item.speed))) : 0;
-            const isIgnitionOn = item.ignition === true || item.engineStatus === true;
+            const rawSpeed = typeof item.speed === 'number' && Number.isFinite(item.speed) ? Math.max(0, Math.min(135, Math.round(item.speed))) : 0;
+            const rawIgnition = item.ignition ?? item.engineStatus;
+            const isIgnitionOn = rawIgnition === true || ['ON', 'IDLE', 'RUNNING', 'STARTED'].includes(String(rawIgnition || '').toUpperCase());
+            const isFresh = rawTimestamp > 0 && !isStale;
 
-            if (rawSpeed >= 5 || (isIgnitionOn && rawSpeed >= 3)) {
+            if (isFresh && isIgnitionOn && rawSpeed >= 3) {
               speed = rawSpeed;
               status = 'MOVING';
               ignitionStatus = 'ON';
-            } else if (isIgnitionOn || (rawSpeed > 0 && rawSpeed < 5)) {
+            } else if (isFresh && isIgnitionOn) {
               speed = rawSpeed;
               status = 'IDLE';
               ignitionStatus = 'IDLE';
@@ -588,7 +607,7 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
 
   // 3. Resilient Fallback: return authentic fleet vehicles matched to database trucks
   const fallbackScoped = await matchAndScopeToDatabaseTrucks(FALLBACK_AUTHENTIC_FLEET, tenantId);
-  return { success: true, vehicles: fallbackScoped, source: 'fleet_complete_cached', fleetId: DEFAULT_FLEET_ID };
+  return { success: true, vehicles: fallbackScoped, source: 'fleet_complete_cached', fleetId: getConfiguredFleetId() };
 }
 
 const FALLBACK_AUTHENTIC_FLEET = [

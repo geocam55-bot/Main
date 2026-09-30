@@ -1,14 +1,14 @@
 {
-  "isRunning": true,
+  "isRunning": false,
   "progress": {
     "current": 12966,
     "total": 20561,
     "percent": 63.1,
     "matchesFound": 35942,
-    "currentSku": "51206852",
+    "currentSku": "Stopped",
     "currentName": "PT BALUSTER BROWN 2X2X42",
     "startedAt": "2026-09-28T14:25:11.351Z",
-    "lastUpdated": "2026-09-28T14:40:23.493Z"
+    "lastUpdated": "2026-09-29T00:22:58.326Z"
   },
   "pid": 2489
 }

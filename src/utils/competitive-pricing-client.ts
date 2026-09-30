@@ -64,6 +64,25 @@ export const DEFAULT_AGENT_STATUS: AgentStatus = {
 let isClientSweepRunning = false;
 let clientSweepAbortController: AbortController | null = null;
 
+export async function appendDirectAgentLog(message: string): Promise<void> {
+  const line = `[${new Date().toISOString()}] [Client Agent] ${message}`;
+  try {
+    const { data } = await supabase
+      .from('kv_store_8405be07')
+      .select('value')
+      .eq('key', 'pricing_agent:logs')
+      .maybeSingle();
+    const existing = typeof data?.value === 'string' ? data.value : data?.value?.logs || '';
+    const lines = `${existing ? `${existing.trim()}\n` : ''}${line}`.split('\n').slice(-200).join('\n');
+    await supabase.from('kv_store_8405be07').upsert({
+      key: 'pricing_agent:logs',
+      value: { logs: lines, updatedAt: new Date().toISOString() },
+    });
+  } catch (error) {
+    console.warn('[v0] Unable to persist pricing agent diagnostic log:', error);
+  }
+}
+
 function resolveInventoryTitles(rawName = '', rawDescription = '', category = '') {
   let parsedDescription = rawDescription || '';
   const markerStart = "<!--metadata:";
@@ -559,6 +578,7 @@ export async function startDirectClientSweep(onProgress?: (status: AgentStatus) 
   clientSweepAbortController = new AbortController();
 
   const startedAt = new Date().toISOString();
+  void appendDirectAgentLog('Direct client sweep started; server runner was unavailable or returned no usable response.');
 
   let initialMatches = 1174;
   let startOffset = 0;
@@ -575,6 +595,8 @@ export async function startDirectClientSweep(onProgress?: (status: AgentStatus) 
       startOffset = 0;
     }
   } catch (e) {}
+
+  await appendDirectAgentLog('Direct sweep initialized. Playwright is server-only; browser fallback uses the Kent search endpoint.');
 
   const currentStatus: AgentStatus = {
     isRunning: true,
