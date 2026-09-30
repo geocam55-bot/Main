@@ -203,13 +203,14 @@ export async function saveActiveConnection(conn) {
 export async function getFleetCompleteToken(conn, forceRefresh = false) {
   const activeConn = conn || await getActiveConnection();
   const isApiKeyMode = activeConn.connection_type === 'api_key';
+  const configuredOrgId = getConfiguredFleetId();
   const apiKey = isApiKeyMode ? activeConn.api_key : null;
   const username = activeConn.client_id;
   const password = activeConn.client_secret;
   const tokenUrl = activeConn.api_url || "https://api.fleetcomplete.com/login/token";
 
   if (isApiKeyMode && apiKey) {
-    return { token: apiKey, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
+    return { token: apiKey, fleetId: configuredOrgId, userId: DEFAULT_USER_ID };
   }
 
   // If we already have a valid access_token and not force refreshing
@@ -444,7 +445,7 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
                 ignitionStatus = 'ON';
                 status = 'MOVING';
               } else if (hasFreshGps && isEngineOn) {
-                speed = rawGpsSpeed;
+                speed = normalizedGpsSpeed;
                 ignitionStatus = 'IDLE';
                 status = 'IDLE';
               } else {
@@ -474,8 +475,8 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
               };
 
               return {
-                id: String(v.id || v.name),
-                vehicleId: String(v.id || v.name),
+                id: String(v.name || v.id),
+                vehicleId: String(v.name || v.id),
                 truckName: String(v.name || v.id),
                 name: String(v.name || v.id),
                 lat,
