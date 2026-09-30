@@ -127,7 +127,9 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         if (matchedRaw.vehicleId) matchedRawIds.add(matchedRaw.vehicleId.toLowerCase());
         if (matchedRaw.truckName) matchedRawIds.add(matchedRaw.truckName.toLowerCase());
         const rawSpd = matchedRaw.telematics?.speedMph ?? matchedRaw.telematics?.speed ?? 0;
-        const normalizedStatus = matchedRaw.status || (rawSpd > 0 ? 'MOVING' : 'STOPPED');
+          const normalizedStatus = ['MOVING', 'IDLE', 'STOPPED'].includes(String(matchedRaw.status).toUpperCase())
+            ? String(matchedRaw.status).toUpperCase()
+            : (rawSpd > 0 ? 'MOVING' : 'STOPPED');
         return {
           ...matchedRaw,
           status: normalizedStatus,
@@ -202,11 +204,15 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     // Once the API has returned live records, do not pad the fleet with configured
     // trucks that have no matching Fleet Complete identity. Those placeholders
     // incorrectly turn a live fleet into an all-stopped fleet in the dashboard.
-    const configuredLive = rawVehicles.length > 0
-      ? mapped.filter(v => matchedBaseIds.has(v.vehicleId.toLowerCase()) || matchedBaseIds.has(v.truckName.toLowerCase()))
-      : mapped;
+    // Fleet Complete can identify assets by a name/number that differs from the
+    // local truck id. The raw API records are authoritative for live display;
+    // mapped records enrich them with local fleet metadata when a match exists.
+    const mappedLive = mapped.filter(v => matchedBaseIds.has(v.vehicleId.toLowerCase()) || matchedBaseIds.has(v.truckName.toLowerCase()));
+    const liveRecords = additionalRaw.length > 0 ? additionalRaw : rawVehicles;
 
-    return [...configuredLive, ...additionalRaw];
+    return rawVehicles.length > 0
+      ? [...mappedLive, ...liveRecords.filter(rv => !mappedLive.some(v => v.vehicleId === rv.vehicleId || v.truckName === rv.truckName))]
+      : mapped;
   }, [trucks, rawVehicles]);
 
   // Filtered vehicles for left panel and map views
