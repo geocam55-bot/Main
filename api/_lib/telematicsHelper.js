@@ -140,9 +140,14 @@ export async function getActiveConnection() {
   const envPass = process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || process.env.FLEETCOMPLETE_PASSWORD || process.env.FLEETCOMPLETE_PASS;
   const envApiKey = process.env.FLEET_COMPLETE_API_KEY || process.env.FLEETCOMPLETE_API_KEY;
 
-  if (envUser && !decryptedConn.client_id) decryptedConn.client_id = envUser;
-  if (envPass && !decryptedConn.client_secret) decryptedConn.client_secret = envPass;
-  if (envApiKey && !decryptedConn.api_key) decryptedConn.api_key = envApiKey;
+  // Production environment variables are authoritative. A stale Supabase
+  // connection record must not override the credentials attached to the deployment.
+  if (envUser) decryptedConn.client_id = envUser;
+  if (envPass) decryptedConn.client_secret = envPass;
+  if (envApiKey) {
+    decryptedConn.api_key = envApiKey;
+    decryptedConn.connection_type = 'api_key';
+  }
 
   return decryptedConn;
 }
@@ -422,7 +427,10 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
               let ignitionStatus = 'OFF';
               let status = 'STOPPED';
 
-              const rawGpsSpeed = typeof gps.speed === 'number' && Number.isFinite(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
+              const rawGpsSpeed = [gps.speed, gps.speedKph, gps.speedKmh, latest.speed]
+                .map((value) => typeof value === 'string' ? Number.parseFloat(value) : value)
+                .find((value) => typeof value === 'number' && Number.isFinite(value));
+              const normalizedGpsSpeed = typeof rawGpsSpeed === 'number' ? Math.max(0, Math.min(135, Math.round(rawGpsSpeed))) : 0;
               const rawEngineStatus = ignition.engineStatus;
               const normalizedEngineStatus = String(rawEngineStatus ?? '').toUpperCase();
               const hasEngineSignal = rawEngineStatus !== undefined && rawEngineStatus !== null && normalizedEngineStatus !== '';
@@ -431,8 +439,8 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
 
               // A fresh GPS speed is authoritative when Fleet Complete omits ignition.
               // Never show motion from an old/offline position.
-              if (hasFreshGps && rawGpsSpeed >= 3 && (!hasEngineSignal || isEngineOn)) {
-                speed = rawGpsSpeed;
+              if (hasFreshGps && normalizedGpsSpeed >= 3 && (!hasEngineSignal || isEngineOn)) {
+                speed = normalizedGpsSpeed;
                 ignitionStatus = 'ON';
                 status = 'MOVING';
               } else if (hasFreshGps && isEngineOn) {
