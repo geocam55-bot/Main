@@ -65,11 +65,9 @@ export function useTelematics({
         params.set('search', searchQuery.trim());
       }
 
-      const queryStr = params.toString() ? `?${params.toString()}` : '';
-      const apiBase = typeof window !== 'undefined' && window.location.pathname.endsWith('.html')
-        ? ''
-        : '';
-      const response = await fetch(`${apiBase}/api/v1/telematics/vehicles${queryStr}`, {
+      params.set('_ts', String(Date.now()));
+      const queryStr = `?${params.toString()}`;
+      const response = await fetch(`/api/v1/telematics/vehicles${queryStr}`, {
         headers: { 'Accept': 'application/json' },
         cache: 'no-store'
       });
@@ -79,8 +77,11 @@ export function useTelematics({
       }
 
       const data: any = await response.json();
-      if (data.success && Array.isArray(data.vehicles)) {
-        const normalizedVehicles: VehicleRecord[] = data.vehicles.map((v: any, index: number) => {
+      const responseVehicles = Array.isArray(data.vehicles)
+        ? data.vehicles
+        : (Array.isArray(data.data) ? data.data : []);
+      if (data.success !== false && responseVehicles.length > 0) {
+        const normalizedVehicles: VehicleRecord[] = responseVehicles.map((v: any, index: number) => {
           const tel = v.telematics || v.telemetry || {};
           const lat = typeof tel.latitude === 'number' ? tel.latitude : (typeof tel.lat === 'number' ? tel.lat : 44.6488);
           const lng = typeof tel.longitude === 'number' ? tel.longitude : (typeof tel.lng === 'number' ? tel.lng : -63.5752);
@@ -208,6 +209,8 @@ export function useTelematics({
         setLastUpdated(new Date());
         setError(null);
         onVehicleUpdate?.(normalizedVehicles);
+      } else {
+        throw new Error(data.error || 'Fleet Complete returned no live vehicle telemetry');
       }
     } catch (err: any) {
       console.warn('[useTelematics] Fetch notice:', err.message);
