@@ -140,9 +140,14 @@ export async function getActiveConnection() {
   const envPass = process.env.FLEET_COMPLETE_PASSWORD || process.env.FLEET_COMPLETE_PASS || process.env.FLEETCOMPLETE_PASSWORD || process.env.FLEETCOMPLETE_PASS;
   const envApiKey = process.env.FLEET_COMPLETE_API_KEY || process.env.FLEETCOMPLETE_API_KEY;
 
-  if (envUser && !decryptedConn.client_id) decryptedConn.client_id = envUser;
-  if (envPass && !decryptedConn.client_secret) decryptedConn.client_secret = envPass;
-  if (envApiKey && !decryptedConn.api_key) decryptedConn.api_key = envApiKey;
+  // Production environment variables are authoritative. A stale Supabase
+  // connection record must not override the credentials attached to the deployment.
+  if (envUser) decryptedConn.client_id = envUser;
+  if (envPass) decryptedConn.client_secret = envPass;
+  if (envApiKey) {
+    decryptedConn.api_key = envApiKey;
+    decryptedConn.connection_type = 'api_key';
+  }
 
   return decryptedConn;
 }
@@ -198,13 +203,14 @@ export async function saveActiveConnection(conn) {
 export async function getFleetCompleteToken(conn, forceRefresh = false) {
   const activeConn = conn || await getActiveConnection();
   const isApiKeyMode = activeConn.connection_type === 'api_key';
+  const configuredOrgId = getConfiguredFleetId();
   const apiKey = isApiKeyMode ? activeConn.api_key : null;
   const username = activeConn.client_id;
   const password = activeConn.client_secret;
   const tokenUrl = activeConn.api_url || "https://api.fleetcomplete.com/login/token";
 
   if (isApiKeyMode && apiKey) {
-    return { token: apiKey, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
+    return { token: apiKey, fleetId: configuredOrgId, userId: DEFAULT_USER_ID };
   }
 
   // If we already have a valid access_token and not force refreshing
@@ -422,7 +428,10 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
               let ignitionStatus = 'OFF';
               let status = 'STOPPED';
 
-              const rawGpsSpeed = typeof gps.speed === 'number' && Number.isFinite(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
+              const rawGpsSpeed = [gps.speed, gps.speedKph, gps.speedKmh, latest.speed]
+                .map((value) => typeof value === 'string' ? Number.parseFloat(value) : value)
+                .find((value) => typeof value === 'number' && Number.isFinite(value));
+              const normalizedGpsSpeed = typeof rawGpsSpeed === 'number' ? Math.max(0, Math.min(135, Math.round(rawGpsSpeed))) : 0;
               const rawEngineStatus = ignition.engineStatus;
               const normalizedEngineStatus = String(rawEngineStatus ?? '').toUpperCase();
               const hasEngineSignal = rawEngineStatus !== undefined && rawEngineStatus !== null && normalizedEngineStatus !== '';
@@ -431,12 +440,12 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
 
               // A fresh GPS speed is authoritative when Fleet Complete omits ignition.
               // Never show motion from an old/offline position.
-              if (hasFreshGps && rawGpsSpeed >= 3 && (!hasEngineSignal || isEngineOn)) {
-                speed = rawGpsSpeed;
+              if (hasFreshGps && normalizedGpsSpeed >= 3 && (!hasEngineSignal || isEngineOn)) {
+                speed = normalizedGpsSpeed;
                 ignitionStatus = 'ON';
                 status = 'MOVING';
               } else if (hasFreshGps && isEngineOn) {
-                speed = rawGpsSpeed;
+                speed = normalizedGpsSpeed;
                 ignitionStatus = 'IDLE';
                 status = 'IDLE';
               } else {
@@ -466,8 +475,8 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
               };
 
               return {
-                id: String(v.id || v.name),
-                vehicleId: String(v.id || v.name),
+                id: String(v.name || v.id),
+                vehicleId: String(v.name || v.id),
                 truckName: String(v.name || v.id),
                 name: String(v.name || v.id),
                 lat,
