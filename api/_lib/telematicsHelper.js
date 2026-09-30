@@ -396,12 +396,17 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
               const odo = latest.odometer || {};
               const addr = latest.address || {};
 
-              const rawTimestamp = typeof latest.timestamp === 'number' 
-                ? latest.timestamp 
-                : (latest.timestamp ? new Date(latest.timestamp).getTime() : 0);
-              const timestamp = rawTimestamp > 0 && !isNaN(rawTimestamp) 
-                ? new Date(rawTimestamp).toISOString() 
-                : (typeof latest.timestamp === 'string' && latest.timestamp.trim() !== '' ? latest.timestamp : new Date().toISOString());
+              const timestampValue = latest.timestamp;
+              const parsedTimestamp = typeof timestampValue === 'number'
+                ? timestampValue
+                : (timestampValue ? new Date(timestampValue).getTime() : 0);
+              // Fleet Complete may return Unix seconds or milliseconds.
+              const rawTimestamp = parsedTimestamp > 0 && parsedTimestamp < 1e12
+                ? parsedTimestamp * 1000
+                : parsedTimestamp;
+              const timestamp = rawTimestamp > 0 && !isNaN(rawTimestamp)
+                ? new Date(rawTimestamp).toISOString()
+                : new Date().toISOString();
               const ageMinutes = rawTimestamp > 0 && !isNaN(rawTimestamp) 
                 ? (Date.now() - rawTimestamp) / 60000 
                 : 0;
@@ -419,12 +424,14 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
 
               const rawGpsSpeed = typeof gps.speed === 'number' && Number.isFinite(gps.speed) ? Math.max(0, Math.min(135, Math.round(gps.speed))) : 0;
               const rawEngineStatus = ignition.engineStatus;
-              const isEngineOn = rawEngineStatus === true || ['ON', 'IDLE', 'RUNNING', 'STARTED'].includes(String(rawEngineStatus || '').toUpperCase());
+              const normalizedEngineStatus = String(rawEngineStatus ?? '').toUpperCase();
+              const hasEngineSignal = rawEngineStatus !== undefined && rawEngineStatus !== null && normalizedEngineStatus !== '';
+              const isEngineOn = rawEngineStatus === true || ['ON', 'IDLE', 'RUNNING', 'STARTED'].includes(normalizedEngineStatus);
               const hasFreshGps = rawTimestamp > 0 && !isStale;
 
-              // Fleet Complete can retain a previous speed while an asset is offline.
-              // Only expose motion when the position is fresh and the ignition agrees.
-              if (hasFreshGps && rawGpsSpeed >= 3 && isEngineOn) {
+              // A fresh GPS speed is authoritative when Fleet Complete omits ignition.
+              // Never show motion from an old/offline position.
+              if (hasFreshGps && rawGpsSpeed >= 3 && (!hasEngineSignal || isEngineOn)) {
                 speed = rawGpsSpeed;
                 ignitionStatus = 'ON';
                 status = 'MOVING';
@@ -513,10 +520,16 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
         const list = Array.isArray(restData) ? restData : (restData.positions || restData.vehicles || []);
         if (list.length > 0) {
           const vehicles = list.map((item, idx) => {
-            const rawTimestamp = item.timestamp || item.dateTime ? new Date(item.timestamp || item.dateTime).getTime() : 0;
-            const timestamp = rawTimestamp > 0 && !isNaN(rawTimestamp) 
-              ? new Date(rawTimestamp).toISOString() 
-              : (typeof (item.timestamp || item.dateTime) === 'string' && (item.timestamp || item.dateTime).trim() !== '' ? (item.timestamp || item.dateTime) : new Date().toISOString());
+            const timestampValue = item.timestamp || item.dateTime;
+            const parsedTimestamp = typeof timestampValue === 'number'
+              ? timestampValue
+              : (timestampValue ? new Date(timestampValue).getTime() : 0);
+            const rawTimestamp = parsedTimestamp > 0 && parsedTimestamp < 1e12
+              ? parsedTimestamp * 1000
+              : parsedTimestamp;
+            const timestamp = rawTimestamp > 0 && !isNaN(rawTimestamp)
+              ? new Date(rawTimestamp).toISOString()
+              : new Date().toISOString();
             const ageMinutes = rawTimestamp > 0 && !isNaN(rawTimestamp) ? (Date.now() - rawTimestamp) / 60000 : 0;
             const isStale = ageMinutes > 60;
 
@@ -530,10 +543,12 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
 
             const rawSpeed = typeof item.speed === 'number' && Number.isFinite(item.speed) ? Math.max(0, Math.min(135, Math.round(item.speed))) : 0;
             const rawIgnition = item.ignition ?? item.engineStatus;
-            const isIgnitionOn = rawIgnition === true || ['ON', 'IDLE', 'RUNNING', 'STARTED'].includes(String(rawIgnition || '').toUpperCase());
+            const normalizedIgnition = String(rawIgnition ?? '').toUpperCase();
+            const hasIgnitionSignal = rawIgnition !== undefined && rawIgnition !== null && normalizedIgnition !== '';
+            const isIgnitionOn = rawIgnition === true || ['ON', 'IDLE', 'RUNNING', 'STARTED'].includes(normalizedIgnition);
             const isFresh = rawTimestamp > 0 && !isStale;
 
-            if (isFresh && isIgnitionOn && rawSpeed >= 3) {
+            if (isFresh && rawSpeed >= 3 && (!hasIgnitionSignal || isIgnitionOn)) {
               speed = rawSpeed;
               status = 'MOVING';
               ignitionStatus = 'ON';
