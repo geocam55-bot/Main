@@ -6,6 +6,19 @@ const FALLBACK_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3M
 const DEFAULT_FLEET_ID = 'f273b680-2105-427a-9e57-4dcef2979ec1';
 const DEFAULT_USER_ID = '453ef6dd-e61f-416d-88c2-fa5ff3fc408f';
 
+function getConfiguredFleetId() {
+  const configuredUrl = process.env.FLEET_COMPLETE_URL;
+  if (configuredUrl) {
+    try {
+      const orgUuid = new URL(configuredUrl).searchParams.get('org_uuid');
+      if (orgUuid) return orgUuid;
+    } catch (_) {
+      // Ignore malformed optional configuration and use the known organization.
+    }
+  }
+  return DEFAULT_FLEET_ID;
+}
+
 export function isJwtExpired(token) {
   if (!token) return true;
   try {
@@ -191,21 +204,21 @@ export async function getFleetCompleteToken(conn, forceRefresh = false) {
   const tokenUrl = activeConn.api_url || "https://api.fleetcomplete.com/login/token";
 
   if (isApiKeyMode && apiKey) {
-    return { token: apiKey, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
+    return { token: apiKey, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
   }
 
   // If we already have a valid access_token and not force refreshing
   if (!forceRefresh && activeConn.access_token) {
     const isExpired = isJwtExpired(activeConn.access_token) || (activeConn.token_expires_at ? new Date(activeConn.token_expires_at).getTime() <= Date.now() : false);
     if (!isExpired) {
-      return { token: activeConn.access_token, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
+      return { token: activeConn.access_token, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
     }
   }
 
   if (!username || !password) {
     return { 
       token: activeConn.access_token || null, 
-      fleetId: DEFAULT_FLEET_ID, 
+      fleetId: getConfiguredFleetId(),
       userId: DEFAULT_USER_ID, 
       error: !activeConn.access_token ? 'No Fleet Complete credentials provided' : null 
     };
@@ -299,7 +312,7 @@ export async function getFleetCompleteToken(conn, forceRefresh = false) {
     console.error('[Fleet Complete Auth Error]', err?.message || err);
   }
 
-  return { token: activeConn.access_token || null, fleetId: DEFAULT_FLEET_ID, userId: DEFAULT_USER_ID };
+  return { token: activeConn.access_token || null, fleetId: getConfiguredFleetId(), userId: DEFAULT_USER_ID };
 }
 
 export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic') {
@@ -588,7 +601,7 @@ export async function fetchLiveFleetCompleteVehicles(tenantId = 'rona_atlantic')
 
   // 3. Resilient Fallback: return authentic fleet vehicles matched to database trucks
   const fallbackScoped = await matchAndScopeToDatabaseTrucks(FALLBACK_AUTHENTIC_FLEET, tenantId);
-  return { success: true, vehicles: fallbackScoped, source: 'fleet_complete_cached', fleetId: DEFAULT_FLEET_ID };
+  return { success: true, vehicles: fallbackScoped, source: 'fleet_complete_cached', fleetId: getConfiguredFleetId() };
 }
 
 const FALLBACK_AUTHENTIC_FLEET = [
