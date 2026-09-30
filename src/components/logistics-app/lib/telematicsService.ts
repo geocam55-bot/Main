@@ -66,8 +66,12 @@ export function useTelematics({
       }
 
       const queryStr = params.toString() ? `?${params.toString()}` : '';
-      const response = await fetch(`/api/v1/telematics/vehicles${queryStr}`, {
-        headers: { 'Accept': 'application/json' }
+      const apiBase = typeof window !== 'undefined' && window.location.pathname.endsWith('.html')
+        ? ''
+        : '';
+      const response = await fetch(`${apiBase}/api/v1/telematics/vehicles${queryStr}`, {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
       });
 
       if (!response.ok) {
@@ -96,10 +100,11 @@ export function useTelematics({
 
           let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
           let effectiveSpeed = speed;
-          if (speed > 3 || (ignitionStatus === 'ON' && speed > 3)) {
+          const upstreamStatus = String(v.status || '').toUpperCase();
+          if (speed > 0 || upstreamStatus === 'MOVING' || upstreamStatus === 'DRIVING' || upstreamStatus === 'IN TRANSIT') {
             status = 'MOVING';
             effectiveSpeed = speed;
-          } else if (ignitionStatus === 'IDLE') {
+          } else if (ignitionStatus === 'IDLE' || upstreamStatus === 'IDLE' || upstreamStatus === 'IDLING') {
             status = 'IDLE';
             effectiveSpeed = 0;
           } else {
