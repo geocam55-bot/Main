@@ -178,7 +178,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         licensePlate: t.licensePlate || `PR-${9020 + index}`,
         model: t.type || 'Commercial Vehicle',
         capacityWeight: 4500,
-        status,
+        status: 'STOPPED' as const,
         driver: {
           id: t.driverId || `DRV-${index + 101}`,
           name: effectiveDriverName
@@ -228,13 +228,13 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     const totalActiveDeliveries = vehicles.reduce((acc, v) => acc + (v.activeRoute?.stops?.length || v.activeRoute?.totalStops || 0), 0);
 
     return {
-      totalVehicles: vehicles.length,
-      movingCount,
-      idleCount,
-      stoppedCount,
-      averageSpeed: avgSpeed,
-      averageFuelLevel: avgFuel,
-      totalActiveDeliveries
+      totalVehicles: rawSummary.totalVehicles || vehicles.length,
+      movingCount: rawSummary.movingCount,
+      idleCount: rawSummary.idleCount,
+      stoppedCount: rawSummary.stoppedCount,
+      averageSpeed: rawSummary.averageSpeed,
+      averageFuelLevel: rawSummary.averageFuelLevel,
+      totalActiveDeliveries: rawSummary.totalActiveDeliveries || totalActiveDeliveries
     };
   }, [vehicles]);
 

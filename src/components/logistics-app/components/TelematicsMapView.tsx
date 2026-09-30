@@ -44,16 +44,23 @@ interface TelematicsMapViewProps {
   viewingTripsFor?: string | null;
 }
 
+const viteEnv = (import.meta as ImportMeta & {
+  env?: Record<string, string | undefined>;
+}).env;
+
+const serverEnv =
+  typeof process !== 'undefined' && process.env ? process.env : undefined;
+
 const API_KEY_STATIC =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.GOOGLE_MAPS_API_KEY ||
-  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.VITE_GOOGLE_MAPS_API_KEY ||
-  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||
+  serverEnv?.GOOGLE_MAPS_PLATFORM_KEY ||
+  serverEnv?.GOOGLE_MAPS_API_KEY ||
+  serverEnv?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  serverEnv?.VITE_GOOGLE_MAPS_API_KEY ||
+  serverEnv?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  viteEnv?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  viteEnv?.VITE_GOOGLE_MAPS_API_KEY ||
+  viteEnv?.GOOGLE_MAPS_PLATFORM_KEY ||
+  viteEnv?.GOOGLE_MAPS_API_KEY ||
   '';
 
 // Default center: Dartmouth / Halifax Regional Logistics Corridor
