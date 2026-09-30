@@ -48,19 +48,12 @@ const viteEnv = (import.meta as ImportMeta & {
   env?: Record<string, string | undefined>;
 }).env;
 
-const serverEnv =
-  typeof process !== 'undefined' && process.env ? process.env : undefined;
+declare const __GOOGLE_MAPS_PLATFORM_KEY__: string | undefined;
 
 const API_KEY_STATIC =
-  serverEnv?.GOOGLE_MAPS_PLATFORM_KEY ||
-  serverEnv?.GOOGLE_MAPS_API_KEY ||
-  serverEnv?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  serverEnv?.VITE_GOOGLE_MAPS_API_KEY ||
-  serverEnv?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  (typeof __GOOGLE_MAPS_PLATFORM_KEY__ !== 'undefined' && __GOOGLE_MAPS_PLATFORM_KEY__) ||
   viteEnv?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   viteEnv?.VITE_GOOGLE_MAPS_API_KEY ||
-  viteEnv?.GOOGLE_MAPS_PLATFORM_KEY ||
-  viteEnv?.GOOGLE_MAPS_API_KEY ||
   '';
 
 // Default center: Dartmouth / Halifax Regional Logistics Corridor
