@@ -1,4 +1,4 @@
-import { fetchLiveFleetCompleteVehicles, getActiveConnection } from '../../_lib/telematicsHelper.js';
+import { fetchLiveFleetCompleteVehicles } from '../../_lib/telematicsHelper.js';
 
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
@@ -9,7 +9,6 @@ export default async function handler(req, res) {
     const search = (req.query.search || '').toLowerCase().trim();
     const tenantId = req.query.tenantId || req.query.tenant || 'rona_atlantic';
 
-    const conn = await getActiveConnection();
     const result = await fetchLiveFleetCompleteVehicles(tenantId);
 
     let list = result.vehicles || [];
