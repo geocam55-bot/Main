@@ -144,35 +144,31 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         };
       }
 
-      // If not in raw telemetry, construct valid VehicleRecord from truck
-      const lat = (typeof t.lat === 'number' && !isNaN(t.lat)) ? t.lat : ((typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (typeof t.currentLatitude === 'number' && !isNaN(t.currentLatitude) ? t.currentLatitude : (44.69098 + (index * 0.012))));
-      const lng = (typeof t.lng === 'number' && !isNaN(t.lng)) ? t.lng : ((typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (typeof t.currentLongitude === 'number' && !isNaN(t.currentLongitude) ? t.currentLongitude : (-63.59854 + (index * 0.008))));
-      
-      const baseSpeed = (typeof t.speed === 'number' && !isNaN(t.speed)) ? t.speed : ((typeof t.gpsSpeed === 'number' && !isNaN(t.gpsSpeed)) ? t.gpsSpeed : 0);
-      const shouldBeMoving = t.status === 'In Transit' || t.status === 'MOVING' || t.status === 'Driving' || (index % 4 === 0 && t.status !== 'Parked' && t.status !== 'Stopped');
-      const rawSpeed = baseSpeed > 3 ? baseSpeed : (shouldBeMoving ? 35 : 0);
-      
-      const isMoving = rawSpeed > 3;
-      const isIdle = !isMoving && (t.status === 'Idling' || t.status === 'IDLE' || t.ignitionStatus === 'IDLE');
-      const status: 'MOVING' | 'IDLE' | 'STOPPED' = isMoving ? 'MOVING' : (isIdle ? 'IDLE' : 'STOPPED');
-      const effectiveSpeed = isMoving ? rawSpeed : 0;
+      // A truck without a matching Fleet Complete record has no live GPS state.
+      // Preserve its configured position, but never synthesize movement or telemetry.
+      const lat = (typeof t.lat === 'number' && Number.isFinite(t.lat)) ? t.lat :
+        (typeof t.gpsLat === 'number' && Number.isFinite(t.gpsLat) ? t.gpsLat :
+          (typeof t.currentLatitude === 'number' && Number.isFinite(t.currentLatitude) ? t.currentLatitude : 0));
+      const lng = (typeof t.lng === 'number' && Number.isFinite(t.lng)) ? t.lng :
+        (typeof t.gpsLng === 'number' && Number.isFinite(t.gpsLng) ? t.gpsLng :
+          (typeof t.currentLongitude === 'number' && Number.isFinite(t.currentLongitude) ? t.currentLongitude : 0));
 
       const telemetryObj = {
         latitude: lat,
         longitude: lng,
         lat,
         lng,
-        speed: effectiveSpeed,
-        speedMph: effectiveSpeed,
-        heading: (index * 45) % 360,
-        ignitionOn: status !== 'STOPPED',
-        ignitionStatus: isMoving ? 'ON' : (isIdle ? 'IDLE' : 'OFF'),
-        fuelPercent: 85,
-        fuelLevel: 85,
-        odometer: 54200 + index * 2100,
-        batteryVoltage: isMoving ? 14.1 : 12.6,
-        coolantTemp: isMoving ? 88 : 22,
-        lastUpdated: new Date().toISOString()
+        speed: 0,
+        speedMph: 0,
+        heading: 0,
+        ignitionOn: false,
+        ignitionStatus: 'OFF',
+        fuelPercent: undefined,
+        fuelLevel: undefined,
+        odometer: undefined,
+        batteryVoltage: undefined,
+        coolantTemp: undefined,
+        lastUpdated: undefined
       };
 
       return {
