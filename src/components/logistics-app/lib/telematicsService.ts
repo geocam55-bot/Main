@@ -102,12 +102,9 @@ export function useTelematics({
           } else if (ignitionStatus === 'IDLE') {
             status = 'IDLE';
             effectiveSpeed = 0;
-          } else if (v.status === 'MOVING' || v.status === 'In Transit' || v.status === 'Driving') {
-            // Preserve an explicit upstream moving state, but never invent motion
-            // from the array index when GPS reports no speed.
-            status = 'MOVING';
-            effectiveSpeed = speed;
           } else {
+            // The GPS/ignition telemetry is authoritative. Do not promote a stale
+            // upstream status to MOVING when the device reports no live motion.
             status = 'STOPPED';
             effectiveSpeed = 0;
           }
