@@ -85,7 +85,11 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
   });
   // Filter vehicles to strictly match Supabase trucks and include all active telematics units
   const vehicles = useMemo(() => {
-    const baseTrucks = (trucks && trucks.length > 0) ? trucks : DEFAULT_TRUCKS;
+    // Live Fleet Complete data is authoritative. Never replace an unavailable
+    // live response with configured trucks that look like real stopped telemetry.
+    const baseTrucks = rawVehicles.length > 0
+      ? ((trucks && trucks.length > 0) ? trucks : DEFAULT_TRUCKS)
+      : [];
     const matchedRawIds = new Set<string>();
     const matchedBaseIds = new Set<string>();
 
@@ -244,12 +248,12 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     const totalActiveDeliveries = vehicles.reduce((acc, v) => acc + (v.activeRoute?.stops?.length || v.activeRoute?.totalStops || 0), 0);
 
     return {
-      totalVehicles: rawSummary.totalVehicles || vehicles.length,
-      movingCount: rawSummary.movingCount,
-      idleCount: rawSummary.idleCount,
-      stoppedCount: rawSummary.stoppedCount,
-      averageSpeed: rawSummary.averageSpeed,
-      averageFuelLevel: rawSummary.averageFuelLevel,
+      totalVehicles: rawVehicles.length > 0 ? rawSummary.totalVehicles : 0,
+      movingCount: rawVehicles.length > 0 ? rawSummary.movingCount : 0,
+      idleCount: rawVehicles.length > 0 ? rawSummary.idleCount : 0,
+      stoppedCount: rawVehicles.length > 0 ? rawSummary.stoppedCount : 0,
+      averageSpeed: rawVehicles.length > 0 ? rawSummary.averageSpeed : 0,
+      averageFuelLevel: rawVehicles.length > 0 ? rawSummary.averageFuelLevel : 0,
       totalActiveDeliveries: rawSummary.totalActiveDeliveries || totalActiveDeliveries
     };
   }, [vehicles, rawSummary]);
