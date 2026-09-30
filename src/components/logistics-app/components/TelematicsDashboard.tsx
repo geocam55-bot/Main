@@ -87,6 +87,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
   const vehicles = useMemo(() => {
     const baseTrucks = (trucks && trucks.length > 0) ? trucks : DEFAULT_TRUCKS;
     const matchedRawIds = new Set<string>();
+    const matchedBaseIds = new Set<string>();
 
     const mapped = baseTrucks.map((t, index) => {
       const tId = (t.id || "").toLowerCase();
@@ -121,6 +122,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         : (matchedRaw?.driver?.name || 'Unassigned');
 
       if (matchedRaw) {
+        matchedBaseIds.add(t.id.toLowerCase());
+        if (t.name) matchedBaseIds.add(t.name.toLowerCase());
         if (matchedRaw.vehicleId) matchedRawIds.add(matchedRaw.vehicleId.toLowerCase());
         if (matchedRaw.truckName) matchedRawIds.add(matchedRaw.truckName.toLowerCase());
         const rawSpd = matchedRaw.telematics?.speedMph ?? matchedRaw.telematics?.speed ?? 0;
@@ -196,7 +199,14 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       return !matchedRawIds.has(vId) && !matchedRawIds.has(vName);
     });
 
-    return [...mapped, ...additionalRaw];
+    // Once the API has returned live records, do not pad the fleet with configured
+    // trucks that have no matching Fleet Complete identity. Those placeholders
+    // incorrectly turn a live fleet into an all-stopped fleet in the dashboard.
+    const configuredLive = rawVehicles.length > 0
+      ? mapped.filter(v => matchedBaseIds.has(v.vehicleId.toLowerCase()) || matchedBaseIds.has(v.truckName.toLowerCase()))
+      : mapped;
+
+    return [...configuredLive, ...additionalRaw];
   }, [trucks, rawVehicles]);
 
   // Filtered vehicles for left panel and map views
@@ -236,7 +246,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       averageFuelLevel: rawSummary.averageFuelLevel,
       totalActiveDeliveries: rawSummary.totalActiveDeliveries || totalActiveDeliveries
     };
-  }, [vehicles]);
+  }, [vehicles, rawSummary]);
 
   const detailsVehicle = viewingDetailsFor ? vehicles.find(v => v.vehicleId === viewingDetailsFor) : null;
   const tripsVehicle = viewingTripsFor ? vehicles.find(v => v.vehicleId === viewingTripsFor) : null;
