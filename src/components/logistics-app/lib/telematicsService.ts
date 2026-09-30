@@ -58,13 +58,8 @@ export function useTelematics({
     try {
       const params = new URLSearchParams();
       params.set('tenantId', 'rona_atlantic');
-      if (statusFilter && statusFilter !== 'ALL') {
-        params.set('status', statusFilter.toLowerCase());
-      }
-      if (searchQuery.trim()) {
-        params.set('search', searchQuery.trim());
-      }
-
+      // Fetch the complete live fleet every poll. Filtering locally prevents the
+      // API's status vocabulary from hiding valid Fleet Complete records.
       params.set('_ts', String(Date.now()));
       const queryStr = `?${params.toString()}`;
       const response = await fetch(`/api/v1/telematics/vehicles${queryStr}`, {
