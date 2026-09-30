@@ -3,7 +3,6 @@ import { useTelematics } from '../lib/telematicsService';
 import TelematicsMapView from './TelematicsMapView';
 import { VehicleRecord } from '../types/telematics';
 import { Truck, Branch } from '../types';
-import { DEFAULT_TRUCKS } from '../data';
 import { 
   Truck as TruckIcon, 
   MapPin, 
@@ -83,141 +82,10 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     statusFilter,
     searchQuery
   });
-  // Filter vehicles to strictly match Supabase trucks and include all active telematics units
-  const vehicles = useMemo(() => {
-    // Live Fleet Complete data is authoritative. Never replace an unavailable
-    // live response with configured trucks that look like real stopped telemetry.
-    const baseTrucks = rawVehicles.length > 0
-      ? ((trucks && trucks.length > 0) ? trucks : DEFAULT_TRUCKS)
-      : [];
-    const matchedRawIds = new Set<string>();
-    const matchedBaseIds = new Set<string>();
-
-    const mapped = baseTrucks.map((t, index) => {
-      const tId = (t.id || "").toLowerCase();
-      const tName = (t.name || "").toLowerCase();
-      const tVin = (t.vin || "").toLowerCase();
-      const tGpsId = (t.gpsDeviceId || "").toLowerCase();
-      const tGpsName = (t.gpsDeviceName || "").toLowerCase();
-
-      const tUnitMatch = tName.match(/\d+/) || tId.match(/\d+/);
-      const tUnitNum = tUnitMatch ? tUnitMatch[0] : null;
-
-      // Find matching live vehicle in rawVehicles
-      const matchedRaw = rawVehicles.find(v => {
-        const vId = (v.vehicleId || "").toLowerCase();
-        const vName = (v.truckName || "").toLowerCase();
-        const vVin = (v.vin || "").toLowerCase();
-        const vUnitMatch = vName.match(/\d+/) || vId.match(/\d+/);
-        const vUnitNum = vUnitMatch ? vUnitMatch[0] : null;
-
-        return (
-          tId === vId ||
-          tName === vName ||
-          (tVin && vVin && tVin === vVin) ||
-          (tGpsId && tGpsId === vId) ||
-          (tGpsName && tGpsName === vName) ||
-          (vUnitNum && tUnitNum && vUnitNum === tUnitNum)
-        );
-      });
-
-      const effectiveDriverName = (t.driver && !['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(t.driver.trim().toLowerCase()))
-        ? t.driver.trim()
-        : (matchedRaw?.driver?.name || 'Unassigned');
-
-      if (matchedRaw) {
-        matchedBaseIds.add(t.id.toLowerCase());
-        if (t.name) matchedBaseIds.add(t.name.toLowerCase());
-        if (matchedRaw.vehicleId) matchedRawIds.add(matchedRaw.vehicleId.toLowerCase());
-        if (matchedRaw.truckName) matchedRawIds.add(matchedRaw.truckName.toLowerCase());
-        const rawSpd = matchedRaw.telematics?.speedMph ?? matchedRaw.telematics?.speed ?? 0;
-          const normalizedStatus = ['MOVING', 'IDLE', 'STOPPED'].includes(String(matchedRaw.status).toUpperCase())
-            ? String(matchedRaw.status).toUpperCase()
-            : (rawSpd > 0 ? 'MOVING' : 'STOPPED');
-        return {
-          ...matchedRaw,
-          status: normalizedStatus,
-          vehicleId: t.id,
-          truckName: t.name,
-          vin: t.vin || matchedRaw.vin,
-          licensePlate: t.licensePlate || matchedRaw.licensePlate,
-          model: t.type || matchedRaw.model,
-          driver: {
-            id: t.driverId || matchedRaw.driver?.id || `DRV-${index + 101}`,
-            name: effectiveDriverName
-          },
-          activeRoute: matchedRaw.activeRoute ? {
-            ...matchedRaw.activeRoute,
-            driverName: effectiveDriverName
-          } : undefined
-        };
-      }
-
-      // A truck without a matching Fleet Complete record has no live GPS state.
-      // Preserve its configured position, but never synthesize movement or telemetry.
-      const lat = (typeof t.lat === 'number' && Number.isFinite(t.lat)) ? t.lat :
-        (typeof t.gpsLat === 'number' && Number.isFinite(t.gpsLat) ? t.gpsLat :
-          (typeof t.currentLatitude === 'number' && Number.isFinite(t.currentLatitude) ? t.currentLatitude : 0));
-      const lng = (typeof t.lng === 'number' && Number.isFinite(t.lng)) ? t.lng :
-        (typeof t.gpsLng === 'number' && Number.isFinite(t.gpsLng) ? t.gpsLng :
-          (typeof t.currentLongitude === 'number' && Number.isFinite(t.currentLongitude) ? t.currentLongitude : 0));
-
-      const telemetryObj = {
-        latitude: lat,
-        longitude: lng,
-        lat,
-        lng,
-        speed: 0,
-        speedMph: 0,
-        heading: 0,
-        ignitionOn: false,
-        ignitionStatus: 'OFF',
-        fuelPercent: undefined,
-        fuelLevel: undefined,
-        odometer: undefined,
-        batteryVoltage: undefined,
-        coolantTemp: undefined,
-        lastUpdated: undefined
-      };
-
-      return {
-        vehicleId: t.id,
-        truckName: t.name,
-        vin: t.vin || `1FTMF1E55MKD${51000 + index}`,
-        licensePlate: t.licensePlate || `PR-${9020 + index}`,
-        model: t.type || 'Commercial Vehicle',
-        capacityWeight: 4500,
-        status: 'STOPPED' as const,
-        driver: {
-          id: t.driverId || `DRV-${index + 101}`,
-          name: effectiveDriverName
-        },
-        telematics: telemetryObj,
-        telemetry: telemetryObj,
-        activeRoute: undefined
-      };
-    });
-
-    // Also include any raw telemetry vehicles that were not in baseTrucks
-    const additionalRaw = rawVehicles.filter(rv => {
-      const vId = (rv.vehicleId || "").toLowerCase();
-      const vName = (rv.truckName || "").toLowerCase();
-      return !matchedRawIds.has(vId) && !matchedRawIds.has(vName);
-    });
-
-    // Once the API has returned live records, do not pad the fleet with configured
-    // trucks that have no matching Fleet Complete identity. Those placeholders
-    // incorrectly turn a live fleet into an all-stopped fleet in the dashboard.
-    // Fleet Complete can identify assets by a name/number that differs from the
-    // local truck id. The raw API records are authoritative for live display;
-    // mapped records enrich them with local fleet metadata when a match exists.
-    const mappedLive = mapped.filter(v => matchedBaseIds.has(v.vehicleId.toLowerCase()) || matchedBaseIds.has(v.truckName.toLowerCase()));
-    const liveRecords = additionalRaw.length > 0 ? additionalRaw : rawVehicles;
-
-    return rawVehicles.length > 0
-      ? [...mappedLive, ...liveRecords.filter(rv => !mappedLive.some(v => v.vehicleId === rv.vehicleId || v.truckName === rv.truckName))]
-      : mapped;
-  }, [trucks, rawVehicles]);
+  // Fleet Complete is the single source of truth for this screen. Keep the
+  // API records intact so identity matching cannot discard live vehicles or
+  // replace them with synthetic stopped trucks.
+  const vehicles = useMemo(() => rawVehicles, [rawVehicles]);
 
   // Filtered vehicles for left panel and map views
   const displayVehicles = useMemo(() => {
