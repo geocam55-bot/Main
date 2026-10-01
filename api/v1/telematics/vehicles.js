@@ -34,10 +34,20 @@ export default async function handler(req, res) {
     }
 
     const allVehicles = result.vehicles || [];
-    const movingCount = allVehicles.filter(v => v.status === 'MOVING' || v.motionStatus === 'MOVING' || (v.speed && v.speed > 3)).length;
+    const movingCount = allVehicles.filter(v => {
+      const values = [v.speed, v.telematics?.speedMph, v.telematics?.speed, v.telematics?.speedKph]
+        .map((value) => typeof value === 'string' ? Number.parseFloat(value) : value)
+        .filter((value) => typeof value === 'number' && Number.isFinite(value));
+      return v.status === 'MOVING' || v.motionStatus === 'MOVING' || values.some((value) => value > 3);
+    }).length;
     const idlingCount = allVehicles.filter(v => v.status === 'IDLE' || v.motionStatus === 'IDLE' || v.ignitionStatus === 'IDLE').length;
     const parkedCount = allVehicles.filter(v => v.status === 'STOPPED' || v.motionStatus === 'PARKED' || v.ignitionStatus === 'OFF').length;
-    const avgSpeed = allVehicles.length > 0 ? Math.round(allVehicles.reduce((acc, v) => acc + (v.speed || 0), 0) / allVehicles.length) : 0;
+    const avgSpeed = allVehicles.length > 0 ? Math.round(allVehicles.reduce((acc, v) => {
+      const values = [v.speed, v.telematics?.speedMph, v.telematics?.speed, v.telematics?.speedKph]
+        .map((value) => typeof value === 'string' ? Number.parseFloat(value) : value)
+        .filter((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+      return acc + (values.length > 0 ? Math.max(...values) : 0);
+    }, 0) / allVehicles.length) : 0;
     const avgFuel = allVehicles.length > 0 ? Math.round(allVehicles.reduce((acc, v) => acc + (v.telematics?.fuelPercent || 75), 0) / allVehicles.length) : 75;
 
     res.status(200).json({

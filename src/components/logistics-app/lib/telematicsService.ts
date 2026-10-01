@@ -80,9 +80,12 @@ export function useTelematics({
           const tel = v.telematics || v.telemetry || {};
           const lat = typeof tel.latitude === 'number' ? tel.latitude : (typeof tel.lat === 'number' ? tel.lat : 44.6488);
           const lng = typeof tel.longitude === 'number' ? tel.longitude : (typeof tel.lng === 'number' ? tel.lng : -63.5752);
-          const speedCandidate = tel.speedMph ?? tel.speed ?? tel.speedKph ?? tel.speedKmh ?? v.speed;
-          let speed = typeof speedCandidate === 'string' ? Number.parseFloat(speedCandidate) : speedCandidate;
-          speed = typeof speed === 'number' && Number.isFinite(speed) ? Math.max(0, speed) : 0;
+          const speedCandidates = [tel.speedMph, tel.speed, tel.speedKph, tel.speedKmh, v.speed]
+            .map((value) => typeof value === 'string' ? Number.parseFloat(value) : value)
+            .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+          // Some Fleet Complete payloads include a stale zero in speedMph and
+          // the current value in speed/speedKph. Never let that zero mask motion.
+          const speed = speedCandidates.length > 0 ? Math.max(...speedCandidates) : 0;
           const headingCandidate = tel.heading ?? v.heading;
           const heading = typeof headingCandidate === 'string' ? Number.parseFloat(headingCandidate) : (typeof headingCandidate === 'number' && Number.isFinite(headingCandidate) ? headingCandidate : 0);
           
