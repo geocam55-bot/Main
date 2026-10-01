@@ -91,7 +91,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
   const displayVehicles = useMemo(() => {
     let list = vehicles;
     if (statusFilter && statusFilter !== 'ALL') {
-      list = list.filter(v => v.status === statusFilter);
+      list = list.filter(v => String(v.status).toUpperCase() === statusFilter);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -116,12 +116,12 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     const totalActiveDeliveries = vehicles.reduce((acc, v) => acc + (v.activeRoute?.stops?.length || v.activeRoute?.totalStops || 0), 0);
 
     return {
-      totalVehicles: rawVehicles.length > 0 ? rawSummary.totalVehicles : 0,
-      movingCount: rawVehicles.length > 0 ? rawSummary.movingCount : 0,
-      idleCount: rawVehicles.length > 0 ? rawSummary.idleCount : 0,
-      stoppedCount: rawVehicles.length > 0 ? rawSummary.stoppedCount : 0,
-      averageSpeed: rawVehicles.length > 0 ? rawSummary.averageSpeed : 0,
-      averageFuelLevel: rawVehicles.length > 0 ? rawSummary.averageFuelLevel : 0,
+      totalVehicles: vehicles.length,
+      movingCount,
+      idleCount,
+      stoppedCount,
+      averageSpeed: avgSpeed,
+      averageFuelLevel: avgFuel,
       totalActiveDeliveries: rawSummary.totalActiveDeliveries || totalActiveDeliveries
     };
   }, [vehicles, rawSummary]);

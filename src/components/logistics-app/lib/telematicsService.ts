@@ -80,8 +80,11 @@ export function useTelematics({
           const tel = v.telematics || v.telemetry || {};
           const lat = typeof tel.latitude === 'number' ? tel.latitude : (typeof tel.lat === 'number' ? tel.lat : 44.6488);
           const lng = typeof tel.longitude === 'number' ? tel.longitude : (typeof tel.lng === 'number' ? tel.lng : -63.5752);
-          let speed = typeof tel.speedMph === 'number' ? tel.speedMph : (typeof tel.speed === 'number' ? tel.speed : 0);
-          const heading = typeof tel.heading === 'number' ? tel.heading : 0;
+          const speedCandidate = tel.speedMph ?? tel.speed ?? tel.speedKph ?? tel.speedKmh ?? v.speed;
+          let speed = typeof speedCandidate === 'string' ? Number.parseFloat(speedCandidate) : speedCandidate;
+          speed = typeof speed === 'number' && Number.isFinite(speed) ? Math.max(0, speed) : 0;
+          const headingCandidate = tel.heading ?? v.heading;
+          const heading = typeof headingCandidate === 'string' ? Number.parseFloat(headingCandidate) : (typeof headingCandidate === 'number' && Number.isFinite(headingCandidate) ? headingCandidate : 0);
           
           let ignitionStatus: 'ON' | 'IDLE' | 'OFF' = 'OFF';
           if (tel.ignitionOn === true || tel.ignitionStatus === 'ON') {
