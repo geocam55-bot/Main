@@ -724,50 +724,106 @@ export async function matchAndScopeToDatabaseTrucks(fcVehicles, tenantId = 'rona
     return m ? m[1] : null;
   }
 
+  // Fallback to default tenant trucks if Supabase query returned no trucks
+  if (dbTrucks.length === 0) {
+    if (tenantId === 'rona_atlantic') {
+      dbTrucks = FALLBACK_AUTHENTIC_FLEET.slice(0, 16).map(t => ({
+        ...t,
+        tenantId: 'rona_atlantic'
+      }));
+    }
+  }
+
+  // Deduplicate active tenant trucks from the database by unit number and name
+  const uniqueDbTrucks = [];
+  const seenDbKeys = new Set();
+  for (const t of dbTrucks) {
+    const idKey = String(t.id || '').toLowerCase().trim();
+    const nameKey = String(t.name || t.id || '').toLowerCase().trim();
+    const u = extractUnit(t.name) || extractUnit(t.id);
+    const key = u ? `unit_${u}` : (nameKey || idKey);
+    if (!seenDbKeys.has(key)) {
+      seenDbKeys.add(key);
+      uniqueDbTrucks.push(t);
+    } else {
+      // If duplicate has an assigned driver, preserve it
+      const existing = uniqueDbTrucks.find(et => {
+        const eu = extractUnit(et.name) || extractUnit(et.id);
+        return (eu && eu === u) || String(et.name || et.id).toLowerCase().trim() === nameKey;
+      });
+      if (existing && t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase())) {
+        existing.driver = t.driver;
+        if (t.driverId || t.assigned_driver_id) {
+          existing.driverId = t.driverId || t.assigned_driver_id;
+        }
+      }
+    }
+  }
+
   const rawList = Array.isArray(fcVehicles) && fcVehicles.length > 0 
     ? fcVehicles 
     : FALLBACK_AUTHENTIC_FLEET;
 
-  // Build lookup index for DB trucks
-  const dbTruckMap = new Map();
-  dbTrucks.forEach(t => {
-    if (t.id) dbTruckMap.set(String(t.id).toLowerCase(), t);
-    if (t.name) dbTruckMap.set(String(t.name).toLowerCase(), t);
-    const u = extractUnit(t.name) || extractUnit(t.id);
-    if (u) dbTruckMap.set(`unit_${u}`, t);
+  // Build fast lookup indices for incoming Fleet Complete live telematics
+  const fcById = new Map();
+  const fcByName = new Map();
+  const fcByUnit = new Map();
+  const fcByVin = new Map();
+  const fcByPlate = new Map();
+
+  rawList.forEach((fv) => {
+    const vId = String(fv.id || fv.vehicleId || '').toLowerCase().trim();
+    const vName = String(fv.name || fv.truckName || '').toLowerCase().trim();
+    const vVin = String(fv.vin || '').toLowerCase().trim();
+    const vPlate = String(fv.licensePlate || fv.plate || '').toLowerCase().trim();
+    const u = extractUnit(vName) || extractUnit(vId);
+
+    if (vId) fcById.set(vId, fv);
+    if (vName) fcByName.set(vName, fv);
+    if (u) fcByUnit.set(u, fv);
+    if (vVin) fcByVin.set(vVin, fv);
+    if (vPlate) fcByPlate.set(vPlate, fv);
   });
 
-  const matchedTruckIds = new Set();
+  // STRICTLY limit the returned list to the active tenant's trucks in Supabase.
+  // Enrich each database truck with real-time Fleet Complete telemetry when matched.
+  const scopedVehicles = uniqueDbTrucks.map((dt, idx) => {
+    const tId = String(dt.id || '').toLowerCase().trim();
+    const tName = String(dt.name || dt.id || '').toLowerCase().trim();
+    const tVin = String(dt.vin || '').toLowerCase().trim();
+    const tPlate = String(dt.licensePlate || '').toLowerCase().trim();
+    const tUnit = extractUnit(tName) || extractUnit(tId);
 
-  // 1. Every Fleet Complete vehicle is preserved with its authoritative real telemetry
-  const enrichedLiveVehicles = rawList.map((fv, idx) => {
-    const vId = String(fv.id || fv.vehicleId || '').toLowerCase();
-    const vName = String(fv.name || fv.truckName || '').toLowerCase();
-    const vVin = String(fv.vin || '').toLowerCase();
-    const vUnit = extractUnit(vName) || extractUnit(vId);
+    const fv = (tUnit ? fcByUnit.get(tUnit) : null) ||
+               fcById.get(tId) ||
+               fcByName.get(tName) ||
+               (tVin ? fcByVin.get(tVin) : null) ||
+               (tPlate ? fcByPlate.get(tPlate) : null);
 
-    const matchedTruck = dbTruckMap.get(vId) || 
-                         dbTruckMap.get(vName) || 
-                         (vUnit ? dbTruckMap.get(`unit_${vUnit}`) : null) ||
-                         (vVin ? dbTrucks.find(t => String(t.vin || '').toLowerCase() === vVin) : null);
+    const isLive = !!fv;
+    const lat = fv && typeof fv.lat === 'number' && Number.isFinite(fv.lat)
+      ? fv.lat
+      : (typeof dt.lat === 'number' && Number.isFinite(dt.lat)
+          ? dt.lat
+          : (typeof dt.currentLatitude === 'number' && Number.isFinite(dt.currentLatitude)
+              ? dt.currentLatitude
+              : (typeof dt.gpsLat === 'number' && Number.isFinite(dt.gpsLat) ? dt.gpsLat : 44.69098 + (idx * 0.01))));
 
-    if (matchedTruck?.id) matchedTruckIds.add(String(matchedTruck.id).toLowerCase());
+    const lng = fv && typeof fv.lng === 'number' && Number.isFinite(fv.lng)
+      ? fv.lng
+      : (typeof dt.lng === 'number' && Number.isFinite(dt.lng)
+          ? dt.lng
+          : (typeof dt.currentLongitude === 'number' && Number.isFinite(dt.currentLongitude)
+              ? dt.currentLongitude
+              : (typeof dt.gpsLng === 'number' && Number.isFinite(dt.gpsLng) ? dt.gpsLng : -63.59854 + (idx * 0.01))));
 
-    const effectiveDriver = (matchedTruck?.driver && !['no driver', 'unassigned', ''].includes(matchedTruck.driver.toLowerCase()))
-      ? matchedTruck.driver
-      : (typeof fv.driver === 'string' ? fv.driver : (fv.driver?.name || 'Assigned Driver'));
+    const speed = fv && typeof fv.speed === 'number' && Number.isFinite(fv.speed) ? fv.speed : 0;
+    const heading = fv && typeof fv.heading === 'number' && Number.isFinite(fv.heading) ? fv.heading : 0;
+    const ignStatus = fv ? (fv.ignitionStatus || (speed > 0 ? 'ON' : 'OFF')) : 'OFF';
+    const status = fv ? (fv.status || (speed > 0 ? 'MOVING' : (ignStatus === 'IDLE' ? 'IDLE' : 'STOPPED'))) : 'STOPPED';
+    const timestamp = fv?.timestamp || new Date().toISOString();
 
-    const effectiveDriverId = matchedTruck?.driverId || matchedTruck?.assigned_driver_id || (typeof fv.driver === 'object' ? fv.driver?.id : `DRV-${idx + 101}`);
-
-    const lat = typeof fv.lat === 'number' && Number.isFinite(fv.lat) ? fv.lat : 44.69098;
-    const lng = typeof fv.lng === 'number' && Number.isFinite(fv.lng) ? fv.lng : -63.59854;
-    const speed = typeof fv.speed === 'number' && Number.isFinite(fv.speed) ? fv.speed : 0;
-    const heading = typeof fv.heading === 'number' && Number.isFinite(fv.heading) ? fv.heading : 0;
-    const ignStatus = fv.ignitionStatus || (speed > 0 ? 'ON' : 'OFF');
-    const status = fv.status || (speed > 0 ? 'MOVING' : (ignStatus === 'IDLE' ? 'IDLE' : 'STOPPED'));
-    const timestamp = fv.timestamp || new Date().toISOString();
-
-    const telemetryObj = fv.telematics || fv.telemetry || {
+    const telemetryObj = fv?.telematics || fv?.telemetry || {
       latitude: lat,
       longitude: lng,
       lat,
@@ -777,23 +833,31 @@ export async function matchAndScopeToDatabaseTrucks(fcVehicles, tenantId = 'rona
       heading,
       ignitionOn: ignStatus === 'ON',
       ignitionStatus: ignStatus,
-      fuelPercent: 75,
-      fuelLevel: 75,
-      odometer: fv.odometer || 54200 + (idx * 2100),
+      fuelPercent: fv?.fuelPercent || dt.fuelLevel || 75,
+      fuelLevel: fv?.fuelLevel || dt.fuelLevel || 75,
+      odometer: fv?.odometer || dt.odometer || (54200 + (idx * 2100)),
       batteryVoltage: ignStatus === 'ON' ? 14.1 : 12.6,
       coolantTemp: ignStatus === 'ON' ? 88 : 22,
       lastUpdated: timestamp
     };
 
+    const effectiveDriver = (dt.driver && !['no driver', 'unassigned', ''].includes(String(dt.driver).trim().toLowerCase()))
+      ? dt.driver
+      : (typeof fv?.driver === 'string' ? fv.driver : (fv?.driver?.name || 'Unassigned'));
+
+    const effectiveDriverId = dt.driverId || dt.assigned_driver_id || (typeof fv?.driver === 'object' ? fv.driver?.id : `DRV-${idx + 101}`);
+
     return {
-      id: String(fv.id || fv.vehicleId || matchedTruck?.id || `FC-${idx + 1}`),
-      vehicleId: String(fv.vehicleId || fv.id || matchedTruck?.id || `FC-${idx + 1}`),
-      truckName: String(fv.truckName || fv.name || matchedTruck?.name || `Unit #${idx + 1}`),
-      name: String(fv.name || fv.truckName || matchedTruck?.name || `Unit #${idx + 1}`),
-      vin: fv.vin || matchedTruck?.vin || `1FTMF1E55MKD${51000 + idx}`,
-      licensePlate: fv.licensePlate || matchedTruck?.licensePlate || `PR-${9020 + idx}`,
-      model: fv.model || matchedTruck?.type || matchedTruck?.vehicle_type || 'Commercial Vehicle',
-      capacityWeight: fv.capacityWeight || matchedTruck?.capacityWeight || 4500,
+      id: String(dt.id || dt.name || `TRK-${idx + 1}`),
+      vehicleId: String(dt.id || dt.name || `TRK-${idx + 1}`),
+      truckName: String(dt.name || dt.id || `Unit #${idx + 1}`),
+      name: String(dt.name || dt.id || `Unit #${idx + 1}`),
+      vin: dt.vin || fv?.vin || `1FTMF1E55MKD${51000 + idx}`,
+      licensePlate: dt.licensePlate || fv?.licensePlate || `PR-${9020 + idx}`,
+      model: dt.type || dt.model || fv?.model || 'Commercial Vehicle',
+      capacityWeight: dt.capacityWeight || fv?.capacityWeight || 4500,
+      branchId: dt.branchId || dt.branch_id || '',
+      tenantId: dt.tenantId || tenantId,
       lat,
       lng,
       speed,
@@ -802,70 +866,17 @@ export async function matchAndScopeToDatabaseTrucks(fcVehicles, tenantId = 'rona
       motionStatus: status,
       timestamp,
       ignitionStatus: ignStatus,
-      idlingMins: fv.idlingMins || 0,
+      idlingMins: fv?.idlingMins || 0,
       driver: {
         id: effectiveDriverId,
         name: effectiveDriver
       },
       telematics: telemetryObj,
       telemetry: telemetryObj,
-      isLive: true,
-      source: fv.source || 'fleet_complete'
+      isLive,
+      source: isLive ? (fv?.source || 'fleet_complete') : 'supabase_trucks'
     };
   });
 
-  // 2. Also append any database trucks that did not appear in Fleet Complete
-  const additionalDbTrucks = dbTrucks
-    .filter(t => !matchedTruckIds.has(String(t.id || '').toLowerCase()))
-    .map((t, idx) => {
-      const lat = typeof t.lat === 'number' && Number.isFinite(t.lat) ? t.lat : (typeof t.gpsLat === 'number' && Number.isFinite(t.gpsLat) ? t.gpsLat : 44.69098 + (idx * 0.01));
-      const lng = typeof t.lng === 'number' && Number.isFinite(t.lng) ? t.lng : (typeof t.gpsLng === 'number' && Number.isFinite(t.gpsLng) ? t.gpsLng : -63.59854 + (idx * 0.01));
-      const timestamp = new Date().toISOString();
-      const telemetryObj = {
-        latitude: lat,
-        longitude: lng,
-        lat,
-        lng,
-        speed: 0,
-        speedMph: 0,
-        heading: (idx * 45) % 360,
-        ignitionOn: false,
-        ignitionStatus: 'OFF',
-        fuelPercent: 75,
-        fuelLevel: 75,
-        odometer: 54200 + (idx * 2100),
-        batteryVoltage: 12.6,
-        coolantTemp: 22,
-        lastUpdated: timestamp
-      };
-
-      return {
-        id: String(t.id || `TRK-${idx + 1}`),
-        vehicleId: String(t.id || `TRK-${idx + 1}`),
-        truckName: String(t.name || t.id || `Unit #${idx + 1}`),
-        name: String(t.name || t.id || `Unit #${idx + 1}`),
-        vin: t.vin || `1FTMF1E55MKD${51000 + idx}`,
-        licensePlate: t.licensePlate || `PR-${9020 + idx}`,
-        model: t.type || t.vehicle_type || 'Commercial Vehicle',
-        capacityWeight: t.capacityWeight || 4500,
-        lat,
-        lng,
-        speed: 0,
-        heading: (idx * 45) % 360,
-        status: 'STOPPED',
-        motionStatus: 'STOPPED',
-        timestamp,
-        ignitionStatus: 'OFF',
-        driver: {
-          id: t.driverId || t.assigned_driver_id || `DRV-${idx + 101}`,
-          name: t.driver || 'Unassigned'
-        },
-        telematics: telemetryObj,
-        telemetry: telemetryObj,
-        isLive: false,
-        source: 'supabase_trucks'
-      };
-    });
-
-  return [...enrichedLiveVehicles, ...additionalDbTrucks];
+  return scopedVehicles;
 }

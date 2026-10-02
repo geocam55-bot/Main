@@ -6251,6 +6251,8 @@ async function getFleetId(token: string): Promise<string | null> {
         const inMem = inMemoryTenantStates[tenantId] || inMemoryTenantStates["t-prospaces-main"];
         if (inMem && Array.isArray(inMem.trucks) && inMem.trucks.length > 0) {
           activeTrucks = deduplicateServerTrucks(inMem.trucks);
+        } else {
+          activeTrucks = deduplicateServerTrucks(DEFAULT_TRUCKS.filter(t => !t.tenantId || t.tenantId === tenantId));
         }
       }
 

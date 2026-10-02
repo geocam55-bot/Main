@@ -6,6 +6,7 @@ export interface UseTelematicsOptions {
   autoStart?: boolean;
   statusFilter?: 'ALL' | 'MOVING' | 'IDLE' | 'STOPPED';
   searchQuery?: string;
+  tenantId?: string;
   onVehicleUpdate?: (vehicles: VehicleRecord[]) => void;
 }
 
@@ -30,6 +31,7 @@ export function useTelematics({
   autoStart = true,
   statusFilter = 'ALL',
   searchQuery = '',
+  tenantId,
   onVehicleUpdate
 }: UseTelematicsOptions = {}): UseTelematicsReturn {
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
@@ -56,8 +58,20 @@ export function useTelematics({
   // Fetch telemetry from internal REST endpoint
   const fetchTelematics = useCallback(async () => {
     try {
+      let resolvedTenantId = tenantId;
+      if (!resolvedTenantId && typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('prospaces_active_tenant');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed?.id) resolvedTenantId = parsed.id;
+          }
+        } catch (_) {}
+      }
+      resolvedTenantId = resolvedTenantId || 'rona_atlantic';
+
       const params = new URLSearchParams();
-      params.set('tenantId', 'rona_atlantic');
+      params.set('tenantId', resolvedTenantId);
       // Fetch the complete live fleet every poll. Filtering locally prevents the
       // API's status vocabulary from hiding valid Fleet Complete records.
       params.set('_ts', String(Date.now()));

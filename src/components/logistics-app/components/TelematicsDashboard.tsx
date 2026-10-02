@@ -64,6 +64,17 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     sensors: false
   });
   
+  const activeTenantId = useMemo(() => {
+    try {
+      const stored = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.id) return parsed.id;
+      }
+    } catch (_) {}
+    return 'rona_atlantic';
+  }, []);
+
   const {
     vehicles: rawVehicles,
     selectedVehicleId,
@@ -80,14 +91,127 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
   } = useTelematics({
     pollingIntervalMs: 5000,
     statusFilter,
-    searchQuery
+    searchQuery,
+    tenantId: activeTenantId
   });
-  // Fleet Complete is the single source of truth for this screen. Keep the
-  // API records intact so identity matching cannot discard live vehicles.
+
+  // Strictly limit visible trucks to those configured for the active tenant in Supabase.
+  // Enrich each database truck with real-time Fleet Complete telemetry when matched.
   const vehicles = useMemo(() => {
-    if (rawVehicles && rawVehicles.length > 0) return rawVehicles;
-    if (trucks && trucks.length > 0) {
-      return (trucks as any[]).map((t, idx) => ({
+    const extractUnitNumber = (str?: string | null): string | null => {
+      if (!str) return null;
+      const m = String(str).match(/\b(\d{3,5})\b/);
+      return m ? m[1] : null;
+    };
+
+    // 1. Resolve active tenant trucks (from prop or localStorage cache)
+    let activeTenantTrucks: Truck[] = (trucks && trucks.length > 0) ? trucks : [];
+    if (activeTenantTrucks.length === 0) {
+      try {
+        const cached = typeof window !== 'undefined' ? localStorage.getItem(`prospaces_trucks_tenant_${activeTenantId}`) : null;
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            activeTenantTrucks = parsed;
+          }
+        }
+      } catch {}
+    }
+
+    // If no trucks exist yet for the active tenant, fall back directly to raw telematics
+    if (activeTenantTrucks.length === 0) {
+      return rawVehicles || [];
+    }
+
+    // Build lookup maps for incoming Fleet Complete live vehicles
+    const fcById = new Map<string, VehicleRecord>();
+    const fcByName = new Map<string, VehicleRecord>();
+    const fcByUnit = new Map<string, VehicleRecord>();
+    const fcByVin = new Map<string, VehicleRecord>();
+    const fcByPlate = new Map<string, VehicleRecord>();
+
+    (rawVehicles || []).forEach(v => {
+      const vId = String(v.id || v.vehicleId || '').toLowerCase().trim();
+      const vName = String(v.name || v.truckName || '').toLowerCase().trim();
+      const vVin = String(v.vin || '').toLowerCase().trim();
+      const vPlate = String(v.licensePlate || '').toLowerCase().trim();
+      const u = extractUnitNumber(vName) || extractUnitNumber(vId);
+
+      if (vId) fcById.set(vId, v);
+      if (vName) fcByName.set(vName, v);
+      if (u) fcByUnit.set(u, v);
+      if (vVin) fcByVin.set(vVin, v);
+      if (vPlate) fcByPlate.set(vPlate, v);
+    });
+
+    // Deduplicate active tenant trucks by unit number & name to guarantee exact 1-to-1 UI cards
+    const uniqueTrucks: Truck[] = [];
+    const seenKeys = new Set<string>();
+    for (const t of activeTenantTrucks) {
+      const idKey = String(t.id || '').toLowerCase().trim();
+      const nameKey = String(t.name || t.id || '').toLowerCase().trim();
+      const u = extractUnitNumber(t.name) || extractUnitNumber(t.id);
+      const key = u ? `unit_${u}` : (nameKey || idKey);
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        uniqueTrucks.push(t);
+      } else {
+        const existing = uniqueTrucks.find(et => {
+          const eu = extractUnitNumber(et.name) || extractUnitNumber(et.id);
+          return (eu && eu === u) || String(et.name || et.id).toLowerCase().trim() === nameKey;
+        });
+        if (existing && t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase())) {
+          existing.driver = t.driver;
+          if (t.driverId) (existing as any).driverId = t.driverId;
+        }
+      }
+    }
+
+    // Map each active tenant database truck to its live Fleet Complete telemetry
+    return uniqueTrucks.map((t, idx) => {
+      const tId = String(t.id || '').toLowerCase().trim();
+      const tName = String(t.name || t.id || '').toLowerCase().trim();
+      const tVin = String(t.vin || '').toLowerCase().trim();
+      const tPlate = String(t.licensePlate || '').toLowerCase().trim();
+      const tUnit = extractUnitNumber(tName) || extractUnitNumber(tId);
+
+      const liveMatch = (tUnit ? fcByUnit.get(tUnit) : null) ||
+                        fcById.get(tId) ||
+                        fcByName.get(tName) ||
+                        (tVin ? fcByVin.get(tVin) : null) ||
+                        (tPlate ? fcByPlate.get(tPlate) : null);
+
+      if (liveMatch) {
+        const driverName = (t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase()))
+          ? t.driver
+          : (typeof liveMatch.driver === 'string' ? liveMatch.driver : (liveMatch.driver?.name || 'Unassigned'));
+
+        return {
+          ...liveMatch,
+          id: t.id,
+          vehicleId: t.id,
+          truckName: t.name || liveMatch.truckName,
+          name: t.name || liveMatch.name,
+          driver: {
+            id: (t as any).driverId || liveMatch.driver?.id || `DRV-${idx + 101}`,
+            name: driverName
+          },
+          vin: t.vin || liveMatch.vin,
+          licensePlate: t.licensePlate || liveMatch.licensePlate,
+          model: t.type || liveMatch.model || 'Commercial Vehicle',
+          capacityWeight: t.capacityWeight || liveMatch.capacityWeight || 4500,
+          branchId: t.branchId || (t as any).branch_id || liveMatch.branchId,
+          tenantId: t.tenantId || (t as any).tenant_id || liveMatch.tenantId
+        } as VehicleRecord;
+      }
+
+      // No live signal yet from Fleet Complete for this truck: render standard database record
+      const lat = typeof t.lat === 'number' ? t.lat : (typeof t.currentLatitude === 'number' ? t.currentLatitude : (typeof t.gpsLat === 'number' ? t.gpsLat : 44.69098 + (idx * 0.01)));
+      const lng = typeof t.lng === 'number' ? t.lng : (typeof t.currentLongitude === 'number' ? t.currentLongitude : (typeof t.gpsLng === 'number' ? t.gpsLng : -63.59854 + (idx * 0.01)));
+      const isMoving = t.status === 'In Transit' || t.status === 'MOVING';
+      const status = isMoving ? 'MOVING' : 'STOPPED';
+
+      return {
         id: t.id,
         vehicleId: t.id,
         truckName: t.name,
@@ -96,20 +220,22 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         licensePlate: t.licensePlate || `PR-${9020 + idx}`,
         model: t.type || 'Commercial Vehicle',
         capacityWeight: t.capacityWeight || 4500,
-        lat: typeof t.lat === 'number' ? t.lat : (typeof t.gpsLat === 'number' ? t.gpsLat : 44.69098 + (idx * 0.01)),
-        lng: typeof t.lng === 'number' ? t.lng : (typeof t.gpsLng === 'number' ? t.gpsLng : -63.59854 + (idx * 0.01)),
+        branchId: t.branchId || (t as any).branch_id,
+        tenantId: t.tenantId || (t as any).tenant_id,
+        lat,
+        lng,
         speed: 0,
         heading: 0,
-        status: (t.status === 'In Transit' || t.status === 'MOVING') ? 'MOVING' : 'STOPPED',
-        motionStatus: (t.status === 'In Transit' || t.status === 'MOVING') ? 'MOVING' : 'STOPPED',
+        status,
+        motionStatus: status,
         timestamp: new Date().toISOString(),
         ignitionStatus: 'OFF',
-        driver: { id: t.driverId || `DRV-${idx + 101}`, name: t.driver || 'Unassigned' },
+        driver: { id: (t as any).driverId || `DRV-${idx + 101}`, name: t.driver || 'Unassigned' },
         telematics: {
-          latitude: typeof t.lat === 'number' ? t.lat : (typeof t.gpsLat === 'number' ? t.gpsLat : 44.69098 + (idx * 0.01)),
-          longitude: typeof t.lng === 'number' ? t.lng : (typeof t.gpsLng === 'number' ? t.gpsLng : -63.59854 + (idx * 0.01)),
-          lat: typeof t.lat === 'number' ? t.lat : (typeof t.gpsLat === 'number' ? t.gpsLat : 44.69098 + (idx * 0.01)),
-          lng: typeof t.lng === 'number' ? t.lng : (typeof t.gpsLng === 'number' ? t.gpsLng : -63.59854 + (idx * 0.01)),
+          latitude: lat,
+          longitude: lng,
+          lat,
+          lng,
           speed: 0,
           speedMph: 0,
           heading: 0,
@@ -123,10 +249,10 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
           lastUpdated: new Date().toISOString()
         },
         telemetry: {
-          latitude: typeof t.lat === 'number' ? t.lat : (typeof t.gpsLat === 'number' ? t.gpsLat : 44.69098 + (idx * 0.01)),
-          longitude: typeof t.lng === 'number' ? t.lng : (typeof t.gpsLng === 'number' ? t.gpsLng : -63.59854 + (idx * 0.01)),
-          lat: typeof t.lat === 'number' ? t.lat : (typeof t.gpsLat === 'number' ? t.gpsLat : 44.69098 + (idx * 0.01)),
-          lng: typeof t.lng === 'number' ? t.lng : (typeof t.gpsLng === 'number' ? t.gpsLng : -63.59854 + (idx * 0.01)),
+          latitude: lat,
+          longitude: lng,
+          lat,
+          lng,
           speed: 0,
           speedMph: 0,
           heading: 0,
@@ -138,11 +264,12 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
           batteryVoltage: 12.6,
           coolantTemp: 22,
           lastUpdated: new Date().toISOString()
-        }
-      } as VehicleRecord));
-    }
-    return rawVehicles;
-  }, [rawVehicles, trucks]);
+        },
+        isLive: false,
+        source: 'supabase_trucks'
+      } as VehicleRecord;
+    });
+  }, [rawVehicles, trucks, activeTenantId]);
 
   // Filtered vehicles for left panel and map views
   const displayVehicles = useMemo(() => {
