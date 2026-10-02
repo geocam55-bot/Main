@@ -994,24 +994,38 @@ export async function restartPlaywrightBrowser(): Promise<Browser> {
 }
 
 /**
- * Creates an isolated, memory-optimized page for scraping with blocked assets
+ * Creates an isolated, human-like browser page to bypass competitor bot/Cloudflare detection
  */
 export async function createOptimizedPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    viewport: { width: 1280, height: 720 },
-    locale: 'en-US'
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    viewport: { width: 1440, height: 900 },
+    locale: 'en-CA',
+    timezoneId: 'America/Halifax',
+    permissions: ['geolocation'],
+    extraHTTPHeaders: {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'en-CA,en-US;q=0.9,en;q=0.8',
+      'Sec-Ch-Ua': '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Upgrade-Insecure-Requests': '1',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    }
   });
+
   const page = await context.newPage();
-  try {
-    await page.route('**/*', (route) => {
-      const resourceType = route.request().resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-        return route.abort();
-      }
-      return route.continue();
-    });
-  } catch (e) {}
+
+  // Override navigator properties to eliminate headless bot signatures
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    (navigator as any).languages = ['en-CA', 'en-US', 'en'];
+    (window as any).chrome = { runtime: {} };
+    // Mock plugins and permissions
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+  });
+
   return page;
 }
 
