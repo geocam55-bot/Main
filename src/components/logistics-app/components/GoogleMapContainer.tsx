@@ -94,13 +94,15 @@ interface GoogleMapContainerProps {
   setViewingTrackEventsTruckId?: (id: string | null) => void;
 }
 
+const mapRuntimeEnv = (import.meta as any).env || {};
+
 const API_KEY_STATIC =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.GOOGLE_MAPS_API_KEY ||
-  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.VITE_GOOGLE_MAPS_API_KEY ||
-  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  mapRuntimeEnv.GOOGLE_MAPS_PLATFORM_KEY ||
+  mapRuntimeEnv.GOOGLE_MAPS_API_KEY ||
+  mapRuntimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  mapRuntimeEnv.VITE_GOOGLE_MAPS_API_KEY ||
+  mapRuntimeEnv.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  mapRuntimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
   (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||

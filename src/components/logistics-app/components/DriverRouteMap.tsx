@@ -43,13 +43,15 @@ export interface RouteStats {
   durationMinutes?: number;
 }
 
+const runtimeEnv = (import.meta as any).env || {};
+
 const API_KEY_STATIC =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.GOOGLE_MAPS_API_KEY ||
-  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.VITE_GOOGLE_MAPS_API_KEY ||
-  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  runtimeEnv.GOOGLE_MAPS_PLATFORM_KEY ||
+  runtimeEnv.GOOGLE_MAPS_API_KEY ||
+  runtimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  runtimeEnv.VITE_GOOGLE_MAPS_API_KEY ||
+  runtimeEnv.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  runtimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
   (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||
