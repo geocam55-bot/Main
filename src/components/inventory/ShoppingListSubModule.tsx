@@ -42,6 +42,7 @@ import { competitivePricingAPI } from '../../utils/api';
 import type { ProductCompetitivePricing } from '../../types/competitive-pricing';
 import { PriceHistoryModal } from './PriceHistoryModal';
 import { searchInventoryClient } from '../../utils/inventory-client';
+import { AIChatSearchBar } from '../common/AIChatSearchBar';
 import {
   resolveInventoryTitles,
   extractRealProductSearchTerm,
@@ -1867,6 +1868,22 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
           </DialogHeader>
 
           <div className="space-y-3 my-2">
+            <div className="mb-2">
+              <AIChatSearchBar
+                moduleName="shopping-list"
+                onApplyFilters={(f) => {
+                  if (f.search) {
+                    setCatalogSearchQuery(f.search);
+                    handleSearchCatalog(f.search, selectedCatalogCategory);
+                  }
+                  if (f.category && f.category !== 'all') {
+                    setSelectedCatalogCategory(f.category);
+                    handleSearchCatalog(catalogSearchQuery, f.category);
+                  }
+                }}
+                placeholder="Ask AI (e.g. 'Show me all products that have Spruce and 2x4 in description')..."
+              />
+            </div>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />

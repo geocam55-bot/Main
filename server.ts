@@ -2961,6 +2961,85 @@ Result:
     }
   });
 
+  app.post('/api/ai/chat-search', async (req, res) => {
+    try {
+      const { message, module = 'inventory' } = req.body || {};
+      if (!message) {
+        return res.status(400).json({ error: 'Missing message parameter' });
+      }
+
+      const client = getGeminiClient();
+      if (!client) {
+        return res.json({
+          reply: `Filtered for "${message}".`,
+          filters: { search: message, category: 'all', varianceFilter: 'all' }
+        });
+      }
+
+      const prompt = `You are an expert AI inventory and pricing assistant for ProSpaces CRM (managing building materials, hardware, lumber, tools, etc.).
+The user is asking in the "${module}" module: "${message}".
+
+Analyze the user's natural language request and extract structured search filter parameters and provide a helpful, natural conversational reply.
+Return JSON matching this schema:
+{
+  "reply": "Friendly conversational response explaining the search results or filters applied.",
+  "filters": {
+    "search": "extracted search terms or keywords (e.g. Spruce 2x4)",
+    "category": "category filter if mentioned (or 'all')",
+    "varianceFilter": "for competitive pricing: 'all', 'higher', 'lower', 'no_match', 'outdated' (or 'all')",
+    "priceMin": null or number,
+    "priceMax": null or number
+  }
+}`;
+
+      const response = await client.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              reply: { type: Type.STRING },
+              filters: {
+                type: Type.OBJECT,
+                properties: {
+                  search: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                  varianceFilter: { type: Type.STRING },
+                  priceMin: { type: Type.NUMBER, nullable: true },
+                  priceMax: { type: Type.NUMBER, nullable: true },
+                },
+                required: ['search', 'category']
+              }
+            },
+            required: ['reply', 'filters']
+          }
+        }
+      });
+
+      let parsed = {
+        reply: `Here are the results for "${message}".`,
+        filters: { search: message, category: 'all', varianceFilter: 'all' }
+      };
+
+      try {
+        if (response.text) {
+          parsed = JSON.parse(response.text.trim());
+        }
+      } catch (parseErr) {
+        parsed.filters.search = message;
+      }
+
+      res.json(parsed);
+    } catch (err: any) {
+      res.json({
+        reply: `Filtered for "${req.body?.message || ''}".`,
+        filters: { search: req.body?.message || '', category: 'all', varianceFilter: 'all' }
+      });
+    }
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════
   // INVENTORY REST API (PAGINATION, FILTERING & LOOKUPS)
   // ═══════════════════════════════════════════════════════════════════════════

@@ -36,6 +36,7 @@ import {
   X,
 } from 'lucide-react';
 import { useDebounce } from '../../utils/useDebounce';
+import { AIChatSearchBar } from '../common/AIChatSearchBar';
 import {
   Dialog,
   DialogContent,
@@ -967,6 +968,17 @@ export function CompetitivePricingDashboard({ onSelectProduct }: CompetitivePric
       })()}
 
       {/* Filter and Search Bar */}
+      <div className="mb-4">
+        <AIChatSearchBar
+          moduleName="competitive-pricing"
+          onApplyFilters={(f) => {
+            if (f.search) setSearchQuery(f.search);
+            if (f.category && f.category !== 'all') setCategoryFilter(f.category);
+            if (f.varianceFilter && f.varianceFilter !== 'all') setVarianceFilter(f.varianceFilter);
+          }}
+          placeholder="Ask AI (e.g. 'Show products with price higher than competitor' or 'Spruce 2x4')..."
+        />
+      </div>
       <Card className="border-slate-200 shadow-xs">
         <CardContent className="p-4">
           <div className="flex flex-col md:flex-row items-center gap-3">

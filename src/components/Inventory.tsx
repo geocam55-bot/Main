@@ -47,6 +47,7 @@ import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { getServerHeaders } from '../utils/server-headers';
 import { advancedSearch, getSearchSuggestions } from '../utils/advanced-search';
 import { InventoryModuleHelp } from './InventoryModuleHelp';
+import { AIChatSearchBar } from './common/AIChatSearchBar';
 import { useDebounce } from '../utils/useDebounce';
 import { createClient } from '../utils/supabase/client';
 import { ensureUserProfile } from '../utils/ensure-profile';
@@ -2103,6 +2104,17 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   </div>
                 </div>
                 
+                <div className="mb-4">
+                  <AIChatSearchBar
+                    moduleName="inventory"
+                    onApplyFilters={(f) => {
+                      if (f.search) setSearchQuery(f.search);
+                      if (f.category && f.category !== 'all') setCategoryFilter(f.category);
+                    }}
+                    placeholder="Ask AI (e.g. 'Show me all products that have Spruce and 2x4 in description')..."
+                  />
+                </div>
+
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <div className="flex-1 relative min-w-0" data-tour="inventory-search">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
