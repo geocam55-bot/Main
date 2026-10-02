@@ -910,28 +910,45 @@ export const competitivePricingAPI = {
     }
   },
   runPricingAgent: async (): Promise<{ success: boolean; message: string; status?: any }> => {
-  const { appendDirectAgentLog } = await import('./competitive-pricing-client');
-  // Persist this before the request so the Diagnostics panel proves the click reached the client.
-  await appendDirectAgentLog('Pricing sweep start requested from Competitive Price module.');
-  try {
-  const res = await fetch('/api/competitive-pricing/agent/start', {
+    const { appendDirectAgentLog, startDirectClientSweep } = await import('./competitive-pricing-client');
+    // Persist this before the request so the Diagnostics panel proves the click reached the client.
+    await appendDirectAgentLog('Pricing sweep start requested from Competitive Price module.');
+    try {
+      const res = await fetch('/api/competitive-pricing/agent/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-  if (res.ok) {
-  const data = await safeParseJson(res);
-  if (data?.success) {
-    await appendDirectAgentLog(`Pricing sweep server start accepted: ${data.message || 'background agent started'}`);
-    return data;
-  }
-  console.warn('[v0] Pricing agent start returned an unusable response; switching to direct client sweep.');
+      if (res.ok) {
+        const data = await safeParseJson(res);
+        if (data?.serverless || data?.runner === 'client') {
+          await appendDirectAgentLog(`Live cloud mode detected: activating direct client sweep runner.`);
+          return await startDirectClientSweep();
+        }
+
+        if (data?.success) {
+          await appendDirectAgentLog(`Pricing sweep server runner started: ${data.message || 'background agent started'}`);
+          
+          // Watchdog verification: ensure server runner is actually active after 1.8s, otherwise fallback to client runner
+          setTimeout(async () => {
+            try {
+              const statusCheck = await competitivePricingAPI.getPricingAgentStatus();
+              if (!statusCheck?.isRunning) {
+                console.log('[Competitive Pricing] Server background runner inactive; engaging client sweep runner.');
+                await appendDirectAgentLog('Server background runner inactive; engaging direct client sweep runner.');
+                await startDirectClientSweep();
+              }
+            } catch (_) {}
+          }, 1800);
+
+          return data;
+        }
+        console.warn('[Competitive Pricing] Pricing agent start returned non-success; switching to direct client sweep.');
       } else {
-        console.warn(`[v0] Pricing agent start failed with HTTP ${res.status}; switching to direct client sweep.`);
+        console.warn(`[Competitive Pricing] Pricing agent start failed with HTTP ${res.status}; switching to direct client sweep.`);
       }
     } catch (err: any) {
-      console.warn('[v0] Pricing agent server start unavailable; switching to direct client sweep:', err.message);
+      console.warn('[Competitive Pricing] Pricing agent server start unavailable; switching to direct client sweep:', err.message);
     }
-    const { startDirectClientSweep } = await import('./competitive-pricing-client');
     return await startDirectClientSweep();
   },
   getPricingAgentStatus: async (): Promise<{

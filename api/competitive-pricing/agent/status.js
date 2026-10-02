@@ -14,28 +14,57 @@ export default async function handler(req, res) {
     const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY).trim();
     const supabase = createClient(url, anonKey);
 
-    // 1. Try local status file if available (e.g. on Node container)
+    // 1. Query shared Supabase kv_store (authoritative across all instances, serverless, and client runners)
+    let kvStatus = null;
+    try {
+      const { data, error } = await supabase
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', 'pricing_agent:status')
+        .maybeSingle();
+
+      if (!error && data?.value) {
+        kvStatus = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      }
+    } catch (dbErr) {}
+
+    // 2. Check local status file if available (e.g. on Node container), but only if fresh
+    let fileStatus = null;
     try {
       const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
       if (fs.existsSync(statusPath)) {
         const fileContent = fs.readFileSync(statusPath, 'utf8');
         const fileData = JSON.parse(fileContent);
         if (fileData && fileData.progress) {
-          return res.status(200).json(fileData);
+          const fileAge = Date.now() - new Date(fileData.progress.lastUpdated || 0).getTime();
+          // Only trust local file if updated within the last 60 seconds
+          if (fileAge < 60000) {
+            fileStatus = fileData;
+          }
         }
       }
     } catch (fErr) {}
 
-    // 2. Query shared Supabase kv_store (persists across all instances and serverless)
-    const { data, error } = await supabase
-      .from('kv_store_8405be07')
-      .select('value')
-      .eq('key', 'pricing_agent:status')
-      .maybeSingle();
+    let chosenStatus = null;
+    if (fileStatus && kvStatus) {
+      const fileTime = new Date(fileStatus.progress?.lastUpdated || 0).getTime();
+      const kvTime = new Date(kvStatus.progress?.lastUpdated || 0).getTime();
+      chosenStatus = fileTime > kvTime ? fileStatus : kvStatus;
+    } else {
+      chosenStatus = fileStatus || kvStatus;
+    }
 
-    if (!error && data?.value) {
-      const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-      return res.status(200).json(parsed);
+    if (chosenStatus && chosenStatus.progress) {
+      // Staleness check: if isRunning is true but lastUpdated is > 5 minutes old, mark as stopped
+      const lastUpdateMs = new Date(chosenStatus.progress.lastUpdated || 0).getTime();
+      if (chosenStatus.isRunning && (Date.now() - lastUpdateMs) > 300000) {
+        chosenStatus.isRunning = false;
+        if (chosenStatus.progress.currentSku === 'Starting...') {
+          chosenStatus.progress.currentSku = 'Paused';
+          chosenStatus.progress.currentName = 'Sweep paused / ready';
+        }
+      }
+      return res.status(200).json(chosenStatus);
     }
 
     // Default status if not yet seeded

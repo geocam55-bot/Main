@@ -1,14 +1,15 @@
 {
   "isRunning": false,
   "progress": {
-    "current": 12966,
+    "current": 12975,
     "total": 20561,
     "percent": 63.1,
-    "matchesFound": 35942,
+    "matchesFound": 35947,
     "currentSku": "Stopped",
-    "currentName": "PT BALUSTER BROWN 2X2X42",
-    "startedAt": "2026-09-28T14:25:11.351Z",
-    "lastUpdated": "2026-09-29T00:22:58.326Z"
+    "currentName": "Catalog sweep paused",
+    "startedAt": "2026-10-02T17:11:07.731Z",
+    "lastUpdated": "2026-10-02T17:11:21.787Z"
   },
-  "pid": 2489
+  "pid": 53,
+  "stoppedAt": "2026-10-02T17:11:21.787Z"
 }

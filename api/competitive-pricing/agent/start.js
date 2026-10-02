@@ -73,50 +73,59 @@ export default async function handler(req, res) {
       fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
     } catch (e) {}
 
-    // 2. Launch Node background process if on a full Node server environment
-    try {
-      const cjsPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
-      const tsPath = path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
-      const scriptPath = fs.existsSync(cjsPath) ? cjsPath : (fs.existsSync(tsPath) ? tsPath : null);
+    // 2. Launch background runner or signal client sweep runner for serverless
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+    let serverWorkerStarted = false;
 
-      if (scriptPath) {
-        const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
-        const outFd = fs.openSync(logPath, 'a');
-        const cmd = scriptPath.endsWith('.ts') ? 'npx' : 'node';
-        const args = scriptPath.endsWith('.ts') ? ['tsx', scriptPath] : [scriptPath];
+    if (!isServerless) {
+      try {
+        const cjsPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
+        const tsPath = path.join(process.cwd(), 'src', 'scripts', 'pricing-agent.ts');
+        const scriptPath = fs.existsSync(cjsPath) ? cjsPath : (fs.existsSync(tsPath) ? tsPath : null);
 
-        const child = spawn(cmd, args, {
-          detached: true,
-          stdio: ['ignore', outFd, outFd],
-          env: {
-            ...process.env,
-            SUPABASE_URL: url,
-            SUPABASE_ANON_KEY: anonKey,
-            VITE_SUPABASE_URL: url,
-            VITE_SUPABASE_ANON_KEY: anonKey
-          }
-        });
-        child.unref();
+        if (scriptPath) {
+          const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
+          const outFd = fs.openSync(logPath, 'a');
+          const cmd = scriptPath.endsWith('.ts') ? 'npx' : 'node';
+          const args = scriptPath.endsWith('.ts') ? ['tsx', scriptPath] : [scriptPath];
 
-        // Also trigger in-process as dual redundancy across container and serverless
-        try {
-          const modPath = path.join(process.cwd(), 'dist', 'pricing-agent.cjs');
-          if (fs.existsSync(modPath)) {
-            import(modPath).then(m => {
-              if (m && typeof m.runCompetitivePricing === 'function') {
-                m.runCompetitivePricing().catch(err => console.error('[Pricing Agent Error]:', err));
-              }
-            }).catch(() => {});
-          }
-        } catch (e) {}
+          const child = spawn(cmd, args, {
+            detached: true,
+            stdio: ['ignore', outFd, outFd],
+            env: {
+              ...process.env,
+              SUPABASE_URL: url,
+              SUPABASE_ANON_KEY: anonKey,
+              VITE_SUPABASE_URL: url,
+              VITE_SUPABASE_ANON_KEY: anonKey
+            }
+          });
+          child.unref();
+          serverWorkerStarted = true;
+
+          // Also trigger in-process as dual redundancy
+          try {
+            if (fs.existsSync(cjsPath)) {
+              import(cjsPath).then(m => {
+                if (m && typeof m.runCompetitivePricing === 'function') {
+                  m.runCompetitivePricing().catch(err => console.error('[Pricing Agent Error]:', err));
+                }
+              }).catch(() => {});
+            }
+          } catch (e) {}
+        }
+      } catch (procErr) {
+        console.log('[Agent Start] Server worker spawn skipped; defaulting to client sweep runner');
       }
-    } catch (procErr) {
-      console.log('[Agent Start] Child process spawn skipped/handled by cloud worker');
     }
 
     return res.status(200).json({
       success: true,
-      message: 'High-speed pricing agent started successfully.',
+      serverless: isServerless || !serverWorkerStarted,
+      runner: serverWorkerStarted ? 'server' : 'client',
+      message: serverWorkerStarted
+        ? 'High-speed pricing agent started successfully in background.'
+        : 'Pricing agent initialized in cloud mode. High-speed client sweep runner active.',
       status: initialStatus
     });
   } catch (err) {
