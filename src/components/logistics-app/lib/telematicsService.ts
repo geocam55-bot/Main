@@ -85,7 +85,7 @@ export function useTelematics({
             .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
           // Some Fleet Complete payloads include a stale zero in speedMph and
           // the current value in speed/speedKph. Never let that zero mask motion.
-          const speed = speedCandidates.length > 0 ? Math.max(...speedCandidates) : 0;
+          let speed = speedCandidates.length > 0 ? Math.max(...speedCandidates) : 0;
           const headingCandidate = tel.heading ?? v.heading;
           const heading = typeof headingCandidate === 'string' ? Number.parseFloat(headingCandidate) : (typeof headingCandidate === 'number' && Number.isFinite(headingCandidate) ? headingCandidate : 0);
           
@@ -102,7 +102,7 @@ export function useTelematics({
 
           let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
           let effectiveSpeed = speed;
-          const upstreamStatus = String(v.status || '').toUpperCase();
+          const upstreamStatus = String(v.status || v.motionStatus || '').toUpperCase();
           if (speed > 0 || upstreamStatus === 'MOVING' || upstreamStatus === 'DRIVING' || upstreamStatus === 'IN TRANSIT') {
             status = 'MOVING';
             effectiveSpeed = speed;
@@ -186,14 +186,16 @@ export function useTelematics({
         const avgFuel = vList.length > 0 ? Math.round(vList.reduce((a, b) => a + (b.telematics.fuelPercent || b.telematics.fuelLevel || 75), 0) / vList.length) : 75;
 
         if (data.summary) {
+          // Recompute from the normalized records in the browser. Production can
+          // receive a stale or differently shaped summary even when vehicles are live.
           setSummary({
-            totalVehicles: typeof data.summary.totalVehicles === 'number' ? data.summary.totalVehicles : (typeof data.summary.total === 'number' ? data.summary.total : vList.length),
-            movingCount: typeof data.summary.movingCount === 'number' ? data.summary.movingCount : (typeof data.summary.moving === 'number' ? data.summary.moving : moving),
-            idleCount: typeof data.summary.idleCount === 'number' ? data.summary.idleCount : (typeof data.summary.idling === 'number' ? data.summary.idling : idle),
-            stoppedCount: typeof data.summary.stoppedCount === 'number' ? data.summary.stoppedCount : (typeof data.summary.parked === 'number' ? data.summary.parked : stopped),
-            averageSpeed: typeof data.summary.averageSpeed === 'number' ? data.summary.averageSpeed : avgSpd,
-            averageFuelLevel: typeof data.summary.averageFuelLevel === 'number' ? data.summary.averageFuelLevel : avgFuel,
-            totalActiveDeliveries: typeof data.summary.totalActiveDeliveries === 'number' ? data.summary.totalActiveDeliveries : vList.reduce((a, b) => a + (b.activeRoute?.stops?.length || b.activeRoute?.totalStops || 0), 0)
+            totalVehicles: vList.length,
+            movingCount: moving,
+            idleCount: idle,
+            stoppedCount: stopped,
+            averageSpeed: avgSpd,
+            averageFuelLevel: avgFuel,
+            totalActiveDeliveries: vList.reduce((a, b) => a + (b.activeRoute?.stops?.length || b.activeRoute?.totalStops || 0), 0)
           });
         } else {
           setSummary({
