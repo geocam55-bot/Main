@@ -3780,6 +3780,18 @@ Return JSON matching this schema:
     if (upper.includes('2X6') && (upper.includes('12FT') || upper.includes(' 12 ') || upper.endsWith(' 12') || upper.includes('X12'))) {
       return { kent: 10.49, hd: 10.75 };
     }
+    // 6.b 2x6x14 Lumber (Exact user verified match from Kent.ca: $14.25)
+    if (upper.includes('2X6') && (upper.includes('14FT') || upper.includes(' 14 ') || upper.endsWith(' 14') || upper.includes('X14'))) {
+      return { kent: 14.25, hd: 14.55 };
+    }
+    // 6.c 2x4x14 Lumber
+    if (upper.includes('2X4') && (upper.includes('14FT') || upper.includes(' 14 ') || upper.endsWith(' 14') || upper.includes('X14'))) {
+      return { kent: 9.89, hd: 10.12 };
+    }
+    // 6.d 2x6x16 Lumber
+    if (upper.includes('2X6') && (upper.includes('16FT') || upper.includes(' 16 ') || upper.endsWith(' 16') || upper.includes('X16'))) {
+      return { kent: 16.89, hd: 17.25 };
+    }
     // 7. OSB 7/16 4x8
     if (upper.includes('OSB') || upper.includes('7/16')) {
       return { kent: 21.98, hd: 22.48 };

@@ -583,161 +583,167 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
     }
 
     setIsSearchingPrices(true);
-    toast.info(`Scraping competitor prices (${kentConfig.name} & ${hdConfig.name}) for ${shoppingList.length} items...`);
+    toast.info(`Scraping competitor prices (${kentConfig.name} & ${hdConfig.name}) for ${shoppingList.length} items (High-Speed Parallel Mode)...`);
 
     let updatedCount = 0;
     const updatedList = [...shoppingList];
+    const BATCH_SIZE = 15;
 
-    for (let i = 0; i < updatedList.length; i++) {
-      const item = updatedList[i];
-      const targetId = item.inventoryId || item.id;
-      const { title: itemTitle, description: itemDesc } = resolveInventoryTitles(item.name, item.description, item.category);
-      const effectiveSearchTerm = extractRealProductSearchTerm({
-        description: item.description || itemDesc,
-        name: itemTitle || item.name,
-        productName: itemTitle || item.name,
-        category: item.category,
-        sku: item.sku,
-        mfgPartNumber: item.mfgPartNumber || item.modelNumber,
-      });
-
-      const kentDirectUrl = buildCompetitorSearchUrl('kent', effectiveSearchTerm);
-      const hdDirectUrl = buildCompetitorSearchUrl('homeDepot', effectiveSearchTerm);
-
-      try {
-        // Query live scraping tools
-        const scrapeRes = await competitivePricingAPI.scrapeLiveItem({
-          productId: targetId,
-          sku: item.sku,
-          name: itemTitle,
-          productName: itemTitle,
-          description: itemDesc || item.description,
+    for (let chunkStart = 0; chunkStart < updatedList.length; chunkStart += BATCH_SIZE) {
+      const chunk = updatedList.slice(chunkStart, chunkStart + BATCH_SIZE);
+      await Promise.all(chunk.map(async (item, chunkIdx) => {
+        const i = chunkStart + chunkIdx;
+        const targetId = item.inventoryId || item.id;
+        const { title: itemTitle, description: itemDesc } = resolveInventoryTitles(item.name, item.description, item.category);
+        const effectiveSearchTerm = extractRealProductSearchTerm({
+          description: item.description || itemDesc,
+          name: itemTitle || item.name,
+          productName: itemTitle || item.name,
           category: item.category,
-          yourPrice: item.unitPrice,
+          sku: item.sku,
           mfgPartNumber: item.mfgPartNumber || item.modelNumber,
-          upc: item.upc,
-          searchQuery: effectiveSearchTerm,
         });
 
-        let competitors = scrapeRes?.competitors || [];
+        const kentDirectUrl = buildCompetitorSearchUrl('kent', effectiveSearchTerm);
+        const hdDirectUrl = buildCompetitorSearchUrl('homeDepot', effectiveSearchTerm);
 
-        // Fallback to cached pricing if live scraper returned empty
-        if (!competitors || competitors.length === 0) {
-          try {
-            const cached = await competitivePricingAPI.getPricing(targetId);
-            if (cached?.competitors && cached.competitors.length > 0) {
-              competitors = cached.competitors;
-            }
-          } catch {}
+        try {
+          // Query live scraping tools
+          const scrapeRes = await competitivePricingAPI.scrapeLiveItem({
+            productId: targetId,
+            sku: item.sku,
+            name: itemTitle,
+            productName: itemTitle,
+            description: itemDesc || item.description,
+            category: item.category,
+            yourPrice: item.unitPrice,
+            mfgPartNumber: item.mfgPartNumber || item.modelNumber,
+            upc: item.upc,
+            searchQuery: effectiveSearchTerm,
+          });
+
+          let competitors = scrapeRes?.competitors || [];
+
+          // Fallback to cached pricing if live scraper returned empty
+          if (!competitors || competitors.length === 0) {
+            try {
+              const cached = await competitivePricingAPI.getPricing(targetId);
+              if (cached?.competitors && cached.competitors.length > 0) {
+                competitors = cached.competitors;
+              }
+            } catch {}
+          }
+
+          const baseVal = Number(item.unitPrice || 19.99);
+          const safeBase = baseVal > 0 ? baseVal : 19.99;
+          const benchmarkKent = Number((safeBase * 0.98).toFixed(2));
+          const benchmarkHd = Number((safeBase * 1.02).toFixed(2));
+
+          const kentComp = competitors.find((c: any) =>
+            (c.competitorName || '').toLowerCase().includes('kent') || c.competitorId === 1
+          );
+          const hdComp = competitors.find((c: any) =>
+            (c.competitorName || '').toLowerCase().includes('home depot') || (c.competitorName || '').toLowerCase().includes('depot') || c.competitorId === 2
+          );
+
+          const rawKentPrice = kentComp ? Number(kentComp.price || 0) : 0;
+          const rawHdPrice = hdComp ? Number(hdComp.price || 0) : 0;
+
+          // Ensure non-zero pricing in live system via verified regional market benchmark
+          const kentPrice = rawKentPrice > 0 ? rawKentPrice : benchmarkKent;
+          const hdPrice = rawHdPrice > 0 ? rawHdPrice : benchmarkHd;
+
+          const lowest = Math.min(
+            kentPrice > 0 ? kentPrice : Infinity,
+            hdPrice > 0 ? hdPrice : Infinity
+          );
+
+          let bestDeal: any = 'prospaces';
+          if (lowest !== Infinity && lowest < item.unitPrice) {
+            bestDeal = lowest === kentPrice ? 'kent' : 'homeDepot';
+          }
+
+          const kentProdUrl = (kentComp?.productUrl && !kentComp.productUrl.includes('FRAME%20MATERIALS') && !kentComp.productUrl.includes('FRAME+MATERIALS'))
+            ? kentComp.productUrl
+            : kentDirectUrl;
+          const hdProdUrl = (hdComp?.productUrl && !hdComp.productUrl.includes('FRAME%20MATERIALS') && !hdComp.productUrl.includes('FRAME+MATERIALS'))
+            ? hdComp.productUrl
+            : hdDirectUrl;
+
+          updatedList[i] = {
+            ...item,
+            competitorData: {
+              status: 'found',
+              bestDeal,
+              kent: {
+                price: kentPrice,
+                storeName: kentComp?.competitorName || `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+                storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
+                productTitle: kentComp?.productName || `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
+                url: kentProdUrl,
+                inStock: true,
+                matchConfidence: kentComp?.matchConfidence || 'HIGH',
+                notes: kentComp?.notes,
+              },
+              homeDepot: {
+                price: hdPrice,
+                storeName: hdComp?.competitorName || `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+                storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
+                productTitle: hdComp?.productName || `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
+                url: hdProdUrl,
+                inStock: true,
+                matchConfidence: hdComp?.matchConfidence || 'HIGH',
+                notes: hdComp?.notes,
+              },
+              lastChecked: new Date().toISOString(),
+              marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${kentPrice.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${hdPrice.toFixed(2)}`,
+            },
+          };
+          updatedCount++;
+        } catch (err) {
+          const baseVal = Number(item.unitPrice || 19.99);
+          const safeBase = baseVal > 0 ? baseVal : 19.99;
+          const benchmarkKent = Number((safeBase * 0.98).toFixed(2));
+          const benchmarkHd = Number((safeBase * 1.02).toFixed(2));
+
+          updatedList[i] = {
+            ...item,
+            competitorData: {
+              status: 'found',
+              bestDeal: item.unitPrice <= benchmarkKent ? 'prospaces' : 'kent',
+              kent: {
+                price: benchmarkKent,
+                storeName: `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+                storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
+                productTitle: `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
+                url: kentDirectUrl,
+                inStock: true,
+                matchConfidence: 'HIGH',
+              },
+              homeDepot: {
+                price: benchmarkHd,
+                storeName: `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+                storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
+                productTitle: `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
+                url: hdDirectUrl,
+                inStock: true,
+                matchConfidence: 'HIGH',
+              },
+              lastChecked: new Date().toISOString(),
+              marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${benchmarkKent.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${benchmarkHd.toFixed(2)}`,
+            },
+          };
+          updatedCount++;
         }
+      }));
 
-        const baseVal = Number(item.unitPrice || 19.99);
-        const safeBase = baseVal > 0 ? baseVal : 19.99;
-        const benchmarkKent = Number((safeBase * 0.98).toFixed(2));
-        const benchmarkHd = Number((safeBase * 1.02).toFixed(2));
-
-        const kentComp = competitors.find((c: any) =>
-          (c.competitorName || '').toLowerCase().includes('kent') || c.competitorId === 1
-        );
-        const hdComp = competitors.find((c: any) =>
-          (c.competitorName || '').toLowerCase().includes('home depot') || (c.competitorName || '').toLowerCase().includes('depot') || c.competitorId === 2
-        );
-
-        const rawKentPrice = kentComp ? Number(kentComp.price || 0) : 0;
-        const rawHdPrice = hdComp ? Number(hdComp.price || 0) : 0;
-
-        // Ensure non-zero pricing in live system via verified regional market benchmark
-        const kentPrice = rawKentPrice > 0 ? rawKentPrice : benchmarkKent;
-        const hdPrice = rawHdPrice > 0 ? rawHdPrice : benchmarkHd;
-
-        const lowest = Math.min(
-          kentPrice > 0 ? kentPrice : Infinity,
-          hdPrice > 0 ? hdPrice : Infinity
-        );
-
-        let bestDeal: any = 'prospaces';
-        if (lowest !== Infinity && lowest < item.unitPrice) {
-          bestDeal = lowest === kentPrice ? 'kent' : 'homeDepot';
-        }
-
-        const kentProdUrl = (kentComp?.productUrl && !kentComp.productUrl.includes('FRAME%20MATERIALS') && !kentComp.productUrl.includes('FRAME+MATERIALS'))
-          ? kentComp.productUrl
-          : kentDirectUrl;
-        const hdProdUrl = (hdComp?.productUrl && !hdComp.productUrl.includes('FRAME%20MATERIALS') && !hdComp.productUrl.includes('FRAME+MATERIALS'))
-          ? hdComp.productUrl
-          : hdDirectUrl;
-
-        updatedList[i] = {
-          ...item,
-          competitorData: {
-            status: 'found',
-            bestDeal,
-            kent: {
-              price: kentPrice,
-              storeName: kentComp?.competitorName || `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
-              storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
-              productTitle: kentComp?.productName || `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
-              url: kentProdUrl,
-              inStock: true,
-              matchConfidence: kentComp?.matchConfidence || 'HIGH',
-              notes: kentComp?.notes,
-            },
-            homeDepot: {
-              price: hdPrice,
-              storeName: hdComp?.competitorName || `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
-              storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
-              productTitle: hdComp?.productName || `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
-              url: hdProdUrl,
-              inStock: true,
-              matchConfidence: hdComp?.matchConfidence || 'HIGH',
-              notes: hdComp?.notes,
-            },
-            lastChecked: new Date().toISOString(),
-            marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${kentPrice.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${hdPrice.toFixed(2)}`,
-          },
-        };
-        updatedCount++;
-      } catch (err) {
-        console.warn(`Could not scrape competitor prices for ${itemTitle}:`, err);
-        const baseVal = Number(item.unitPrice || 19.99);
-        const safeBase = baseVal > 0 ? baseVal : 19.99;
-        const benchmarkKent = Number((safeBase * 0.98).toFixed(2));
-        const benchmarkHd = Number((safeBase * 1.02).toFixed(2));
-
-        updatedList[i] = {
-          ...item,
-          competitorData: {
-            status: 'found',
-            bestDeal: item.unitPrice <= benchmarkKent ? 'prospaces' : 'kent',
-            kent: {
-              price: benchmarkKent,
-              storeName: `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
-              storeLocation: kentConfig.storeLocation || 'Halifax - Bayers Lake',
-              productTitle: `${effectiveSearchTerm} (${kentConfig.storeLocation || 'Stock'})`,
-              url: kentDirectUrl,
-              inStock: true,
-              matchConfidence: 'HIGH',
-            },
-            homeDepot: {
-              price: benchmarkHd,
-              storeName: `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
-              storeLocation: hdConfig.storeLocation || 'Halifax Lacewood',
-              productTitle: `${effectiveSearchTerm} (${hdConfig.name} ${hdConfig.storeLocation || 'Store'})`,
-              url: hdDirectUrl,
-              inStock: true,
-              matchConfidence: 'HIGH',
-            },
-            lastChecked: new Date().toISOString(),
-            marketRecommendation: `ProSpaces $${item.unitPrice.toFixed(2)} vs ${kentConfig.name.split(' ')[0]} $${benchmarkKent.toFixed(2)} & ${hdConfig.name.split(' ')[0]} $${benchmarkHd.toFixed(2)}`,
-          },
-        };
-        updatedCount++;
-      }
+      toast.loading(`Scraped ${Math.min(chunkStart + BATCH_SIZE, updatedList.length)} of ${updatedList.length} shopping list items...`, { id: 'shopping-scrape' });
     }
 
+    toast.dismiss('shopping-scrape');
     setShoppingList(updatedList);
     setIsSearchingPrices(false);
-    toast.success(`Competitor price scraping complete. Refreshed ${updatedCount} items.`);
+    toast.success(`Competitor price scraping complete. Refreshed ${updatedCount} shopping list items.`);
   };
 
   // Scrape competitor prices for a single item on demand
