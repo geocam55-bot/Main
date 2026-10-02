@@ -36,12 +36,14 @@ import {
 } from 'lucide-react';
 
 // Google Maps API Key resolution from environment variables & localStorage
+const mapRuntimeEnv = (import.meta as any).env || {};
+
 const GOOGLE_MAPS_KEY_ENV =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.GOOGLE_MAPS_API_KEY ||
-  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  process.env.VITE_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  mapRuntimeEnv.GOOGLE_MAPS_PLATFORM_KEY ||
+  mapRuntimeEnv.GOOGLE_MAPS_API_KEY ||
+  mapRuntimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  mapRuntimeEnv.VITE_GOOGLE_MAPS_API_KEY ||
+  mapRuntimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
   (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||
