@@ -113,7 +113,7 @@ const ShedPlanner = lazyNamed(() => import('./components/planners/ShedPlanner'),
 const RoofPlanner = lazyNamed(() => import('./components/planners/RoofPlanner'), 'RoofPlanner');
 const InteriorFinishingPlanner = lazyNamed(() => import('./components/planners/InteriorFinishingPlanner'), 'InteriorFinishingPlanner');
 
-export type UserRole = 'standard_user' | 'manager' | 'director' | 'admin' | 'super_admin' | 'marketing' | 'designer';
+export type UserRole = 'standard_user' | 'manager' | 'director' | 'admin' | 'super_admin' | 'marketing' | 'designer' | 'Picker' | 'Driver' | 'Dispatcher';
 
 export interface User {
   id: string;

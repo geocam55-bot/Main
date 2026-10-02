@@ -212,6 +212,9 @@ export function useTelematics({
         setLastUpdated(new Date());
         setError(null);
         onVehicleUpdate?.(normalizedVehicles);
+      } else if (responseVehicles.length === 0 && vehiclesRef.current.length > 0) {
+        // Retain existing fleet state so screen never wipes blank during transient network blips
+        setLastUpdated(new Date());
       } else {
         throw new Error(data.error || 'Fleet Complete returned no live vehicle telemetry');
       }

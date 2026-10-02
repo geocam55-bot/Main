@@ -37,16 +37,16 @@ import {
 
 // Google Maps API Key resolution from environment variables & localStorage
 const mapRuntimeEnv = (import.meta as any).env || {};
+declare const __GOOGLE_MAPS_PLATFORM_KEY__: string | undefined;
 
 const GOOGLE_MAPS_KEY_ENV =
-  mapRuntimeEnv.GOOGLE_MAPS_PLATFORM_KEY ||
-  mapRuntimeEnv.GOOGLE_MAPS_API_KEY ||
+  (typeof __GOOGLE_MAPS_PLATFORM_KEY__ !== 'undefined' && __GOOGLE_MAPS_PLATFORM_KEY__) ||
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   mapRuntimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   mapRuntimeEnv.VITE_GOOGLE_MAPS_API_KEY ||
-  mapRuntimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||
+  mapRuntimeEnv.GOOGLE_MAPS_PLATFORM_KEY ||
+  process.env.GOOGLE_MAPS_API_KEY ||
   '';
 
 // Default center: Dartmouth / Halifax Regional Logistics Corridor
@@ -387,6 +387,21 @@ export default function LiveVehicleMap({
     }
     return '';
   });
+
+  // Runtime key fetch fallback
+  useEffect(() => {
+    if (!apiKey) {
+      fetch('/api/maps-key')
+        .then(r => r.json())
+        .then(d => {
+          const k = d.key || d.apiKey;
+          if (k && k !== 'YOUR_API_KEY') {
+            setApiKey(k);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [apiKey]);
 
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [inputKey, setInputKey] = useState<string>('');

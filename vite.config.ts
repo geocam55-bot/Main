@@ -12,7 +12,7 @@
     plugins: [react(), tailwindcss()],
     publicDir: 'src/public',
     define: {
-      __GOOGLE_MAPS_PLATFORM_KEY__: JSON.stringify(
+      '__GOOGLE_MAPS_PLATFORM_KEY__': JSON.stringify(
         process.env.GOOGLE_MAPS_PLATFORM_KEY ||
         process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
         process.env.GOOGLE_MAPS_API_KEY ||

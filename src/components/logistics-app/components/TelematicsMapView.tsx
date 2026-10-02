@@ -52,8 +52,12 @@ declare const __GOOGLE_MAPS_PLATFORM_KEY__: string | undefined;
 
 const API_KEY_STATIC =
   (typeof __GOOGLE_MAPS_PLATFORM_KEY__ !== 'undefined' && __GOOGLE_MAPS_PLATFORM_KEY__) ||
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   viteEnv?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   viteEnv?.VITE_GOOGLE_MAPS_API_KEY ||
+  viteEnv?.GOOGLE_MAPS_PLATFORM_KEY ||
+  process.env.GOOGLE_MAPS_API_KEY ||
   '';
 
 // Default center: Dartmouth / Halifax Regional Logistics Corridor
@@ -438,6 +442,21 @@ export default function TelematicsMapView({
     }
     return '';
   });
+
+  // Runtime fallback if key was not static at compile time
+  useEffect(() => {
+    if (!apiKey) {
+      fetch('/api/maps-key')
+        .then(r => r.json())
+        .then(d => {
+          const k = d.key || d.apiKey;
+          if (k && k !== 'YOUR_API_KEY') {
+            setApiKey(k);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [apiKey]);
 
   const [mapTypeId, setMapTypeId] = useState<string>('roadmap');
   const [showTraffic, setShowTraffic] = useState<boolean>(false);

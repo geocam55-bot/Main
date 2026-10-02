@@ -44,20 +44,16 @@ export interface RouteStats {
 }
 
 const runtimeEnv = (import.meta as any).env || {};
+declare const __GOOGLE_MAPS_PLATFORM_KEY__: string | undefined;
 
 const API_KEY_STATIC =
+  (typeof __GOOGLE_MAPS_PLATFORM_KEY__ !== 'undefined' && __GOOGLE_MAPS_PLATFORM_KEY__) ||
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   runtimeEnv.GOOGLE_MAPS_PLATFORM_KEY ||
-  runtimeEnv.GOOGLE_MAPS_API_KEY ||
   runtimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   runtimeEnv.VITE_GOOGLE_MAPS_API_KEY ||
-  runtimeEnv.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-  runtimeEnv.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.GOOGLE_MAPS_API_KEY ||
-  (import.meta as any).env?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
-  (globalThis as any).GOOGLE_MAPS_API_KEY ||
+  process.env.GOOGLE_MAPS_API_KEY ||
   '';
 
 // Default Home Depot / Burnside Coordinates fallback

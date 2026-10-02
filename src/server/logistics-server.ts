@@ -6292,37 +6292,17 @@ async function getFleetId(token: string): Promise<string | null> {
         else if (rawIgnition === 'IDLE' || rawIgnition === 'IDLING') ignitionStatus = 'IDLE';
         else ignitionStatus = 'OFF';
 
-        // Evaluate vehicle state: MOVING, IDLE, or STOPPED universally for all units
+        // Evaluate authentic vehicle state: MOVING, IDLE, or STOPPED directly from live telematics & speed
         let status: 'MOVING' | 'IDLE' | 'STOPPED' = 'STOPPED';
         const dbStatus = String(deserialized.status || t.status || '').toLowerCase();
         
-        // Universal rule applied identically across DEV and LIVE: every 4th unit or explicit transit status is moving
-        const isUniversalActive = (index % 4 === 0) || dbStatus.includes('transit') || dbStatus.includes('moving') || dbStatus.includes('driving') || rawSpeed > 3;
-
-        if (isUniversalActive) {
+        if (rawSpeed > 3 || (ignitionStatus === 'ON' && rawSpeed > 3) || dbStatus.includes('transit') || dbStatus.includes('moving') || dbStatus.includes('driving')) {
           status = 'MOVING';
-          if (rawSpeed <= 3) rawSpeed = 45;
-        } else if (dbStatus.includes('idle') || ignitionStatus === 'IDLE') {
+        } else if (rawSpeed === 0 && (dbStatus.includes('idle') || ignitionStatus === 'IDLE' || (liveMatch && (liveMatch.idlingMins || 0) > 0))) {
           status = 'IDLE';
-          rawSpeed = 0;
         } else {
           status = 'STOPPED';
           rawSpeed = 0;
-        }
-
-        // Live GPS motion progression between RONA stores (Elmsdale, Dartmouth, Halifax, Tantallon) for moving units
-        if (status === 'MOVING') {
-          const progress = (Math.sin((Date.now() / 25000) + (index * 1.8)) + 1) / 2; // 0 to 1 back and forth
-          const storeRoutes = [
-            { from: { lat: 44.9796, lng: -63.5044 }, to: { lat: 44.6909, lng: -63.5985 } }, // Elmsdale <-> Dartmouth
-            { from: { lat: 44.9810, lng: -63.5060 }, to: { lat: 44.6896, lng: -63.5976 } }, // Elmsdale <-> Halifax
-            { from: { lat: 44.9790, lng: -63.5030 }, to: { lat: 44.6854, lng: -63.8824 } }, // Elmsdale <-> Tantallon
-          ];
-          const route = storeRoutes[index % storeRoutes.length];
-          lat = route.from.lat + (route.to.lat - route.from.lat) * progress;
-          lng = route.from.lng + (route.to.lng - route.from.lng) * progress;
-          rawSpeed = 48 + Math.floor(Math.abs(Math.sin(Date.now() / 6000 + index)) * 22); // 48-70 km/h
-          heading = progress > 0.5 ? 175 : 355;
         }
 
         const fuelLevel = typeof deserialized.fuelLevel === 'number' ? deserialized.fuelLevel : Math.max(25, Math.min(100, 85 - (index * 4)));
