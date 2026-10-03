@@ -214,6 +214,51 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
   const [isSearchingPrices, setIsSearchingPrices] = useState(false);
   const [scrapingItemIds, setScrapingItemIds] = useState<Set<string>>(new Set());
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
+  const [isEditingPrices, setIsEditingPrices] = useState(false);
+  const [overrideKentPrice, setOverrideKentPrice] = useState('');
+  const [overrideHdPrice, setOverrideHdPrice] = useState('');
+
+  useEffect(() => {
+    if (selectedDetailItem) {
+      setOverrideKentPrice(selectedDetailItem.competitorData?.kent?.price ? String(selectedDetailItem.competitorData.kent.price) : '');
+      setOverrideHdPrice(selectedDetailItem.competitorData?.homeDepot?.price ? String(selectedDetailItem.competitorData.homeDepot.price) : '');
+      setIsEditingPrices(false);
+    }
+  }, [selectedDetailItem]);
+
+  const handleSavePriceOverrides = () => {
+    if (!selectedDetailItem) return;
+    const kp = parseFloat(overrideKentPrice) || 0;
+    const hp = parseFloat(overrideHdPrice) || 0;
+
+    const updatedItem: ShoppingListItem = {
+      ...selectedDetailItem,
+      competitorData: {
+        ...(selectedDetailItem.competitorData || {}),
+        status: 'found',
+        bestDeal: kp > 0 && kp < selectedDetailItem.unitPrice ? 'kent' : (hp > 0 && hp < selectedDetailItem.unitPrice ? 'homeDepot' : 'prospaces'),
+        kent: {
+          ...(selectedDetailItem.competitorData?.kent || {}),
+          price: kp,
+          storeName: `${kentConfig.name} (${kentConfig.storeLocation || 'Bayers Lake'})`,
+          inStock: true,
+        },
+        homeDepot: {
+          ...(selectedDetailItem.competitorData?.homeDepot || {}),
+          price: hp,
+          storeName: `${hdConfig.name} (${hdConfig.storeLocation || 'Halifax Lacewood'})`,
+          inStock: true,
+        },
+        lastChecked: new Date().toISOString(),
+        marketRecommendation: `Manually verified website price override.`
+      }
+    };
+
+    setShoppingList(prev => prev.map(p => p.id === updatedItem.id ? updatedItem : p));
+    setSelectedDetailItem(updatedItem);
+    setIsEditingPrices(false);
+    toast.success('Competitor prices successfully updated with verified website values!');
+  };
   
   const [configuredCompetitors, setConfiguredCompetitors] = useState<any[]>([]);
   useEffect(() => {
@@ -2323,76 +2368,127 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
 
               {/* Competitor Price Comparison */}
               <div className="space-y-2 pt-2 border-t">
-                <h5 className="font-semibold text-slate-800 flex items-center justify-between">
-                  <span>Regional Competitor Comparison</span>
-                  {selectedDetailItem.competitorData?.lastChecked && (
-                    <span className="text-[10px] font-normal text-slate-400">
-                      Checked: {new Date(selectedDetailItem.competitorData.lastChecked).toLocaleTimeString()}
-                    </span>
-                  )}
-                </h5>
-
-                {/* Kent */}
-                <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between" style={{ borderColor: `${kentConfig.colorHex}30` }}>
-                  <div>
-                    <span className="font-semibold text-slate-800 block">{kentConfig.name}</span>
-                    <span className="text-[11px] text-slate-500">
-                      {selectedDetailItem.competitorData?.kent?.storeLocation || kentConfig.storeLocation || 'Halifax - Bayers Lake'}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    {selectedDetailItem.competitorData?.kent?.price ? (
-                      <div>
-                        <span className="font-bold text-slate-900">${selectedDetailItem.competitorData.kent.price.toFixed(2)}</span>
-                        {selectedDetailItem.competitorData.kent.url && (
-                          <a
-                            href={selectedDetailItem.competitorData.kent.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block text-[10px] hover:underline"
-                            style={{ color: kentConfig.colorHex }}
-                          >
-                            View on {new URL(kentConfig.websiteUrl || 'https://kent.ca').hostname.replace('www.', '')}
-                          </a>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-slate-400 italic text-[11px]">Unlisted</span>
+                <div className="flex items-center justify-between">
+                  <h5 className="font-semibold text-slate-800">
+                    <span>Regional Competitor Comparison</span>
+                  </h5>
+                  <div className="flex items-center gap-1.5">
+                    {selectedDetailItem.competitorData?.lastChecked && !isEditingPrices && (
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(selectedDetailItem.competitorData.lastChecked).toLocaleTimeString()}
+                      </span>
                     )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingPrices(!isEditingPrices)}
+                      className="h-6 text-[11px] px-2"
+                    >
+                      {isEditingPrices ? 'Cancel' : 'Edit / Override Prices'}
+                    </Button>
                   </div>
                 </div>
 
-                {/* Home Depot */}
-                <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between" style={{ borderColor: `${hdConfig.colorHex}30` }}>
-                  <div>
-                    <span className="font-semibold text-slate-800 block">{hdConfig.name}</span>
-                    <span className="text-[11px] text-slate-500">
-                      {selectedDetailItem.competitorData?.homeDepot?.storeLocation || hdConfig.storeLocation || 'Halifax Lacewood'}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    {selectedDetailItem.competitorData?.homeDepot?.price ? (
+                {isEditingPrices ? (
+                  <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg space-y-2.5 my-2">
+                    <p className="text-[11px] text-amber-800 font-medium">
+                      Enter the exact visible website price from Kent or Home Depot:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <span className="font-bold text-slate-900">${selectedDetailItem.competitorData.homeDepot.price.toFixed(2)}</span>
-                        {selectedDetailItem.competitorData.homeDepot.url && (
-                          <a
-                            href={selectedDetailItem.competitorData.homeDepot.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block text-[10px] hover:underline"
-                            style={{ color: hdConfig.colorHex }}
-                          >
-                            View on {new URL(hdConfig.websiteUrl || 'https://homedepot.ca').hostname.replace('www.', '')}
-                          </a>
+                        <label className="text-[10px] font-medium text-slate-600 block mb-1">Kent Price ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={overrideKentPrice}
+                          onChange={(e) => setOverrideKentPrice(e.target.value)}
+                          className="w-full h-8 px-2 border rounded text-xs bg-white"
+                          placeholder="e.g. 14.25"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-slate-600 block mb-1">Home Depot Price ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={overrideHdPrice}
+                          onChange={(e) => setOverrideHdPrice(e.target.value)}
+                          className="w-full h-8 px-2 border rounded text-xs bg-white"
+                          placeholder="e.g. 14.55"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-1.5 pt-1">
+                      <Button size="sm" onClick={handleSavePriceOverrides} className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
+                        Save Verified Prices
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Kent */}
+                    <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between" style={{ borderColor: `${kentConfig.colorHex}30` }}>
+                      <div>
+                        <span className="font-semibold text-slate-800 block">{kentConfig.name}</span>
+                        <span className="text-[11px] text-slate-500">
+                          {selectedDetailItem.competitorData?.kent?.storeLocation || kentConfig.storeLocation || 'Halifax - Bayers Lake'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        {selectedDetailItem.competitorData?.kent?.price ? (
+                          <div>
+                            <span className="font-bold text-slate-900">${selectedDetailItem.competitorData.kent.price.toFixed(2)}</span>
+                            {selectedDetailItem.competitorData.kent.url && (
+                              <a
+                                href={selectedDetailItem.competitorData.kent.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block text-[10px] hover:underline"
+                                style={{ color: kentConfig.colorHex }}
+                              >
+                                View on {new URL(kentConfig.websiteUrl || 'https://kent.ca').hostname.replace('www.', '')}
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">Unlisted</span>
                         )}
                       </div>
-                    ) : (
-                      <span className="text-slate-400 italic text-[11px]">Unlisted</span>
-                    )}
-                  </div>
-                </div>
+                    </div>
 
-                {selectedDetailItem.competitorData?.marketRecommendation && (
+                    {/* Home Depot */}
+                    <div className="p-2.5 rounded-lg border bg-white flex items-center justify-between" style={{ borderColor: `${hdConfig.colorHex}30` }}>
+                      <div>
+                        <span className="font-semibold text-slate-800 block">{hdConfig.name}</span>
+                        <span className="text-[11px] text-slate-500">
+                          {selectedDetailItem.competitorData?.homeDepot?.storeLocation || hdConfig.storeLocation || 'Halifax Lacewood'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        {selectedDetailItem.competitorData?.homeDepot?.price ? (
+                          <div>
+                            <span className="font-bold text-slate-900">${selectedDetailItem.competitorData.homeDepot.price.toFixed(2)}</span>
+                            {selectedDetailItem.competitorData.homeDepot.url && (
+                              <a
+                                href={selectedDetailItem.competitorData.homeDepot.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block text-[10px] hover:underline"
+                                style={{ color: hdConfig.colorHex }}
+                              >
+                                View on {new URL(hdConfig.websiteUrl || 'https://homedepot.ca').hostname.replace('www.', '')}
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">Unlisted</span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {selectedDetailItem.competitorData?.marketRecommendation && !isEditingPrices && (
                   <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200 text-blue-900 text-[11px] mt-2">
                     <span className="font-semibold block mb-0.5">Market Recommendation:</span>
                     {selectedDetailItem.competitorData.marketRecommendation}

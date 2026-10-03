@@ -630,19 +630,26 @@ export function getSearchTerms(item: InventoryItem): string[] {
  */
 export async function fetchLiveKentStorePrice(url?: string | null): Promise<number | null> {
   if (!url || !url.includes('kent.ca')) return null;
+  let page: Page | null = null;
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Cookie': 'store=bayers_lake; selected_store=10; store_code=10'
-      },
-      signal: AbortSignal.timeout(4000)
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
+    const browser = await getPlaywrightBrowser();
+    page = await createOptimizedPage(browser);
+    
+    await page.context().addCookies([
+      { name: 'store', value: 'bayers_lake', domain: '.kent.ca', path: '/' },
+      { name: 'selected_store', value: '10', domain: '.kent.ca', path: '/' },
+      { name: 'store_code', value: '10', domain: '.kent.ca', path: '/' }
+    ]);
 
-    // 1. Check JSON-LD structured data (Product offers) - Highest accuracy for live store price
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12000 });
+    await page.mouse.move(110, 110);
+    await page.waitForTimeout(400);
+
+    const html = await page.content();
+    await page.close();
+    page = null;
+
+    // 1. JSON-LD structured data (Product offers)
     const ldMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
     if (ldMatches) {
       for (const m of ldMatches) {
@@ -661,14 +668,14 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
       }
     }
 
-    // 2. Check Magento data-price-amount attribute
+    // 2. Magento data-price-amount attribute
     const dataPriceMatch = html.match(/data-price-amount="([0-9.]+)"/i);
     if (dataPriceMatch) {
       const val = parseFloat(dataPriceMatch[1]);
       if (!isNaN(val) && val > 0) return val;
     }
 
-    // 3. Check OpenGraph / Schema product:price:amount meta tag
+    // 3. OpenGraph / Schema meta tag
     const metaMatch = html.match(/<meta[^>]+(?:property="product:price:amount"|itemprop="price")[^>]+content="([0-9.]+)"/i) ||
                       html.match(/<meta[^>]+content="([0-9.]+)"[^>]+(?:property="product:price:amount"|itemprop="price")/i);
     if (metaMatch) {
@@ -676,7 +683,7 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
       if (!isNaN(val) && val > 0) return val;
     }
 
-    // 4. Check finalPrice wrapper span
+    // 4. Price span
     const spanPriceMatch = html.match(/data-price-type="finalPrice"[^>]*>[\s\S]*?class="price"[^>]*>\$?([0-9,.]+)/i) ||
                            html.match(/class="price"[^>]*>\$?([0-9,.]+)/i);
     if (spanPriceMatch) {
@@ -686,6 +693,64 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
 
     return null;
   } catch (e) {
+    if (page) {
+      try { await page.close(); } catch (err) {}
+    }
+    return null;
+  }
+}
+
+export async function fetchLiveHomeDepotStorePrice(url?: string | null): Promise<number | null> {
+  if (!url || !url.includes('homedepot.ca')) return null;
+  let page: Page | null = null;
+  try {
+    const browser = await getPlaywrightBrowser();
+    page = await createOptimizedPage(browser);
+    
+    await page.context().addCookies([
+      { name: 'store', value: '7126', domain: '.homedepot.ca', path: '/' },
+      { name: 'selected_store', value: '7126', domain: '.homedepot.ca', path: '/' },
+      { name: 'province', value: 'NS', domain: '.homedepot.ca', path: '/' }
+    ]);
+
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12000 });
+    await page.mouse.move(130, 130);
+    await page.waitForTimeout(400);
+
+    const html = await page.content();
+    await page.close();
+    page = null;
+
+    const ldMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
+    if (ldMatches) {
+      for (const m of ldMatches) {
+        try {
+          const raw = m.replace(/<\/?script[^>]*>/gi, '').trim();
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          for (const item of items) {
+            if (item['@type'] === 'Product' && item.offers) {
+              const offer = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+              const p = parseFloat(offer.price);
+              if (!isNaN(p) && p > 0) return p;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    const priceMatch = html.match(/<meta[^>]+property="product:price:amount"[^>]+content="([0-9.]+)"/i) ||
+                       html.match(/data-testid="product-price"[^>]*>\$?([0-9,.]+)/i);
+    if (priceMatch) {
+      const val = parseFloat(priceMatch[1].replace(/,/g, ''));
+      if (!isNaN(val) && val > 0) return val;
+    }
+
+    return null;
+  } catch (e) {
+    if (page) {
+      try { await page.close(); } catch (err) {}
+    }
     return null;
   }
 }
@@ -929,6 +994,17 @@ export async function findBestProductMatch(
       if (liveKentPrice != null && liveKentPrice > 0) {
         best.price = liveKentPrice;
         best.candidate.priceText = String(liveKentPrice);
+      }
+    } catch (priceErr) {}
+  }
+
+  // If Home Depot candidate was found and has a URL, resolve live localized store price from the page
+  if (best && config.id === 2 && best.candidate.url) {
+    try {
+      const liveHdPrice = await fetchLiveHomeDepotStorePrice(best.candidate.url);
+      if (liveHdPrice != null && liveHdPrice > 0) {
+        best.price = liveHdPrice;
+        best.candidate.priceText = String(liveHdPrice);
       }
     } catch (priceErr) {}
   }
