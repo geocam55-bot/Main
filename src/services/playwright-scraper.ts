@@ -1091,15 +1091,44 @@ export async function createOptimizedPage(browser: Browser): Promise<Page> {
     }
   });
 
+  // Seed store cookies for Halifax Bayers Lake (Kent Store 10) & Halifax Lacewood (Home Depot Store 7126)
+  await context.addCookies([
+    { name: 'store', value: 'bayers_lake', domain: '.kent.ca', path: '/' },
+    { name: 'store', value: 'bayers_lake', domain: 'kent.ca', path: '/' },
+    { name: 'store', value: 'bayers_lake', domain: 'www.kent.ca', path: '/' },
+    { name: 'selected_store', value: '10', domain: '.kent.ca', path: '/' },
+    { name: 'selected_store', value: '10', domain: 'kent.ca', path: '/' },
+    { name: 'selected_store', value: '10', domain: 'www.kent.ca', path: '/' },
+    { name: 'store_code', value: '10', domain: '.kent.ca', path: '/' },
+    { name: 'store_code', value: '10', domain: 'kent.ca', path: '/' },
+    { name: 'store_code', value: '10', domain: 'www.kent.ca', path: '/' },
+    { name: 'store', value: '7126', domain: '.homedepot.ca', path: '/' },
+    { name: 'store', value: '7126', domain: 'homedepot.ca', path: '/' },
+    { name: 'store', value: '7126', domain: 'www.homedepot.ca', path: '/' },
+    { name: 'selected_store', value: '7126', domain: '.homedepot.ca', path: '/' },
+    { name: 'selected_store', value: '7126', domain: 'homedepot.ca', path: '/' },
+    { name: 'selected_store', value: '7126', domain: 'www.homedepot.ca', path: '/' },
+    { name: 'province', value: 'NS', domain: '.homedepot.ca', path: '/' },
+    { name: 'province', value: 'NS', domain: 'homedepot.ca', path: '/' }
+  ]);
+
   const page = await context.newPage();
 
-  // Override navigator properties to eliminate headless bot signatures
+  // Override navigator properties and seed localStorage for Halifax store location
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     (navigator as any).languages = ['en-CA', 'en-US', 'en'];
     (window as any).chrome = { runtime: {} };
-    // Mock plugins and permissions
     Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+
+    try {
+      localStorage.setItem('currentStore', JSON.stringify({ id: '10', code: '10', name: 'Bayers Lake', city: 'Halifax' }));
+      localStorage.setItem('selectedStore', '10');
+      localStorage.setItem('storeId', '10');
+      localStorage.setItem('kent_store', 'bayers_lake');
+      localStorage.setItem('hd_store_id', '7126');
+      localStorage.setItem('homedepot_store', '7126');
+    } catch (e) {}
   });
 
   return page;
