@@ -787,6 +787,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
 
                             {/* Status & Speed Pill Badge matching image.png */}
                             {(() => {
+                              const isOffline = v.status === 'STOPPED';
                               const speedKmh = Math.round(
                                 typeof v.speed === 'number' && v.speed > 0
                                   ? v.speed
