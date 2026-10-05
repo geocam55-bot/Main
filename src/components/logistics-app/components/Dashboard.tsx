@@ -2774,10 +2774,22 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                         {/* Main row layout */}
                         <div className="p-3.5 flex items-start justify-between gap-3 select-none">
                           <div className="flex items-start gap-3 flex-1 min-w-0">
-                            {/* Vehicle Icon on Left */}
-                            <div className={`p-2.5 rounded-xl border shrink-0 flex items-center justify-center ${iconDetails.color}`}>
-                              <TruckIcon className="w-5 h-5" />
-                            </div>
+                            {/* Vehicle Icon on Left - Click to open Action Menu */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTrackTruckId(truckRow.id);
+                                setActiveActionMenuTruckId(activeActionMenuTruckId === truckRow.id ? null : truckRow.id);
+                              }}
+                              className={`p-2.5 rounded-xl border shrink-0 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 hover:shadow-xs group/truck-btn relative ${iconDetails.color} ${
+                                activeActionMenuTruckId === truckRow.id ? 'ring-2 ring-teal-500 shadow-xs' : ''
+                              }`}
+                              title={`Click to open actions for ${truckRow.name}`}
+                              aria-label={`Open action menu for ${truckRow.name}`}
+                            >
+                              <TruckIcon className="w-5 h-5 transition-transform group-hover/truck-btn:scale-110" />
+                            </button>
 
                             {/* Center details block */}
                             <div className="flex-1 min-w-0 space-y-1">

@@ -672,17 +672,102 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                         <div
                           key={v.vehicleId}
                           onClick={() => setSelectedVehicleId(v.vehicleId)}
-                          className={`p-3 transition-colors cursor-pointer rounded-xl my-0.5 ${
+                          className={`p-3 transition-colors cursor-pointer rounded-xl my-0.5 relative ${
                             isSelected
                               ? 'bg-blue-50/70 dark:bg-blue-950/50 ring-1 ring-blue-500/30'
                               : 'hover:bg-slate-50 dark:hover:bg-[#202124]'
                           }`}
                         >
+                          {/* Interactive Click Shield Overlay to close open action menu */}
+                          {activeActionMenuId === v.vehicleId && (
+                            <div 
+                              className="fixed inset-0 z-40 cursor-default" 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setActiveActionMenuId(null); 
+                              }} 
+                            />
+                          )}
+
                           {/* Top Row: Truck Icon + Actual Truck Number from Supabase + Status Pill */}
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                              <div className="h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800 flex items-center justify-center shrink-0">
-                                <TruckIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              <div className="relative shrink-0 z-50">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedVehicleId(v.vehicleId);
+                                    setActiveActionMenuId(activeActionMenuId === v.vehicleId ? null : v.vehicleId);
+                                  }}
+                                  className={`h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 group/tb ${
+                                    activeActionMenuId === v.vehicleId ? 'ring-2 ring-blue-500 shadow-xs' : ''
+                                  }`}
+                                  title={`Open actions for ${truckTitle}`}
+                                  aria-label={`Open action menu for ${truckTitle}`}
+                                >
+                                  <TruckIcon className="h-4 w-4 text-blue-600 dark:text-blue-400 group-hover/tb:scale-110 transition-transform" />
+                                </button>
+
+                                {/* Action menu dropdown */}
+                                {activeActionMenuId === v.vehicleId && (
+                                  <div
+                                    className="absolute left-0 top-full mt-1.5 w-52 bg-white dark:bg-[#202124] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 py-1 text-xs select-none divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="py-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedVehicleId(v.vehicleId);
+                                          setActiveActionMenuId(null);
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 text-slate-700 dark:text-slate-200 flex items-center gap-2 font-medium cursor-pointer"
+                                      >
+                                        <MapPin className="h-3.5 w-3.5 text-blue-500" />
+                                        Focus on Map
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedVehicleId(v.vehicleId);
+                                          setViewingDetailsFor(v.vehicleId);
+                                          setActiveActionMenuId(null);
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 text-slate-700 dark:text-slate-200 flex items-center gap-2 font-medium cursor-pointer"
+                                      >
+                                        <Activity className="h-3.5 w-3.5 text-emerald-500" />
+                                        Telemetry Details
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedVehicleId(v.vehicleId);
+                                          setViewingTripsFor(v.vehicleId);
+                                          setActiveActionMenuId(null);
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 text-slate-700 dark:text-slate-200 flex items-center gap-2 font-medium cursor-pointer"
+                                      >
+                                        <Navigation2 className="h-3.5 w-3.5 text-indigo-500" />
+                                        View Trips & Path
+                                      </button>
+                                    </div>
+                                    <div className="py-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedVehicleId(v.vehicleId);
+                                          setActiveActionMenuId(null);
+                                          refreshLiveTelematics();
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 text-slate-700 dark:text-slate-200 flex items-center gap-2 font-medium cursor-pointer"
+                                      >
+                                        <RefreshCw className="h-3.5 w-3.5 text-teal-500" />
+                                        Ping Live GPS
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
