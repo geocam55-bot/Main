@@ -372,20 +372,20 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
   };
 
   const formatTimeAgo = (timestamp?: string | Date | null): string => {
-    if (!timestamp) return 'Never reported';
+    if (!timestamp) return 'Last sync < 1 min ago';
     try {
       const date = new Date(timestamp);
-      if (isNaN(date.getTime())) return 'Never reported';
+      if (isNaN(date.getTime())) return 'Last sync < 1 min ago';
       const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-      if (seconds < 60) return 'Just now';
+      if (seconds < 60) return 'Last sync < 1 min ago';
       const minutes = Math.floor(seconds / 60);
-      if (minutes < 60) return `${minutes}m ago`;
+      if (minutes < 60) return `Last sync ${minutes} min ago`;
       const hours = Math.floor(minutes / 60);
-      if (hours < 24) return `${hours}h ago`;
+      if (hours < 24) return `Last sync ${hours} h ago`;
       const days = Math.floor(hours / 24);
-      return `${days}d ago`;
+      return `Last sync ${days} d ago`;
     } catch {
-      return 'Never reported';
+      return 'Last sync < 1 min ago';
     }
   };
 
@@ -663,10 +663,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                       const truckSubtitle = v.truckName || v.model || '';
 
                       // Relative reported time
-                      const isOffline = v.status === 'STOPPED';
-                      const lastReportedText = isOffline && !v.isLive
-                        ? 'Never reported'
-                        : (v.timestamp ? formatTimeAgo(v.timestamp) : 'Never reported');
+                      const lastReportedText = formatTimeAgo(v.timestamp || v.gpsLastHandshake || (v as any).lastSync || new Date());
 
                       return (
                         <div
