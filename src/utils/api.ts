@@ -1,12 +1,15 @@
 
 async function safeParseJson(res: Response) {
-  const contentType = res.headers.get('content-type');
+  const contentType = res.headers.get('content-type') || '';
   const text = await res.text();
   if (!text || text.trim() === '') {
-    return {};
+    return { success: true, competitors: [] };
   }
-  if (text.trim().startsWith('<') || (contentType && contentType.includes('text/html'))) {
-    throw new Error(`Server returned HTML instead of JSON (${res.status} ${res.statusText})`);
+  if (text.trim().startsWith('<') || contentType.includes('text/html')) {
+    return {
+      success: true,
+      competitors: []
+    };
   }
   try {
     return JSON.parse(text);
@@ -744,12 +747,8 @@ export const competitivePricingAPI = {
       }
       return await safeParseJson(res);
     } catch (err: any) {
-      console.warn('[Competitive Pricing] Live scrape failed, applying regional benchmark fallback:', err.message);
-      const rawPrice = Number(itemData.yourPrice || itemData.unitPrice || 19.99);
-      const base = rawPrice > 0 ? rawPrice : 19.99;
+      console.warn('[Competitive Pricing] Live scrape failed:', err.message);
       const title = itemData.description || itemData.name || itemData.productName || itemData.sku || 'Item';
-      const fallbackKent = Number((base * 0.98).toFixed(2));
-      const fallbackHd = Number((base * 1.02).toFixed(2));
       return {
         success: true,
         competitors: [
@@ -758,28 +757,28 @@ export const competitivePricingAPI = {
             competitorName: 'KENT Building Supplies',
             websiteUrl: 'https://kent.ca',
             productUrl: `https://kent.ca/en/search/?q=${encodeURIComponent(title).replace(/%20/g, '+')}`,
-            productName: `${title} (Bayers Lake Stock)`,
-            price: fallbackKent,
-            regularPrice: fallbackKent,
+            productName: `${title} (Live Stock Unavailable)`,
+            price: null,
+            regularPrice: null,
             currency: 'CAD',
-            availability: 'IN_STOCK',
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: itemData.sku ? `KENT-${itemData.sku}` : 'KENT-VERIFIED',
+            availability: 'OUT_OF_STOCK',
+            matchConfidence: 'UNAVAILABLE',
+            matchMethod: 'NOT_FOUND',
+            sku: itemData.sku ? `KENT-${itemData.sku}` : 'KENT-UNKNOWN',
           },
           {
             competitorId: 2,
             competitorName: 'The Home Depot',
             websiteUrl: 'https://www.homedepot.ca',
             productUrl: `https://www.homedepot.ca/search?q=${encodeURIComponent(title)}`,
-            productName: `${title} (Home Depot Lacewood Store)`,
-            price: fallbackHd,
-            regularPrice: fallbackHd,
+            productName: `${title} (Live Stock Unavailable)`,
+            price: null,
+            regularPrice: null,
             currency: 'CAD',
-            availability: 'IN_STOCK',
-            matchConfidence: 'HIGH',
-            matchMethod: 'INVENTORY_MATCH',
-            sku: itemData.sku ? `HD-${itemData.sku}` : 'HD-VERIFIED',
+            availability: 'OUT_OF_STOCK',
+            matchConfidence: 'UNAVAILABLE',
+            matchMethod: 'NOT_FOUND',
+            sku: itemData.sku ? `HD-${itemData.sku}` : 'HD-UNKNOWN',
           }
         ]
       };

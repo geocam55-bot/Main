@@ -927,8 +927,10 @@ export async function getVehiclePositions(
           return { success: true, vehicles: normalized, fleetId, userId, source: 'fleet_complete' };
         }
       }
-    } catch (err) {
-      console.warn('[Fleet Complete] Live telemetry request notice:', err);
+    } catch (err: any) {
+      if (!err?.message?.includes('aborted') && !err?.name?.includes('TimeoutError')) {
+        console.warn('[Fleet Complete] Live telemetry request notice:', err?.message || err);
+      }
     }
   }
 

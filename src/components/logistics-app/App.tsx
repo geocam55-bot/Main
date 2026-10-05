@@ -2869,6 +2869,251 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
             </div>
           </div>
 
+          {/* Unified Classified Navigation Bar on Primary Header Line */}
+          <div className="hidden lg:flex items-center space-x-1.5 xl:space-x-2.5 mx-auto px-2 select-none" id="prospaces-nav-header-line">
+            {/* Group 1: Dispatcher Space */}
+            {showDispatcherSpace && (
+              <div className="relative nav-dropdown-container">
+                <button 
+                  onClick={() => setActiveNavDropdown(prev => prev === 'dispatcher' ? null : 'dispatcher')}
+                  className={`flex items-center space-x-1.5 px-2.5 xl:px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    ['telematics', 'dashboard', 'live-dashboard', 'queue', 'document-import'].includes(activeTab)
+                      ? 'bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"></span>
+                  <span className="whitespace-nowrap">Dispatcher Space</span>
+                  <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'dispatcher' ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'dispatcher' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
+                  <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
+                    <button
+                      onClick={() => { setActiveTab('telematics'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'telematics' || activeTab === 'dashboard' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <MapIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span>Map</span>
+                    </button>
+
+                    {showAdminSpace && (
+                      <button
+                        onClick={() => { setActiveTab('live-dashboard'); setActiveNavDropdown(null); }}
+                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                          activeTab === 'live-dashboard' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <Activity className="h-4 w-4 text-[#FF5A1F]" />
+                        <span>Live Monitor</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => { setActiveTab('queue'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'queue' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <ClipboardList className="h-4 w-4" />
+                      <span>Freight Board</span>
+                    </button>
+
+                    {!isNavUser && (
+                      <button
+                        onClick={() => { setActiveTab('document-import'); setActiveNavDropdown(null); }}
+                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                          activeTab === 'document-import' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <FileDown className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                        <span>Doc Import</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Group 2: Picker Space */}
+            {showPickerSpace && (
+              <div className="relative nav-dropdown-container">
+                <button 
+                  onClick={() => setActiveNavDropdown(prev => prev === 'picker' ? null : 'picker')}
+                  className={`flex items-center space-x-1.5 px-2.5 xl:px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'scanner'
+                      ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                  <span className="whitespace-nowrap">Picker Space</span>
+                  <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'picker' ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'picker' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
+                  <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
+                    <button
+                      onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'scanner' ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Scan className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <span>Loading Scanner</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Group 3: Driver Space */}
+            {showDriverSpace && (
+              <div className="relative nav-dropdown-container">
+                <button 
+                  onClick={() => setActiveNavDropdown(prev => prev === 'driver' ? null : 'driver')}
+                  className={`flex items-center space-x-1.5 px-2.5 xl:px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    ['driver', 'epod', 'driver-app', 'driver-mobile', 'inspections', 'fuel'].includes(activeTab)
+                      ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span className="whitespace-nowrap">Driver Space</span>
+                  <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'driver' ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`absolute left-0 top-full pt-1 min-w-[220px] z-[100] transition-all duration-200 ${activeNavDropdown === 'driver' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
+                  <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5 space-y-0.5">
+                    <button
+                      onClick={() => {
+                        setShowDriverTruckModal(true);
+                        setActiveNavDropdown(null);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-extrabold rounded-lg flex items-center justify-between transition-all cursor-pointer bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/80 border border-blue-200/60 dark:border-blue-800"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <TruckIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <span>Change Assigned Truck</span>
+                      </div>
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-200 truncate max-w-[75px]">
+                        {driverAssignedTruck ? driverAssignedTruck.name?.split(' ')[0] : 'None'}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => { 
+                        setActiveTab('driver'); 
+                        setActiveNavDropdown(null); 
+                        try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'driver' || activeTab === 'epod' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <TruckIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>Driver Mobile App</span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'scanner' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Scan className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <span>Loading Scanner</span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('inspections'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'inspections' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Shield className="h-4 w-4 text-blue-500" />
+                      <span>Vehicle Inspections</span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('fuel'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'fuel' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Activity className="h-4 w-4 text-rose-500" />
+                      <span>Fuel Tracker</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Group 4: Admin Space */}
+            {showAdminSpace && (
+              <div className="relative nav-dropdown-container">
+                <button 
+                  onClick={() => setActiveNavDropdown(prev => prev === 'admin' ? null : 'admin')}
+                  className={`flex items-center space-x-1.5 px-2.5 xl:px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    ['enterprise-hub', 'stores', 'trucks', 'gps', 'users', 'architecture', 'tracking-portal'].includes(activeTab)
+                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600 dark:bg-slate-400 shrink-0"></span>
+                  <span className="whitespace-nowrap">Admin Space</span>
+                  <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'admin' ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'admin' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
+                  <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
+                    <button
+                      onClick={() => { setActiveTab('enterprise-hub'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'enterprise-hub' ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Sparkles className="h-4 w-4 text-purple-500" />
+                      <span>Enterprise Hub</span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('stores'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        ['stores', 'trucks', 'gps', 'users', 'architecture'].includes(activeTab) ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Settings className="h-4 w-4" />
+                      <span>System Config</span>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
+
+                    {/* Customer Delivery Tracking Portal Quick Launch */}
+                    <button
+                      onClick={() => { setActiveTab('tracking-portal'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center justify-between transition-all cursor-pointer ${
+                        activeTab === 'tracking-portal' ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <Package className="h-4 w-4 text-sky-500" />
+                        <span>Customer Delivery Portal</span>
+                      </div>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300 font-bold uppercase tracking-wider">Preview</span>
+                    </button>
+
+                    <a
+                      href="/track"
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setActiveNavDropdown(null)}
+                      className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 flex items-center justify-between transition-all rounded-lg"
+                      title="Open Customer Delivery Tracking Portal in a new window"
+                    >
+                      <span className="pl-6.5 text-[10.5px]">Open in New Window</span>
+                      <ExternalLink className="h-3 w-3 opacity-60" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Quick Stats & Logged-In User Profile context */}
           <div className="flex items-center justify-end gap-2 sm:gap-3 shrink-0">
             <div className="hidden md:flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/85 dark:border-slate-700 px-2.5 py-1 rounded-lg text-xs font-mono text-slate-600 dark:text-slate-300">
@@ -3327,283 +3572,6 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               )}
             </div>
 
-          </div>
-        </div>
-
-        {/* Unified Classified Navigation Subbar inside Sticky Header */}
-        <div className="hidden lg:block border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 py-1.5 select-none" id="prospaces-nav-unified-sticky">
-          <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8">
-            <div className="flex items-center space-x-2 lg:space-x-4">
-              
-              {/* Group 1: Dispatcher Space */}
-              {showDispatcherSpace && (
-                <div 
-                  className="relative nav-dropdown-container"
-                >
-                  <button 
-                    onClick={() => setActiveNavDropdown(prev => prev === 'dispatcher' ? null : 'dispatcher')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-                    <span>Dispatcher Space</span>
-                    <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'dispatcher' ? 'rotate-180' : ''}`} />
-                  </button>
-                  <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'dispatcher' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
-                      <button
-                        onClick={() => { setActiveTab('telematics'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'telematics' || activeTab === 'dashboard' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <MapIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        <span>Map</span>
-                      </button>
-
-                      {showAdminSpace && (
-                        <button
-                          onClick={() => { setActiveTab('live-dashboard'); setActiveNavDropdown(null); }}
-                          className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                            activeTab === 'live-dashboard' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`}
-                        >
-                          <Activity className="h-4 w-4 text-[#FF5A1F]" />
-                          <span>Live Monitor</span>
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => { setActiveTab('queue'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'queue' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <ClipboardList className="h-4 w-4" />
-                        <span>Freight Board</span>
-                      </button>
-
-                      {!isNavUser && (
-                        <button
-                          onClick={() => { setActiveTab('document-import'); setActiveNavDropdown(null); }}
-                          className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                            activeTab === 'document-import' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`}
-                        >
-                          <FileDown className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                          <span>Doc Import</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Group 2: Picker Space */}
-              {showPickerSpace && (
-                <div 
-                  className="relative nav-dropdown-container"
-                >
-                  <button 
-                    onClick={() => setActiveNavDropdown(prev => prev === 'picker' ? null : 'picker')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                    <span>Picker Space</span>
-                    <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'picker' ? 'rotate-180' : ''}`} />
-                  </button>
-                  <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'picker' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
-                      <button
-                        onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'scanner' ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <Scan className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                        <span>Loading Scanner</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Group 3: Driver Space */}
-              {showDriverSpace && (
-                <div 
-                  className="relative nav-dropdown-container"
-                >
-                  <button 
-                    onClick={() => setActiveNavDropdown(prev => prev === 'driver' ? null : 'driver')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Driver Space</span>
-                    <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'driver' ? 'rotate-180' : ''}`} />
-                  </button>
-                  <div className={`absolute left-0 top-full pt-1 min-w-[220px] z-[100] transition-all duration-200 ${activeNavDropdown === 'driver' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5 space-y-0.5">
-                      <button
-                        onClick={() => {
-                          setShowDriverTruckModal(true);
-                          setActiveNavDropdown(null);
-                        }}
-                        className="w-full text-left px-3 py-2 text-xs font-extrabold rounded-lg flex items-center justify-between transition-all cursor-pointer bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/80 border border-blue-200/60 dark:border-blue-800"
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <TruckIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                          <span>Change Assigned Truck</span>
-                        </div>
-                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-200 truncate max-w-[75px]">
-                          {driverAssignedTruck ? driverAssignedTruck.name?.split(' ')[0] : 'None'}
-                        </span>
-                      </button>
-
-                      <button
-                        onClick={() => { 
-                          setActiveTab('driver'); 
-                          setActiveNavDropdown(null); 
-                          try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'driver' || activeTab === 'epod' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <TruckIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                        <span>Driver Mobile App</span>
-                      </button>
-                      <button
-                        onClick={() => { setActiveTab('scanner'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'scanner' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <Scan className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                        <span>Loading Scanner</span>
-                      </button>
-                      <button
-                        onClick={() => { setActiveTab('inspections'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'inspections' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <Shield className="h-4 w-4 text-blue-500" />
-                        <span>Vehicle Inspections</span>
-                      </button>
-                      <button
-                        onClick={() => { setActiveTab('fuel'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'fuel' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <Activity className="h-4 w-4 text-rose-500" />
-                        <span>Fuel Tracker</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Group 4: Admin Space */}
-              {showAdminSpace && (
-                <div 
-                  className="relative nav-dropdown-container"
-                >
-                  <button 
-                    onClick={() => setActiveNavDropdown(prev => prev === 'admin' ? null : 'admin')}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600 dark:bg-slate-400"></span>
-                    <span>Admin Space</span>
-                    <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${activeNavDropdown === 'admin' ? 'rotate-180' : ''}`} />
-                  </button>
-                  <div className={`absolute left-0 top-full pt-1 min-w-[200px] z-[100] transition-all duration-200 ${activeNavDropdown === 'admin' ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2 pointer-events-none'}`}>
-                    <div className="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60 rounded-xl p-1.5">
-                      <button
-                        onClick={() => { setActiveTab('enterprise-hub'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          activeTab === 'enterprise-hub' ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <Sparkles className="h-4 w-4 text-purple-500" />
-                        <span>Enterprise Hub</span>
-                      </button>
-                      <button
-                        onClick={() => { setActiveTab('stores'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
-                          ['stores', 'trucks', 'gps', 'users', 'architecture'].includes(activeTab) ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <Settings className="h-4 w-4" />
-                        <span>System Config</span>
-                      </button>
-
-                      <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
-
-                      {/* Customer Delivery Tracking Portal Quick Launch */}
-                      <button
-                        onClick={() => { setActiveTab('tracking-portal'); setActiveNavDropdown(null); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center justify-between transition-all cursor-pointer ${
-                          activeTab === 'tracking-portal' ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Package className="h-4 w-4 text-sky-500" />
-                          <span>Customer Delivery Portal</span>
-                        </div>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300 font-bold uppercase tracking-wider">Preview</span>
-                      </button>
-
-                      <a
-                        href="/track"
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={() => setActiveNavDropdown(null)}
-                        className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 flex items-center justify-between transition-all rounded-lg"
-                        title="Open Customer Delivery Tracking Portal in a new window"
-                      >
-                        <span className="pl-6.5 text-[10.5px]">Open in New Window</span>
-                        <ExternalLink className="h-3 w-3 opacity-60" />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Direct Quick Launch: Customer Delivery Portal */}
-              <button
-                onClick={() => {
-                  setActiveTab('tracking-portal');
-                  setActiveNavDropdown(null);
-                }}
-                className={`ml-auto flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs ${
-                  activeTab === 'tracking-portal'
-                    ? 'bg-sky-600 text-white shadow-sky-500/20'
-                    : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/60 border border-sky-200/80 dark:border-sky-800'
-                }`}
-                title="Preview Customer Delivery Live Tracking Portal"
-              >
-                <Package className="h-3.5 w-3.5 text-current" />
-                <span>Customer Portal</span>
-              </button>
-
-              {/* Direct Quick Launch: Driver App */}
-              <button
-                onClick={() => {
-                  setActiveTab('driver');
-                  setActiveNavDropdown(null);
-                  try { window.history.replaceState(null, '', '/logistics/driver'); } catch(e) {}
-                }}
-                className={`flex items-center space-x-2 px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer shadow-sm ${
-                  activeTab === 'driver' || activeTab === 'epod'
-                    ? 'bg-emerald-600 text-white shadow-emerald-500/20'
-                    : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800'
-                }`}
-              >
-                <TruckIcon className="h-3.5 w-3.5 text-current" />
-                <span>Driver Mobile Portal</span>
-              </button>
-              
-            </div>
           </div>
         </div>
       </header>

@@ -620,7 +620,7 @@ export default function LiveVehicleMap({
             <Map
               defaultCenter={REGIONAL_CENTER}
               defaultZoom={11}
-              mapId="prospaces-live-telematics"
+              mapId={mapRuntimeEnv.VITE_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
               mapTypeId={mapTypeId}
               gestureHandling="greedy"
               disableDefaultUI={false}

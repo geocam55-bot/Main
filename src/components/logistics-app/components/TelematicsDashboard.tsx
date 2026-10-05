@@ -3,6 +3,7 @@ import { useTelematics } from '../lib/telematicsService';
 import TelematicsMapView from './TelematicsMapView';
 import { VehicleRecord } from '../types/telematics';
 import { Truck, Branch } from '../types';
+import { DEFAULT_TRUCKS } from '../data';
 import { 
   Truck as TruckIcon, 
   MapPin, 
@@ -40,7 +41,9 @@ import {
   Pin,
   Calendar,
   ChevronLeft,
-  Eye
+  Eye,
+  Car,
+  XCircle
 } from 'lucide-react';
 
 export interface TelematicsDashboardProps {
@@ -54,6 +57,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
   const [viewingTripsFor, setViewingTripsFor] = useState<string | null>(null);
   const [viewingDetailsFor, setViewingDetailsFor] = useState<string | null>(null);
+  const [isAssetListCollapsed, setIsAssetListCollapsed] = useState<boolean>(false);
+  const [showFilterMenu, setShowFilterMenu] = useState<boolean>(false);
   
   // Sidebar accordion states
   const [accordions, setAccordions] = useState({
@@ -118,9 +123,9 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       } catch {}
     }
 
-    // If no trucks exist yet for the active tenant, fall back directly to raw telematics
+    // If no trucks exist yet for the active tenant, fall back to default Supabase trucks
     if (activeTenantTrucks.length === 0) {
-      return rawVehicles || [];
+      activeTenantTrucks = DEFAULT_TRUCKS;
     }
 
     // Build lookup maps for incoming Fleet Complete live vehicles
@@ -192,6 +197,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
           vehicleId: t.id,
           truckName: t.name || liveMatch.truckName,
           name: t.name || liveMatch.name,
+          truckNumber: (t as any).truck_number || t.truckNumber || tUnit || extractUnitNumber(t.name) || extractUnitNumber(t.id) || t.id,
           driver: {
             id: (t as any).driverId || liveMatch.driver?.id || `DRV-${idx + 101}`,
             name: driverName
@@ -216,6 +222,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         vehicleId: t.id,
         truckName: t.name,
         name: t.name,
+        truckNumber: (t as any).truck_number || t.truckNumber || tUnit || extractUnitNumber(t.name) || extractUnitNumber(t.id) || t.id,
         vin: t.vin || `1FTMF1E55MKD${51000 + idx}`,
         licensePlate: t.licensePlate || `PR-${9020 + idx}`,
         model: t.type || 'Commercial Vehicle',
@@ -282,6 +289,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
       list = list.filter(v => 
         (v.truckName && v.truckName.toLowerCase().includes(q)) ||
         (v.vehicleId && v.vehicleId.toLowerCase().includes(q)) ||
+        ((v as any).truckNumber && String((v as any).truckNumber).toLowerCase().includes(q)) ||
         (v.driver?.name && v.driver.name.toLowerCase().includes(q)) ||
         (v.vin && v.vin.toLowerCase().includes(q)) ||
         (v.licensePlate && v.licensePlate.toLowerCase().includes(q)) ||
@@ -363,642 +371,417 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     }
   };
 
+  const formatTimeAgo = (timestamp?: string | Date | null): string => {
+    if (!timestamp) return 'Never reported';
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return 'Never reported';
+      const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (seconds < 60) return 'Just now';
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    } catch {
+      return 'Never reported';
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full min-h-screen bg-slate-50 dark:bg-[#202124] text-slate-900 dark:text-[#F4F4F5] font-sans">
+    <div className="flex flex-col h-[calc(100vh-62px)] bg-slate-50 dark:bg-[#202124] text-slate-900 dark:text-[#F4F4F5] font-sans overflow-hidden">
       
-      {/* ── Top Telematics Header & KPI Summary Ribbon ── */}
-      <header className="bg-white dark:bg-[#18191B] border-b border-slate-200/90 dark:border-[#303237] sticky top-0 z-30 shadow-xs px-4 sm:px-6 lg:px-8 py-3.5 transition-colors">
-        <div className="w-full flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      {/* ── Condensed Top Telematics Header & Status Bar (Poll section removed) ── */}
+      <header className="bg-white dark:bg-[#18191B] border-b border-slate-200/90 dark:border-[#303237] z-30 shadow-xs px-3 sm:px-4 py-2 transition-colors shrink-0">
+        <div className="w-full flex flex-wrap items-center justify-between gap-2">
           
-          {/* Brand Title & Live Beacon */}
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-2xl bg-blue-900 dark:bg-blue-950 text-white flex items-center justify-center shadow-md border border-blue-800/50">
-              <Radio className="h-5 w-5 text-blue-300 animate-pulse" />
+          {/* Brand Title & Live GPS Beacon */}
+          <div className="flex items-center space-x-2.5">
+            <div className="h-7 w-7 rounded-lg bg-blue-900 dark:bg-blue-950 text-white flex items-center justify-center shadow-xs border border-blue-800/50">
+              <Radio className="h-4 w-4 text-blue-300 animate-pulse" />
             </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="text-lg font-black tracking-tight text-blue-950 dark:text-white">Fleet Telematics & Live GPS</h1>
-                <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 text-[10px] font-mono font-bold rounded-md border border-blue-200 dark:border-blue-800">
-                  REST v1
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Real-time Unity / Fleet Complete vehicle stream & automated route progression
-              </p>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-sm sm:text-base font-black tracking-tight text-blue-950 dark:text-white">Fleet Telematics &amp; Live GPS</h1>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/80">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
+                Live GPS
+              </span>
             </div>
           </div>
 
-          {/* Polling Controls & Stream Engine */}
-          <div className="flex items-center space-x-2 self-start md:self-auto">
-            {/* Interval Selector */}
-            <div className="flex items-center bg-slate-100 dark:bg-[#1E1F22] p-1 rounded-xl border border-slate-200 dark:border-[#44474D] text-xs font-bold text-slate-600 dark:text-slate-300">
-              <span className="px-2 text-[10px] uppercase text-slate-400 dark:text-slate-500 font-bold">Poll</span>
-              {[3000, 5000, 15000].map((ms) => (
-                <button
-                  key={ms}
-                  type="button"
-                  onClick={() => setPollingIntervalMs(ms)}
-                  className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
-                    pollingIntervalMs === ms 
-                      ? 'bg-white dark:bg-[#282A2E] text-blue-900 dark:text-blue-400 shadow-xs font-black' 
-                      : 'hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  {ms / 1000}s
-                </button>
-              ))}
+          {/* Condensed Interactive KPI Filter Chips */}
+          <div className="flex items-center space-x-1 sm:space-x-1.5 text-xs overflow-x-auto scrollbar-none py-0.5">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('ALL')}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
+                statusFilter === 'ALL'
+                  ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-400 dark:border-blue-600 text-blue-900 dark:text-blue-300 shadow-2xs'
+                  : 'bg-slate-50 dark:bg-[#1E1F22] border-slate-200/80 dark:border-[#303237] text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+              }`}
+            >
+              <span>Total Fleet:</span>
+              <span className="font-black text-slate-900 dark:text-white">{summary.totalVehicles}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('MOVING')}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
+                statusFilter === 'MOVING'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-800 dark:text-emerald-300 shadow-2xs'
+                  : 'bg-slate-50 dark:bg-[#1E1F22] border-slate-200/80 dark:border-[#303237] text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/50'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Moving:</span>
+              <span className="font-black">{summary.movingCount}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('IDLE')}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
+                statusFilter === 'IDLE'
+                  ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-500 text-amber-800 dark:text-amber-300 shadow-2xs'
+                  : 'bg-slate-50 dark:bg-[#1E1F22] border-slate-200/80 dark:border-[#303237] text-amber-600 dark:text-amber-400 hover:bg-amber-50/50'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span>Idling:</span>
+              <span className="font-black">{summary.idleCount}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('STOPPED')}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
+                statusFilter === 'STOPPED'
+                  ? 'bg-slate-200 dark:bg-[#282A2E] border-slate-500 text-slate-900 dark:text-white shadow-2xs'
+                  : 'bg-slate-50 dark:bg-[#1E1F22] border-slate-200/80 dark:border-[#303237] text-slate-500 dark:text-slate-400 hover:bg-slate-100'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+              <span>Offline/Stopped:</span>
+              <span className="font-black">{summary.stoppedCount}</span>
+            </button>
+
+            <div className="hidden xl:flex items-center space-x-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 pl-1 border-l border-slate-200 dark:border-slate-700">
+              <span>Avg: <strong className="text-slate-700 dark:text-slate-300">{summary.averageSpeed} km/h</strong></span>
+              <span>&bull;</span>
+              <span>Stops: <strong className="text-slate-700 dark:text-slate-300">{summary.totalActiveDeliveries}</strong></span>
             </div>
 
-            {/* Manual Refresh */}
+            {/* Quick Refresh */}
             <button
               type="button"
               onClick={() => refreshTelematics()}
-              className="p-2 bg-white dark:bg-[#1E1F22] hover:bg-slate-50 dark:hover:bg-[#282A2E] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#44474D] rounded-xl transition-all cursor-pointer shadow-xs"
-              title="Manual Sync"
+              className="p-1.5 bg-slate-50 dark:bg-[#1E1F22] hover:bg-slate-100 dark:hover:bg-[#282A2E] text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-[#44474D] rounded-lg transition-all cursor-pointer shadow-2xs ml-1"
+              title="Refresh Live GPS"
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin text-blue-600 dark:text-blue-400' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-blue-600 dark:text-blue-400' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* ── Sunday Delivery Department Closure Notice ── */}
+        {/* Sunday Delivery Closure Notice - Compact Single Line */}
         {new Date().getDay() === 0 && (
-          <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
-            <div className="flex items-center space-x-2.5">
-              <span className="text-lg">📅</span>
-              <div>
-                <p className="text-xs font-bold text-amber-900 dark:text-amber-300">
-                  Delivery Department Closed Today (Sunday)
-                </p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                  Operational shipping and driver routes are offline on Sundays according to regional scheduling rules. All 16 fleet trucks are stationary and parked at terminal depot yards.
-                </p>
-              </div>
+          <div className="mt-1.5 px-2.5 py-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 rounded-lg flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center space-x-2">
+              <span>📅</span>
+              <span className="font-bold text-amber-900 dark:text-amber-300">Sunday Closure:</span>
+              <span className="text-amber-700 dark:text-amber-400 text-[11px]">Fleet is offline on Sundays according to regional scheduling rules. Trucks parked at yard depots.</span>
             </div>
-            <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-black rounded-lg border border-amber-300 dark:border-amber-700 uppercase tracking-wider self-start sm:self-center shrink-0">
-              Fleet Parked
-            </span>
+            <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[9px] font-black rounded uppercase shrink-0">Fleet Parked</span>
           </div>
         )}
-
-        {/* ── Interactive KPI Filter Ribbon Bar ── */}
-        <div className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-3 pt-3 border-t border-slate-100 dark:border-[#303237]">
-          <button
-            type="button"
-            onClick={() => setStatusFilter('ALL')}
-            className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
-              statusFilter === 'ALL'
-                ? 'bg-blue-50/80 dark:bg-blue-950/50 border-blue-400 dark:border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
-                : 'bg-slate-50/80 dark:bg-[#1E1F22] hover:bg-slate-100/80 dark:hover:bg-[#282A2E] border-slate-200/70 dark:border-[#303237]'
-            }`}
-          >
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Fleet</span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <span className="text-lg font-black text-slate-900 dark:text-white">{summary.totalVehicles}</span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">units</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter('MOVING')}
-            className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
-              statusFilter === 'MOVING'
-                ? 'bg-emerald-100/70 dark:bg-emerald-950/50 border-emerald-500 dark:border-emerald-600 ring-2 ring-emerald-500/20 shadow-xs'
-                : 'bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/40 border-emerald-200/60 dark:border-emerald-800/60'
-            }`}
-          >
-            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">Moving (Active)</span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <span className="text-lg font-black text-emerald-700 dark:text-emerald-400">{summary.movingCount}</span>
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">in transit</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter('IDLE')}
-            className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
-              statusFilter === 'IDLE'
-                ? 'bg-amber-100/70 dark:bg-amber-950/50 border-amber-500 dark:border-amber-600 ring-2 ring-amber-500/20 shadow-xs'
-                : 'bg-amber-50/50 dark:bg-amber-950/30 hover:bg-amber-100/50 dark:hover:bg-amber-900/40 border-amber-200/60 dark:border-amber-800/60'
-            }`}
-          >
-            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">Idling Engine</span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <span className="text-lg font-black text-amber-700 dark:text-amber-400">{summary.idleCount}</span>
-              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">stationary</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter('STOPPED')}
-            className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
-              statusFilter === 'STOPPED'
-                ? 'bg-slate-200 dark:bg-[#282A2E] border-slate-500 dark:border-slate-400 ring-2 ring-slate-500/20 shadow-xs'
-                : 'bg-slate-100/60 dark:bg-[#1E1F22] hover:bg-slate-200/60 dark:hover:bg-[#282A2E] border-slate-200/70 dark:border-[#303237]'
-            }`}
-          >
-            <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">Stopped / Off</span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <span className="text-lg font-black text-slate-700 dark:text-slate-300">{summary.stoppedCount}</span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">parked</span>
-            </div>
-          </button>
-
-          <div className="bg-blue-50/50 dark:bg-blue-950/30 p-2.5 rounded-xl border border-blue-200/60 dark:border-blue-900/60">
-            <span className="text-[10px] font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wider block">Fleet Avg Speed</span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <span className="text-lg font-black text-blue-900 dark:text-blue-300">{summary.averageSpeed}</span>
-              <span className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">km/h</span>
-            </div>
-          </div>
-
-          <div className="bg-slate-50/80 dark:bg-[#1E1F22] p-2.5 rounded-xl border border-slate-200/70 dark:border-[#303237]">
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Active Stops</span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <span className="text-lg font-black text-slate-900 dark:text-white">{summary.totalActiveDeliveries}</span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">stops</span>
-            </div>
-          </div>
-        </div>
       </header>
 
-      {/* ── Main Two-Column Telematics Layout ── */}
-      <main className="w-full flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* ── Main Workspace: Left Asset List + Right Map ── */}
+      <main className="w-full flex-1 p-2 sm:p-2.5 flex flex-col lg:flex-row gap-2.5 overflow-hidden min-h-0">
         
-        {/* ── Left Column: Vehicle Telematics Directory (aligned to left edge) ── */}
-        <div className="lg:col-span-4 xl:col-span-3 flex flex-col space-y-4">
-          
-          {viewingTripsFor ? (
-            <div className="bg-white dark:bg-[#18191B] rounded-2xl border border-slate-200/90 dark:border-[#303237] shadow-xs flex flex-col max-h-[calc(100vh-320px)] lg:max-h-[660px] xl:max-h-[740px] overflow-hidden">
-                {/* Header with back button */}
-                <div className="p-3 border-b border-slate-200/90 dark:border-[#303237] flex items-center gap-2 shrink-0">
-                    <button onClick={() => setViewingTripsFor(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#282A2E] rounded-md transition-colors text-slate-500 dark:text-slate-400">
-                        <ChevronLeft className="w-5 h-5" />
+        {/* ── Left Column: Vehicle Telematics Directory (Collapsible & styled as in image.png) ── */}
+        {!isAssetListCollapsed && (
+          <div className="w-full lg:w-[320px] xl:w-[340px] shrink-0 flex flex-col bg-white dark:bg-[#18191B] rounded-2xl border border-slate-200/90 dark:border-[#303237] shadow-xs overflow-hidden h-full animate-in fade-in slide-in-from-left-4 duration-200">
+            
+            {viewingTripsFor ? (
+              <div className="flex flex-col h-full overflow-hidden">
+                {/* Header with back button & collapse button */}
+                <div className="p-3 border-b border-slate-200/90 dark:border-[#303237] flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setViewingTripsFor(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-[#282A2E] rounded-md transition-colors text-slate-500 dark:text-slate-400 cursor-pointer">
+                      <ChevronLeft className="w-5 h-5" />
                     </button>
-                    <h2 className="font-medium text-[15px] text-slate-900 dark:text-white">Trips</h2>
+                    <h2 className="font-bold text-[15px] text-slate-900 dark:text-white">Trips</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAssetListCollapsed(true)}
+                    className="p-1 text-indigo-900 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-md transition-colors cursor-pointer"
+                    title="Collapse Trips panel"
+                  >
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <path d="M15 19l-7-7 7-7v14z" />
+                    </svg>
+                  </button>
                 </div>
 
                 {/* Filters section */}
-                <div className="p-4 border-b border-slate-200/90 dark:border-[#303237] space-y-4 bg-slate-50 dark:bg-[#1E1F22] shrink-0">
-                    <div>
-                        <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-1.5 block">Date and time</label>
-                        <div className="flex items-center gap-2 bg-slate-200/60 dark:bg-[#282A2E] p-2.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200">
-                            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                            Aug 19, 2026 12:00 AM - 11:59 PM
-                        </div>
+                <div className="p-3.5 border-b border-slate-200/90 dark:border-[#303237] space-y-3 bg-slate-50 dark:bg-[#1E1F22] shrink-0">
+                  <div>
+                    <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-1 block">Date and time</label>
+                    <div className="flex items-center gap-2 bg-slate-200/60 dark:bg-[#282A2E] p-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200">
+                      <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                      Aug 19, 2026 12:00 AM - 11:59 PM
                     </div>
-                    
-                    <div>
-                        <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-1.5 block">Asset</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="flex items-center justify-between bg-slate-200/60 dark:bg-[#282A2E] p-2.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
-                                <span className="truncate">{vehicles.find(v => v.vehicleId === viewingTripsFor)?.truckName || viewingTripsFor}</span>
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                            </div>
-                            <div className="flex items-center justify-between bg-slate-200/60 dark:bg-[#282A2E] p-2.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
-                                <span className="truncate text-slate-400">Driver</span>
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                            </div>
-                        </div>
+                  </div>
+                  
+                  <div>
+                    <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-1 block">Asset</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center justify-between bg-slate-200/60 dark:bg-[#282A2E] p-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
+                        <span className="truncate">{vehicles.find(v => v.vehicleId === viewingTripsFor)?.truckName || viewingTripsFor}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                      </div>
+                      <div className="flex items-center justify-between bg-slate-200/60 dark:bg-[#282A2E] p-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
+                        <span className="truncate text-slate-400">Driver</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                      </div>
                     </div>
+                  </div>
 
-                    <div className="relative">
-                        <MapPin className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input type="text" placeholder="Filter by location" className="w-full text-xs py-2.5 pl-9 pr-8 bg-slate-200/60 dark:bg-[#282A2E] text-slate-900 dark:text-[#F2F2F3] rounded-lg outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                        <Filter className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400" />
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 dark:text-slate-300 pt-3 border-t border-slate-200/70 dark:border-[#303237]">
-                        <div className="flex items-center gap-1" title="Trips">
-                            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" /> 13
-                        </div>
-                        <div className="flex items-center gap-1" title="Distance">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" /> 249.3km
-                        </div>
-                        <div className="flex items-center gap-1" title="Driving Time">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" /> 3h 44m
-                        </div>
-                        <div className="flex items-center gap-1" title="Idle Time">
-                            <Pause className="w-3.5 h-3.5 text-slate-400" /> 46m
-                        </div>
-                        <div className="flex items-center gap-1 text-red-600 dark:text-red-400 font-bold" title="Alerts">
-                            <AlertCircle className="w-3.5 h-3.5" /> 15
-                        </div>
-                    </div>
-                </div>
-                
-                {/* Banner */}
-                <div className="p-3 bg-blue-50/50 dark:bg-blue-950/40 border-b border-blue-100/50 dark:border-blue-900/40 flex gap-2.5 items-start shrink-0">
-                    <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                    <span className="text-[11px] text-blue-800 dark:text-blue-300 font-medium">For more details of all the assets data points please go to <a href="#" className="underline text-blue-700 dark:text-blue-400">Track & Events</a></span>
+                  <div className="relative">
+                    <MapPin className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input type="text" placeholder="Filter by location" className="w-full text-xs py-2 pl-9 pr-8 bg-slate-200/60 dark:bg-[#282A2E] text-slate-900 dark:text-[#F2F2F3] rounded-lg outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+                    <Filter className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400" />
+                  </div>
                 </div>
 
-                {/* Date Accordion & Scrollable Trips */}
-                <div className="flex-1 overflow-y-auto">
-                    <div className="flex items-center justify-between p-3.5 bg-slate-50/80 dark:bg-[#1E1F22] border-b border-slate-200/80 dark:border-[#303237] font-bold text-slate-900 dark:text-[#F4F4F5] text-xs shrink-0">
-                        <div className="flex items-center gap-2.5">
-                            <Eye className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                            Wed, Aug 19, 2026
-                        </div>
-                        <div className="flex items-center gap-3.5 text-[11px] text-slate-600 dark:text-slate-300">
-                            <div className="flex items-center gap-1.5 font-mono font-medium">
-                                <MapPin className="w-3.5 h-3.5 text-slate-400" /> 249.3km
-                            </div>
-                            <div className="flex items-center gap-1 text-red-600 dark:text-red-400 font-bold">
-                                <AlertCircle className="w-3.5 h-3.5" /> 15
-                            </div>
-                            <ChevronUp className="w-4 h-4 text-slate-400" />
-                        </div>
+                {/* Trip Items */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                  <div className="relative">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 uppercase tracking-wider">Business Trip</div>
+                    <div className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 font-medium">
+                      <span>Windmill &bull; 6:19 AM</span>
+                      <span className="font-mono text-[11px] text-blue-600">3.81 km</span>
                     </div>
-
-                    {/* Trip Items */}
-                    <div className="p-4 space-y-3">
-                        {/* Trip 1 */}
-                        <div className="relative">
-                            <div className="absolute left-1.5 top-9 bottom-4 w-px bg-slate-200 dark:bg-[#303237]" />
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1.5 uppercase tracking-wider">Business</div>
-                            <div className="flex gap-3">
-                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white dark:outline-[#18191B]" />
-                                </div>
-                                <div className="flex-1 text-[11px]">
-                                    <div className="flex gap-2">
-                                        <span className="font-bold text-slate-900 dark:text-white w-[72px] shrink-0">6:19 AM ADT</span>
-                                        <span className="text-slate-600 dark:text-slate-300 truncate">Windmill</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex gap-3 mt-3">
-                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white dark:outline-[#18191B]" />
-                                </div>
-                                <div className="flex-1 text-[11px]">
-                                    <div className="flex gap-2">
-                                        <span className="font-bold text-slate-900 dark:text-white w-[72px] shrink-0">6:21 AM ADT</span>
-                                        <span className="text-slate-600 dark:text-slate-300 truncate">30 Waddell Ave, Dartmouth, NS</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 dark:text-slate-400 font-medium ml-6 pb-4 border-b border-slate-100 dark:border-[#303237]">
-                                <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
-                                    <User className="w-3 h-3 text-blue-600 dark:text-blue-400" /> {tripsDriverName}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 0.21km</div>
-                                    <div className="flex items-center gap-1" title="Driving Time"><Clock className="w-3 h-3" /> 1m</div>
-                                    <div className="flex items-center gap-1" title="Idle Time"><Pause className="w-3 h-3" /> 1m</div>
-                                    <div className="flex items-center gap-1" title="Alerts"><AlertCircle className="w-3 h-3 text-slate-300 dark:text-slate-600" /> 0</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Pause separator */}
-                        <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400 font-bold bg-slate-100/80 dark:bg-[#282A2E] border border-slate-200/60 dark:border-[#303237] w-fit px-2.5 py-1 rounded-md ml-1 my-1">
-                            <Pause className="w-3 h-3" /> Pause 1m
-                        </div>
-
-                        {/* Trip 2 */}
-                        <div className="relative mt-2">
-                            <div className="absolute left-1.5 top-9 bottom-4 w-px bg-slate-200 dark:bg-[#303237]" />
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1.5 uppercase tracking-wider">Business</div>
-                            <div className="flex gap-3">
-                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white dark:outline-[#18191B]" />
-                                </div>
-                                <div className="flex-1 text-[11px]">
-                                    <div className="flex gap-2">
-                                        <span className="font-bold text-slate-900 dark:text-white w-[72px] shrink-0">6:22 AM ADT</span>
-                                        <span className="text-slate-600 dark:text-slate-300 truncate">30 Waddell Ave, Dartmouth, NS</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex gap-3 mt-3">
-                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white dark:outline-[#18191B]" />
-                                </div>
-                                <div className="flex-1 text-[11px]">
-                                    <div className="flex gap-2">
-                                        <span className="font-bold text-slate-900 dark:text-white w-[72px] shrink-0">6:26 AM ADT</span>
-                                        <span className="text-slate-600 dark:text-slate-300 truncate">500 Windmill Rd, Dartmouth, NS</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 dark:text-slate-400 font-medium ml-6 pb-4 border-b border-slate-100 dark:border-[#303237]">
-                                <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
-                                    <User className="w-3 h-3 text-blue-600 dark:text-blue-400" /> {tripsDriverName}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 0.99km</div>
-                                    <div className="flex items-center gap-1" title="Driving Time"><Clock className="w-3 h-3" /> 3m</div>
-                                    <div className="flex items-center gap-1" title="Idle Time"><Pause className="w-3 h-3" /> 3m</div>
-                                    <div className="flex items-center gap-1" title="Alerts"><AlertCircle className="w-3 h-3 text-slate-300 dark:text-slate-600" /> 0</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Pause separator */}
-                        <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400 font-bold bg-slate-100/80 dark:bg-[#282A2E] border border-slate-200/60 dark:border-[#303237] w-fit px-2.5 py-1 rounded-md ml-1 my-1">
-                            <Pause className="w-3 h-3" /> Pause 42m
-                        </div>
-
-                        {/* Trip 3 */}
-                        <div className="relative mt-2">
-                            <div className="absolute left-1.5 top-9 bottom-4 w-px bg-slate-200 dark:bg-[#303237]" />
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1.5 uppercase tracking-wider">Business</div>
-                            <div className="flex gap-3">
-                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white dark:outline-[#18191B]" />
-                                </div>
-                                <div className="flex-1 text-[11px]">
-                                    <div className="flex gap-2">
-                                        <span className="font-bold text-slate-900 dark:text-white w-[72px] shrink-0">7:08 AM ADT</span>
-                                        <span className="text-slate-600 dark:text-slate-300 truncate">500 Windmill Rd, Dartmouth, NS</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex gap-3 mt-3">
-                                <div className="flex flex-col items-center shrink-0 w-3 pt-1 relative z-10">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-slate-400 outline outline-4 outline-white dark:outline-[#18191B]" />
-                                </div>
-                                <div className="flex-1 text-[11px]">
-                                    <div className="flex gap-2">
-                                        <span className="font-bold text-slate-900 dark:text-white w-[72px] shrink-0">7:20 AM ADT</span>
-                                        <span className="text-slate-600 dark:text-slate-300 truncate">500 Windmill Rd, Dartmouth, NS</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between mt-3.5 text-[10px] text-slate-500 dark:text-slate-400 font-medium ml-6 pb-4">
-                                <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
-                                    <User className="w-3 h-3 text-blue-600 dark:text-blue-400" /> {tripsDriverName}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-1" title="Distance"><MapPin className="w-3 h-3" /> 3.81km</div>
-                                    <div className="flex items-center gap-1" title="Driving Time"><Clock className="w-3 h-3" /> 11m</div>
-                                    <div className="flex items-center gap-1" title="Idle Time"><Pause className="w-3 h-3" /> 6m</div>
-                                    <div className="flex items-center gap-1" title="Alerts"><AlertCircle className="w-3 h-3 text-slate-300 dark:text-slate-600" /> 0</div>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-          ) : (
-            <>
-              {/* Search & Status Filter Bar */}
-              <div className="bg-white dark:bg-[#18191B] rounded-2xl p-4 border border-slate-200/90 dark:border-[#303237] shadow-xs space-y-3 transition-colors">
-                <div className="relative">
-                  <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search truck, VIN, plate, or driver..."
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-[#1E1F22] border border-slate-200 dark:border-[#44474D] rounded-xl text-xs text-slate-900 dark:text-[#F2F2F3] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* Filter Tabs */}
-                <div className="flex items-center space-x-1 bg-slate-100 dark:bg-[#1E1F22] p-1 rounded-xl text-xs font-bold">
-                  {(['ALL', 'MOVING', 'IDLE', 'STOPPED'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setStatusFilter(tab)}
-                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
-                        statusFilter === tab
-                          ? 'bg-white dark:bg-[#282A2E] text-blue-900 dark:text-blue-400 shadow-xs font-black'
-                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
+                  </div>
                 </div>
               </div>
+            ) : (
+              <div className="flex flex-col h-full overflow-hidden">
+                {/* Header matching image.png */}
+                <div className="p-3.5 pb-2.5 flex items-center justify-between shrink-0">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                    Asset list
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsAssetListCollapsed(true)}
+                    className="p-1 text-indigo-900 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-md transition-colors cursor-pointer"
+                    title="Collapse asset list"
+                  >
+                    {/* Dark purple/indigo solid left triangle like in image.png */}
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <path d="M15 19l-7-7 7-7v14z" />
+                    </svg>
+                  </button>
+                </div>
 
-              {/* Vehicle List */}
-              <div className="space-y-2.5 max-h-[calc(100vh-320px)] lg:max-h-[660px] xl:max-h-[740px] overflow-y-auto pr-1">
-                {displayVehicles.length === 0 ? (
-                  <div className="bg-white dark:bg-[#18191B] rounded-2xl p-8 text-center border border-slate-200 dark:border-[#303237] text-slate-500 dark:text-slate-400">
-                    <AlertCircle className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-xs font-bold">No telemetry records match your filters.</p>
+                {/* Search Bar matching image.png */}
+                <div className="px-3.5 pb-2.5 shrink-0">
+                  <div className="relative">
+                    <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search for assets and geofences"
+                      className="w-full pl-9 pr-3 py-2 bg-[#F1F3F5] dark:bg-[#202124] border border-slate-200/80 dark:border-[#303237] rounded-lg text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                ) : (
-                  displayVehicles.map((v) => {
-                    const isSelected = v.vehicleId === selectedVehicleId;
-                    const stops = v.activeRoute?.stops || [];
-                    const completed = v.activeRoute?.completedStops || 0;
-                    const driverName = getVehicleDriverName(v);
-                    const unitMatch = v.truckName.match(/\d+/) || v.vehicleId.match(/\d+/);
-                    const unitBadge = unitMatch ? `#${unitMatch[0]}` : `#${v.vehicleId.slice(-3)}`;
+                </div>
 
-                    return (
-                      <div
-                        key={v.vehicleId}
-                        onClick={() => setSelectedVehicleId(v.vehicleId)}
-                        className={`bg-white dark:bg-[#18191B] rounded-2xl p-3.5 border transition-all cursor-pointer shadow-xs hover:border-blue-300 dark:hover:border-blue-700 ${
-                          isSelected 
-                            ? 'border-blue-600 dark:border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/30' 
-                            : 'border-slate-200/90 dark:border-[#303237] hover:bg-slate-50/50 dark:hover:bg-[#202124]'
-                        }`}
-                      >
-                        {/* Header: Name & Status */}
-                        <div className="flex items-start justify-between relative">
-                          <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                            <div className="h-9 w-9 rounded-xl bg-blue-100/90 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800 flex items-center justify-center font-mono font-black text-xs shrink-0 shadow-2xs">
-                              {unitBadge}
-                            </div>
-                            <div className="min-w-0 pr-2 flex-1">
-                              <h3 className="text-xs font-black text-slate-900 dark:text-white leading-snug truncate">{v.truckName}</h3>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">{v.licensePlate} &bull; {v.model}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-1 shrink-0 z-10">
-                            {getStatusBadge(v.status)}
-                            
-                            <div className="relative ml-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveActionMenuId(activeActionMenuId === v.vehicleId ? null : v.vehicleId);
-                                }}
-                                className={`p-1.5 hover:bg-slate-200/50 dark:hover:bg-[#282A2E] rounded-md transition-colors cursor-pointer ${
-                                  activeActionMenuId === v.vehicleId ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/40' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
-                                }`}
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
+                {/* Subheader: All assets / count & filter icon matching image.png */}
+                <div className="px-3.5 pb-2 flex items-center justify-between border-b border-slate-100 dark:border-[#303237] shrink-0">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                      All assets
+                    </h3>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5">
+                      {displayVehicles.length} total
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowFilterMenu(!showFilterMenu)}
+                      className="p-1 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-md transition-colors cursor-pointer"
+                      title="Filter assets"
+                    >
+                      <Filter className="w-3.5 h-3.5 fill-current" />
+                    </button>
 
-                              {activeActionMenuId === v.vehicleId && (
-                                <div 
-                                  className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#1E1F22] border border-slate-200 dark:border-[#303237] rounded-xl shadow-xl z-[100] text-slate-700 dark:text-slate-200 py-1 text-[11px] select-none font-sans divide-y divide-slate-100 dark:divide-[#303237] animate-in fade-in"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <div className="py-1">
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        setActiveActionMenuId(null);
-                                        try {
-                                          await fetch('/api/telematics/ping', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ truckId: v.vehicleId, name: v.truckName })
-                                          });
-                                        } catch (e) {}
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-teal-50 dark:hover:bg-teal-950/40 hover:text-teal-800 dark:hover:text-teal-300 transition-colors flex items-center font-bold text-teal-700 dark:text-teal-400"
-                                    >
-                                      <span className="w-2 h-2 rounded-full bg-teal-500 mr-2 animate-pulse" />
-                                      Ping Live GPS
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveActionMenuId(null);
-                                        setViewingDetailsFor(v.vehicleId);
-                                        setViewingTripsFor(null);
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-[#282A2E] hover:text-slate-900 dark:hover:text-white transition-colors font-medium text-slate-700 dark:text-slate-200"
-                                    >
-                                      Details & Specs
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveActionMenuId(null);
-                                        setViewingTripsFor(v.vehicleId);
-                                        setViewingDetailsFor(null);
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-[#282A2E] hover:text-slate-900 dark:hover:text-white transition-colors font-medium text-slate-700 dark:text-slate-200"
-                                    >
-                                      Trips
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveActionMenuId(null);
-                                        setSelectedVehicleId(v.vehicleId);
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-[#282A2E] hover:text-slate-900 dark:hover:text-white transition-colors font-medium text-slate-700 dark:text-slate-200"
-                                    >
-                                      Track & Events
-                                    </button>
-                                  </div>
-                                  <div className="py-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveActionMenuId(null);
-                                        const coords = `${(v.telematics || v.telemetry)?.lat ?? 0}, ${(v.telematics || v.telemetry)?.lng ?? 0}`;
-                                        navigator.clipboard.writeText(coords);
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-[#282A2E] hover:text-slate-900 dark:hover:text-white transition-colors text-slate-700 dark:text-slate-300"
-                                    >
-                                      Copy Coordinates
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveActionMenuId(null);
-                                        navigator.clipboard.writeText(`${window.location.origin}/track?num=${encodeURIComponent(v.vehicleId)}`);
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-[#282A2E] hover:text-slate-900 dark:hover:text-white transition-colors text-slate-700 dark:text-slate-300"
-                                    >
-                                      Live Share Link
-                                    </button>
-                                  </div>
+                    {showFilterMenu && (
+                      <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-[#1E1F22] border border-slate-200 dark:border-[#303237] rounded-xl shadow-xl z-50 py-1 text-xs animate-in fade-in">
+                        {(['ALL', 'MOVING', 'IDLE', 'STOPPED'] as const).map(f => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => {
+                              setStatusFilter(f);
+                              setShowFilterMenu(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 font-medium transition-colors cursor-pointer ${
+                              statusFilter === f ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#282A2E]'
+                            }`}
+                          >
+                            {f === 'ALL' ? 'All Assets' : f === 'MOVING' ? 'Moving only' : f === 'IDLE' ? 'Idle only' : 'Offline only'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Asset Cards List matching image.png */}
+                <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-[#282A2E] px-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+                  {displayVehicles.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-xs">
+                      No assets found matching criteria.
+                    </div>
+                  ) : (
+                    displayVehicles.map((v, idx) => {
+                      const isSelected = v.vehicleId === selectedVehicleId;
+                      const driverName = getVehicleDriverName(v);
+                      const isDriverAssigned = driverName && driverName !== 'Unassigned' && !['no driver', 'unassigned'].includes(driverName.toLowerCase());
+                      
+                      // Resolve actual truck number and name from the Supabase table
+                      const truckUnit = (v as any).truckNumber || (v as any).truck_number || (v.truckName?.match(/\b(\d{3,5})\b/)?.[1]) || (v.vehicleId?.match(/\b(\d{3,5})\b/)?.[1]);
+                      const truckTitle = truckUnit ? `Truck #${truckUnit}` : (v.truckName || v.vehicleId);
+                      const truckSubtitle = v.truckName || v.model || '';
+
+                      // Relative reported time
+                      const isOffline = v.status === 'STOPPED';
+                      const lastReportedText = isOffline && !v.isLive
+                        ? 'Never reported'
+                        : (v.timestamp ? formatTimeAgo(v.timestamp) : 'Never reported');
+
+                      return (
+                        <div
+                          key={v.vehicleId}
+                          onClick={() => setSelectedVehicleId(v.vehicleId)}
+                          className={`p-3 transition-colors cursor-pointer rounded-xl my-0.5 ${
+                            isSelected
+                              ? 'bg-blue-50/70 dark:bg-blue-950/50 ring-1 ring-blue-500/30'
+                              : 'hover:bg-slate-50 dark:hover:bg-[#202124]'
+                          }`}
+                        >
+                          {/* Top Row: Truck Icon + Actual Truck Number from Supabase + Status Pill */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                              <div className="h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800 flex items-center justify-center shrink-0">
+                                <TruckIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+                                    {truckTitle}
+                                  </span>
+                                  {v.licensePlate && (
+                                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded border border-slate-200 dark:border-slate-700 shrink-0">
+                                      {v.licensePlate}
+                                    </span>
+                                  )}
                                 </div>
+                                {truckSubtitle && truckSubtitle !== truckTitle && (
+                                  <span className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate block">
+                                    {truckSubtitle}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Status Pill Badge matching image.png */}
+                            <div className="shrink-0">
+                              {isOffline ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#FEECEC] dark:bg-red-950/50 text-[#D32F2F] dark:text-red-400 border border-[#FCD8D8] dark:border-red-900/60">
+                                  <XCircle className="w-3.5 h-3.5 fill-[#D32F2F] text-white dark:fill-red-400 dark:text-slate-900" />
+                                  <span>Offline</span>
+                                </span>
+                              ) : v.status === 'MOVING' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/80">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span>Moving</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80">
+                                  <Pause className="w-3 h-3 text-amber-600" />
+                                  <span>Idle</span>
+                                </span>
                               )}
                             </div>
                           </div>
-                        </div>
 
-                        {/* Prominent Driver Information Area */}
-                        <div className="mt-2.5 flex items-center justify-between bg-slate-50/90 dark:bg-[#1E1F22] px-2.5 py-1.5 rounded-xl border border-slate-200/70 dark:border-[#303237]">
-                          <div className="flex items-center space-x-2 truncate">
-                            <div className="h-6 w-6 rounded-lg bg-blue-100/80 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center justify-center shrink-0">
-                              <User className="h-3.5 w-3.5" />
+                          {/* Sub-rows: Indented Driver & Timestamp as in image.png */}
+                          <div className="pl-9.5 mt-1.5 space-y-1">
+                            <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-400">
+                              <User className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                              <span className="truncate">
+                                {isDriverAssigned ? driverName : 'No driver'}
+                              </span>
                             </div>
-                            <div className="truncate">
-                              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-bold block leading-none">Driver</span>
-                              <span className="text-xs font-bold text-slate-850 dark:text-slate-200 truncate leading-tight block">{driverName}</span>
+                            <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-400">
+                              <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                              <span className="truncate">
+                                {lastReportedText}
+                              </span>
                             </div>
                           </div>
-                          {v.activeRoute && (
-                            <span className="font-mono text-[10.5px] text-slate-600 dark:text-slate-300 shrink-0 ml-2 font-bold bg-white dark:bg-[#282A2E] px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-[#44474D] shadow-2xs">
-                              {completed}/{stops.length || v.activeRoute.totalStops || 0} Stops
-                            </span>
-                          )}
                         </div>
-
-                        {/* Next stop ETA if available */}
-                        {v.activeRoute?.nextStop && (
-                          <div className="mt-1.5 px-2.5 py-1 bg-blue-50/50 dark:bg-blue-950/30 rounded-lg border border-blue-100/80 dark:border-blue-900/50 flex items-center justify-between text-[10px] text-slate-600 dark:text-slate-400">
-                            <span className="truncate pr-2 font-mono text-slate-600 dark:text-slate-400 font-medium">
-                              Next: {v.activeRoute.nextStop}
-                            </span>
-                            <span className="font-mono text-blue-700 dark:text-blue-400 font-bold shrink-0">
-                              ETA {v.activeRoute.eta || v.activeRoute.scheduledETA}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Telemetry Metrics Bar */}
-                        <div className="grid grid-cols-3 gap-2 mt-2.5 pt-2 border-t border-slate-100 dark:border-[#303237] text-center">
-                          <div className="bg-slate-50 dark:bg-[#1E1F22] py-1 rounded-lg">
-                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase block">Speed</span>
-                            <span className="text-xs font-mono font-black text-blue-700 dark:text-blue-400">
-                              {Math.round((v.telematics || v.telemetry)?.speed ?? (v.telematics || v.telemetry)?.speedMph ?? 0)} km/h
-                            </span>
-                          </div>
-                          <div className="bg-slate-50 dark:bg-[#1E1F22] py-1 rounded-lg">
-                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase block">Heading</span>
-                            <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-                              {(v.telematics || v.telemetry)?.heading ?? 0}&deg;
-                            </span>
-                          </div>
-                          <div className="bg-slate-50 dark:bg-[#1E1F22] py-1 rounded-lg">
-                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase block">Fuel</span>
-                            <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                              {(v.telematics || v.telemetry)?.fuelPercent ?? (v.telematics || v.telemetry)?.fuelLevel ?? 0}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        {/* ── Right Column: Interactive Map & Live Telemetry HUD ── */}
-        <div className="lg:col-span-8 xl:col-span-9 flex flex-col h-full relative">
+        {/* ── Right Column: Interactive Map & Live Telemetry HUD (Takes full remaining space) ── */}
+        <div className="flex-1 w-full h-full relative rounded-2xl overflow-hidden shadow-xs border border-slate-200/90 dark:border-[#303237] bg-slate-100 dark:bg-[#18191B] min-h-[450px] flex">
           
+          {/* Floating Expand Button when Asset list is collapsed */}
+          {isAssetListCollapsed && (
+            <button
+              type="button"
+              onClick={() => setIsAssetListCollapsed(false)}
+              className="absolute top-3 left-3 z-30 bg-white/95 dark:bg-[#18191B]/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 shadow-md hover:shadow-lg rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 transition-all hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer animate-in fade-in"
+              title="Show Asset list"
+            >
+              <svg className="w-3.5 h-3.5 fill-indigo-900 dark:fill-indigo-400" viewBox="0 0 24 24">
+                <path d="M9 5l7 7-7 7V5z" />
+              </svg>
+              <span>Asset list</span>
+              <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-[10px] rounded-full text-slate-500 font-mono font-bold">
+                {displayVehicles.length}
+              </span>
+            </button>
+          )}
+
           {/* Interactive Google Map Telematics View */}
-          <div className="flex-1 w-full rounded-2xl overflow-hidden shadow-xs border border-slate-200/90 dark:border-[#303237] relative flex bg-slate-100 dark:bg-[#18191B] min-h-[540px] lg:min-h-0">
-            <div className="flex-1 h-full relative">
-              <TelematicsMapView
-                vehicles={displayVehicles}
-                branches={branches}
-                selectedVehicleId={selectedVehicleId}
-                onSelectVehicle={(id) => setSelectedVehicleId(id)}
-                isStreaming={isStreaming}
-                onToggleStreaming={() => setIsStreaming(!isStreaming)}
-                viewingTripsFor={viewingTripsFor}
-              />
-            </div>
+          <div className="flex-1 h-full w-full relative">
+            <TelematicsMapView
+              vehicles={displayVehicles}
+              branches={branches}
+              selectedVehicleId={selectedVehicleId}
+              onSelectVehicle={(id) => setSelectedVehicleId(id)}
+              isStreaming={isStreaming}
+              onToggleStreaming={() => setIsStreaming(!isStreaming)}
+              viewingTripsFor={viewingTripsFor}
+            />
+          </div>
 
             {/* ── Slide-over Detailed Inspector Panel ── */}
             {detailsVehicle && (
@@ -1168,8 +951,7 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
               </div>
             )}
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
   );
 }

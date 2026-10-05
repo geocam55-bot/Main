@@ -465,6 +465,22 @@ export default function TelematicsMapView({
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [manualKeyInput, setManualKeyInput] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  const [mapAuthError, setMapAuthError] = useState<boolean>(false);
+
+  // Detect Google Maps Authentication Failure (e.g. ApiProjectMapError or Referrer restrictions)
+  useEffect(() => {
+    const originalAuthFailure = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.warn('[Google Maps] gm_authFailure triggered');
+      setMapAuthError(true);
+      if (typeof originalAuthFailure === 'function') {
+        originalAuthFailure();
+      }
+    };
+    return () => {
+      (window as any).gm_authFailure = originalAuthFailure;
+    };
+  }, []);
 
   const activeBranches = useMemo(() => {
     if (branches && branches.length > 0) return branches;
@@ -573,12 +589,19 @@ export default function TelematicsMapView({
         </div>
       )}
 
-      <APIProvider apiKey={apiKey} version="weekly">
+      <APIProvider 
+        apiKey={apiKey} 
+        version="weekly"
+        onError={(err) => {
+          console.warn('[Google Maps] APIProvider error:', err);
+          setMapAuthError(true);
+        }}
+      >
         <div className="relative w-full h-full flex-1">
           <Map
             defaultCenter={REGIONAL_CENTER}
             defaultZoom={12}
-            mapId="PROSPACES_TELEMATICS_MAP"
+            mapId={process.env.VITE_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
             internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
             gestureHandling="greedy"
             disableDefaultUI={true}
@@ -869,6 +892,42 @@ export default function TelematicsMapView({
               </button>
             </div>
           </div>
+
+          {/* ── Key Auth / Referrer Error Notification ── */}
+          {mapAuthError && (
+            <div className="absolute top-14 inset-x-3 z-30 bg-amber-950/95 backdrop-blur-md border border-amber-500/70 text-amber-100 text-xs p-3 rounded-xl shadow-xl flex items-center justify-between gap-3 animate-in fade-in select-text">
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="h-4.5 w-4.5 text-amber-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-white">Google Maps Authorization Issue:</span>{' '}
+                  <span className="text-amber-200 text-[11.5px]">
+                    The key was supplied from your environment/Vercel. If your key has HTTP Referrer Restrictions in Google Cloud, add{' '}
+                    <code className="bg-amber-900/80 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300 border border-amber-700/50">
+                      {typeof window !== 'undefined' ? `${window.location.origin}/*` : '*.run.app/*'}
+                    </code>{' '}
+                    to the Google Cloud Console allowed referrers.
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowKeyModal(true)}
+                  className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                >
+                  Change Key
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapAuthError(false)}
+                  className="p-1 text-amber-400 hover:text-white rounded-md transition-colors cursor-pointer"
+                  title="Dismiss notice"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </APIProvider>
     </div>

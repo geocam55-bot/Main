@@ -541,6 +541,14 @@ export function getSearchTerms(item: InventoryItem): string[] {
   const parsedAttrs = parseItemAttributes(item.attributes);
   const brand = extractBrand(item);
 
+  // 0. SKU / Supplier SKU (Highest precision direct retailer lookup, e.g. 1016219)
+  if (item.sku && String(item.sku).trim().length >= 3) {
+    terms.push(String(item.sku).trim());
+  }
+  if (item.supplier_sku && String(item.supplier_sku).trim().length >= 3 && item.supplier_sku !== item.sku) {
+    terms.push(String(item.supplier_sku).trim());
+  }
+
   // 1. UPC barcode (highest precision)
   if (item.upc && String(item.upc).trim().length >= 6) {
     terms.push(String(item.upc).trim());
@@ -641,21 +649,52 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
       { name: 'store_code', value: '10', domain: '.kent.ca', path: '/' }
     ]);
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12000 });
-    await page.mouse.move(110, 110);
-    await page.waitForTimeout(400);
+    let interceptedPrice: number | null = null;
+    page.on('response', async (response) => {
+      try {
+        const reqUrl = response.url();
+        if ((reqUrl.includes('ksearchnet') || reqUrl.includes('pricing') || reqUrl.includes('graphql') || reqUrl.includes('product')) && response.status() === 200) {
+          const ct = response.headers()['content-type'] || '';
+          if (ct.includes('json')) {
+            const body = await response.json();
+            const jsonStr = JSON.stringify(body);
+            const priceMatches = jsonStr.match(/"(?:price|salePrice|displayPrice|amount|specialPrice)"\s*:\s*([0-9.]+)/g);
+            if (priceMatches && priceMatches.length > 0) {
+              for (const pm of priceMatches) {
+                const valMatch = pm.match(/([0-9.]+)/);
+                if (valMatch) {
+                  const p = parseFloat(valMatch[1]);
+                  if (p > 1.0 && p < 10000) {
+                    interceptedPrice = p;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    });
 
-    const html = await page.content();
-    await page.close();
-    page = null;
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
+    await page.waitForSelector('.price, [data-price-amount], .price-wrapper', { timeout: 6000 }).catch(() => {});
+    await page.waitForTimeout(1500);
 
-    // 1. JSON-LD structured data (Product offers)
-    const ldMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
-    if (ldMatches) {
-      for (const m of ldMatches) {
+    // Save debug screenshot to inspect what Playwright sees
+    try {
+      await page.screenshot({ path: '/tmp/debug_kent.png', fullPage: true });
+    } catch (shotErr) {}
+
+    const scrapedPrice = await page.evaluate(() => {
+      const priceElem = document.querySelector('[data-price-amount]');
+      if (priceElem) {
+        const val = parseFloat(priceElem.getAttribute('data-price-amount') || '');
+        if (!isNaN(val) && val > 0) return val;
+      }
+
+      const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+      for (const script of ldScripts) {
         try {
-          const raw = m.replace(/<\/?script[^>]*>/gi, '').trim();
-          const parsed = JSON.parse(raw);
+          const parsed = JSON.parse(script.textContent || '');
           const items = Array.isArray(parsed) ? parsed : [parsed];
           for (const item of items) {
             if (item['@type'] === 'Product' && item.offers) {
@@ -666,29 +705,29 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
           }
         } catch (e) {}
       }
-    }
 
-    // 2. Magento data-price-amount attribute
-    const dataPriceMatch = html.match(/data-price-amount="([0-9.]+)"/i);
-    if (dataPriceMatch) {
-      const val = parseFloat(dataPriceMatch[1]);
-      if (!isNaN(val) && val > 0) return val;
-    }
+      const selectors = ['.price-final_price .price', '.price-wrapper .price', '.price', '[class*="price"]'];
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el && el.textContent) {
+          const match = el.textContent.replace(/,/g, '').match(/\$([0-9.]+)/);
+          if (match) {
+            const p = parseFloat(match[1]);
+            if (!isNaN(p) && p > 0) return p;
+          }
+        }
+      }
+      return null;
+    });
 
-    // 3. OpenGraph / Schema meta tag
-    const metaMatch = html.match(/<meta[^>]+(?:property="product:price:amount"|itemprop="price")[^>]+content="([0-9.]+)"/i) ||
-                      html.match(/<meta[^>]+content="([0-9.]+)"[^>]+(?:property="product:price:amount"|itemprop="price")/i);
-    if (metaMatch) {
-      const val = parseFloat(metaMatch[1]);
-      if (!isNaN(val) && val > 0) return val;
-    }
+    await page.close();
+    page = null;
 
-    // 4. Price span
-    const spanPriceMatch = html.match(/data-price-type="finalPrice"[^>]*>[\s\S]*?class="price"[^>]*>\$?([0-9,.]+)/i) ||
-                           html.match(/class="price"[^>]*>\$?([0-9,.]+)/i);
-    if (spanPriceMatch) {
-      const parsed = parseFloat(spanPriceMatch[1].replace(/,/g, ''));
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+    if (scrapedPrice != null && scrapedPrice > 0) {
+      return scrapedPrice;
+    }
+    if (interceptedPrice != null && interceptedPrice > 0) {
+      return interceptedPrice;
     }
 
     return null;
@@ -713,20 +752,55 @@ export async function fetchLiveHomeDepotStorePrice(url?: string | null): Promise
       { name: 'province', value: 'NS', domain: '.homedepot.ca', path: '/' }
     ]);
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12000 });
-    await page.mouse.move(130, 130);
-    await page.waitForTimeout(400);
+    let interceptedPrice: number | null = null;
+    page.on('response', async (response) => {
+      try {
+        const reqUrl = response.url();
+        if ((reqUrl.includes('search') || reqUrl.includes('pricing') || reqUrl.includes('product')) && response.status() === 200) {
+          const ct = response.headers()['content-type'] || '';
+          if (ct.includes('json')) {
+            const body = await response.json();
+            const jsonStr = JSON.stringify(body);
+            const priceMatches = jsonStr.match(/"(?:price|salePrice|displayPrice|amount)"\s*:\s*([0-9.]+)/g);
+            if (priceMatches && priceMatches.length > 0) {
+              for (const pm of priceMatches) {
+                const valMatch = pm.match(/([0-9.]+)/);
+                if (valMatch) {
+                  const p = parseFloat(valMatch[1]);
+                  if (p > 1.0 && p < 10000) {
+                    interceptedPrice = p;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    });
 
-    const html = await page.content();
-    await page.close();
-    page = null;
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
+    await page.waitForSelector('[data-testid="product-price"], .price, [class*="price"]', { timeout: 6000 }).catch(() => {});
+    await page.waitForTimeout(1500);
 
-    const ldMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
-    if (ldMatches) {
-      for (const m of ldMatches) {
+    try {
+      await page.screenshot({ path: '/tmp/debug_hd.png', fullPage: true });
+    } catch (shotErr) {}
+
+    const scrapedPrice = await page.evaluate(() => {
+      const priceElem = document.querySelector('[data-testid="product-price"], [itemprop="price"]');
+      if (priceElem) {
+        const text = priceElem.textContent || priceElem.getAttribute('content') || '';
+        const match = text.replace(/,/g, '').match(/\$?([0-9.]+)/);
+        if (match) {
+          const p = parseFloat(match[1]);
+          if (!isNaN(p) && p > 0) return p;
+        }
+      }
+
+      const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+      for (const script of ldScripts) {
         try {
-          const raw = m.replace(/<\/?script[^>]*>/gi, '').trim();
-          const parsed = JSON.parse(raw);
+          const parsed = JSON.parse(script.textContent || '');
           const items = Array.isArray(parsed) ? parsed : [parsed];
           for (const item of items) {
             if (item['@type'] === 'Product' && item.offers) {
@@ -737,13 +811,27 @@ export async function fetchLiveHomeDepotStorePrice(url?: string | null): Promise
           }
         } catch (e) {}
       }
-    }
 
-    const priceMatch = html.match(/<meta[^>]+property="product:price:amount"[^>]+content="([0-9.]+)"/i) ||
-                       html.match(/data-testid="product-price"[^>]*>\$?([0-9,.]+)/i);
-    if (priceMatch) {
-      const val = parseFloat(priceMatch[1].replace(/,/g, ''));
-      if (!isNaN(val) && val > 0) return val;
+      const priceEls = document.querySelectorAll('.price, [class*="price"]');
+      for (const el of priceEls) {
+        const text = el.textContent || '';
+        const match = text.replace(/,/g, '').match(/\$([0-9.]+)/);
+        if (match) {
+          const p = parseFloat(match[1]);
+          if (!isNaN(p) && p > 0) return p;
+        }
+      }
+      return null;
+    });
+
+    await page.close();
+    page = null;
+
+    if (scrapedPrice != null && scrapedPrice > 0) {
+      return scrapedPrice;
+    }
+    if (interceptedPrice != null && interceptedPrice > 0) {
+      return interceptedPrice;
     }
 
     return null;
@@ -1027,7 +1115,10 @@ export async function getPlaywrightBrowser(): Promise<Browser> {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled',
+        '--no-first-run',
+        '--no-service-autorun'
       ]
     };
     if (customExecPath) {
