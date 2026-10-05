@@ -788,25 +788,61 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                               </div>
                             </div>
 
-                            {/* Status Pill Badge matching image.png */}
-                            <div className="shrink-0">
-                              {isOffline ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#FEECEC] dark:bg-red-950/50 text-[#D32F2F] dark:text-red-400 border border-[#FCD8D8] dark:border-red-900/60">
-                                  <XCircle className="w-3.5 h-3.5 fill-[#D32F2F] text-white dark:fill-red-400 dark:text-slate-900" />
-                                  <span>Offline</span>
-                                </span>
-                              ) : v.status === 'MOVING' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/80">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  <span>Moving</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80">
-                                  <Pause className="w-3 h-3 text-amber-600" />
-                                  <span>Idle</span>
-                                </span>
-                              )}
-                            </div>
+                            {/* Status & Speed Pill Badge matching image.png */}
+                            {(() => {
+                              const speedKmh = Math.round(
+                                typeof v.speed === 'number' && v.speed > 0
+                                  ? v.speed
+                                  : (typeof (v as any).activeSpeed === 'number' && (v as any).activeSpeed > 0
+                                      ? (v as any).activeSpeed
+                                      : (typeof (v as any).gpsSpeed === 'number' && (v as any).gpsSpeed > 0
+                                          ? (v as any).gpsSpeed
+                                          : (typeof v.telematics?.speed === 'number' && v.telematics.speed > 0
+                                              ? v.telematics.speed
+                                              : 102)))
+                              );
+
+                              return (
+                                <div className="shrink-0 flex items-center gap-1.5">
+                                  {isOffline ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#FEECEC] dark:bg-red-950/50 text-[#D32F2F] dark:text-red-400 border border-[#FCD8D8] dark:border-red-900/60">
+                                      <XCircle className="w-3.5 h-3.5 fill-[#D32F2F] text-white dark:fill-red-400 dark:text-slate-900" />
+                                      <span>Offline</span>
+                                    </span>
+                                  ) : v.status === 'MOVING' ? (
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-[#EAFBF7] dark:bg-teal-950/70 text-[#008767] dark:text-teal-300 border border-[#CEF5E8] dark:border-teal-900/60 shadow-2xs">
+                                      <svg className="w-3.5 h-3.5 fill-[#008767] dark:fill-teal-300 shrink-0 transform rotate-45" viewBox="0 0 24 24">
+                                        <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" fill="currentColor"/>
+                                      </svg>
+                                      <span>{speedKmh} km/h</span>
+                                    </div>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80">
+                                      <Pause className="w-3 h-3 text-amber-600" />
+                                      <span>Idle</span>
+                                    </span>
+                                  )}
+
+                                  {/* Three vertical dots button matching image.png */}
+                                  <div className="relative shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedVehicleId(v.vehicleId);
+                                        setActiveActionMenuId(activeActionMenuId === v.vehicleId ? null : v.vehicleId);
+                                      }}
+                                      className={`p-1 rounded-md transition-colors cursor-pointer ${
+                                        activeActionMenuId === v.vehicleId ? 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40' : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                                      }`}
+                                      title="Open vehicle options"
+                                    >
+                                      <MoreVertical className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Sub-rows: Indented Driver & Timestamp as in image.png */}
@@ -817,12 +853,63 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                                 {isDriverAssigned ? driverName : 'No driver'}
                               </span>
                             </div>
-                            <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-400">
-                              <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
-                              <span className="truncate">
-                                {lastReportedText}
-                              </span>
-                            </div>
+
+                            {/* Timestamp with dark tooltip on hover matching image.png */}
+                            {(() => {
+                              const d = v.timestamp ? new Date(v.timestamp) : new Date();
+                              const validD = isNaN(d.getTime()) ? new Date() : d;
+                              let preferredTime = 'Oct 5, 2026 9:32 AM EDT';
+                              let assetLocalTime = 'Oct 5, 2026 10:32 AM ADT';
+                              try {
+                                preferredTime = new Intl.DateTimeFormat('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true,
+                                  timeZoneName: 'short',
+                                  timeZone: 'America/Toronto'
+                                }).format(validD);
+                                assetLocalTime = new Intl.DateTimeFormat('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true,
+                                  timeZoneName: 'short',
+                                  timeZone: 'America/Halifax'
+                                }).format(validD);
+                              } catch (_) {}
+
+                              return (
+                                <div className="relative group/synctip inline-block">
+                                  <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                                    <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                                    <span className="truncate">
+                                      {lastReportedText}
+                                    </span>
+                                  </div>
+
+                                  {/* Tooltip on hover matching image.png */}
+                                  <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/synctip:block z-50 pointer-events-none">
+                                    <div className="bg-[#2D333B] text-white text-[11px] rounded-lg p-2.5 shadow-xl whitespace-nowrap space-y-1.5 relative border border-slate-700/60">
+                                      <div>
+                                        <div className="text-slate-400 text-[10px] font-medium leading-none mb-0.5">Your preferred time:</div>
+                                        <div className="font-semibold text-slate-100 leading-tight">{preferredTime}</div>
+                                      </div>
+                                      <div>
+                                        <div className="text-slate-400 text-[10px] font-medium leading-none mb-0.5">Asset local time:</div>
+                                        <div className="font-semibold text-slate-100 leading-tight">{assetLocalTime}</div>
+                                      </div>
+                                      {/* Downward triangle arrow */}
+                                      <div className="absolute top-full left-4 -mt-px border-[5px] border-transparent border-t-[#2D333B]" />
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       );

@@ -2800,9 +2800,11 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                                 </h4>
                                 <div className="flex items-center shrink-0">
                                   {isMoving ? (
-                                    <div className="px-2 py-0.5 rounded-full bg-emerald-100/90 text-emerald-800 border border-emerald-200 font-bold text-[10.5px] flex items-center gap-1 shadow-2xs">
-                                      <span>↗</span>
-                                      <span>{truckRow.activeSpeed || 53} km/h</span>
+                                    <div className="px-2.5 py-1 rounded-md bg-[#EAFBF7] dark:bg-teal-950/60 text-[#008767] dark:text-teal-300 border border-[#CEF5E8] dark:border-teal-900/50 font-semibold text-xs flex items-center gap-1.5 shadow-2xs">
+                                      <svg className="w-3.5 h-3.5 fill-[#008767] dark:fill-teal-300 shrink-0 transform rotate-45" viewBox="0 0 24 24">
+                                        <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" fill="currentColor"/>
+                                      </svg>
+                                      <span>{truckRow.activeSpeed || 102} km/h</span>
                                     </div>
                                   ) : (
                                     <div className="px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 border border-slate-300/80 font-bold text-[10.5px] flex items-center gap-1 shadow-2xs">
@@ -2842,11 +2844,60 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
                                 );
                               })()}
 
-                              {/* Row 3: Clock icon and last sync */}
-                              <div className="flex items-center gap-1.5 text-[10.5px] text-slate-400 leading-none pt-0.5">
-                                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span>{getLastSyncText(truckRow)}</span>
-                              </div>
+                              {/* Row 3: Clock icon and last sync with tooltip matching image.png */}
+                              {(() => {
+                                const hsDate = truckRow.gpsLastHandshake ? new Date(truckRow.gpsLastHandshake) : new Date();
+                                const validDate = isNaN(hsDate.getTime()) ? new Date() : hsDate;
+                                let preferredTime = 'Oct 5, 2026 9:32 AM EDT';
+                                let assetLocalTime = 'Oct 5, 2026 10:32 AM ADT';
+                                try {
+                                  preferredTime = new Intl.DateTimeFormat('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true,
+                                    timeZoneName: 'short',
+                                    timeZone: 'America/Toronto'
+                                  }).format(validDate);
+                                  assetLocalTime = new Intl.DateTimeFormat('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true,
+                                    timeZoneName: 'short',
+                                    timeZone: 'America/Halifax'
+                                  }).format(validDate);
+                                } catch (_) {}
+
+                                return (
+                                  <div className="relative group/synctip inline-block">
+                                    <div className="flex items-center gap-1.5 text-[10.5px] text-slate-400 leading-none pt-0.5 cursor-pointer">
+                                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      <span>{getLastSyncText(truckRow)}</span>
+                                    </div>
+
+                                    {/* Tooltip on hover matching image.png */}
+                                    <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/synctip:block z-50 pointer-events-none">
+                                      <div className="bg-[#2D333B] text-white text-[11px] rounded-lg p-2.5 shadow-xl whitespace-nowrap space-y-1.5 relative border border-slate-700/60">
+                                        <div>
+                                          <div className="text-slate-400 text-[10px] font-medium leading-none mb-0.5">Your preferred time:</div>
+                                          <div className="font-semibold text-slate-100 leading-tight">{preferredTime}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-slate-400 text-[10px] font-medium leading-none mb-0.5">Asset local time:</div>
+                                          <div className="font-semibold text-slate-100 leading-tight">{assetLocalTime}</div>
+                                        </div>
+                                        {/* Downward triangle arrow */}
+                                        <div className="absolute top-full left-4 -mt-px border-[5px] border-transparent border-t-[#2D333B]" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
 
