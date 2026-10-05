@@ -518,7 +518,9 @@ function MapInner({
     const coords = getTruckCoords(truck, simProgress, activeBranches);
     if (coords && coords.lat !== undefined && coords.lng !== undefined && !isNaN(coords.lat) && !isNaN(coords.lng)) {
       map.panTo({ lat: coords.lat, lng: coords.lng });
-      map.setZoom(13.5);
+      if (map.getZoom()! < 14) {
+        map.setZoom(15);
+      }
       
       const isOnline = isTruckOnline(truck);
       const assignedDelivery = displayDeliveries.find((d: any) => d.assignedTruck === truck.id && d.status !== DeliveryStatus.DELIVERED);
@@ -549,13 +551,13 @@ function MapInner({
     }
   }, [map, selectedTrackTruckId, displayTrucks, simProgress, activeBranches, displayDeliveries, isTruckOnline]);
 
-  // Handle fitBounds dynamically when fleet / locations change
+  // Handle fitBounds dynamically ONLY when branches or deliveries change (NOT on every truck position update)
   useEffect(() => {
     if (!map) return;
 
     const branchesKey = activeBranches.map((b: any) => b.id).sort().join(',');
     const deliveriesCount = displayDeliveries.filter((d: any) => d.status !== DeliveryStatus.DELIVERED).length;
-    const currentBoundsKey = `${branchesKey}-${deliveriesCount}-${displayTrucks.length}`;
+    const currentBoundsKey = `${branchesKey}-${deliveriesCount}`;
 
     if (lastBoundsKeyRef.current !== currentBoundsKey) {
       lastBoundsKeyRef.current = currentBoundsKey;
@@ -590,7 +592,7 @@ function MapInner({
         map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
       }
     }
-  }, [map, hqCoords, activeBranches, displayDeliveries, displayTrucks]);
+  }, [map, hqCoords, activeBranches, displayDeliveries]);
 
   // Map shift-click relocator handler
   const handleMapClick = (e: any) => {

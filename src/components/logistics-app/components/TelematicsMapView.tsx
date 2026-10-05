@@ -264,7 +264,9 @@ function MapCameraController({
     const vLng = getVehicleLng(selectedVehicle);
     if (!isNaN(vLat) && !isNaN(vLng) && vLat !== 0 && vLng !== 0) {
       map.panTo({ lat: vLat, lng: vLng });
-      map.setZoom(15);
+      if (map.getZoom()! < 14) {
+        map.setZoom(15);
+      }
     }
   }, [map, selectedVehicle]);
 
@@ -279,15 +281,7 @@ function MapCameraController({
       return;
     }
 
-    if (selectedVehicle && followSelected) {
-      const vLat = getVehicleLat(selectedVehicle);
-      const vLng = getVehicleLng(selectedVehicle);
-      map.panTo({
-        lat: vLat,
-        lng: vLng
-      });
-      map.setZoom(15);
-    } else if (!initialFitDone.current || fitKey) {
+    if (!initialFitDone.current || fitKey) {
       const bounds = new window.google.maps.LatLngBounds();
       let count = 0;
       vehicles.forEach(v => {
@@ -313,7 +307,7 @@ function MapCameraController({
         initialFitDone.current = true;
       }
     }
-  }, [map, selectedVehicle, followSelected, vehicles, branches, fitKey]);
+  }, [map, viewingTripsFor, fitKey]);
 
   return null;
 }
