@@ -45,8 +45,8 @@ import {
 } from 'lucide-react';
 import { createClient } from '../../../utils/supabase/client';
 import DriverRouteMap from './DriverRouteMap';
-import { getGpsForLocation, sanitizeGpsCoordinates, getTruckCoords, getBranchCoordinates, extractCleanDeliveryInfo, cleanAddressText } from '../lib/mapHelpers';
-import { getTruckSpecs } from '../truckSpecs';
+import { getGpsForLocation, sanitizeGpsCoordinates, getTruckCoords, getBranchCoordinates, extractCleanDeliveryInfo, cleanAddressText, extractVehicleNumber } from '../lib/mapHelpers';
+import { getTruckSpecs, FLEET_COMPLETE_TRUCKS } from '../truckSpecs';
 import { saveDeliveryDirect } from '../lib/supabaseClient';
 import { isDeliveryValidForDriverPortal } from '../lib/schedulingUtils';
 
@@ -60,6 +60,8 @@ interface DriverMobileAppProps {
   onLogout?: () => void;
   onBackToPortal?: () => void;
   initialScreen?: 'login' | 'home' | 'route' | 'stop' | 'earnings';
+  selectedTruckId?: string | null;
+  onSelectTruck?: (truckId: string) => void;
 }
 
 interface DriverStop {
@@ -89,7 +91,9 @@ export default function DriverMobileApp({
   onAddOrUpdateDelivery,
   onLogout,
   onBackToPortal,
-  initialScreen = 'home'
+  initialScreen = 'home',
+  selectedTruckId: selectedTruckIdProp = null,
+  onSelectTruck
 }: DriverMobileAppProps) {
   
   // Real Driver User State from props / session / Supabase
@@ -117,7 +121,28 @@ export default function DriverMobileApp({
   const [liveSupabaseTrucks, setLiveSupabaseTrucks] = useState<Truck[]>(trucks);
   const [isFetchingTrucks, setIsFetchingTrucks] = useState<boolean>(false);
   const [lastTruckSyncTime, setLastTruckSyncTime] = useState<string>('');
-  const [selectedTruckIdOverride, setSelectedTruckIdOverride] = useState<string | null>(null);
+  const [selectedTruckIdOverride, setSelectedTruckIdOverride] = useState<string | null>(() => {
+    if (selectedTruckIdProp) return selectedTruckIdProp;
+    try {
+      const cached = localStorage.getItem('prospaces_driver_auth') || localStorage.getItem('prospaces_active_user');
+      const u = cached ? JSON.parse(cached) : null;
+      const uid = currentUser?.id || u?.id;
+      if (uid) {
+        const saved = localStorage.getItem(`prospaces_driver_selected_truck_${uid}`);
+        if (saved && saved !== 'UNASSIGNED') return saved;
+      }
+      const generic = localStorage.getItem('prospaces_driver_active_truck');
+      if (generic && generic !== 'UNASSIGNED') return generic;
+    } catch (e) {}
+    return null;
+  });
+
+  // Synchronize with external prop if provided
+  useEffect(() => {
+    if (selectedTruckIdProp && selectedTruckIdProp !== 'UNASSIGNED') {
+      setSelectedTruckIdOverride(selectedTruckIdProp);
+    }
+  }, [selectedTruckIdProp]);
 
   // Modals for Driver Actions
   const [showVehicleInspectionModal, setShowVehicleInspectionModal] = useState<boolean>(false);
@@ -259,32 +284,120 @@ export default function DriverMobileApp({
     fetchLiveSupabaseTrucks();
   }, []);
 
-  // Active truck assigned to this driver in Supabase
+  // Comprehensive fleet list combining live Supabase, props, and standard fleet specs
+  const availableFleetTrucks = useMemo(() => {
+    const map = new Map<string, Truck>();
+    
+    // Add trucks from props and live query
+    [...liveSupabaseTrucks, ...trucks].forEach(t => {
+      if (t && t.id) {
+        map.set(t.id, t);
+      }
+    });
+
+    // Also include FLEET_COMPLETE_TRUCKS if not already present
+    FLEET_COMPLETE_TRUCKS.forEach(spec => {
+      const uNum = extractVehicleNumber(spec.id) || extractVehicleNumber(spec.name);
+      let alreadyExists = false;
+      for (const [k, v] of map.entries()) {
+        const vNum = extractVehicleNumber(v.id) || extractVehicleNumber(v.name);
+        if (k === spec.id || (uNum && vNum && uNum === vNum)) {
+          alreadyExists = true;
+          break;
+        }
+      }
+      if (!alreadyExists) {
+        map.set(spec.id, {
+          id: spec.id,
+          name: spec.name,
+          type: spec.model.includes('Boom') ? '6X Boom Truck' : (spec.model.includes('Box') ? 'Box Truck' : 'Pickup / Flatbed'),
+          status: 'Active',
+          driver: 'No Driver',
+          branchId: spec.branchId,
+          homeDepot: spec.homeDepot,
+          licensePlate: spec.licensePlate,
+          fuelLevel: `${spec.baseFuelPercent || 85}%`,
+          currentMileage: spec.baseOdometerKm,
+          lat: 44.68550,
+          lng: -63.58250,
+        } as Truck);
+      }
+    });
+
+    return Array.from(map.values());
+  }, [liveSupabaseTrucks, trucks]);
+
+  // Compute how many deliveries are currently assigned to a given truck
+  const getDeliveryCountForTruck = (trk: Truck): number => {
+    const validPortalDeliveries = (deliveries || []).filter(isDeliveryValidForDriverPortal);
+    const trkId = String(trk.id || '').trim().toLowerCase();
+    const trkName = String(trk.name || '').trim().toLowerCase();
+    const trkPlate = String(trk.licensePlate || '').trim().toLowerCase();
+    const trkUnit = extractVehicleNumber(trk.id) || extractVehicleNumber(trk.name);
+
+    return validPortalDeliveries.filter(del => {
+      const delTruckRaw = String(
+        del.assignedTruck ||
+        (del as any).assignedTruckId ||
+        (del as any).assigned_truck_id ||
+        (del as any).assigned_truck ||
+        ''
+      ).trim();
+      if (!delTruckRaw || ['unassigned', 'no truck', 'none', 'pending', ''].includes(delTruckRaw.toLowerCase())) {
+        return false;
+      }
+      const delTruckLower = delTruckRaw.toLowerCase();
+      const delTruckUnit = extractVehicleNumber(delTruckRaw);
+
+      if (trkId && delTruckLower === trkId) return true;
+      if (trkName && delTruckLower === trkName) return true;
+      if (trkId && (delTruckLower.includes(trkId) || trkId.includes(delTruckLower))) return true;
+      if (trkName && (delTruckLower.includes(trkName) || trkName.includes(delTruckLower))) return true;
+      if (trkUnit && delTruckUnit && trkUnit === delTruckUnit) return true;
+      if (trkPlate && delTruckLower.includes(trkPlate)) return true;
+      return false;
+    }).length;
+  };
+
+  // Active truck picked by this driver
   const assignedTruck = useMemo(() => {
-    if (selectedTruckIdOverride) {
-      const found = liveSupabaseTrucks.find(t => t.id === selectedTruckIdOverride);
+    if (selectedTruckIdOverride && selectedTruckIdOverride !== 'UNASSIGNED') {
+      const found = availableFleetTrucks.find(t => 
+        t.id === selectedTruckIdOverride || 
+        (t.name && t.name.toLowerCase().trim() === selectedTruckIdOverride.toLowerCase().trim()) ||
+        (extractVehicleNumber(t.id) && extractVehicleNumber(t.id) === extractVehicleNumber(selectedTruckIdOverride))
+      );
       if (found) return found;
     }
-    if (!driverUser) return liveSupabaseTrucks[0] || trucks[0] || null;
+
+    if (!driverUser) return null;
     const dNameNorm = (driverUser.name || '').trim().toLowerCase();
     const dIdNorm = (driverUser.id || '').trim().toLowerCase();
-    
-    // Check match in live Supabase trucks
-    const matchedLive = liveSupabaseTrucks.find(t => {
-      const tDriverId = (t.assignedDriverId || '').trim().toLowerCase();
-      const tDriverName = (t.assignedDriverName || '').trim().toLowerCase();
-      return (tDriverId && tDriverId === dIdNorm) || (tDriverName && tDriverName.includes(dNameNorm));
-    });
-    if (matchedLive) return matchedLive;
 
-    // Fallback to prop trucks
-    const matchedProp = trucks.find(t => {
+    // Check localStorage for this driver
+    try {
+      const savedTruckId = localStorage.getItem(`prospaces_driver_selected_truck_${driverUser.id}`);
+      if (savedTruckId && savedTruckId !== 'UNASSIGNED') {
+        const found = availableFleetTrucks.find(t => 
+          t.id === savedTruckId || 
+          (t.name && t.name.toLowerCase().trim() === savedTruckId.toLowerCase().trim()) ||
+          (extractVehicleNumber(t.id) && extractVehicleNumber(t.id) === extractVehicleNumber(savedTruckId))
+        );
+        if (found) return found;
+      }
+    } catch (e) {}
+
+    // Check if a truck has this driver explicitly assigned in fleet
+    const matched = availableFleetTrucks.find(t => {
       const tDriverId = (t.assignedDriverId || '').trim().toLowerCase();
-      const tDriverName = (t.assignedDriverName || '').trim().toLowerCase();
-      return (tDriverId && tDriverId === dIdNorm) || (tDriverName && tDriverName.includes(dNameNorm));
+      const tDriverName = (t.assignedDriverName || t.driver || '').trim().toLowerCase();
+      const isDrv = (t.driver && !['no driver', 'unassigned', 'driver', ''].includes(t.driver.trim().toLowerCase()));
+      return (tDriverId && tDriverId === dIdNorm) || (isDrv && (tDriverName === dNameNorm || tDriverName.includes(dNameNorm)));
     });
-    return matchedProp || liveSupabaseTrucks[0] || trucks[0] || null;
-  }, [driverUser, liveSupabaseTrucks, trucks, selectedTruckIdOverride]);
+    if (matched) return matched;
+
+    return null;
+  }, [driverUser, availableFleetTrucks, selectedTruckIdOverride]);
 
   // Derive authentic Truck Specifications matching the assigned vehicle
   const assignedTruckSpec = useMemo(() => {
@@ -443,52 +556,58 @@ export default function DriverMobileApp({
     return () => clearInterval(interval);
   }, []);
 
-  // Filter deliveries assigned to this driver: ONLY active deliveries and today's completed deliveries
-  // Completed deliveries are removed after the day is completed
+  // Filter deliveries: ONLY active deliveries and today's completed deliveries
+  // CRITICAL REQUIREMENT: Make sure drivers can ONLY see Deliveries that are assigned to the Truck they pick.
   const driverDeliveries = useMemo(() => {
     // 1. Strict filter: keep only active deliveries and deliveries completed today
     const validPortalDeliveries = (deliveries || []).filter(isDeliveryValidForDriverPortal);
 
-    if (!driverUser) return validPortalDeliveries;
-    const dNameNorm = (driverUser.name || '').trim().toLowerCase();
-    const dIdNorm = (driverUser.id || '').trim().toLowerCase();
-
-    const truckIdNorm = assignedTruck ? String(assignedTruck.id).trim().toLowerCase() : '';
-    const truckNameNorm = assignedTruck ? String(assignedTruck.name).trim().toLowerCase() : '';
-    const truckPlateNorm = assignedTruck?.licensePlate ? String(assignedTruck.licensePlate).trim().toLowerCase() : '';
-
-    const matched = validPortalDeliveries.filter(d => {
-      const delDriverId = (d.assignedDriverId || d.assignedDriver || '').trim().toLowerCase();
-      const delDriverName = (d.assignedDriverName || d.assignedDriver || '').trim().toLowerCase();
-      
-      const isDriverMatch = (delDriverId && delDriverId === dIdNorm) || (delDriverName && (delDriverName === dNameNorm || delDriverName.includes(dNameNorm)));
-
-      const delTruckId = (d.assignedTruckId || d.assignedTruck || '').trim().toLowerCase();
-      const delTruckName = (d.assignedTruck || '').trim().toLowerCase();
-      
-      const isTruckMatch = (truckIdNorm || truckNameNorm || truckPlateNorm) && 
-        ((truckIdNorm && (delTruckId === truckIdNorm || delTruckId.includes(truckIdNorm))) || 
-         (truckNameNorm && (delTruckName === truckNameNorm || delTruckName.includes(truckNameNorm))) ||
-         (truckPlateNorm && (delTruckId.includes(truckPlateNorm) || delTruckName.includes(truckPlateNorm))));
-
-      return isDriverMatch || isTruckMatch;
-    });
-
-    if (matched.length > 0) return matched;
-
-    // Fallback: If no driver/truck assignment matched yet, filter by driver's branch
-    const driverBranchId = (driverUser.branchId || driverUser.branch_id || driverUser.branch || '').trim().toLowerCase();
-    if (driverBranchId) {
-      const branchMatched = validPortalDeliveries.filter(d => {
-        const dBranch = (d.originBranch || (d as any).branchId || (d as any).branch_id || '').trim().toLowerCase();
-        return dBranch && (dBranch === driverBranchId || dBranch.includes(driverBranchId) || driverBranchId.includes(dBranch));
-      });
-      if (branchMatched.length > 0) return branchMatched;
+    // If no truck is picked yet, do NOT show deliveries
+    if (!assignedTruck) {
+      return [];
     }
 
-    // Return valid portal deliveries (only active + today's completed)
-    return validPortalDeliveries;
-  }, [deliveries, driverUser, assignedTruck]);
+    const pickedTruckId = String(assignedTruck.id || '').trim().toLowerCase();
+    const pickedTruckName = String(assignedTruck.name || '').trim().toLowerCase();
+    const pickedTruckPlate = String(assignedTruck.licensePlate || '').trim().toLowerCase();
+    const pickedTruckUnit = extractVehicleNumber(assignedTruck.id) || extractVehicleNumber(assignedTruck.name);
+
+    return validPortalDeliveries.filter(d => {
+      const delTruckRaw = String(
+        d.assignedTruck ||
+        (d as any).assignedTruckId ||
+        (d as any).assigned_truck_id ||
+        (d as any).assigned_truck ||
+        ''
+      ).trim();
+
+      // If delivery is not assigned to any truck, the driver cannot see it!
+      if (!delTruckRaw || ['unassigned', 'no truck', 'none', 'pending', ''].includes(delTruckRaw.toLowerCase())) {
+        return false;
+      }
+
+      const delTruckLower = delTruckRaw.toLowerCase();
+      const delTruckUnit = extractVehicleNumber(delTruckRaw);
+
+      // 1. Exact ID match
+      if (pickedTruckId && delTruckLower === pickedTruckId) return true;
+
+      // 2. Exact Name match
+      if (pickedTruckName && delTruckLower === pickedTruckName) return true;
+
+      // 3. Substring match
+      if (pickedTruckId && (delTruckLower.includes(pickedTruckId) || pickedTruckId.includes(delTruckLower))) return true;
+      if (pickedTruckName && (delTruckLower.includes(pickedTruckName) || pickedTruckName.includes(delTruckLower))) return true;
+
+      // 4. Unit / Vehicle Number match (e.g. 2503, 101, 2402)
+      if (pickedTruckUnit && delTruckUnit && pickedTruckUnit === delTruckUnit) return true;
+
+      // 5. License plate match
+      if (pickedPlate && delTruckLower.includes(pickedPlate)) return true;
+
+      return false;
+    });
+  }, [deliveries, assignedTruck]);
 
   // Map deliveries and their additional stops into ordered Driver Stop objects
   // Sequence strictly: 1) Additional Stops in the order entered, 2) Delivery (Delivery Project Site Address as destination)
@@ -767,12 +886,33 @@ export default function DriverMobileApp({
       localStorage.setItem('prospaces_driver_auth', JSON.stringify(authenticatedUser));
       setActiveScreen('home');
       fetchLiveSupabaseTrucks();
+
+      // Check if driver has previously picked a truck; if not, open truck picker immediately
+      const savedTruck = localStorage.getItem(`prospaces_driver_selected_truck_${authenticatedUser.id}`);
+      if (savedTruck && savedTruck !== 'UNASSIGNED') {
+        setSelectedTruckIdOverride(savedTruck);
+      } else {
+        setShowTruckSwitcherModal(true);
+      }
     } catch (err: any) {
       setLoginError(err.message || 'Invalid Driver credentials. Please try again.');
     } finally {
       setIsLoggingIn(false);
     }
   };
+
+  // Automatically prompt driver to select a truck if none is currently selected
+  useEffect(() => {
+    if (activeScreen !== 'login' && driverUser) {
+      const saved = localStorage.getItem(`prospaces_driver_selected_truck_${driverUser.id}`);
+      if (!saved && !selectedTruckIdOverride && !assignedTruck) {
+        const timer = setTimeout(() => {
+          setShowTruckSwitcherModal(true);
+        }, 200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [activeScreen, driverUser, selectedTruckIdOverride, assignedTruck]);
 
   // Submit Proof of Delivery (ePOD) directly to Supabase and parent state
   const handleSubmitPOD = async () => {
@@ -1322,15 +1462,39 @@ export default function DriverMobileApp({
               </div>
 
               <div className="space-y-2.5">
-                {liveStops.length === 0 ? (
-                  <div className="bg-white border border-slate-200/80 rounded-2xl p-6 text-center shadow-xs">
-                    <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2.5">
-                      <CheckCircle2 className="h-5 w-5" />
+                {!assignedTruck ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center shadow-xs">
+                    <div className="h-10 w-10 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto mb-2.5">
+                      <TruckIcon className="h-5 w-5" />
                     </div>
-                    <h5 className="text-xs font-bold text-slate-800">No Active Deliveries</h5>
-                    <p className="text-[11px] text-slate-500 mt-1 max-w-xs mx-auto">
-                      All deliveries for previous days have been completed and cleared. New active dispatches will appear here when scheduled.
+                    <h5 className="text-xs font-bold text-amber-900">Truck Selection Required</h5>
+                    <p className="text-[11px] text-amber-700 mt-1 max-w-xs mx-auto">
+                      Please pick the truck you are operating today to view your assigned deliveries.
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowTruckSwitcherModal(true)}
+                      className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                    >
+                      Pick Your Truck
+                    </button>
+                  </div>
+                ) : liveStops.length === 0 ? (
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-6 text-center shadow-xs">
+                    <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-2.5">
+                      <TruckIcon className="h-5 w-5" />
+                    </div>
+                    <h5 className="text-xs font-bold text-slate-800">No Active Deliveries Assigned to {assignedTruck.name}</h5>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-xs mx-auto">
+                      There are currently no active delivery tickets assigned to {assignedTruck.name}. If you are operating a different truck, switch vehicles below or check with dispatch.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowTruckSwitcherModal(true)}
+                      className="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                    >
+                      Switch Assigned Truck
+                    </button>
                   </div>
                 ) : (
                   liveStops.map((stop, idx) => {
@@ -1464,10 +1628,23 @@ export default function DriverMobileApp({
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
                   <div className="h-12 w-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
-                    <Navigation className="h-6 w-6" />
+                    <TruckIcon className="h-6 w-6" />
                   </div>
-                  <h4 className="text-sm font-black text-white mb-1">No Active Dispatches</h4>
-                  <p className="text-xs text-slate-400">There are no pending delivery stops assigned to your route today.</p>
+                  <h4 className="text-sm font-black text-white mb-1">
+                    {assignedTruck ? `No Deliveries on ${assignedTruck.name}` : 'No Truck Selected'}
+                  </h4>
+                  <p className="text-xs text-slate-400 max-w-xs mb-3">
+                    {assignedTruck 
+                      ? `There are no deliveries assigned to ${assignedTruck.name} today.` 
+                      : 'Please select a truck to view today\'s route.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowTruckSwitcherModal(true)}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+                  >
+                    {assignedTruck ? 'Switch Assigned Truck' : 'Select Truck'}
+                  </button>
                 </div>
               )}
             </div>
@@ -1668,19 +1845,31 @@ export default function DriverMobileApp({
             {!currentStop || liveStops.length === 0 ? (
               <div className="p-6 text-center">
                 <div className="bg-white border border-slate-200/80 rounded-2xl p-8 shadow-xs max-w-sm mx-auto">
-                  <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
-                    <CheckCircle2 className="h-6 w-6" />
+                  <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                    <TruckIcon className="h-6 w-6" />
                   </div>
-                  <h4 className="text-sm font-black text-slate-900 mb-1">No Active Stops Pending</h4>
+                  <h4 className="text-sm font-black text-slate-900 mb-1">
+                    {assignedTruck ? `No Active Stops on ${assignedTruck.name}` : 'No Truck Selected'}
+                  </h4>
                   <p className="text-xs text-slate-500 mb-4">
-                    There are no uncompleted delivery stops requiring ePOD capture. Completed deliveries from previous days have been cleared.
+                    {assignedTruck 
+                      ? `There are currently no deliveries assigned to ${assignedTruck.name} to capture Proof of Delivery.` 
+                      : 'Please select your operating vehicle to begin your route and submit ePODs.'}
                   </p>
-                  <button
-                    onClick={() => setActiveScreen('home')}
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
-                  >
-                    Return to Route Home
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => setShowTruckSwitcherModal(true)}
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
+                    >
+                      {assignedTruck ? 'Switch Assigned Truck' : 'Select Truck'}
+                    </button>
+                    <button
+                      onClick={() => setActiveScreen('home')}
+                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
+                    >
+                      Return to Route Home
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : currentStop?.stopType === 'additional_stop' ? (
@@ -2505,52 +2694,84 @@ export default function DriverMobileApp({
         </div>
       )}
 
-      {/* ── MODAL 3: SWITCH ASSIGNED TRUCK (Live Supabase Fleet) ── */}
+      {/* ── MODAL 3: SWITCH ASSIGNED TRUCK (Live Fleet Selection) ── */}
       {showTruckSwitcherModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl border border-slate-200 text-left">
+          <div className="bg-white rounded-3xl p-5 max-w-md w-full shadow-2xl border border-slate-200 text-left">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
               <div className="flex items-center space-x-2">
                 <TruckIcon className="h-5 w-5 text-blue-600" />
-                <h3 className="text-sm font-black text-slate-900">Switch Assigned Truck</h3>
+                <h3 className="text-sm font-black text-slate-900">Select Operating Truck</h3>
               </div>
               <button 
                 onClick={() => setShowTruckSwitcherModal(false)}
                 className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                title="Close"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <p className="text-xs text-slate-500 mb-3">
-              Select the vehicle you are operating today from the live Supabase fleet:
+              Select the truck you are driving today. You will <strong>only see deliveries assigned to this truck</strong>:
             </p>
 
-            <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
-              {liveSupabaseTrucks.map(trk => {
+            <div className="space-y-2 max-h-72 overflow-y-auto mb-4 pr-1">
+              {availableFleetTrucks.map(trk => {
                 const isCurrent = trk.id === assignedTruck?.id;
+                const deliveryCount = getDeliveryCountForTruck(trk);
+
                 return (
                   <button
                     key={trk.id}
                     onClick={() => {
                       setSelectedTruckIdOverride(trk.id);
+                      try {
+                        const uid = driverUser?.id || currentUser?.id;
+                        if (uid) {
+                          localStorage.setItem(`prospaces_driver_selected_truck_${uid}`, trk.id);
+                        }
+                        localStorage.setItem('prospaces_driver_active_truck', trk.id);
+                      } catch (e) {}
+
+                      if (onSelectTruck) {
+                        onSelectTruck(trk.id);
+                      }
+
                       setShowTruckSwitcherModal(false);
-                      setVehicleSavedToast(`Active vehicle switched to ${trk.name}`);
-                      setTimeout(() => setVehicleSavedToast(null), 2500);
+                      setVehicleSavedToast(`Operating vehicle set to ${trk.name}. Loaded ${deliveryCount} assigned deliveries.`);
+                      setTimeout(() => setVehicleSavedToast(null), 3000);
                     }}
-                    className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                       isCurrent 
-                        ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-500/20'
-                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                        ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20'
+                        : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200'
                     }`}
                   >
-                    <div>
-                      <h5 className="text-xs font-black text-slate-900">{trk.name}</h5>
-                      <span className="text-[10px] font-mono text-slate-500">
-                        {trk.licensePlate} &bull; Fuel: {trk.fuelLevel}
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center space-x-2">
+                        <h5 className="text-xs font-black text-slate-900 truncate">{trk.name}</h5>
+                        {isCurrent && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 bg-blue-600 text-white rounded font-mono">
+                            ACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-500 block truncate mt-0.5">
+                        {trk.licensePlate || 'Fleet Unit'} &bull; {trk.homeDepot || 'Depot'}
                       </span>
                     </div>
-                    {isCurrent && <CheckCircle2 className="h-4 w-4 text-blue-600" />}
+
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        deliveryCount > 0 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono' 
+                          : 'bg-slate-100 text-slate-500 font-mono'
+                      }`}>
+                        {deliveryCount} {deliveryCount === 1 ? 'Del' : 'Dels'}
+                      </span>
+                      {isCurrent && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />}
+                    </div>
                   </button>
                 );
               })}
@@ -2561,7 +2782,7 @@ export default function DriverMobileApp({
               onClick={() => setShowTruckSwitcherModal(false)}
               className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl cursor-pointer"
             >
-              Close
+              Done
             </button>
           </div>
         </div>

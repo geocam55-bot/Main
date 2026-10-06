@@ -693,6 +693,18 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     const driverNameNorm = (currentUser.name || '').trim().toLowerCase();
     const driverIdNorm = currentUser.id;
 
+    try {
+      const savedTruckId = localStorage.getItem(`prospaces_driver_selected_truck_${currentUser.id}`) || localStorage.getItem('prospaces_driver_active_truck');
+      if (savedTruckId && savedTruckId !== 'UNASSIGNED') {
+        const found = trucks.find(t => 
+          t.id === savedTruckId || 
+          (t.name && t.name.toLowerCase().trim() === savedTruckId.toLowerCase().trim()) ||
+          (extractVehicleNumber(t.id) && extractVehicleNumber(t.id) === extractVehicleNumber(savedTruckId))
+        );
+        if (found) return found;
+      }
+    } catch (e) {}
+
     return trucks.find(t => {
       const tDrvNorm = (t.driver || '').trim().toLowerCase();
       const isDriverMatch = tDrvNorm !== 'no driver' && tDrvNorm !== 'unassigned' && tDrvNorm === driverNameNorm;
@@ -840,6 +852,11 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
 
     setTrucks(updatedTrucks);
     setShowDriverTruckModal(false);
+
+    try {
+      localStorage.setItem(`prospaces_driver_selected_truck_${driverId}`, selectedTruckId);
+      localStorage.setItem('prospaces_driver_active_truck', selectedTruckId);
+    } catch (e) {}
 
     // Explicitly write updated truck assignment directly to Supabase trucks table
     const supabase = getFrontendSupabase();
@@ -3695,6 +3712,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               branches={branches}
               users={users}
               currentUser={currentUser}
+              selectedTruckId={driverAssignedTruck?.id || (currentUser ? localStorage.getItem(`prospaces_driver_selected_truck_${currentUser.id}`) : null)}
+              onSelectTruck={handleConfirmTruckAssignment}
               onAddOrUpdateDelivery={handleAddOrUpdateDelivery}
               onBackToPortal={() => setActiveTab('dashboard')}
             />

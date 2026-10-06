@@ -217,6 +217,48 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
   const [isEditingPrices, setIsEditingPrices] = useState(false);
   const [overrideKentPrice, setOverrideKentPrice] = useState('');
   const [overrideHdPrice, setOverrideHdPrice] = useState('');
+  const [isScrapingLive, setIsScrapingLive] = useState(false);
+
+  const handleRunLiveComparison = async (item: ShoppingListItem) => {
+    if (!item || !item.name) return;
+    setIsScrapingLive(true);
+    try {
+      const res = await fetch('/api/price-comparison', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchTerm: item.name })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.matchesFound && data.results) {
+          const kentRes = data.results.find((r: any) => r.store === 'Kent');
+          const hdRes = data.results.find((r: any) => r.store === 'Home Depot');
+          const ronaRes = data.results.find((r: any) => r.store === 'RONA');
+
+          const updatedCompetitorData = {
+            lastChecked: new Date().toISOString(),
+            kent: kentRes ? { price: kentRes.price, url: kentRes.url, storeLocation: 'Halifax - Bayers Lake' } : (item.competitorData?.kent || null),
+            homeDepot: hdRes ? { price: hdRes.price, url: hdRes.url, storeLocation: 'Halifax Lacewood' } : (item.competitorData?.homeDepot || null),
+            rona: ronaRes ? { price: ronaRes.price, url: ronaRes.url, storeLocation: 'Halifax' } : (item.competitorData?.rona || null),
+            bestDeal: data.lowestPriceStore === 'Kent' ? 'kent' : (data.lowestPriceStore === 'Home Depot' ? 'homeDepot' : 'prospaces')
+          };
+
+          const updatedItem = { ...item, competitorData: updatedCompetitorData };
+          setSelectedDetailItem(updatedItem);
+          setItems(items.map(i => i.id === item.id ? updatedItem : i));
+          toast.success(`Live comparison found prices! Lowest: $${data.lowestPrice} (${data.lowestPriceStore})`);
+        } else {
+          toast.error(data.reason || 'No matching competitor products found.');
+        }
+      } else {
+        toast.error('Failed to communicate with pricing service.');
+      }
+    } catch (err: any) {
+      toast.error('Error running live price comparison: ' + (err?.message || 'Network error'));
+    } finally {
+      setIsScrapingLive(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedDetailItem) {
@@ -2355,10 +2397,20 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => handleRunLiveComparison(selectedDetailItem)}
+                      disabled={isScrapingLive}
+                      className="h-6 text-[11px] px-2 text-blue-600 border-blue-200 hover:bg-blue-50 flex items-center gap-1"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${isScrapingLive ? 'animate-spin' : ''}`} />
+                      {isScrapingLive ? 'Searching...' : 'Run Live Search'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => setIsEditingPrices(!isEditingPrices)}
                       className="h-6 text-[11px] px-2"
                     >
-                      {isEditingPrices ? 'Cancel' : 'Edit / Override Prices'}
+                      {isEditingPrices ? 'Cancel' : 'Edit Prices'}
                     </Button>
                   </div>
                 </div>

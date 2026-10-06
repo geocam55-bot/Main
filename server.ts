@@ -31,6 +31,7 @@ import {
   getInProcessAgentStatus,
   getInProcessRecentLogs
 } from "./src/scripts/pricing-agent";
+import { runRetailPriceComparison } from "./src/services/playwright-scraper";
 
 const FALLBACK_PROJECT_ID = "usorqldwroecyxucmtuw";
 const FALLBACK_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
@@ -4467,6 +4468,20 @@ Return JSON matching this schema:
 
   app.all('/api/scrape-competitor-live', handleScrapeLive);
   app.all('/api/competitive-pricing/scrape-live', handleScrapeLive);
+
+  // Retail Price Comparison Agent endpoint
+  app.post('/api/price-comparison', async (req, res) => {
+    try {
+      const { searchTerm } = req.body || {};
+      if (!searchTerm) {
+        return res.status(400).json({ matchesFound: false, reason: "Missing searchTerm in request body." });
+      }
+      const result = await runRetailPriceComparison(searchTerm);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ matchesFound: false, reason: err?.message || 'Internal error during price comparison.' });
+    }
+  });
 
   // 2. POST /api/products/:productId/competitive-pricing/refresh
   app.post('/api/products/:productId/competitive-pricing/refresh', async (req, res) => {

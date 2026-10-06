@@ -96,6 +96,32 @@ export const COMPETITORS: Record<string, CompetitorConfig> = {
       productLink: 'a.acl-product-card__title-link, a[href*="/product/"], a[data-testid="product-card-title-link"]'
     },
     matchThreshold: 45
+  },
+
+  rona: {
+    id: 3,
+    name: 'RONA',
+    baseUrl: 'https://www.rona.ca',
+    searchUrl: 'https://www.rona.ca/en/search?search=',
+    cookies: [
+      { name: 'store', value: '8860', domain: '.rona.ca' },
+      { name: 'province', value: 'NS', domain: '.rona.ca' }
+    ],
+    headers: {
+      'Accept-Language': 'en-US,en;q=0.9',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    },
+    selectors: {
+      productCard: '.product-card, [data-testid="product-card"], .product-item',
+      title: '.product-card__title, [data-testid="product-title"], h2, h3',
+      price: '.product-card__price, [data-testid="product-price"], .price',
+      manufacturer: '.product-card__model, [data-testid="model-number"]',
+      upc: '[data-upc]',
+      dimensions: '.dimensions',
+      description: '.product-card__description',
+      productLink: 'a[href*="/product/"], a.product-card__link'
+    },
+    matchThreshold: 40
   }
 };
 
@@ -1234,5 +1260,94 @@ export function getMemoryUsageInfo(): { heapUsedMB: number; heapTotalMB: number;
     heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024 * 10) / 10,
     heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024 * 10) / 10,
     rssMB: Math.round(mem.rss / 1024 / 1024 * 10) / 10
+  };
+}
+
+/**
+ * Retail Price Comparison Agent matching user specifications across RONA, Kent, and Home Depot.
+ */
+export async function runRetailPriceComparison(searchTerm: string) {
+  const timestamp = new Date().toISOString();
+  if (!searchTerm || !searchTerm.trim()) {
+    return {
+      matchesFound: false,
+      reason: "Invalid search term provided.",
+      timestamp
+    };
+  }
+
+  const cleanTerm = searchTerm.trim();
+  const inventoryItem: InventoryItem = {
+    sku: 'QUERY-' + Date.now(),
+    name: cleanTerm,
+    description: cleanTerm
+  };
+
+  const competitorsList = [COMPETITORS.homeDepot, COMPETITORS.rona, COMPETITORS.kent];
+  const allResults: any[] = [];
+  let browser: Browser | null = null;
+
+  try {
+    browser = await getPlaywrightBrowser();
+    const page = await createOptimizedPage(browser);
+
+    for (const comp of competitorsList) {
+      try {
+        const bestMatch = await findBestProductMatch(page, comp, inventoryItem);
+        if (bestMatch && bestMatch.matchFound && bestMatch.price != null && bestMatch.price > 0) {
+          allResults.push({
+            store: comp.name === 'KENT Building Supplies' ? 'Kent' : (comp.name === 'The Home Depot' ? 'Home Depot' : 'RONA'),
+            productName: bestMatch.candidate.title,
+            brand: bestMatch.candidate.brand || extractBrand(inventoryItem, bestMatch.candidate.title) || undefined,
+            modelNumber: bestMatch.candidate.mfg || bestMatch.candidate.sku || undefined,
+            price: bestMatch.price,
+            salePrice: bestMatch.price,
+            url: bestMatch.candidate.url || comp.baseUrl
+          });
+        }
+      } catch (compErr: any) {
+        console.error(`[Price Comparison] Live scrape error for ${comp.name}:`, compErr.message);
+      }
+    }
+
+    if (page) {
+      try { await page.close(); } catch (e) {}
+    }
+  } catch (err: any) {
+    console.error('[Price Comparison] Browser initialization error:', err.message);
+  }
+
+  if (allResults.length === 0) {
+    return {
+      matchesFound: false,
+      reason: "Live scraping returned no matching competitor products for this term. No fallback generated.",
+      timestamp
+    };
+  }
+
+  // Rank results from lowest price to highest price
+  allResults.sort((a, b) => a.price - b.price);
+
+  const lowestPrice = allResults[0].price;
+  const highestPrice = allResults[allResults.length - 1].price;
+  const difference = Math.round((highestPrice - lowestPrice) * 100) / 100;
+  const savingsPercent = lowestPrice > 0 ? Math.round(((highestPrice - lowestPrice) / highestPrice) * 10000) / 100 : 0;
+
+  return {
+    searchTerm: cleanTerm,
+    matchesFound: true,
+    lowestPriceStore: allResults[0].store,
+    lowestPrice,
+    highestPrice,
+    difference,
+    savingsPercent,
+    timestamp,
+    results: allResults.map(r => ({
+      store: r.store,
+      productName: r.productName,
+      modelNumber: r.modelNumber || null,
+      price: r.price,
+      url: r.url
+    }))
   };
 }

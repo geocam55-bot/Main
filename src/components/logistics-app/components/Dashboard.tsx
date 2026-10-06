@@ -223,18 +223,42 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
 
   const isDriver = currentUser?.role === 'Driver';
   const driverName = currentUser?.name || '';
-  const driverTrucks = isDriver && driverName
-    ? trucks.filter(t => t.driver && t.driver.toLowerCase() === driverName.toLowerCase())
-    : [];
-  const driverTruckIds = driverTrucks.map(t => t.id);
+  
+  // Resolve the driver's picked truck from localStorage or assigned truck
+  const pickedTruckId = isDriver && currentUser ? (
+    (() => {
+      try {
+        return localStorage.getItem(`prospaces_driver_selected_truck_${currentUser.id}`) ||
+               localStorage.getItem('prospaces_driver_active_truck');
+      } catch (e) {
+        return null;
+      }
+    })() ||
+    trucks.find(t => (t.driver && t.driver.toLowerCase() === driverName.toLowerCase()) || (t.assignedDriverId && t.assignedDriverId === currentUser.id))?.id
+  ) : null;
 
-  const displayDeliveries = isDriver && driverName
+  const pickedTruck = isDriver && pickedTruckId 
+    ? trucks.find(t => t.id === pickedTruckId || (t.name && t.name.toLowerCase() === pickedTruckId.toLowerCase()))
+    : null;
+  const pickedTruckUnit = pickedTruck ? (extractVehicleNumber(pickedTruck.id) || extractVehicleNumber(pickedTruck.name)) : null;
+
+  const displayDeliveries = isDriver
     ? deliveries
         .filter(isDeliveryValidForDriverPortal)
-        .filter(d => 
-          (d.assignedDriver && d.assignedDriver.toLowerCase() === driverName.toLowerCase()) ||
-          (d.assignedTruck && driverTruckIds.includes(d.assignedTruck))
-        )
+        .filter(d => {
+          if (!pickedTruck) return false;
+          const delTruckRaw = String(d.assignedTruck || (d as any).assignedTruckId || (d as any).assigned_truck_id || (d as any).assigned_truck || '').trim();
+          if (!delTruckRaw || ['unassigned', 'no truck', 'none', 'pending', ''].includes(delTruckRaw.toLowerCase())) return false;
+          
+          const delTruckLower = delTruckRaw.toLowerCase();
+          const delTruckUnit = extractVehicleNumber(delTruckRaw);
+
+          if (pickedTruck.id && (delTruckLower === pickedTruck.id.toLowerCase() || delTruckLower.includes(pickedTruck.id.toLowerCase()) || pickedTruck.id.toLowerCase().includes(delTruckLower))) return true;
+          if (pickedTruck.name && (delTruckLower === pickedTruck.name.toLowerCase() || delTruckLower.includes(pickedTruck.name.toLowerCase()) || pickedTruck.name.toLowerCase().includes(delTruckLower))) return true;
+          if (pickedTruckUnit && delTruckUnit && pickedTruckUnit === delTruckUnit) return true;
+          if (pickedTruck.licensePlate && delTruckLower.includes(pickedTruck.licensePlate.toLowerCase())) return true;
+          return false;
+        })
     : deliveries;
 
   const [liveTelemetryVehicles, setLiveTelemetryVehicles] = useState<any[]>([]);
