@@ -70,6 +70,9 @@ export const getVehicleLat = (v: VehicleRecord): number => {
   if (tel && typeof tel.lat === 'number' && !isNaN(tel.lat) && tel.lat !== 0) return tel.lat;
   if (typeof (v as any).lat === 'number' && !isNaN((v as any).lat) && (v as any).lat !== 0) return (v as any).lat;
   if (typeof (v as any).latitude === 'number' && !isNaN((v as any).latitude) && (v as any).latitude !== 0) return (v as any).latitude;
+  if (typeof (v as any).gpsLat === 'number' && !isNaN((v as any).gpsLat) && (v as any).gpsLat !== 0) return (v as any).gpsLat;
+  if (typeof (v as any).currentLatitude === 'number' && !isNaN((v as any).currentLatitude) && (v as any).currentLatitude !== 0) return (v as any).currentLatitude;
+  if (typeof (v as any).current_latitude === 'number' && !isNaN((v as any).current_latitude) && (v as any).current_latitude !== 0) return (v as any).current_latitude;
   return 44.69098;
 };
 
@@ -79,6 +82,9 @@ export const getVehicleLng = (v: VehicleRecord): number => {
   if (tel && typeof tel.lng === 'number' && !isNaN(tel.lng) && tel.lng !== 0) return tel.lng;
   if (typeof (v as any).lng === 'number' && !isNaN((v as any).lng) && (v as any).lng !== 0) return (v as any).lng;
   if (typeof (v as any).longitude === 'number' && !isNaN((v as any).longitude) && (v as any).longitude !== 0) return (v as any).longitude;
+  if (typeof (v as any).gpsLng === 'number' && !isNaN((v as any).gpsLng) && (v as any).gpsLng !== 0) return (v as any).gpsLng;
+  if (typeof (v as any).currentLongitude === 'number' && !isNaN((v as any).currentLongitude) && (v as any).currentLongitude !== 0) return (v as any).currentLongitude;
+  if (typeof (v as any).current_longitude === 'number' && !isNaN((v as any).current_longitude) && (v as any).current_longitude !== 0) return (v as any).current_longitude;
   return -63.59854;
 };
 
@@ -324,58 +330,72 @@ function AnimatedVehicleMarker({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const initialLat = getVehicleLat(vehicle);
-  const initialLng = getVehicleLng(vehicle);
-
-  const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number }>({
-    lat: initialLat,
-    lng: initialLng
-  });
-
-  const prevTargetRef = useRef<{ lat: number; lng: number }>({
-    lat: initialLat,
-    lng: initialLng
-  });
-
-  const animFrameRef = useRef<number | null>(null);
-
   const targetLat = getVehicleLat(vehicle);
   const targetLng = getVehicleLng(vehicle);
 
+  const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number }>({
+    lat: targetLat,
+    lng: targetLng
+  });
+
+  // Keep the current rendered position as the starting point for any new animation.
+  // Using a stale target ref caused overlapping polls and re-renders to restart from
+  // the previous location, causing markers to visibly bounce between 2 points.
+  const currentPosRef = useRef(currentPos);
+  const animFrameRef = useRef<number | null>(null);
+
   useEffect(() => {
-    const startLat = prevTargetRef.current.lat;
-    const startLng = prevTargetRef.current.lng;
+    currentPosRef.current = currentPos;
+  }, [currentPos]);
 
-    if (startLat !== targetLat || startLng !== targetLng) {
-      const startTime = performance.now();
-      const duration = 1800; // 1.8s interpolation
+  useEffect(() => {
+    const target = { lat: targetLat, lng: targetLng };
+    const start = currentPosRef.current;
 
-      const animate = (currentTime: number) => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const ease = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
-
-        const nextLat = startLat + (targetLat - startLat) * ease;
-        const nextLng = startLng + (targetLng - startLng) * ease;
-
-        setCurrentPos({ lat: nextLat, lng: nextLng });
-
-        if (progress < 1) {
-          animFrameRef.current = requestAnimationFrame(animate);
-        } else {
-          prevTargetRef.current = { lat: targetLat, lng: targetLng };
-          setCurrentPos({ lat: targetLat, lng: targetLng });
-        }
-      };
-
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = requestAnimationFrame(animate);
-    } else {
-      setCurrentPos({ lat: targetLat, lng: targetLng });
+    // If already at target or change is negligible micro-jitter (< 1 meter), snap directly
+    const latDiff = Math.abs(start.lat - target.lat);
+    const lngDiff = Math.abs(start.lng - target.lng);
+    if (latDiff < 0.00002 && lngDiff < 0.00002) {
+      setCurrentPos(target);
+      currentPosRef.current = target;
+      return;
     }
 
+    const startTime = performance.now();
+    const duration = 1800; // 1.8s interpolation
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
+
+      const next = {
+        lat: start.lat + (target.lat - start.lat) * ease,
+        lng: start.lng + (target.lng - start.lng) * ease
+      };
+
+      currentPosRef.current = next;
+      setCurrentPos(next);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        currentPosRef.current = target;
+        setCurrentPos(target);
+        animFrameRef.current = null;
+      }
+    };
+
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
+    animFrameRef.current = requestAnimationFrame(animate);
+
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (animFrameRef.current !== null) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
     };
   }, [targetLat, targetLng]);
 

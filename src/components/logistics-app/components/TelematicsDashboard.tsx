@@ -191,6 +191,13 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
           ? t.driver
           : (typeof liveMatch.driver === 'string' ? liveMatch.driver : (liveMatch.driver?.name || 'Unassigned'));
 
+        const matchLat = typeof liveMatch.lat === 'number' && !isNaN(liveMatch.lat)
+          ? liveMatch.lat
+          : (typeof liveMatch.telematics?.lat === 'number' ? liveMatch.telematics.lat : (typeof t.lat === 'number' ? t.lat : (t.currentLatitude || 44.9796)));
+        const matchLng = typeof liveMatch.lng === 'number' && !isNaN(liveMatch.lng)
+          ? liveMatch.lng
+          : (typeof liveMatch.telematics?.lng === 'number' ? liveMatch.telematics.lng : (typeof t.lng === 'number' ? t.lng : (t.currentLongitude || -63.5044)));
+
         return {
           ...liveMatch,
           id: t.id,
@@ -207,13 +214,23 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
           model: t.type || liveMatch.model || 'Commercial Vehicle',
           capacityWeight: t.capacityWeight || liveMatch.capacityWeight || 4500,
           branchId: t.branchId || (t as any).branch_id || liveMatch.branchId,
-          tenantId: t.tenantId || (t as any).tenant_id || liveMatch.tenantId
+          tenantId: t.tenantId || (t as any).tenant_id || liveMatch.tenantId,
+          lat: matchLat,
+          lng: matchLng,
+          latitude: matchLat,
+          longitude: matchLng,
+          currentLatitude: matchLat,
+          currentLongitude: matchLng,
         } as VehicleRecord;
       }
 
       // No live signal yet from Fleet Complete for this truck: render standard database record
-      const lat = typeof t.lat === 'number' ? t.lat : (typeof t.currentLatitude === 'number' ? t.currentLatitude : (typeof t.gpsLat === 'number' ? t.gpsLat : 44.69098 + (idx * 0.01)));
-      const lng = typeof t.lng === 'number' ? t.lng : (typeof t.currentLongitude === 'number' ? t.currentLongitude : (typeof t.gpsLng === 'number' ? t.gpsLng : -63.59854 + (idx * 0.01)));
+      const lat = typeof t.lat === 'number' && !isNaN(t.lat) 
+        ? t.lat 
+        : (typeof t.gpsLat === 'number' && !isNaN(t.gpsLat) ? t.gpsLat : (typeof t.currentLatitude === 'number' && !isNaN(t.currentLatitude) ? t.currentLatitude : 44.9796));
+      const lng = typeof t.lng === 'number' && !isNaN(t.lng) 
+        ? t.lng 
+        : (typeof t.gpsLng === 'number' && !isNaN(t.gpsLng) ? t.gpsLng : (typeof t.currentLongitude === 'number' && !isNaN(t.currentLongitude) ? t.currentLongitude : -63.5044));
       const isMoving = t.status === 'In Transit' || t.status === 'MOVING';
       const status = isMoving ? 'MOVING' : 'STOPPED';
 

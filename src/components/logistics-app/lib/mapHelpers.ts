@@ -548,8 +548,8 @@ export const HIGHWAY_103_ROUTE = [
 export const getTruckCoords = (truck: any, simProgress?: Record<string, number>, branches: any[] = []) => {
   const isTruckGps = truck?.gpsSource === 'truck';
 
-  const rawLat = truck?.gpsLat ?? truck?.lat ?? truck?.latitude ?? truck?.current_latitude;
-  const rawLng = truck?.gpsLng ?? truck?.lng ?? truck?.longitude ?? truck?.current_longitude;
+  const rawLat = truck?.gpsLat ?? truck?.lat ?? truck?.latitude ?? truck?.currentLatitude ?? truck?.current_latitude;
+  const rawLng = truck?.gpsLng ?? truck?.lng ?? truck?.longitude ?? truck?.currentLongitude ?? truck?.current_longitude;
   const numLat = typeof rawLat === 'number' ? rawLat : (typeof rawLat === 'string' ? parseFloat(rawLat) : NaN);
   const numLng = typeof rawLng === 'number' ? rawLng : (typeof rawLng === 'string' ? parseFloat(rawLng) : NaN);
   const hasValidStaticGps = !isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0;

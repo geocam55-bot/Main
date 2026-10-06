@@ -2820,6 +2820,8 @@ app.use((req, res, next) => {
               dt.lng = inMemMatch.lng;
               dt.gpsLat = inMemMatch.lat;
               dt.gpsLng = inMemMatch.lng;
+              dt.currentLatitude = inMemMatch.lat;
+              dt.currentLongitude = inMemMatch.lng;
             }
             if (inMemMatch.gpsLastHandshake) dt.gpsLastHandshake = inMemMatch.gpsLastHandshake;
             if (typeof inMemMatch.gpsSpeed === 'number') {
@@ -6904,6 +6906,8 @@ async function syncFleetCompleteTelemetry() {
                       gpsIdlingMins: idlingMins,
                       lat,
                       lng,
+                      currentLatitude: lat,
+                      currentLongitude: lng,
                       isDriving: speed > 0,
                       isIdling: speed === 0 && idlingMins > 0,
                       isParked: speed === 0 && idlingMins === 0,

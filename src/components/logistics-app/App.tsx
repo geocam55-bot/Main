@@ -1462,7 +1462,33 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           const dedupedUsers = deduplicateUsers(filteredUsers);
 
           setDeliveries(filteredDeliveries);
-          setTrucks(dedupedTrucks);
+          // Preserve live telematics coordinates across state refreshes to eliminate vehicle jumping/bouncing
+          setTrucks(prevTrucks => {
+            if (!prevTrucks || prevTrucks.length === 0) return dedupedTrucks;
+            return dedupedTrucks.map(t => {
+              const existing = prevTrucks.find(pt => pt.id === t.id);
+              if (existing && typeof existing.lat === 'number' && !isNaN(existing.lat)) {
+                return {
+                  ...t,
+                  lat: existing.lat,
+                  lng: existing.lng,
+                  gpsLat: existing.gpsLat ?? existing.lat,
+                  gpsLng: existing.gpsLng ?? existing.lng,
+                  currentLatitude: existing.currentLatitude ?? existing.lat,
+                  currentLongitude: existing.currentLongitude ?? existing.lng,
+                  gpsStatus: existing.gpsStatus || t.gpsStatus,
+                  gpsLastHandshake: existing.gpsLastHandshake || t.gpsLastHandshake,
+                  gpsSpeed: existing.gpsSpeed ?? t.gpsSpeed,
+                  speed: existing.speed ?? t.speed,
+                  statusText: existing.statusText || t.statusText,
+                  isDriving: existing.isDriving ?? t.isDriving,
+                  isIdling: existing.isIdling ?? t.isIdling,
+                  isParked: existing.isParked ?? t.isParked,
+                };
+              }
+              return t;
+            });
+          });
           setBranches(filteredBranches);
           setUsers(dedupedUsers);
 
@@ -1546,7 +1572,32 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           });
 
           setDeliveries(rawDeliveries.filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id)));
-          setTrucks(normalizedRawTrucks);
+          setTrucks(prevTrucks => {
+            if (!prevTrucks || prevTrucks.length === 0) return normalizedRawTrucks;
+            return normalizedRawTrucks.map(t => {
+              const existing = prevTrucks.find(pt => pt.id === t.id);
+              if (existing && typeof existing.lat === 'number' && !isNaN(existing.lat)) {
+                return {
+                  ...t,
+                  lat: existing.lat,
+                  lng: existing.lng,
+                  gpsLat: existing.gpsLat ?? existing.lat,
+                  gpsLng: existing.gpsLng ?? existing.lng,
+                  currentLatitude: existing.currentLatitude ?? existing.lat,
+                  currentLongitude: existing.currentLongitude ?? existing.lng,
+                  gpsStatus: existing.gpsStatus || t.gpsStatus,
+                  gpsLastHandshake: existing.gpsLastHandshake || t.gpsLastHandshake,
+                  gpsSpeed: existing.gpsSpeed ?? t.gpsSpeed,
+                  speed: existing.speed ?? t.speed,
+                  statusText: existing.statusText || t.statusText,
+                  isDriving: existing.isDriving ?? t.isDriving,
+                  isIdling: existing.isIdling ?? t.isIdling,
+                  isParked: existing.isParked ?? t.isParked,
+                };
+              }
+              return t;
+            });
+          });
           setBranches(rawBranches.filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id)));
           setUsers(deduplicateUsers(rawUsers.filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id))));
           setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Local Cache)`);
@@ -1700,6 +1751,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                   lng: matchedLive.lng,
                   gpsLat: matchedLive.lat,
                   gpsLng: matchedLive.lng,
+                  currentLatitude: matchedLive.lat,
+                  currentLongitude: matchedLive.lng,
                   gpsSpeed: speed,
                   speed: speed,
                   gpsIdlingMins: idlingMins,
