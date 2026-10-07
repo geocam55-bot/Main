@@ -2,6 +2,11 @@ import { Hono } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { extractUserToken } from './auth-helper.ts';
 
+function normalizeUserRole(role: unknown): string {
+  const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return normalized === 'super_user' || normalized === 'superadmin' ? 'super_admin' : normalized;
+}
+
 export function profilesAPI(app: Hono) {
   // GET /profiles — returns all profiles visible to the authenticated user
   // Uses service role key to bypass RLS, then applies role-based filtering.
@@ -23,7 +28,7 @@ export function profilesAPI(app: Hono) {
         return c.json({ error: 'Unauthorized in profiles API: ' + (authError?.message || 'No user') }, 401);
       }
 
-      const role = user.user_metadata?.role || 'standard_user';
+      const role = normalizeUserRole(user.user_metadata?.role || 'standard_user');
       let orgId = user.user_metadata?.organizationId;
 
       // Fetch the caller's own profile to get a reliable organization_id
@@ -36,7 +41,7 @@ export function profilesAPI(app: Hono) {
       if (callerProfile?.organization_id) {
         orgId = callerProfile.organization_id;
       }
-      const effectiveRole = callerProfile?.role || role;
+      const effectiveRole = normalizeUserRole(callerProfile?.role || role);
 
       console.log(`[profiles-api] User ${user.email}, role=${effectiveRole}, org=${orgId}`);
 

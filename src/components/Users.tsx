@@ -55,6 +55,11 @@ interface Tenant {
   logo?: string;
 }
 
+function normalizeUserRole(role: unknown): string {
+  const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return normalized === 'super_user' || normalized === 'superadmin' ? 'super_admin' : normalized;
+}
+
 export function Users({ user, organization, onOrganizationUpdate }: UsersProps) {
   const [activeTab, setActiveTab] = useState('users');
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,12 +92,15 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
   const [missingUsersResult, setMissingUsersResult] = useState<{ missing: any[]; wrongOrg: any[] } | null>(null);
   const [inviteMethod, setInviteMethod] = useState<'email' | 'manual'>('email');
 
+  const currentRole = normalizeUserRole(user.role);
+  const isSuperAdmin = currentRole === 'super_admin';
+
   // Check permissions using the permissions system
   // Director can VIEW users but not add/edit/delete
-  const isAdmin = user.role === 'admin' || user.role === 'super_admin';
-  const canViewUsers = isAdmin || canView('users', user.role);
-  const canManageUsers = isAdmin || canAdd('users', user.role) || canChange('users', user.role);
-  const canManageAllUsers = isAdmin || canDelete('users', user.role);
+  const isAdmin = currentRole === 'admin' || isSuperAdmin;
+  const canViewUsers = isAdmin || canView('users', currentRole as UserRole);
+  const canManageUsers = isAdmin || canAdd('users', currentRole as UserRole) || canChange('users', currentRole as UserRole);
+  const canManageAllUsers = isAdmin || canDelete('users', currentRole as UserRole);
 
   const [users, setUsers] = useState<OrgUser[]>([]);
 
@@ -135,10 +143,10 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
 
   // Load tenants if super admin
   useEffect(() => {
-    if (user.role === 'super_admin') {
+    if (isSuperAdmin) {
       loadTenants();
     }
-  }, [user.role]);
+  }, [isSuperAdmin]);
 
   // Load user plans when users list changes
   useEffect(() => {
@@ -148,7 +156,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
   }, [users]);
 
   const loadUserPlans = async () => {
-    if (!['admin', 'super_admin'].includes(user.role)) return;
+    if (!isAdmin) return;
     try {
       const planMap: Record<string, PlanId> = {};
 
@@ -194,15 +202,17 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
 
       // Filter by organization for non-super_admin (server returns all accessible profiles)
       let filtered = allUsers;
-      if (user.role !== 'super_admin' && user.organizationId) {
+      if (!isSuperAdmin && user.organizationId) {
         filtered = allUsers.filter((u: any) => u.organization_id === user.organizationId);
       }
 
       // Map snake_case column names to camelCase for consistency
       const mappedUsers = filtered.map((u: any) => ({
         ...u,
+        role: normalizeUserRole(u.role),
         organizationId: u.organization_id,
         lastLogin: u.last_login,
+        managerId: u.manager_id || '',
       }));
 
       setUsers(mappedUsers);
@@ -261,16 +271,16 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
       (u.status && u.status.toLowerCase().includes(query));
     
     // Admin users should not see super_admin users
-    const roleFilter = user.role === 'super_admin' || u.role !== 'super_admin';
+    const roleFilter = isSuperAdmin || normalizeUserRole(u.role) !== 'super_admin';
     
     return matchesSearch && roleFilter;
   });
 
   // Get list of managers/directors for the manager dropdown
-  const managers = users.filter(u => (u.role === 'manager' || u.role === 'director') && u.status === 'active');
+  const managers = users.filter(u => (normalizeUserRole(u.role) === 'manager' || normalizeUserRole(u.role) === 'director') && u.status === 'active');
 
   // Check if there's an organization mismatch (user is not seeing their own org)
-  const hasOrgMismatch = users.length > 0 && user.role !== 'super_admin' && 
+  const hasOrgMismatch = users.length > 0 && !isSuperAdmin &&
     !users.some(u => u.organizationId === user.organizationId);
 
   // Check if user has invalid timestamp-based org ID
@@ -364,7 +374,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
   // Helper to get organization name for user table rows
   const getOrgName = (organizationId: string) => {
     // For Super Admin - look up from tenants list
-    if (user.role === 'super_admin') {
+    if (isSuperAdmin) {
       const tenant = tenants.find(t => t.id === organizationId);
       if (tenant && !looksLikeUuid(tenant.name)) {
         return tenant.name;
@@ -374,7 +384,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     }
     
     // For regular Admin - check if it's their organization
-    if (user.role === 'admin') {
+    if (currentRole === 'admin') {
       if (organizationId === user.organizationId) {
         // Show displayOrgName (which already handles UUID detection)
         return displayOrgName;
@@ -403,7 +413,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
       };
       
       // If super_admin, include the organizationId; also pass org name for auto-creation
-      if (user.role === 'super_admin') {
+      if (isSuperAdmin) {
         inviteData.organizationId = newUser.organizationId;
         const tenant = tenants.find(t => t.id === newUser.organizationId);
         if (tenant) inviteData.organizationName = tenant.name;
@@ -474,7 +484,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     const userToDelete = users.find(u => u.id === id);
     
     // Prevent admin from deleting super_admin users
-    if (user.role === 'admin' && userToDelete?.role === 'super_admin') {
+    if (currentRole === 'admin' && userToDelete && normalizeUserRole(userToDelete.role) === 'super_admin') {
       toast.error('You do not have permission to delete Super Admin users');
       return;
     }
@@ -484,16 +494,21 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     }
     
     try {
-      await usersAPI.delete(id);
+      const result = await usersAPI.delete(id);
       await loadUsers(); // Reload users after deletion
-    } catch (error) {
-      alert('Failed to remove user. Please try again.');
+      if (result?.alreadyRemoved) {
+        toast.info('User was already removed. The list has been refreshed.');
+      } else {
+        toast.success('User removed successfully');
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to remove user. Please try again.');
     }
   };
 
   const handleEditUser = (orgUser: OrgUser) => {
     // Prevent admin from editing super_admin users
-    if (user.role === 'admin' && orgUser.role === 'super_admin') {
+    if (currentRole === 'admin' && normalizeUserRole(orgUser.role) === 'super_admin') {
       toast.error('You do not have permission to edit Super Admin users');
       return;
     }
@@ -503,7 +518,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     setEditUser({
       name: orgUser.name,
       email: orgUser.email,
-      role: orgUser.role,
+      role: normalizeUserRole(orgUser.role) as UserRole,
       organizationId: orgUser.organizationId,
       status: orgUser.status,
       managerId: orgUser.managerId || '',
@@ -520,7 +535,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     const orgChanged = editUser.organizationId !== originalOrganizationId;
     
     // If organization changed, show warning and require confirmation
-    if (orgChanged && user.role === 'super_admin') {
+    if (orgChanged && isSuperAdmin) {
       const oldOrgName = getOrgName(originalOrganizationId);
       const newOrgName = getOrgName(editUser.organizationId);
       
@@ -545,69 +560,28 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     }
 
     try {
-      // First, try to update with manager_id
-      let updateData: any = {
+      const currentPlan = userPlanMap[selectedUser.id];
+      const updateData: any = {
         name: editUser.name,
         email: editUser.email,
         role: editUser.role,
         organization_id: editUser.organizationId,
         status: editUser.status,
-        updated_at: new Date().toISOString(),
+        manager_id: editUser.managerId || null,
+        ...(editUser.plan !== currentPlan ? { billing_plan: editUser.plan || null } : {}),
       };
 
-      // Try to include manager_id - if it fails, we'll retry without it
-      updateData.manager_id = editUser.managerId || null;
-
-      let { error } = await supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', selectedUser.id);
-
-      // If we get a column not found error for manager_id, retry without it
-      if (error && error.code === 'PGRST204' && error.message?.includes('manager_id')) {
-        // Show migration helper
-        setError('MANAGER_COLUMN_MISSING');
-        
-        // Retry the update without manager_id
-        const { manager_id, ...updateDataWithoutManager } = updateData;
-        const { error: retryError } = await supabase
-          .from('profiles')
-          .update(updateDataWithoutManager)
-          .eq('id', selectedUser.id);
-
-        if (retryError) {
-          toast.error('Failed to update user: ' + retryError.message);
-          return;
-        }
-
-        toast.warning('User updated, but manager assignment requires database migration. See instructions above.');
-        // Still save the plan even on manager_id fallback — fall through to plan logic below
-        error = null;
+      const result = await usersAPI.update(selectedUser.id, updateData);
+      if (result?.warnings?.length) {
+        if (result.warnings.some((warning: string) => warning.includes('manager assignment'))) setError('MANAGER_COLUMN_MISSING');
+        result.warnings.forEach((warning: string) => toast.warning(warning));
       }
-
-      if (error) {
-        toast.error('Failed to update user: ' + error.message);
-        return;
-      }
-
       toast.success('User updated successfully!');
 
       // Handle plan change if admin changed the billing plan
       if (selectedUser && editUser.plan) {
-        const currentPlan = userPlanMap[selectedUser.id];
         if (editUser.plan !== currentPlan) {
           try {
-            // Save billing_plan directly on the profiles table
-            const { error: planError } = await supabase
-              .from('profiles')
-              .update({
-                billing_plan: editUser.plan,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', selectedUser.id);
-            if (planError) {
-              throw planError;
-            }
             // Also try the subscription API (works after server deploy)
             try {
               if (currentPlan) {
@@ -621,14 +595,6 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
             toast.error('Profile saved but failed to update plan: ' + (planErr.message || 'Unknown error'));
           }
         }
-      } else if (selectedUser && !editUser.plan && userPlanMap[selectedUser.id]) {
-        // Plan was cleared — set to null
-        try {
-          await supabase
-            .from('profiles')
-            .update({ billing_plan: null, updated_at: new Date().toISOString() })
-            .eq('id', selectedUser.id);
-        } catch { /* non-critical */ }
       }
 
       // Reload users and plan map
@@ -645,7 +611,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
 
   const handleResetPassword = async (orgUser: OrgUser) => {
     // Prevent admin from resetting super_admin passwords
-    if (user.role === 'admin' && orgUser.role === 'super_admin') {
+    if (currentRole === 'admin' && normalizeUserRole(orgUser.role) === 'super_admin') {
       toast.error('You do not have permission to reset Super Admin passwords');
       return;
     }
@@ -769,7 +735,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
   }
 
   return (
-    <PermissionGate user={user} module="users" action="view">
+    <PermissionGate user={{ ...user, role: currentRole as UserRole }} module="users" action="view">
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div className="flex justify-end">
         <UsersModuleHelp
@@ -902,7 +868,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                       ) : (
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-foreground">{displayOrgName}</p>
-                          {(user.role === 'admin' || user.role === 'super_admin') && (
+                          {isAdmin && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -926,7 +892,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                       </p>
                     </div>
                   </div>
-                  {user.role === 'super_admin' && (
+                  {isSuperAdmin && (
                     <div className="mt-3 flex items-center gap-2 text-sm text-purple-700 bg-purple-100 px-3 py-1.5 rounded-md inline-flex">
                       <Shield className="h-4 w-4" />
                       <span>You can view, edit, and delete users from ALL organizations</span>
@@ -1003,7 +969,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                     </div>
 
                     {/* Organization selector - only for super admins */}
-                    {user.role === 'super_admin' && (
+                    {isSuperAdmin && (
                       <div className="space-y-2">
                         <Label htmlFor="organization">Organization *</Label>
                         <Select 
@@ -1051,7 +1017,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                           <SelectItem value="manager">Manager</SelectItem>
                           <SelectItem value="director">Director</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
-                          {user.role === 'super_admin' && (
+                          {isSuperAdmin && (
                             <SelectItem value="super_admin">Super Admin</SelectItem>
                           )}
                         </SelectContent>
@@ -1233,7 +1199,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                       <tr className="border-b border-border">
                         <th className="text-left py-3 px-4 text-sm text-muted-foreground">Actions</th>
                         <th className="text-left py-3 px-4 text-sm text-muted-foreground">User</th>
-                        {(user.role === 'super_admin' || user.role === 'admin') && (
+                        {isAdmin && (
                           <th className="text-left py-3 px-4 text-sm text-muted-foreground">Organization</th>
                         )}
                         <th className="text-left py-3 px-4 text-sm text-muted-foreground">Role</th>
@@ -1287,7 +1253,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                               </div>
                             </div>
                           </td>
-                          {(user.role === 'super_admin' || user.role === 'admin') && (
+                          {isAdmin && (
                             <td className="py-3 px-4">
                               <div className="flex flex-col">
                                 <span className="text-sm text-foreground">
@@ -1368,7 +1334,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                 </div>
 
                 {/* Organization selector - only for super admins */}
-                {user.role === 'super_admin' && (
+                {isSuperAdmin && (
                   <div className="space-y-2">
                     <Label htmlFor="organization" className="flex items-center gap-2">
                       Organization *
@@ -1432,7 +1398,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                       <SelectItem value="manager">Manager</SelectItem>
                       <SelectItem value="director">Director</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
-                      {user.role === 'super_admin' && (
+                      {isSuperAdmin && (
                         <SelectItem value="super_admin">Super Admin</SelectItem>
                       )}
                     </SelectContent>
@@ -1750,7 +1716,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
         </TabsContent>
 
         <TabsContent value="permissions" className="space-y-6">
-          <PermissionsManager userRole={user.role} />
+          <PermissionsManager userRole={currentRole as UserRole} />
         </TabsContent>
 
         <TabsContent value="recovery" className="space-y-6">
@@ -1759,7 +1725,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
           <UserRecovery 
             currentUserId={user.id} 
             currentOrganizationId={user.organizationId}
-            currentUserRole={user.role}
+            currentUserRole={currentRole}
           />
         </TabsContent>
       </Tabs>

@@ -26,6 +26,11 @@ import { fixProfileMismatch } from './fix-profile-mismatch.ts';
 
 const PREFIX = '/make-server-8405be07';
 
+function normalizeUserRole(role: unknown): string {
+  const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return normalized === 'super_user' || normalized === 'superadmin' ? 'super_admin' : normalized;
+}
+
 function sanitizeRedirectUri(uri: string): string {
   if (!uri) return '';
   let clean = uri.trim();
@@ -170,10 +175,11 @@ async function authenticateUser(c: any) {
       error: null,
       status: 200,
       supabase,
+      internal: true,
       user: mockUser as any,
       profile: {
         ...profile,
-        role: profile?.role || 'admin',
+        role: normalizeUserRole(profile?.role || 'admin'),
         organization_id: profile?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a'
       }
     };
@@ -188,7 +194,7 @@ async function authenticateUser(c: any) {
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) return { error: 'Unauthorized: ' + (authError?.message || 'No user'), status: 401, supabase, user: null as any, profile: null as any };
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-  const effectiveRole = profile?.role || user.user_metadata?.role || 'standard_user';
+  const effectiveRole = normalizeUserRole(profile?.role || user.user_metadata?.role || 'standard_user');
   const effectiveOrg = profile?.organization_id || user.user_metadata?.organizationId;
   return { error: null, status: 200, supabase, user, profile: { ...profile, role: effectiveRole, organization_id: effectiveOrg } };
 }
@@ -462,7 +468,7 @@ app.get(`${PREFIX}/quotes/tracking-status`, async (c) => {
     const { error: colErr } = await auth.supabase.from('quotes').select('tracking_status').limit(0);
     if (colErr) return c.json({ trackingStatuses: [], columnExists: false });
     let query = auth.supabase.from('quotes').select('id, tracking_status, status, title, contact_name');
-    if (auth.profile.role !== 'super_admin' && auth.profile.organization_id) {
+    if (normalizeUserRole(auth.profile.role) !== 'super_admin' && auth.profile.organization_id) {
       query = query.or(`organization_id.eq.${auth.profile.organization_id},organization_id.is.null`);
     }
     const { data } = await query;
@@ -3703,7 +3709,10 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
   try {
     const auth = await authenticateUser(c);
     if (auth.error) return c.json({ error: auth.error }, auth.status);
-    if (!['admin', 'super_admin'].includes(auth.profile.role)) {
+    if (auth.internal) return c.json({ error: 'Internal service identity cannot manage users' }, 403);
+    const actorRole = normalizeUserRole(auth.profile.role);
+    const isSuperAdmin = actorRole === 'super_admin';
+    if (actorRole !== 'admin' && !isSuperAdmin) {
       return c.json({ error: 'Forbidden' }, 403);
     }
 
@@ -3726,12 +3735,16 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
     if (existingProfileError) return c.json({ error: existingProfileError.message }, 500);
     if (!existingProfile) return c.json({ error: 'User not found' }, 404);
 
-    if (auth.profile.role !== 'super_admin' && existingProfile.organization_id !== auth.profile.organization_id) {
+    if (!isSuperAdmin && existingProfile.organization_id !== auth.profile.organization_id) {
       return c.json({ error: 'Forbidden' }, 403);
     }
 
-    if (auth.profile.role !== 'super_admin' && nextOrgId && nextOrgId !== auth.profile.organization_id) {
+    if (!isSuperAdmin && nextOrgId && nextOrgId !== auth.profile.organization_id) {
       return c.json({ error: 'Admins can only assign users within their own organization' }, 403);
+    }
+
+    if (!isSuperAdmin && nextRole && normalizeUserRole(nextRole) === 'super_admin') {
+      return c.json({ error: 'Only a super admin can assign the super admin role' }, 403);
     }
 
     const finalName = nextName ?? existingProfile.name;
@@ -3740,10 +3753,10 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
     const finalOrgId = nextOrgId ?? existingProfile.organization_id;
     const finalStatus = nextStatus ?? existingProfile.status;
 
-    const { data: authUsersData, error: listUsersError } = await auth.supabase.auth.admin.listUsers();
-    if (listUsersError) return c.json({ error: listUsersError.message }, 500);
+    const { data: authUserData, error: getAuthUserError } = await auth.supabase.auth.admin.getUserById(id);
+    if (getAuthUserError) return c.json({ error: getAuthUserError.message }, 500);
 
-    const authUser = authUsersData.users?.find((user: any) => user.id === id);
+    const authUser = authUserData.user;
     if (!authUser) return c.json({ error: 'Auth user not found' }, 404);
 
     const mergedUserMetadata = {
@@ -3776,7 +3789,106 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
 
     if (profileUpdateError) return c.json({ error: profileUpdateError.message }, 500);
 
-    return c.json({ success: true, user: updatedProfile });
+    const warnings: string[] = [];
+    if (body.manager_id !== undefined) {
+      const { error: managerUpdateError } = await auth.supabase
+        .from('profiles')
+        .update({ manager_id: body.manager_id || null })
+        .eq('id', id);
+      if (managerUpdateError) {
+        if (managerUpdateError.code === 'PGRST204' || managerUpdateError.code === '42703') {
+          warnings.push('User details were saved, but manager assignment requires the manager_id database migration.');
+        } else {
+          return c.json({ error: managerUpdateError.message }, 500);
+        }
+      } else {
+        updatedProfile.manager_id = body.manager_id || null;
+      }
+    }
+
+    if (body.billing_plan !== undefined) {
+      const { error: planUpdateError } = await auth.supabase
+        .from('profiles')
+        .update({ billing_plan: body.billing_plan || null })
+        .eq('id', id);
+      if (planUpdateError) {
+        if (planUpdateError.code === 'PGRST204' || planUpdateError.code === '42703') {
+          warnings.push('User details were saved, but billing plan storage is not available in the profiles table.');
+        } else {
+          return c.json({ error: planUpdateError.message }, 500);
+        }
+      } else {
+        updatedProfile.billing_plan = body.billing_plan || null;
+      }
+    }
+
+    return c.json({ success: true, user: updatedProfile, warnings });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+app.delete(`${PREFIX}/users/:id`, async (c) => {
+  try {
+    const auth = await authenticateUser(c);
+    if (auth.error) return c.json({ error: auth.error }, auth.status);
+    if (auth.internal) return c.json({ error: 'Internal service identity cannot manage users' }, 403);
+
+    const actorRole = normalizeUserRole(auth.profile.role);
+    const isSuperAdmin = actorRole === 'super_admin';
+    if (actorRole !== 'admin' && !isSuperAdmin) return c.json({ error: 'Forbidden' }, 403);
+
+    const id = c.req.param('id');
+    if (!id) return c.json({ error: 'Missing user id' }, 400);
+    if (id === auth.user.id) return c.json({ error: 'Cannot delete yourself' }, 400);
+
+    const { data: targetProfile, error: profileError } = await auth.supabase
+      .from('profiles')
+      .select('id, organization_id, role')
+      .eq('id', id)
+      .maybeSingle();
+    if (profileError) return c.json({ error: profileError.message }, 500);
+
+    let targetAuthUser: any = null;
+    if (!targetProfile) {
+      const { data: authUserData, error: authLookupError } = await auth.supabase.auth.admin.getUserById(id);
+      if (authLookupError) {
+        const isNotFound = authLookupError.status === 404 || authLookupError.message?.toLowerCase().includes('not found');
+        return c.json({ error: isNotFound ? 'User not found in Auth or profiles' : authLookupError.message }, isNotFound ? 404 : 500);
+      }
+      if (!authUserData?.user) return c.json({ error: 'User not found in Auth or profiles' }, 404);
+      targetAuthUser = authUserData.user;
+    }
+
+    const targetOrganizationId = targetProfile?.organization_id || targetAuthUser?.user_metadata?.organizationId;
+    const targetRole = normalizeUserRole(targetProfile?.role || targetAuthUser?.user_metadata?.role);
+
+    if (!isSuperAdmin && targetOrganizationId !== auth.profile.organization_id) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+    if (!isSuperAdmin && targetRole === 'super_admin') {
+      return c.json({ error: 'Only a super admin can delete a super admin user' }, 403);
+    }
+
+    const { error: deleteError } = await auth.supabase.auth.admin.deleteUser(id);
+    if (deleteError && !deleteError.message?.toLowerCase().includes('not found')) {
+      return c.json({ error: deleteError.message }, 500);
+    }
+
+    const { error: profileDeleteError } = await auth.supabase.from('profiles').delete().eq('id', id);
+    if (profileDeleteError) {
+      return c.json({ error: `Auth user removal was attempted, but profile cleanup failed: ${profileDeleteError.message}` }, 500);
+    }
+
+    const { data: remainingProfile, error: verifyError } = await auth.supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    if (verifyError) return c.json({ error: `Could not verify profile removal: ${verifyError.message}` }, 500);
+    if (remainingProfile) return c.json({ error: 'Profile still exists after the delete operation' }, 500);
+
+    return c.json({ success: true, deletedUserId: id, profileRemoved: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }

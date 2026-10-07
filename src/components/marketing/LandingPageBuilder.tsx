@@ -45,7 +45,27 @@ import {
   Search,
   X,
   Upload,
-  Clipboard
+  Clipboard,
+  Copy,
+  Monitor,
+  Smartphone,
+  Tablet,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  GripVertical,
+  Heading1,
+  Images,
+  MousePointerClick,
+  ClipboardList,
+  PanelTop,
+  Columns2,
+  Quote,
+  CircleHelp,
+  SeparatorHorizontal,
+  MoveVertical,
+  Share2,
+  PanelBottom
 } from 'lucide-react';
 
 interface LandingPageBuilderProps {
@@ -68,7 +88,7 @@ interface InventoryItem {
 
 interface PageElement {
   id: string;
-  type: 'heading' | 'paragraph' | 'image' | 'video' | 'button' | 'form' | 'product';
+  type: 'heading' | 'paragraph' | 'image' | 'video' | 'button' | 'form' | 'product' | 'hero' | 'gallery' | 'navigation' | 'columns' | 'testimonial' | 'faq' | 'divider' | 'spacer' | 'social' | 'footer';
   content: string;
   styles?: {
     alignment?: 'left' | 'center' | 'right';
@@ -101,7 +121,25 @@ interface PageSettings {
   metaDescription: string;
   conversionGoal: string;
   trackingCode: string;
+  backgroundColor: string;
+  textColor: string;
+  accentColor: string;
+  fontFamily: string;
+  contentWidth: string;
 }
+
+const DEFAULT_PAGE_SETTINGS: PageSettings = {
+  title: '',
+  slug: '',
+  metaDescription: '',
+  conversionGoal: '',
+  trackingCode: '',
+  backgroundColor: '#ffffff',
+  textColor: '#172033',
+  accentColor: '#2563eb',
+  fontFamily: 'Inter, sans-serif',
+  contentWidth: '1200px'
+};
 
 export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProps) {
   const [selectedPage, setSelectedPage] = useState<string | null>(null);
@@ -111,14 +149,12 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
 
   const [pageElements, setPageElements] = useState<PageElement[]>([]);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [draggedElement, setDraggedElement] = useState<string | null>(null);
   const [editingProductIndexes, setEditingProductIndexes] = useState<Record<string, number>>({});
   const [pageSettings, setPageSettings] = useState<PageSettings>({
-    title: '',
-    slug: '',
-    metaDescription: '',
-    conversionGoal: '',
-    trackingCode: ''
+    ...DEFAULT_PAGE_SETTINGS
   });
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
   // Inventory State
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -185,13 +221,7 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
         status: 'draft',
         content: {
           elements: [],
-          settings: {
-            title: '',
-            slug: '',
-            metaDescription: '',
-            conversionGoal: '',
-            trackingCode: ''
-          }
+          settings: DEFAULT_PAGE_SETTINGS
         },
         views_count: 0,
         conversions_count: 0,
@@ -241,7 +271,7 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
       if (selectedPage === id) {
         setSelectedPage(null);
         setPageElements([]);
-        setPageSettings({ title: '', slug: '', metaDescription: '', conversionGoal: '', trackingCode: '' });
+        setPageSettings({ ...DEFAULT_PAGE_SETTINGS });
       }
       toast.success('Page deleted');
     } catch (error) {
@@ -253,31 +283,30 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
     setSelectedPage(page.id);
     const content = page.content || {};
     setPageElements(content.elements || []);
-    setPageSettings(content.settings || {
-      title: page.name || '',
-      slug: page.slug || '',
-      metaDescription: '',
-      conversionGoal: '',
-      trackingCode: ''
+    setPageSettings({
+      ...DEFAULT_PAGE_SETTINGS,
+      ...content.settings,
+      title: content.settings?.title || page.name || '',
+      slug: content.settings?.slug || page.slug || ''
     });
   };
 
   const builderElements = [
     { 
-      icon: Type, 
+      icon: Heading1,
       name: 'Heading', 
       type: 'heading' as const, 
       category: 'Text', 
       defaultContent: 'Your Heading Here',
-      gradient: 'from-blue-500 to-indigo-600'
+      color: 'text-blue-700 bg-blue-50'
     },
     { 
-      icon: FileText, 
+      icon: AlignLeft,
       name: 'Paragraph', 
       type: 'paragraph' as const, 
       category: 'Text', 
       defaultContent: 'Add your paragraph text here. You can customize this content to match your message.',
-      gradient: 'from-emerald-400 to-teal-500'
+      color: 'text-teal-700 bg-teal-50'
     },
     { 
       icon: ImageIcon, 
@@ -285,7 +314,15 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
       type: 'image' as const, 
       category: 'Media', 
       defaultContent: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800',
-      gradient: 'from-pink-500 to-rose-500'
+      color: 'text-rose-700 bg-rose-50'
+    },
+    {
+      icon: Images,
+      name: 'Gallery',
+      type: 'gallery' as const,
+      category: 'Media',
+      defaultContent: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=700, https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=700, https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=700',
+      color: 'text-fuchsia-700 bg-fuchsia-50'
     },
     { 
       icon: Video, 
@@ -293,23 +330,95 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
       type: 'video' as const, 
       category: 'Media', 
       defaultContent: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      gradient: 'from-orange-400 to-red-500'
+      color: 'text-orange-700 bg-orange-50'
+    },
+    {
+      icon: PanelTop,
+      name: 'Navigation',
+      type: 'navigation' as const,
+      category: 'Layout',
+      defaultContent: 'Brand | About | Services | Contact',
+      color: 'text-slate-700 bg-slate-100'
+    },
+    {
+      icon: Columns2,
+      name: 'Columns',
+      type: 'columns' as const,
+      category: 'Layout',
+      defaultContent: 'Plan your project | Choose your materials | Build with confidence',
+      color: 'text-cyan-700 bg-cyan-50'
+    },
+    {
+      icon: SeparatorHorizontal,
+      name: 'Divider',
+      type: 'divider' as const,
+      category: 'Layout',
+      defaultContent: '',
+      color: 'text-slate-600 bg-slate-100'
+    },
+    {
+      icon: MoveVertical,
+      name: 'Spacer',
+      type: 'spacer' as const,
+      category: 'Layout',
+      defaultContent: '48',
+      color: 'text-indigo-700 bg-indigo-50'
+    },
+    {
+      icon: PanelBottom,
+      name: 'Footer',
+      type: 'footer' as const,
+      category: 'Layout',
+      defaultContent: '© 2026 Your Company. All rights reserved.',
+      color: 'text-slate-700 bg-slate-100'
+    },
+    {
+      icon: Layout,
+      name: 'Hero section',
+      type: 'hero' as const,
+      category: 'Sections',
+      defaultContent: 'Design a space that feels like you.|A considered process. Beautiful materials. Built around your life.|Start your project',
+      color: 'text-amber-700 bg-amber-50'
+    },
+    {
+      icon: Quote,
+      name: 'Testimonial',
+      type: 'testimonial' as const,
+      category: 'Sections',
+      defaultContent: 'The team made every detail easy, from the first sketch to the final finish.|Alex Morgan, homeowner',
+      color: 'text-violet-700 bg-violet-50'
     },
     { 
-      icon: Layout, 
+      icon: MousePointerClick,
       name: 'Button', 
       type: 'button' as const, 
       category: 'Interactive', 
       defaultContent: 'Click Here',
-      gradient: 'from-violet-500 to-purple-600'
+      color: 'text-blue-700 bg-blue-50'
     },
     { 
-      icon: FileText, 
+      icon: ClipboardList,
       name: 'Form', 
       type: 'form' as const, 
       category: 'Interactive', 
       defaultContent: 'Email Signup Form',
-      gradient: 'from-cyan-400 to-blue-500'
+      color: 'text-emerald-700 bg-emerald-50'
+    },
+    {
+      icon: CircleHelp,
+      name: 'FAQ',
+      type: 'faq' as const,
+      category: 'Interactive',
+      defaultContent: 'How does it work?|We will guide you through each step and keep you informed along the way.',
+      color: 'text-amber-700 bg-amber-50'
+    },
+    {
+      icon: Share2,
+      name: 'Social links',
+      type: 'social' as const,
+      category: 'Interactive',
+      defaultContent: 'Instagram | Facebook | LinkedIn',
+      color: 'text-pink-700 bg-pink-50'
     },
     { 
       icon: Package, 
@@ -317,7 +426,7 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
       type: 'product' as const, 
       category: 'Commerce', 
       defaultContent: 'Select Product',
-      gradient: 'from-amber-400 to-orange-500'
+      color: 'text-orange-700 bg-orange-50'
     },
   ];
 
@@ -413,6 +522,14 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
       el.id === id ? { ...el, content } : el
     ));
   };
+
+  const handleUpdateAlignment = (id: string, alignment: 'left' | 'center' | 'right') => {
+    setPageElements(pageElements.map((element) =>
+      element.id === id
+        ? { ...element, styles: { ...element.styles, alignment } }
+        : element
+    ));
+  };
   
   const handleUpdateProductData = (id: string, field: string, value: any, productIndex: number = 0) => {
     setPageElements(pageElements.map(el => {
@@ -460,6 +577,36 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
       [newElements[index], newElements[index + 1]] = [newElements[index + 1], newElements[index]];
       setPageElements(newElements);
     }
+  };
+
+  const handleDuplicateElement = (id: string) => {
+    const index = pageElements.findIndex((element) => element.id === id);
+    if (index < 0) return;
+    const original = pageElements[index];
+    const duplicate: PageElement = {
+      ...original,
+      id: `element-${Date.now()}`,
+      styles: original.styles ? { ...original.styles } : undefined,
+      products: original.products?.map((product) => ({ ...product })),
+      productData: original.productData ? { ...original.productData } : undefined
+    };
+    const nextElements = [...pageElements];
+    nextElements.splice(index + 1, 0, duplicate);
+    setPageElements(nextElements);
+    setSelectedElement(duplicate.id);
+    toast.success('Element duplicated');
+  };
+
+  const handleDropElement = (targetId: string) => {
+    if (!draggedElement || draggedElement === targetId) return;
+    const nextElements = [...pageElements];
+    const sourceIndex = nextElements.findIndex((element) => element.id === draggedElement);
+    const targetIndex = nextElements.findIndex((element) => element.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const [movedElement] = nextElements.splice(sourceIndex, 1);
+    nextElements.splice(targetIndex, 0, movedElement);
+    setPageElements(nextElements);
+    setDraggedElement(null);
   };
 
   // Helper function to convert file to base64
@@ -632,7 +779,7 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
                 </Button>
               </div>
             ) : (
-              <h1 className="text-4xl font-bold text-gray-900">{element.content}</h1>
+              <h1 className="text-4xl font-bold" style={{ color: pageSettings.textColor }}>{element.content}</h1>
             )}
           </div>
         );
@@ -661,7 +808,7 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
                 </Button>
               </div>
             ) : (
-              <p className="text-lg text-gray-700">{element.content}</p>
+              <p className="text-lg" style={{ color: pageSettings.textColor }}>{element.content}</p>
             )}
           </div>
         );
@@ -813,7 +960,7 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
                 </Button>
               </div>
             ) : (
-              <Button size="lg" className="text-lg px-8 py-6">{element.content}</Button>
+              <Button size="lg" className="text-lg px-8 py-6" style={{ backgroundColor: pageSettings.accentColor }}>{element.content}</Button>
             )}
           </div>
         );
@@ -850,6 +997,82 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
             </div>
           </div>
         );
+
+      case 'hero': {
+        const [title, description, action] = element.content.split('|');
+        return (
+          <section className="rounded-lg bg-slate-950 px-8 py-16 text-center text-white sm:px-14 sm:py-24">
+            <h1 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tight sm:text-6xl">{title}</h1>
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">{description}</p>
+            <Button className="mt-8" style={{ backgroundColor: pageSettings.accentColor }}>{action || 'Learn more'}</Button>
+          </section>
+        );
+      }
+
+      case 'navigation': {
+        const [brand, ...links] = element.content.split('|').map((item) => item.trim());
+        return (
+          <nav className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-2 py-4" aria-label="Page navigation">
+            <span className="text-lg font-semibold">{brand || 'Brand'}</span>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">{links.map((link, index) => <span key={`${link}-${index}`}>{link}</span>)}</div>
+          </nav>
+        );
+      }
+
+      case 'columns': {
+        const columns = element.content.split('|').map((item) => item.trim()).filter(Boolean);
+        return (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {columns.map((column, index) => <div key={`${column}-${index}`} className="min-h-32 border-t-2 border-slate-200 px-4 py-5 text-lg font-medium">{column}</div>)}
+          </div>
+        );
+      }
+
+      case 'gallery': {
+        const images = element.content.split(',').map((item) => item.trim()).filter(Boolean);
+        return (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {images.map((image, index) => <img key={`${image}-${index}`} src={image} alt={`Gallery image ${index + 1}`} className="aspect-[4/3] w-full rounded-md object-cover" />)}
+          </div>
+        );
+      }
+
+      case 'testimonial': {
+        const [quote, author] = element.content.split('|');
+        return (
+          <figure className="mx-auto max-w-3xl py-8 text-center">
+            <Quote className="mx-auto mb-4 h-7 w-7 text-slate-400" />
+            <blockquote className="text-2xl font-medium leading-relaxed">“{quote}”</blockquote>
+            <figcaption className="mt-4 text-sm text-slate-500">{author}</figcaption>
+          </figure>
+        );
+      }
+
+      case 'faq': {
+        const [question, answer] = element.content.split('|');
+        return (
+          <details className="group border-b border-slate-200 py-4">
+            <summary className="cursor-pointer list-none font-medium marker:hidden">{question}<span className="float-right text-slate-400">+</span></summary>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{answer}</p>
+          </details>
+        );
+      }
+
+      case 'divider':
+        return <hr className="my-6 border-0 border-t border-slate-200" />;
+
+      case 'spacer': {
+        const height = Math.min(Math.max(Number.parseInt(element.content, 10) || 48, 8), 240);
+        return <div aria-hidden="true" style={{ height }} className="border border-dashed border-slate-200 bg-slate-50/40" />;
+      }
+
+      case 'social': {
+        const networks = element.content.split('|').map((item) => item.trim()).filter(Boolean);
+        return <div className="flex flex-wrap justify-center gap-3">{networks.map((network, index) => <span key={`${network}-${index}`} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium">{network}</span>)}</div>;
+      }
+
+      case 'footer':
+        return <footer className="border-t border-slate-200 py-6 text-center text-sm text-slate-500">{element.content}</footer>;
 
       case 'product':
         // Support both new products array and old productData for backwards compatibility
@@ -1052,7 +1275,7 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
                           <div className="text-xs font-medium opacity-90 uppercase tracking-wide">Price</div>
                           <div className="text-3xl font-bold">${productData.price.toFixed(2)}</div>
                         </div>
-                        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700">Buy Now</Button>
+                        <Button size="sm" style={{ backgroundColor: pageSettings.accentColor }}>Buy Now</Button>
                       </div>
                     </div>
                   </div>
@@ -1211,91 +1434,162 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
-                <TabsContent value="builder" className="m-0 space-y-4">
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-700 font-medium">Add Elements</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
-                      {builderElements.map((element) => {
-                        const Icon = element.icon;
-                        return (
-                          <div key={element.name} className="relative group flex flex-col items-center">
-                            <button
-                              onClick={() => handleAddElement(element.type, element.defaultContent)}
-                              className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${element.gradient} p-0 flex items-center justify-center shadow-sm hover:shadow-lg hover:scale-105 transition-all duration-200 cursor-pointer border-0 ring-1 ring-black/5`}
-                            >
-                              <Icon className="h-6 w-6 sm:h-7 sm:w-7 text-white drop-shadow-sm" />
-                            </button>
-                            <div className="absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
-                              <div className="bg-gray-900 text-white text-xs py-1 px-2.5 rounded-md shadow-lg whitespace-nowrap">
-                                {element.name}
-                              </div>
-                              <div className="w-2 h-2 bg-gray-900 rotate-45 absolute -top-1 left-1/2 transform -translate-x-1/2"></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="border-2 border-gray-200 rounded-lg p-6 min-h-[500px] bg-white space-y-4 shadow-sm">
-                    {pageElements.length === 0 ? (
-                      <div className="text-center text-gray-400 py-20">
-                        <Layout className="h-12 w-12 mx-auto mb-4" />
-                        <p className="font-medium">Click elements above to build your page</p>
-                        <p className="text-sm mt-2">Elements will appear here</p>
+                <TabsContent value="builder" className="m-0 -mx-6 -mb-6 min-h-[calc(100vh-158px)]">
+                  <div className="grid min-h-[calc(100vh-158px)] grid-cols-1 bg-[#e9edf2] lg:grid-cols-[230px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)_270px]">
+                    <aside className="border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
+                      <div className="border-b border-slate-100 px-4 py-4">
+                        <div className="text-sm font-semibold text-slate-900">Add to page</div>
+                        <div className="mt-1 text-xs text-slate-500">Click a block to insert it</div>
                       </div>
-                    ) : (
-                      pageElements.map((element) => (
-                        <div key={element.id} className="relative group">
-                          {selectedElement !== element.id && (
-                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => handleMoveElement(element.id, 'up')}
-                                className="h-8 w-8 p-0"
-                              >
-                                ↑
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => handleMoveElement(element.id, 'down')}
-                                className="h-8 w-8 p-0"
-                              >
-                                ↓
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDeleteElement(element.id)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                      <div className="space-y-5 p-3">
+                        {['Sections', 'Text', 'Media', 'Layout', 'Interactive', 'Commerce'].map((category) => (
+                          <section key={category}>
+                            <h3 className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{category}</h3>
+                            <div className="grid grid-cols-5 gap-1.5">
+                              {builderElements.filter((element) => element.category === category).map((element) => {
+                                const Icon = element.icon;
+                                return (
+                                  <div key={element.name} className="group relative flex justify-center">
+                                    <button
+                                      onClick={() => handleAddElement(element.type, element.defaultContent)}
+                                      aria-label={`Add ${element.name}`}
+                                      title={element.name}
+                                      className={`flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:ring-1 hover:ring-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${element.color}`}
+                                    >
+                                      <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                                    </button>
+                                    <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">{element.name}</span>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          )}
-                          <div onClick={() => setSelectedElement(element.id)}>
-                            {renderElement(element)}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                          </section>
+                        ))}
+                      </div>
+                    </aside>
 
-                  {pageElements.length > 0 && (
-                    <div className="flex gap-2">
-                      <Button variant="outline" onClick={() => {
-                        if (confirm('Clear all elements?')) {
-                          setPageElements([]);
-                          setSelectedElement(null);
-                          toast.success('Canvas cleared');
-                        }
-                      }}>
-                        Clear Canvas
-                      </Button>
-                    </div>
-                  )}
+                    <section className="flex min-w-0 flex-col">
+                      <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <span className="font-medium text-slate-800">Page canvas</span>
+                          <span>/</span>
+                          <span>{pageElements.length} {pageElements.length === 1 ? 'block' : 'blocks'}</span>
+                        </div>
+                        <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-0.5">
+                          <Button variant={previewDevice === 'desktop' ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" aria-label="Desktop canvas" title="Desktop" onClick={() => setPreviewDevice('desktop')}><Monitor className="h-4 w-4" /></Button>
+                          <Button variant={previewDevice === 'tablet' ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" aria-label="Tablet canvas" title="Tablet" onClick={() => setPreviewDevice('tablet')}><Tablet className="h-4 w-4" /></Button>
+                          <Button variant={previewDevice === 'mobile' ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" aria-label="Mobile canvas" title="Mobile" onClick={() => setPreviewDevice('mobile')}><Smartphone className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                      <div className="min-h-[600px] flex-1 overflow-auto p-5 sm:p-8" style={{ backgroundColor: '#e9edf2', backgroundImage: 'radial-gradient(#c9d0da 0.7px, transparent 0.7px)', backgroundSize: '16px 16px' }}>
+                        <div
+                          className="mx-auto min-h-[650px] space-y-4 p-6 shadow-xl ring-1 ring-slate-900/10 transition-[max-width] duration-200 sm:p-10"
+                          style={{ maxWidth: previewDevice === 'mobile' ? '375px' : previewDevice === 'tablet' ? '768px' : pageSettings.contentWidth, backgroundColor: pageSettings.backgroundColor, color: pageSettings.textColor, fontFamily: pageSettings.fontFamily }}
+                        >
+                          {pageElements.length === 0 ? (
+                            <div className="mx-auto max-w-2xl py-28 text-center">
+                              <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500"><Layout className="h-5 w-5" /></div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Your page starts here</p>
+                              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{pageSettings.title || 'Build a page that brings your story to life.'}</h1>
+                              <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-500">Choose a block from the left to begin shaping your landing page.</p>
+                              <Button className="mt-6" onClick={() => handleAddElement('heading', 'Your Heading Here')}><Plus className="mr-2 h-4 w-4" />Add a heading</Button>
+                            </div>
+                          ) : pageElements.map((element, index) => (
+                            <div
+                              key={element.id}
+                              draggable
+                              onDragStart={() => setDraggedElement(element.id)}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={(event) => { event.preventDefault(); handleDropElement(element.id); }}
+                              onDragEnd={() => setDraggedElement(null)}
+                              onClick={() => setSelectedElement(element.id)}
+                              className={`group relative cursor-pointer transition-shadow ${draggedElement === element.id ? 'opacity-50' : ''} ${selectedElement === element.id ? 'z-[1] rounded-sm ring-2 ring-blue-500 ring-offset-2' : 'hover:outline hover:outline-1 hover:outline-blue-300'}`}
+                            >
+                              <div className={`absolute -left-9 top-2 z-10 flex items-center gap-0.5 rounded-md border border-slate-200 bg-white p-0.5 shadow-sm transition-opacity ${selectedElement === element.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                <span className="flex h-7 w-6 cursor-grab items-center justify-center text-slate-400" title="Drag to reorder"><GripVertical className="h-4 w-4" /></span>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-slate-500" title="Duplicate block" aria-label="Duplicate block" onClick={(event) => { event.stopPropagation(); handleDuplicateElement(element.id); }}><Copy className="h-3.5 w-3.5" /></Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" title="Delete block" aria-label="Delete block" onClick={(event) => { event.stopPropagation(); handleDeleteElement(element.id); }}><Trash2 className="h-3.5 w-3.5" /></Button>
+                              </div>
+                              <div className="pointer-events-none">{renderElement(element, true)}</div>
+                              <span className="absolute -top-2 left-2 rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white opacity-0 transition-opacity group-hover:opacity-100">{element.type} {index + 1}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
+
+                    <aside className="border-t border-slate-200 bg-white xl:border-l xl:border-t-0">
+                      {(() => {
+                        const element = pageElements.find((item) => item.id === selectedElement);
+                        return (
+                          <>
+                            <div className="border-b border-slate-100 px-4 py-4">
+                              <div className="text-sm font-semibold text-slate-900">{element ? `${element.type.charAt(0).toUpperCase()}${element.type.slice(1)} properties` : 'Page design'}</div>
+                              <div className="mt-1 text-xs text-slate-500">{element ? 'Edit the selected block' : 'Set the look for your page'}</div>
+                            </div>
+                            <div className="space-y-5 p-4">
+                              {element ? (
+                                <>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-600">Content</label>
+                                    {['paragraph', 'image', 'video', 'hero', 'gallery', 'navigation', 'columns', 'testimonial', 'faq', 'social', 'footer'].includes(element.type) ? (
+                                      <Textarea value={element.content} onChange={(event) => handleUpdateElement(element.id, event.target.value)} rows={element.type === 'paragraph' || element.type === 'hero' || element.type === 'gallery' ? 5 : 3} />
+                                    ) : element.type !== 'product' ? (
+                                      <Input value={element.content} onChange={(event) => handleUpdateElement(element.id, event.target.value)} />
+                                    ) : (
+                                      <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Product cards use your inventory details.</div>
+                                    )}
+                                  </div>
+                                  {(element.type === 'heading' || element.type === 'paragraph' || element.type === 'button' || element.type === 'hero' || element.type === 'testimonial') && (
+                                    <div className="space-y-2">
+                                      <label className="text-xs font-medium text-slate-600">Alignment</label>
+                                      <div className="flex gap-1">
+                                        {([{ value: 'left', Icon: AlignLeft }, { value: 'center', Icon: AlignCenter }, { value: 'right', Icon: AlignRight }] as const).map(({ value, Icon }) => (
+                                          <Button key={value} variant={(element.styles?.alignment || 'center') === value ? 'secondary' : 'outline'} size="sm" className="h-9 flex-1" aria-label={`Align ${value}`} title={`Align ${value}`} onClick={() => handleUpdateAlignment(element.id, value)}><Icon className="h-4 w-4" /></Button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {element.type === 'product' && (
+                                    <Button variant="outline" className="w-full" onClick={() => { setEditingProductIndexes({ ...editingProductIndexes, [element.id]: 0 }); setShowProductSelector(true); }}><Search className="mr-2 h-4 w-4" />Choose inventory product</Button>
+                                  )}
+                                  <Button variant="ghost" size="sm" className="w-full text-slate-500" onClick={() => setSelectedElement(null)}>Deselect block</Button>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-600">Page background</label>
+                                    <div className="flex items-center gap-2"><Input type="color" value={pageSettings.backgroundColor} onChange={(event) => setPageSettings({ ...pageSettings, backgroundColor: event.target.value })} className="h-9 w-12 p-1" /><Input value={pageSettings.backgroundColor} onChange={(event) => setPageSettings({ ...pageSettings, backgroundColor: event.target.value })} className="h-9 font-mono text-xs uppercase" /></div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-600">Text color</label>
+                                    <div className="flex items-center gap-2"><Input type="color" value={pageSettings.textColor} onChange={(event) => setPageSettings({ ...pageSettings, textColor: event.target.value })} className="h-9 w-12 p-1" /><Input value={pageSettings.textColor} onChange={(event) => setPageSettings({ ...pageSettings, textColor: event.target.value })} className="h-9 font-mono text-xs uppercase" /></div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-600">Brand accent</label>
+                                    <div className="flex items-center gap-2"><Input type="color" value={pageSettings.accentColor} onChange={(event) => setPageSettings({ ...pageSettings, accentColor: event.target.value })} className="h-9 w-12 p-1" /><Input value={pageSettings.accentColor} onChange={(event) => setPageSettings({ ...pageSettings, accentColor: event.target.value })} className="h-9 font-mono text-xs uppercase" /></div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-600">Typography</label>
+                                    <select value={pageSettings.fontFamily} onChange={(event) => setPageSettings({ ...pageSettings, fontFamily: event.target.value })} className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+                                      <option value="Inter, sans-serif">Modern sans</option><option value="Georgia, serif">Editorial serif</option><option value="Arial, sans-serif">Classic sans</option><option value="'Trebuchet MS', sans-serif">Friendly rounded</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-600">Content width</label>
+                                    <select value={pageSettings.contentWidth} onChange={(event) => setPageSettings({ ...pageSettings, contentWidth: event.target.value })} className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+                                      <option value="960px">Compact</option><option value="1200px">Wide</option><option value="1440px">Extra wide</option>
+                                    </select>
+                                  </div>
+                                  <div className="border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">Select a block on the canvas to edit its content and alignment.</div>
+                                </>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </aside>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="settings" className="m-0 space-y-4 max-w-2xl mx-auto">
@@ -1382,12 +1676,48 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
                           rows={4}
                         />
                       </div>
+                      <div className="border-t pt-5 space-y-4">
+                        <h3 className="text-sm font-semibold text-gray-900">Design</h3>
+                        <div className="grid grid-cols-3 gap-3">
+                          <label className="space-y-2 text-sm text-gray-700">
+                            <span>Background</span>
+                            <Input type="color" value={pageSettings.backgroundColor} onChange={(e) => setPageSettings({ ...pageSettings, backgroundColor: e.target.value })} className="h-10 p-1" />
+                          </label>
+                          <label className="space-y-2 text-sm text-gray-700">
+                            <span>Text</span>
+                            <Input type="color" value={pageSettings.textColor} onChange={(e) => setPageSettings({ ...pageSettings, textColor: e.target.value })} className="h-10 p-1" />
+                          </label>
+                          <label className="space-y-2 text-sm text-gray-700">
+                            <span>Accent</span>
+                            <Input type="color" value={pageSettings.accentColor} onChange={(e) => setPageSettings({ ...pageSettings, accentColor: e.target.value })} className="h-10 p-1" />
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <label className="space-y-2 text-sm text-gray-700 block">
+                            <span>Typography</span>
+                            <select value={pageSettings.fontFamily} onChange={(e) => setPageSettings({ ...pageSettings, fontFamily: e.target.value })} className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm">
+                              <option value="Inter, sans-serif">Modern sans</option>
+                              <option value="Georgia, serif">Editorial serif</option>
+                              <option value="Arial, sans-serif">Classic sans</option>
+                              <option value="'Trebuchet MS', sans-serif">Friendly rounded</option>
+                            </select>
+                          </label>
+                          <label className="space-y-2 text-sm text-gray-700 block">
+                            <span>Content width</span>
+                            <select value={pageSettings.contentWidth} onChange={(e) => setPageSettings({ ...pageSettings, contentWidth: e.target.value })} className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm">
+                              <option value="960px">Compact</option>
+                              <option value="1200px">Wide</option>
+                              <option value="1440px">Extra wide</option>
+                            </select>
+                          </label>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 </TabsContent>
 
                 <TabsContent value="preview" className="m-0">
-                  <div className="border rounded-lg overflow-hidden max-w-5xl mx-auto shadow-lg">
+                  <div className="border rounded-lg overflow-hidden mx-auto shadow-lg" style={{ maxWidth: previewDevice === 'mobile' ? '390px' : previewDevice === 'tablet' ? '768px' : '100%' }}>
                     <div className="bg-gray-100 p-4 border-b">
                       <div className="flex items-center gap-2">
                         <div className="flex gap-1">
@@ -1402,7 +1732,12 @@ export function LandingPageBuilder({ user, accessToken }: LandingPageBuilderProp
                         />
                       </div>
                     </div>
-                    <div className="bg-white p-8 min-h-[500px] space-y-6">
+                    <div className="flex items-center justify-center gap-1 border-b bg-white py-2">
+                      <Button variant={previewDevice === 'desktop' ? 'secondary' : 'ghost'} size="sm" aria-label="Desktop preview" title="Desktop preview" onClick={() => setPreviewDevice('desktop')}><Monitor className="h-4 w-4" /></Button>
+                      <Button variant={previewDevice === 'tablet' ? 'secondary' : 'ghost'} size="sm" aria-label="Tablet preview" title="Tablet preview" onClick={() => setPreviewDevice('tablet')}><Tablet className="h-4 w-4" /></Button>
+                      <Button variant={previewDevice === 'mobile' ? 'secondary' : 'ghost'} size="sm" aria-label="Mobile preview" title="Mobile preview" onClick={() => setPreviewDevice('mobile')}><Smartphone className="h-4 w-4" /></Button>
+                    </div>
+                    <div className="p-4 sm:p-8 min-h-[500px] space-y-6" style={{ backgroundColor: pageSettings.backgroundColor, color: pageSettings.textColor, fontFamily: pageSettings.fontFamily, maxWidth: pageSettings.contentWidth, margin: '0 auto' }}>
                       {pageElements.length === 0 ? (
                         <div className="max-w-2xl mx-auto text-center py-20">
                           <h1 className="text-4xl text-gray-900 mb-4">{pageSettings.title || 'Your Landing Page Title'}</h1>
