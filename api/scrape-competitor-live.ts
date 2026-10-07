@@ -1,3 +1,5 @@
+import { runRetailPriceComparison } from '../src/services/playwright-scraper.js';
+
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
@@ -15,9 +17,7 @@ export default async function handler(req: any, res: any) {
   if (!searchTerm || searchTerm.length > 300) {
     return res.status(400).json({ success: false, error: 'A search term of 1 to 300 characters is required' });
   }
-
   try {
-    const { runRetailPriceComparison } = await import('../src/services/playwright-scraper');
     const result = await runRetailPriceComparison(searchTerm, {
       sku: item.sku,
       name: item.productName || item.name,
