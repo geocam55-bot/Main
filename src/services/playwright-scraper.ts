@@ -515,7 +515,7 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
   // 7. TOKEN & SIGNIFICANT WORDS MATCHING (+ up to 45)
   // ==========================================
   const stopWords = new Set(['the', 'and', 'for', 'with', 'in', 'to', 'of', 'by', 'on', 'at', 'from', 'a', 'an', 'per', 'ea']);
-  const cleanInvWords = (invTitle + ' ' + (inventoryItem.short_description || ''))
+  const cleanInvWords = (invTitle + ' ' + invDesc + ' ' + (inventoryItem.short_description || ''))
     .replace(/[^a-z0-9\/\- ]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length >= 2 && !stopWords.has(w));
@@ -576,20 +576,41 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
 
 export function getSearchTerms(item: InventoryItem): string[] {
   const terms: string[] = [];
+  const identifierTerms: string[] = [];
   const parsedAttrs = parseItemAttributes(item.attributes);
   const brand = extractBrand(item);
+  const rawDesc = (item.description || item.short_description || item.name || '').trim();
 
-  // 0. SKU / Supplier SKU (Highest precision direct retailer lookup, e.g. 1016219)
-  if (item.sku && String(item.sku).trim().length >= 3) {
-    terms.push(String(item.sku).trim());
+  // Put the product description first; an internal inventory SKU is rarely searchable at a retailer.
+  if (rawDesc) {
+    const cleaned = rawDesc
+      .replace(/["']/g, ' ')
+      .replace(/\bSPLP\b/gi, 'Shiplap')
+      .replace(/\bLUM\b/gi, 'Lumber')
+      .replace(/\bBALU\b/gi, 'Baluster')
+      .replace(/\bPREPAINTED\b/gi, 'Primed')
+      .replace(/\bFRAM\.\b/gi, 'Framing')
+      .replace(/\bREG\.\b/gi, 'Regular')
+      .replace(/\bELEC\b|\bELECT\b/gi, 'Electric')
+      .replace(/#.*$/, '')
+      .replace(/&.*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const words = cleaned.split(' ').filter(w => w.length > 1);
+    if (words.length > 4) {
+      terms.push(words.slice(0, 4).join(' '));
+    }
+    if (cleaned) terms.push(cleaned);
   }
-  if (item.supplier_sku && String(item.supplier_sku).trim().length >= 3 && item.supplier_sku !== item.sku) {
-    terms.push(String(item.supplier_sku).trim());
+
+  // Retain retailer-facing identifiers as secondary queries.
+  if (item.sku && String(item.sku).trim().length >= 3) {
+    identifierTerms.push(String(item.sku).trim());
   }
 
   // 1. UPC barcode (highest precision)
   if (item.upc && String(item.upc).trim().length >= 6) {
-    terms.push(String(item.upc).trim());
+    identifierTerms.unshift(String(item.upc).trim());
   }
 
   // 2. Brand + Manufacturer Part / Model # (highest precision text query)
@@ -597,12 +618,16 @@ export function getSearchTerms(item: InventoryItem): string[] {
   if (mfg && String(mfg).trim().length >= 3 && !/^\d{1,3}$/.test(String(mfg))) {
     const cleanMfg = String(mfg).trim();
     if (brand) {
-      terms.push(`${brand} ${cleanMfg}`);
+      identifierTerms.unshift(`${brand} ${cleanMfg}`);
     }
-    terms.push(cleanMfg);
+    identifierTerms.unshift(cleanMfg);
   }
 
-  // 3. Top High-Intent Search Keywords from Catalog Enrichment
+  if (item.supplier_sku && String(item.supplier_sku).trim().length >= 3 && item.supplier_sku !== item.sku) {
+    identifierTerms.unshift(String(item.supplier_sku).trim());
+  }
+
+  // High-intent catalog keywords supplement the product description.
   const keywords = parseSearchKeywords(item.search_keywords);
   if (keywords.length > 0) {
     // Pick top 2 most descriptive keywords (between 8 and 45 chars)
@@ -619,39 +644,6 @@ export function getSearchTerms(item: InventoryItem): string[] {
     terms.push(`${brand} ${dims} ${cat}`.trim());
   }
 
-  // 5. Cleaned Title / POS Description Query
-  const rawDesc = (item.description || item.short_description || item.name || '').trim();
-  if (rawDesc) {
-    // Clean POS abbreviations
-    const cleaned = rawDesc
-      .replace(/["']/g, ' ')
-      .replace(/\bSPLP\b/gi, 'Shiplap')
-      .replace(/\bLUM\b/gi, 'Lumber')
-      .replace(/\bBALU\b/gi, 'Baluster')
-      .replace(/\bPREPAINTED\b/gi, 'Primed')
-      .replace(/\bFRAM\.\b/gi, 'Framing')
-      .replace(/\bREG\.\b/gi, 'Regular')
-      .replace(/\bELEC\b|\bELECT\b/gi, 'Electric')
-      .replace(/#.*$/, '')
-      .replace(/&.*$/, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Concise search query (first 3-4 key tokens)
-    const words = cleaned.split(' ').filter(w => w.length > 1);
-    if (words.length > 4) {
-      const concise = words.slice(0, 4).join(' ');
-      if (brand && !concise.toLowerCase().includes(brand)) {
-        terms.push(`${brand} ${concise}`);
-      } else {
-        terms.push(concise);
-      }
-    }
-    if (cleaned && cleaned.length <= 45) {
-      terms.push(cleaned);
-    }
-  }
-
   // Deduplicate and select top 3 most targeted queries
   const unique: string[] = [];
   const seen = new Set<string>();
@@ -663,7 +655,12 @@ export function getSearchTerms(item: InventoryItem): string[] {
     }
   }
 
-  return unique.slice(0, 6);
+  const uniqueIdentifiers = identifierTerms.filter((term, index) =>
+    identifierTerms.findIndex(candidate => candidate.toLowerCase() === term.toLowerCase()) === index
+  );
+  return [...unique, ...uniqueIdentifiers]
+    .filter((term, index, all) => all.findIndex(candidate => candidate.toLowerCase() === term.toLowerCase()) === index)
+    .slice(0, 6);
 }
 
 // ======================================================
@@ -824,7 +821,8 @@ export async function fetchLiveHomeDepotStorePrice(url?: string | null): Promise
 export async function scrapeSearchResults(
   page: Page | null,
   config: CompetitorConfig,
-  searchTerm: string
+  searchTerm: string,
+  diagnostics?: { errors?: string[] }
 ): Promise<CandidateProduct[]> {
   const cleanTerm = searchTerm.replace(/[\x27\"]/g, '').trim();
   if (!cleanTerm) return [];
@@ -839,9 +837,10 @@ export async function scrapeSearchResults(
       });
       if (res.ok) {
         const data = await res.json();
-        const results = (data.result || []).map((r: any) => ({
+        const rawResults = Array.isArray(data.result) ? data.result : [];
+        const results = rawResults.map((r: any) => ({
           title: r.name || '',
-          priceText: priceValueToText(r.salePrice) || priceValueToText(r.price),
+          priceText: (extractPrice(priceValueToText(r.salePrice)) || extractPrice(priceValueToText(r.price)))?.toString() || '',
           mfg: r.model_no || r.sku || '',
           sku: r.sku || '',
           upc: r.upc || '',
@@ -852,8 +851,11 @@ export async function scrapeSearchResults(
           url: r.url || ''
         }));
         if (results.length > 0) return results;
+      } else {
+        diagnostics?.errors?.push(`Kent API returned HTTP ${res.status}`);
       }
-    } catch (apiErr) {
+    } catch (apiErr: any) {
+      diagnostics?.errors?.push(`Kent API: ${apiErr.message}`);
       // Fall through to the browser search when the catalog API is unavailable.
     }
   }
@@ -889,8 +891,11 @@ export async function scrapeSearchResults(
         if (hdCandidates.length > 0) {
           return hdCandidates;
         }
+      } else {
+        diagnostics?.errors?.push(`Home Depot API returned HTTP ${res.status}`);
       }
-    } catch (hdErr) {
+    } catch (hdErr: any) {
+      diagnostics?.errors?.push(`Home Depot API: ${hdErr.message}`);
       // Fallback to browser navigation if API fails
     }
   }
@@ -961,18 +966,32 @@ export async function scrapeSearchResults(
 export async function findBestProductMatch(
   page: Page | null,
   config: CompetitorConfig,
-  inventoryItem: InventoryItem
+  inventoryItem: InventoryItem,
+  diagnostics?: {
+    searchTerms?: string[];
+    candidateCounts?: Array<{ term: string; count: number }>;
+    errors?: string[];
+    bestScore?: number;
+  }
 ): Promise<ScoredMatch | null> {
   const allCandidates: CandidateProduct[] = [];
   const searchTerms = getSearchTerms(inventoryItem).slice(0, page ? 6 : (process.env.VERCEL ? 4 : 6));
+  if (diagnostics) {
+    diagnostics.searchTerms = searchTerms;
+    diagnostics.candidateCounts = [];
+    diagnostics.errors = [];
+  }
 
   for (const term of searchTerms) {
     try {
-      const results = await scrapeSearchResults(page, config, term);
+      const results = await scrapeSearchResults(page, config, term, diagnostics);
+      diagnostics?.candidateCounts?.push({ term, count: results.length });
       if (results && results.length > 0) {
         allCandidates.push(...results);
-        // Check if any candidate in this batch qualifies with a high score (>= matchThreshold)
-        const hasQualifiedMatch = results.some(cand => calculateMatchScore(inventoryItem, cand) >= Math.max(config.matchThreshold, 65));
+        const hasQualifiedMatch = results.some(cand =>
+          extractPrice(cand.priceText) != null &&
+          calculateMatchScore(inventoryItem, cand) >= Math.max(config.matchThreshold, 65)
+        );
         if (hasQualifiedMatch) {
           break; // Stop upon finding qualified candidates
         }
@@ -983,6 +1002,7 @@ export async function findBestProductMatch(
   }
 
   if (!allCandidates.length) {
+    if (diagnostics) diagnostics.bestScore = 0;
     return null;
   }
 
@@ -1051,6 +1071,7 @@ export async function findBestProductMatch(
   });
 
   scored.sort((a, b) => b.score - a.score);
+  if (diagnostics) diagnostics.bestScore = scored[0]?.score ?? 0;
   const best = scored.find(match => match.matchFound && match.price != null && match.price > 0) || scored[0];
 
   // If Kent candidate was found and has a URL, resolve live localized store price from the page
@@ -1239,6 +1260,13 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
 
   const competitorsList = [COMPETITORS.homeDepot, COMPETITORS.rona, COMPETITORS.kent];
   const allResults: any[] = [];
+  const competitorDiagnostics: Array<{
+    store: string;
+    searchTerms: string[];
+    candidateCounts: Array<{ term: string; count: number }>;
+    errors: string[];
+    bestScore: number;
+  }> = [];
   let browser: Browser | null = null;
 
   try {
@@ -1253,8 +1281,21 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
     }
 
     const scrapeCompetitor = async (comp: CompetitorConfig) => {
+      const searchDiagnostics: {
+        searchTerms?: string[];
+        candidateCounts?: Array<{ term: string; count: number }>;
+        errors?: string[];
+        bestScore?: number;
+      } = {};
       try {
-        const bestMatch = await findBestProductMatch(page, comp, inventoryItem);
+        const bestMatch = await findBestProductMatch(page, comp, inventoryItem, searchDiagnostics);
+        competitorDiagnostics.push({
+          store: comp.name,
+          searchTerms: searchDiagnostics.searchTerms || [],
+          candidateCounts: searchDiagnostics.candidateCounts || [],
+          errors: searchDiagnostics.errors || [],
+          bestScore: searchDiagnostics.bestScore || 0,
+        });
         if (bestMatch?.matchFound && bestMatch.price != null && bestMatch.price > 0) {
           allResults.push({
             store: comp.name === 'KENT Building Supplies' ? 'Kent' : (comp.name === 'The Home Depot' ? 'Home Depot' : 'RONA'),
@@ -1269,6 +1310,13 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
           });
         }
       } catch (compErr: any) {
+        competitorDiagnostics.push({
+          store: comp.name,
+          searchTerms: searchDiagnostics.searchTerms || [],
+          candidateCounts: searchDiagnostics.candidateCounts || [],
+          errors: searchDiagnostics.errors || [],
+          bestScore: searchDiagnostics.bestScore || 0,
+        });
         console.error(`[Price Comparison] Live scrape error for ${comp.name}:`, compErr.message);
       }
     };
@@ -1292,6 +1340,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
     return {
       matchesFound: false,
       reason: "Live scraping returned no matching competitor products for this term. No fallback generated.",
+      competitorDiagnostics,
       timestamp
     };
   }
@@ -1313,6 +1362,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
     difference,
     savingsPercent,
     timestamp,
+    competitorDiagnostics,
     results: allResults.map(r => ({
       store: r.store,
       productName: r.productName,

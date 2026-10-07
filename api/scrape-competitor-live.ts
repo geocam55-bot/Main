@@ -55,7 +55,10 @@ export default async function handler(req: any, res: any) {
         matchMethod: match.matchMethod,
         sku: match.modelNumber || null,
       })),
-      diagnostics: result.matchesFound ? undefined : { reason: result.reason },
+      diagnostics: {
+        reason: result.matchesFound ? undefined : result.reason,
+        competitors: result.competitorDiagnostics,
+      },
     });
   } catch (err: any) {
     console.error('[Competitor Scrape API] Live search failed:', err);

@@ -707,10 +707,19 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
             yourPrice: item.unitPrice,
             mfgPartNumber: item.mfgPartNumber || item.modelNumber,
             upc: item.upc,
+            brand: item.manufacturer,
+            supplierSku: item.supplierSKU,
             searchQuery: effectiveSearchTerm,
           });
 
           let competitors = scrapeRes?.competitors || [];
+          if (competitors.length === 0) {
+            console.info('[Shopping List] No live competitor matches', {
+              sku: item.sku,
+              searchTerm: effectiveSearchTerm,
+              diagnostics: scrapeRes?.diagnostics,
+            });
+          }
 
           const kentComp = competitors.find((c: any) =>
             (c.competitorName || '').toLowerCase().includes('kent') || c.competitorId === 1
@@ -844,6 +853,8 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
         yourPrice: item.unitPrice,
         mfgPartNumber: item.mfgPartNumber || item.modelNumber,
         upc: item.upc,
+        brand: item.manufacturer,
+        supplierSku: item.supplierSKU,
         searchQuery: effectiveSearchTerm,
       });
 

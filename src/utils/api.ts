@@ -725,6 +725,8 @@ export const competitivePricingAPI = {
     yourPrice?: number;
     unitPrice?: number;
     upc?: string;
+    brand?: string;
+    supplierSku?: string;
     mfgPartNumber?: string;
     searchQuery?: string;
   }): Promise<{ success: boolean; competitors: any[] }> => {
