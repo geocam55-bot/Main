@@ -3810,8 +3810,8 @@ Return JSON matching this schema:
       `[Init] Primary Search Query (Priority: DESCRIPTION/DIMENSIONS): "${primarySearchTerm}"`,
     ];
 
-    let freshKent = 0;
-    let freshHd = 0;
+    let freshKent: number | null = null;
+    let freshHd: number | null = null;
     let kentConf = 'NOT_FOUND';
     let hdConf = 'NOT_FOUND';
     let kentMethod = (activeItemDesc || activeItemName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
@@ -3872,7 +3872,7 @@ Return JSON matching this schema:
         }
         
         const kentMatch = await findBestProductMatch(page, COMPETITORS.kent, invItem);
-        if (kentMatch && kentMatch.price != null && kentMatch.price > 0) {
+        if (kentMatch?.matchFound && kentMatch.price != null && kentMatch.price > 0) {
             freshKent = kentMatch.price;
             kentTitle = kentMatch.candidate.title;
             kentUrl = kentMatch.candidate.url;
@@ -3900,7 +3900,7 @@ Return JSON matching this schema:
         }
 
         const hdMatch = await findBestProductMatch(page, COMPETITORS.homeDepot, invItem);
-        if (hdMatch && hdMatch.price != null && hdMatch.price > 0) {
+        if (hdMatch?.matchFound && hdMatch.price != null && hdMatch.price > 0) {
             freshHd = hdMatch.price;
             hdTitle = hdMatch.candidate.title;
             hdUrl = hdMatch.candidate.url;
@@ -3925,70 +3925,7 @@ Return JSON matching this schema:
       diagnosticLogs.push(`[Scraper General Notice] ${err.message}`);
     }
 
-  // Precision Atlantic Canada Regional Retail Catalog matching for Kent Bayers Lake & Home Depot Lacewood
-  function getRegionalCatalogPrice(queryText: string, basePrice: number): { kent: number; hd: number } {
-    const upper = String(queryText || '').toUpperCase();
-    if (upper.includes('TEMPER') || upper.includes('GLASS') || upper.includes('CLR')) {
-      if (upper.includes('39') || upper.includes('35-7/8X39') || upper.includes('4448947')) return { kent: 98.59, hd: 124.99 };
-      if (upper.includes('57') || upper.includes('35-7/8X57')) return { kent: 136.69, hd: 194.99 };
-      if (upper.includes('63') || upper.includes('35-7/8X63')) return { kent: 148.59, hd: 215.99 };
-      return { kent: 112.50, hd: 139.99 };
-    }
-    if (upper.includes('PLY') || upper.includes('PLYWOOD') || upper.includes('SHEATHING')) {
-      if (upper.includes('1/2') || upper.includes('12.5MM')) return { kent: 39.98, hd: 39.98 };
-      if (upper.includes('3/4') || upper.includes('19MM')) return { kent: 49.98, hd: 49.98 };
-      if (upper.includes('5/8') || upper.includes('15MM')) return { kent: 44.98, hd: 44.98 };
-      if (upper.includes('3/8') || upper.includes('9.5MM')) return { kent: 29.98, hd: 29.98 };
-      return { kent: 39.98, hd: 39.98 };
-    }
-    if (upper.includes('OSB') || upper.includes('7/16')) {
-      return { kent: 21.98, hd: 22.48 };
-    }
-    if (upper.includes('DRYWALL') || upper.includes('GYPSUM')) {
-      if (upper.includes('5/8') || upper.includes('TYPE X')) return { kent: 18.48, hd: 18.98 };
-      if (upper.includes('1/2')) return { kent: 14.98, hd: 15.48 };
-      return { kent: 16.50, hd: 16.98 };
-    }
-    if (upper.includes('104-5/8')) return { kent: 5.37, hd: 5.48 };
-    if (upper.includes('92-5/8')) return { kent: 4.78, hd: 4.89 };
-    if (upper.includes('2X4')) return { kent: 4.29, hd: 4.38 };
-    if (upper.includes('2X6')) return { kent: 6.98, hd: 7.12 };
-
-    const bp = (!isNaN(basePrice) && basePrice > 0) ? basePrice : 24.99;
-    return {
-      kent: Number((bp * 0.98).toFixed(2)),
-      hd: Number((bp * 1.02).toFixed(2))
-    };
-  }
-
-    // Verified Atlantic Canada Regional Retail Catalog matching (Bayers Lake Kent & Halifax Lacewood Home Depot)
-    // GUARANTEES 100% retail market pricing hit rate across all 400+ SKUs even under bot protection.
-    const rawPrice = Number(product.yourPrice || 0);
-    const baseP = (!isNaN(rawPrice) && rawPrice > 0) ? rawPrice : 19.99;
-    const targetDimsFallback = extractBuildingDimensions(effectiveDesc || effectiveName);
-    const catalogItemTitle = activeItemDesc || activeItemName || product.sku;
-    const dimSuffix = targetDimsFallback.signature ? ` [${targetDimsFallback.signature}]` : '';
-    
-    const catalogPrices = getRegionalCatalogPrice(primarySearchTerm + ' ' + catalogItemTitle + ' ' + effectiveDesc + ' ' + effectiveName, baseP);
-
-    if (freshKent === 0) {
-      freshKent = catalogPrices.kent;
-      kentConf = 'HIGH';
-      kentMethod = 'REGIONAL_CATALOG';
-      kentTitle = `${catalogItemTitle}${dimSuffix}`;
-      kentSku = product.sku ? `KENT-${product.sku}` : 'KENT-VERIFIED';
-      kentUrl = buildCompetitorSearchUrl('kent', primarySearchTerm);
-      diagnosticLogs.push(`[Kent Regional Catalog Match] Matched regional price $${freshKent} for "${primarySearchTerm}".`);
-    }
-    if (freshHd === 0) {
-      freshHd = catalogPrices.hd;
-      hdConf = 'HIGH';
-      hdMethod = 'REGIONAL_CATALOG';
-      hdTitle = `${catalogItemTitle}${dimSuffix}`;
-      hdSku = product.sku ? `HD-${product.sku}` : 'HD-VERIFIED';
-      hdUrl = buildCompetitorSearchUrl('homeDepot', primarySearchTerm);
-      diagnosticLogs.push(`[Home Depot Regional Catalog Match] Matched regional price $${freshHd} for "${primarySearchTerm}".`);
-    }
+    const baseP = Number(product.yourPrice || 0);
 
     const checkTime = new Date().toISOString();
     const competitorsData: any[] = [
@@ -4008,7 +3945,7 @@ Return JSON matching this schema:
         matchConfidence: kentConf,
         matchMethod: kentMethod,
         sku: kentSku,
-        availability: freshKent > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+        availability: freshKent != null ? 'IN_STOCK' : 'OUT_OF_STOCK',
         checkedAt: checkTime,
       },
       {
@@ -4027,7 +3964,7 @@ Return JSON matching this schema:
         matchConfidence: hdConf,
         matchMethod: hdMethod,
         sku: hdSku,
-        availability: freshHd > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+        availability: freshHd != null ? 'IN_STOCK' : 'OUT_OF_STOCK',
         checkedAt: checkTime,
       }
     ];
@@ -4071,6 +4008,7 @@ Return JSON matching this schema:
           .eq('product_id', String(product.productId));
 
         for (const entry of competitorsData) {
+          if (entry.price == null || entry.price <= 0) continue;
           const compId = entry.competitorId;
           const price = entry.price;
           const existingMatch = (allMatches || []).find(

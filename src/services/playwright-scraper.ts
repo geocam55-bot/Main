@@ -221,14 +221,26 @@ export function extractPrice(rawText?: string | null): number | null {
     return dollars + (cents / 100);
   }
 
-  // Format: "$3.98" or "3.98"
-  const decimalMatch = rawText.match(/\$?([0-9]+(?:\.[0-9]{2})?)/);
+  // Format: "$3.98", "$1,299.99", or "3.98"
+  const decimalMatch = rawText.match(/\$?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)/);
   if (decimalMatch) {
-    const val = parseFloat(decimalMatch[1]);
+    const val = parseFloat(decimalMatch[1].replace(/,/g, ''));
     return isNaN(val) ? null : val;
   }
 
   return null;
+}
+
+function priceValueToText(value: unknown): string {
+  if (typeof value === 'number' || typeof value === 'string') return String(value);
+  if (!value || typeof value !== 'object') return '';
+
+  const price = value as Record<string, unknown>;
+  for (const key of ['value', 'amount', 'formattedValue', 'formatted', 'price']) {
+    const nested = price[key];
+    if (typeof nested === 'number' || typeof nested === 'string') return String(nested);
+  }
+  return '';
 }
 
 /**
@@ -651,7 +663,7 @@ export function getSearchTerms(item: InventoryItem): string[] {
     }
   }
 
-  return unique.slice(0, 3);
+  return unique.slice(0, 6);
 }
 
 // ======================================================
@@ -674,32 +686,6 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
       { name: 'selected_store', value: '10', domain: '.kent.ca', path: '/' },
       { name: 'store_code', value: '10', domain: '.kent.ca', path: '/' }
     ]);
-
-    let interceptedPrice: number | null = null;
-    page.on('response', async (response) => {
-      try {
-        const reqUrl = response.url();
-        if ((reqUrl.includes('ksearchnet') || reqUrl.includes('pricing') || reqUrl.includes('graphql') || reqUrl.includes('product')) && response.status() === 200) {
-          const ct = response.headers()['content-type'] || '';
-          if (ct.includes('json')) {
-            const body = await response.json();
-            const jsonStr = JSON.stringify(body);
-            const priceMatches = jsonStr.match(/"(?:price|salePrice|displayPrice|amount|specialPrice)"\s*:\s*([0-9.]+)/g);
-            if (priceMatches && priceMatches.length > 0) {
-              for (const pm of priceMatches) {
-                const valMatch = pm.match(/([0-9.]+)/);
-                if (valMatch) {
-                  const p = parseFloat(valMatch[1]);
-                  if (p > 1.0 && p < 10000) {
-                    interceptedPrice = p;
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {}
-    });
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
     await page.waitForSelector('.price, [data-price-amount], .price-wrapper', { timeout: 6000 }).catch(() => {});
@@ -752,10 +738,6 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
     if (scrapedPrice != null && scrapedPrice > 0) {
       return scrapedPrice;
     }
-    if (interceptedPrice != null && interceptedPrice > 0) {
-      return interceptedPrice;
-    }
-
     return null;
   } catch (e) {
     if (page) {
@@ -777,32 +759,6 @@ export async function fetchLiveHomeDepotStorePrice(url?: string | null): Promise
       { name: 'selected_store', value: '7126', domain: '.homedepot.ca', path: '/' },
       { name: 'province', value: 'NS', domain: '.homedepot.ca', path: '/' }
     ]);
-
-    let interceptedPrice: number | null = null;
-    page.on('response', async (response) => {
-      try {
-        const reqUrl = response.url();
-        if ((reqUrl.includes('search') || reqUrl.includes('pricing') || reqUrl.includes('product')) && response.status() === 200) {
-          const ct = response.headers()['content-type'] || '';
-          if (ct.includes('json')) {
-            const body = await response.json();
-            const jsonStr = JSON.stringify(body);
-            const priceMatches = jsonStr.match(/"(?:price|salePrice|displayPrice|amount)"\s*:\s*([0-9.]+)/g);
-            if (priceMatches && priceMatches.length > 0) {
-              for (const pm of priceMatches) {
-                const valMatch = pm.match(/([0-9.]+)/);
-                if (valMatch) {
-                  const p = parseFloat(valMatch[1]);
-                  if (p > 1.0 && p < 10000) {
-                    interceptedPrice = p;
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {}
-    });
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
     await page.waitForSelector('[data-testid="product-price"], .price, [class*="price"]', { timeout: 6000 }).catch(() => {});
@@ -856,10 +812,6 @@ export async function fetchLiveHomeDepotStorePrice(url?: string | null): Promise
     if (scrapedPrice != null && scrapedPrice > 0) {
       return scrapedPrice;
     }
-    if (interceptedPrice != null && interceptedPrice > 0) {
-      return interceptedPrice;
-    }
-
     return null;
   } catch (e) {
     if (page) {
@@ -883,13 +835,13 @@ export async function scrapeSearchResults(
       const searchEndpoint = `https://eucs28.ksearchnet.com/cloud-search/n-search/search?ticket=klevu-164006757741514325&term=${encodeURIComponent(cleanTerm)}&responseType=json`;
       const res = await fetch(searchEndpoint, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(3500)
+        signal: AbortSignal.timeout(process.env.VERCEL ? 1800 : 3500)
       });
       if (res.ok) {
         const data = await res.json();
         const results = (data.result || []).map((r: any) => ({
           title: r.name || '',
-          priceText: String(r.salePrice || r.price || ''),
+          priceText: priceValueToText(r.salePrice) || priceValueToText(r.price),
           mfg: r.model_no || r.sku || '',
           sku: r.sku || '',
           upc: r.upc || '',
@@ -901,8 +853,9 @@ export async function scrapeSearchResults(
         }));
         if (results.length > 0) return results;
       }
-    } catch (apiErr) {}
-    return [];
+    } catch (apiErr) {
+      // Fall through to the browser search when the catalog API is unavailable.
+    }
   }
 
   // Fast-path direct Home Depot Canada search API (Store 7126 - Halifax Lacewood)
@@ -914,15 +867,15 @@ export async function scrapeSearchResults(
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(3500)
+        signal: AbortSignal.timeout(process.env.VERCEL ? 1800 : 3500)
       });
       if (res.ok) {
         const data = await res.json();
         const hdCandidates: CandidateProduct[] = (data.products || []).map((p: any) => {
-          const priceVal = p.pricing?.displayPrice?.value ?? p.pricing?.value ?? null;
+          const priceVal = p.pricing?.displayPrice ?? p.pricing?.value ?? p.price ?? null;
           return {
             title: p.name || '',
-            priceText: priceVal != null ? String(priceVal) : '',
+            priceText: priceValueToText(priceVal),
             sku: String(p.code || ''),
             mfg: p.modelNumber || p.code || '',
             upc: p.upc || '',
@@ -1011,7 +964,7 @@ export async function findBestProductMatch(
   inventoryItem: InventoryItem
 ): Promise<ScoredMatch | null> {
   const allCandidates: CandidateProduct[] = [];
-  const searchTerms = getSearchTerms(inventoryItem);
+  const searchTerms = getSearchTerms(inventoryItem).slice(0, page ? 6 : (process.env.VERCEL ? 4 : 6));
 
   for (const term of searchTerms) {
     try {
@@ -1019,7 +972,7 @@ export async function findBestProductMatch(
       if (results && results.length > 0) {
         allCandidates.push(...results);
         // Check if any candidate in this batch qualifies with a high score (>= matchThreshold)
-        const hasQualifiedMatch = results.some(cand => calculateMatchScore(inventoryItem, cand) >= config.matchThreshold);
+        const hasQualifiedMatch = results.some(cand => calculateMatchScore(inventoryItem, cand) >= Math.max(config.matchThreshold, 65));
         if (hasQualifiedMatch) {
           break; // Stop upon finding qualified candidates
         }
@@ -1084,7 +1037,7 @@ export async function findBestProductMatch(
       candidate,
       score,
       price: parsedPrice,
-      matchFound: score >= config.matchThreshold,
+      matchFound: score >= Math.max(config.matchThreshold, 65),
       competitorName: config.name,
       confidenceLevel: confidence,
       matchMethod: method,
@@ -1098,11 +1051,11 @@ export async function findBestProductMatch(
   });
 
   scored.sort((a, b) => b.score - a.score);
-  const best = scored[0];
+  const best = scored.find(match => match.matchFound && match.price != null && match.price > 0) || scored[0];
 
   // If Kent candidate was found and has a URL, resolve live localized store price from the page
   // to avoid outdated Klevu search catalog pricing
-  if (best && config.id === 1 && best.candidate.url) {
+  if (page && best?.matchFound && config.id === 1 && best.candidate.url) {
     try {
       const liveKentPrice = await fetchLiveKentStorePrice(best.candidate.url);
       if (liveKentPrice != null && liveKentPrice > 0) {
@@ -1113,7 +1066,7 @@ export async function findBestProductMatch(
   }
 
   // If Home Depot candidate was found and has a URL, resolve live localized store price from the page
-  if (best && config.id === 2 && best.candidate.url) {
+  if (page && best?.matchFound && config.id === 2 && best.candidate.url) {
     try {
       const liveHdPrice = await fetchLiveHomeDepotStorePrice(best.candidate.url);
       if (liveHdPrice != null && liveHdPrice > 0) {
@@ -1160,8 +1113,8 @@ export async function getPlaywrightBrowser(): Promise<Browser> {
         execSync('npx playwright install chromium', { stdio: 'inherit' });
         sharedBrowser = await chromium.launch(launchOptions);
       } catch (installErr: any) {
-        console.warn(`[Playwright Scraper] Auto-install/launch notice: ${installErr.message}. Regional catalog benchmark pricing will be applied.`);
-        throw new Error(`Playwright Initialization Notice: ${err.message}. Regional catalog benchmark pricing will be applied.`);
+        console.warn(`[Playwright Scraper] Browser launch failed: ${installErr.message}`);
+        throw new Error(`Playwright initialization failed: ${err.message}`);
       }
     }
   }
@@ -1266,7 +1219,7 @@ export function getMemoryUsageInfo(): { heapUsedMB: number; heapTotalMB: number;
 /**
  * Retail Price Comparison Agent matching user specifications across RONA, Kent, and Home Depot.
  */
-export async function runRetailPriceComparison(searchTerm: string) {
+export async function runRetailPriceComparison(searchTerm: string, itemDetails: Partial<InventoryItem> = {}) {
   const timestamp = new Date().toISOString();
   if (!searchTerm || !searchTerm.trim()) {
     return {
@@ -1278,9 +1231,10 @@ export async function runRetailPriceComparison(searchTerm: string) {
 
   const cleanTerm = searchTerm.trim();
   const inventoryItem: InventoryItem = {
-    sku: 'QUERY-' + Date.now(),
-    name: cleanTerm,
-    description: cleanTerm
+    ...itemDetails,
+    sku: itemDetails.sku || 'QUERY-' + Date.now(),
+    name: itemDetails.name || cleanTerm,
+    description: itemDetails.description || cleanTerm,
   };
 
   const competitorsList = [COMPETITORS.homeDepot, COMPETITORS.rona, COMPETITORS.kent];
@@ -1288,13 +1242,20 @@ export async function runRetailPriceComparison(searchTerm: string) {
   let browser: Browser | null = null;
 
   try {
-    browser = await getPlaywrightBrowser();
-    const page = await createOptimizedPage(browser);
+    let page: Page | null = null;
+    if (!process.env.VERCEL || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || process.env.CHROMIUM_PATH) {
+      try {
+        browser = await getPlaywrightBrowser();
+        page = await createOptimizedPage(browser);
+      } catch (browserErr: any) {
+        console.warn('[Price Comparison] Browser unavailable; trying retailer search APIs:', browserErr.message);
+      }
+    }
 
-    for (const comp of competitorsList) {
+    const scrapeCompetitor = async (comp: CompetitorConfig) => {
       try {
         const bestMatch = await findBestProductMatch(page, comp, inventoryItem);
-        if (bestMatch && bestMatch.matchFound && bestMatch.price != null && bestMatch.price > 0) {
+        if (bestMatch?.matchFound && bestMatch.price != null && bestMatch.price > 0) {
           allResults.push({
             store: comp.name === 'KENT Building Supplies' ? 'Kent' : (comp.name === 'The Home Depot' ? 'Home Depot' : 'RONA'),
             productName: bestMatch.candidate.title,
@@ -1302,12 +1263,22 @@ export async function runRetailPriceComparison(searchTerm: string) {
             modelNumber: bestMatch.candidate.mfg || bestMatch.candidate.sku || undefined,
             price: bestMatch.price,
             salePrice: bestMatch.price,
-            url: bestMatch.candidate.url || comp.baseUrl
+            url: bestMatch.candidate.url || comp.baseUrl,
+            matchConfidence: bestMatch.confidenceLevel || 'LOW',
+            matchMethod: bestMatch.matchMethod || 'LIVE_SEARCH',
           });
         }
       } catch (compErr: any) {
         console.error(`[Price Comparison] Live scrape error for ${comp.name}:`, compErr.message);
       }
+    };
+
+    if (page) {
+      for (const comp of competitorsList) {
+        await scrapeCompetitor(comp);
+      }
+    } else {
+      await Promise.all(competitorsList.map(scrapeCompetitor));
     }
 
     if (page) {
@@ -1347,7 +1318,9 @@ export async function runRetailPriceComparison(searchTerm: string) {
       productName: r.productName,
       modelNumber: r.modelNumber || null,
       price: r.price,
-      url: r.url
+      url: r.url,
+      matchConfidence: r.matchConfidence,
+      matchMethod: r.matchMethod,
     }))
   };
 }

@@ -86,7 +86,7 @@ export interface ShoppingListItem {
     status?: string;
     bestDeal?: 'prospaces' | 'competitor' | 'kent' | 'homeDepot' | 'tie';
     kent?: {
-      price: number;
+      price: number | null;
       storeName?: string;
       storeLocation?: string;
       productTitle?: string;
@@ -97,7 +97,7 @@ export interface ShoppingListItem {
       notes?: string;
     };
     homeDepot?: {
-      price: number;
+      price: number | null;
       storeName?: string;
       storeLocation?: string;
       productTitle?: string;
@@ -670,11 +670,12 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
     }
 
     setIsSearchingPrices(true);
-    toast.info(`Scraping competitor prices (${kentConfig.name} & ${hdConfig.name}) for ${shoppingList.length} items (High-Speed Parallel Mode)...`);
+    toast.info(`Searching live competitor prices (${kentConfig.name} & ${hdConfig.name}) for ${shoppingList.length} items...`);
 
     let updatedCount = 0;
+    let itemsWithLivePrices = 0;
     const updatedList = [...shoppingList];
-    const BATCH_SIZE = 15;
+    const BATCH_SIZE = 3;
 
     for (let chunkStart = 0; chunkStart < updatedList.length; chunkStart += BATCH_SIZE) {
       const chunk = updatedList.slice(chunkStart, chunkStart + BATCH_SIZE);
@@ -711,16 +712,6 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
 
           let competitors = scrapeRes?.competitors || [];
 
-          // Fallback to cached pricing if live scraper returned empty
-          if (!competitors || competitors.length === 0) {
-            try {
-              const cached = await competitivePricingAPI.getPricing(targetId);
-              if (cached?.competitors && cached.competitors.length > 0) {
-                competitors = cached.competitors;
-              }
-            } catch {}
-          }
-
           const kentComp = competitors.find((c: any) =>
             (c.competitorName || '').toLowerCase().includes('kent') || c.competitorId === 1
           );
@@ -733,6 +724,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
 
           const kentPrice = rawKentPrice > 0 ? rawKentPrice : null;
           const hdPrice = rawHdPrice > 0 ? rawHdPrice : null;
+          if (kentPrice !== null || hdPrice !== null) itemsWithLivePrices++;
 
           const lowest = Math.min(
             kentPrice !== null && kentPrice > 0 ? kentPrice : Infinity,
@@ -819,7 +811,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
     toast.dismiss('shopping-scrape');
     setShoppingList(updatedList);
     setIsSearchingPrices(false);
-    toast.success(`Competitor price scraping complete. Refreshed ${updatedCount} shopping list items.`);
+    toast.success(`Live price search complete. Found prices for ${itemsWithLivePrices} of ${updatedCount} items.`);
   };
 
   // Scrape competitor prices for a single item on demand
@@ -856,13 +848,6 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
       });
 
       let competitors = scrapeRes?.competitors || [];
-
-      if (!competitors || competitors.length === 0) {
-        try {
-          const cached = await competitivePricingAPI.getPricing(targetId);
-          if (cached?.competitors?.length) competitors = cached.competitors;
-        } catch {}
-      }
 
       if (competitors && competitors.length > 0) {
         const kentComp = competitors.find((c: any) =>

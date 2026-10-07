@@ -728,61 +728,23 @@ export const competitivePricingAPI = {
     mfgPartNumber?: string;
     searchQuery?: string;
   }): Promise<{ success: boolean; competitors: any[] }> => {
-    try {
-      const headers = await getServerHeaders();
-      const res = await fetch('/api/scrape-competitor-live', {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(itemData),
-      });
-      if (!res.ok) {
-        let errorMsg = `Live scrape request failed (${res.status})`;
-        try {
-          const err = await safeParseJson(res);
-          errorMsg = err.error || err.message || errorMsg;
-        } catch (e: any) {
-          if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
-        }
-        throw new Error(errorMsg);
+    const headers = await getServerHeaders();
+    const res = await fetch('/api/scrape-competitor-live', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(itemData),
+    });
+    if (!res.ok) {
+      let errorMsg = `Live scrape request failed (${res.status})`;
+      try {
+        const err = await safeParseJson(res);
+        errorMsg = err.error || err.message || errorMsg;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Server returned HTML')) errorMsg = e.message;
       }
-      return await safeParseJson(res);
-    } catch (err: any) {
-      console.warn('[Competitive Pricing] Live scrape failed:', err.message);
-      const title = itemData.description || itemData.name || itemData.productName || itemData.sku || 'Item';
-      return {
-        success: true,
-        competitors: [
-          {
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            websiteUrl: 'https://kent.ca',
-            productUrl: `https://kent.ca/en/search/?q=${encodeURIComponent(title).replace(/%20/g, '+')}`,
-            productName: `${title} (Live Stock Unavailable)`,
-            price: null,
-            regularPrice: null,
-            currency: 'CAD',
-            availability: 'OUT_OF_STOCK',
-            matchConfidence: 'UNAVAILABLE',
-            matchMethod: 'NOT_FOUND',
-            sku: itemData.sku ? `KENT-${itemData.sku}` : 'KENT-UNKNOWN',
-          },
-          {
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            websiteUrl: 'https://www.homedepot.ca',
-            productUrl: `https://www.homedepot.ca/search?q=${encodeURIComponent(title)}`,
-            productName: `${title} (Live Stock Unavailable)`,
-            price: null,
-            regularPrice: null,
-            currency: 'CAD',
-            availability: 'OUT_OF_STOCK',
-            matchConfidence: 'UNAVAILABLE',
-            matchMethod: 'NOT_FOUND',
-            sku: itemData.sku ? `HD-${itemData.sku}` : 'HD-UNKNOWN',
-          }
-        ]
-      };
+      throw new Error(errorMsg);
     }
+    return await safeParseJson(res);
   },
   saveCompetitorPrice: async (
     productId: string | number,
