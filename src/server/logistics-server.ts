@@ -3418,7 +3418,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       // 2. Trucks
       if (trucks !== undefined && sanitizedTrucks.length > 0) {
         try {
-          // Fetch existing DB trucks to preserve live server telematics coordinates
+          // Fetch existing DB trucks to preserve live server telematics coordinates and enforce database authority
           const { data: existingDbTrucks } = await supabase.from("trucks").select("*").eq("tenantId", tenantId);
           const existingTruckMap = new Map<string, any>();
           if (existingDbTrucks) {
@@ -3428,7 +3428,16 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
             }
           }
 
-          const trucksToUpsert = sanitizedTrucks.map((t: any) => {
+          // CRITICAL: Live Database Authority Check
+          // Only update trucks that already exist in Supabase for this tenant (or are explicitly marked as newly created with _isNew).
+          // If a truck was deleted directly from the Supabase table, NEVER resurrect it!
+          const existingIds = new Set(Array.from(existingTruckMap.keys()));
+          const filteredTrucks = (existingDbTrucks && existingDbTrucks.length > 0)
+            ? sanitizedTrucks.filter((t: any) => existingIds.has(String(t.id).toLowerCase()) || t._isNew === true || t.isNew === true)
+            : sanitizedTrucks;
+
+          if (filteredTrucks.length > 0) {
+            const trucksToUpsert = filteredTrucks.map((t: any) => {
             const ex = existingTruckMap.get(String(t.id).toLowerCase());
             const gpsLat = (typeof t.gpsLat === 'number' && !isNaN(t.gpsLat)) ? t.gpsLat : (ex?.gpsLat ?? t.gpsLat ?? ex?.lat ?? t.lat);
             const gpsLng = (typeof t.gpsLng === 'number' && !isNaN(t.gpsLng)) ? t.gpsLng : (ex?.gpsLng ?? t.gpsLng ?? ex?.lng ?? t.lng);
@@ -3549,6 +3558,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
             } else {
               throw dbErr;
             }
+          }
           }
         } catch (dbErr: any) {
           throw new Error(`Trucks Sync Error: ${dbErr.message}`);
@@ -3805,9 +3815,19 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         }
       }
 
+      // Update in-memory tenant state, preserving database deletions
+      let survivingTrucks = uniqueTrucks;
+      try {
+        const { data: currentDbTrucks } = await supabase.from("trucks").select("id").eq("tenantId", tenantId);
+        if (currentDbTrucks && currentDbTrucks.length > 0) {
+          const currentDbIds = new Set(currentDbTrucks.map((ct: any) => String(ct.id).toLowerCase()));
+          survivingTrucks = (uniqueTrucks || []).filter((t: any) => currentDbIds.has(String(t.id).toLowerCase()) || t._isNew === true || t.isNew === true);
+        }
+      } catch (e) {}
+
       inMemoryTenantStates[String(tenantId)] = {
         branches: uniqueBranches,
-        trucks: uniqueTrucks,
+        trucks: survivingTrucks,
         users: uniqueUsers,
         deliveries: uniqueDeliveries
       };

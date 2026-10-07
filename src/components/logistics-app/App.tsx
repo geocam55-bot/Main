@@ -1033,6 +1033,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   const recentlyDeletedIdsRef = useRef<Set<string>>(new Set());
   const syncStatusRef = useRef<string>('IDLE');
   const isFirstLoadRef = useRef<boolean>(true);
+  const isStateHydratedRef = useRef<boolean>(false);
   const isExpressBackendAvailableRef = useRef<boolean | null>(
     typeof window !== 'undefined' && (
       window.location.hostname.includes('prospacescrm.com') ||
@@ -1305,6 +1306,12 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     b: Branch[],
     u: User[]
   ) => {
+    // Prevent premature sync before live Supabase database state has finished hydrating
+    if (!isStateHydratedRef.current) {
+      console.log("[Sync Lock] Skipping syncStateToSupabase before live database state has finished hydrating from Supabase.");
+      return;
+    }
+
     lastMutationTimeRef.current = Date.now();
     // Save to browser cache immediately so that local fallback remains 100% persistent in cache
     localStorage.setItem(`prospaces_deliveries_tenant_${tenantId}`, JSON.stringify(d));
@@ -1443,7 +1450,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         if (data.supabaseActive) {
           // Populate React state directly from live Supabase Tables and filter out recently deleted IDs
           const rawDeliveries = (data.deliveries || []).filter((d: any) => !recentlyDeletedIdsRef.current.has(d.id));
-          const serverTrucks = (Array.isArray(data.trucks) && data.trucks.length > 0) ? data.trucks : DEFAULT_TRUCKS;
+          const serverTrucks = Array.isArray(data.trucks) ? data.trucks : DEFAULT_TRUCKS;
           const filteredTrucks = serverTrucks.filter((t: any) => !recentlyDeletedIdsRef.current.has(t.id));
           const filteredBranches = (data.branches && data.branches.length > 0 ? data.branches : DEFAULT_BRANCHES).filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id));
           const filteredUsers = (data.users && data.users.length > 0 ? data.users : DEFAULT_USERS).filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id));
@@ -1504,6 +1511,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           localStorage.setItem(`prospaces_branches_tenant_${tenantId}`, JSON.stringify(filteredBranches));
           localStorage.setItem(`prospaces_users_tenant_${tenantId}`, JSON.stringify(dedupedUsers));
 
+          isStateHydratedRef.current = true;
           setLastSyncTime(new Date().toLocaleTimeString());
           setDbActive(true);
           setSyncStatus('IDLE');
@@ -1600,6 +1608,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           });
           setBranches(rawBranches.filter((b: any) => !recentlyDeletedIdsRef.current.has(b.id)));
           setUsers(deduplicateUsers(rawUsers.filter((u: any) => !recentlyDeletedIdsRef.current.has(u.id))));
+          isStateHydratedRef.current = true;
           setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Local Cache)`);
           setDbActive(false);
           setSyncStatus('IDLE');
@@ -1854,6 +1863,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   useEffect(() => {
     if (!currentUser || !currentTenant) return;
     if (currentUser.role === 'SUPER_ADMIN') return;
+    if (!isStateHydratedRef.current) return;
     
     // We only heal if state has finished loading (i.e. branches is populated, indicating we have state)
     if (branches.length === 0) return;
@@ -2203,7 +2213,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     lastMutationTimeRef.current = Date.now();
     const truckWithTenant: Truck = {
       ...newTruck,
-      tenantId: currentTenant.id
+      tenantId: currentTenant.id,
+      _isNew: true
     };
     const updated = [...trucks.filter(t => t.id !== truckWithTenant.id), truckWithTenant];
     setTrucks(updated);

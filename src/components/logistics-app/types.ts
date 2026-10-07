@@ -200,6 +200,8 @@ export interface Truck {
   isRefrigerated?: boolean;
   isLiftgateEquipped?: boolean;
   isActive?: boolean;
+  _isNew?: boolean;
+  isNew?: boolean;
   createdDate?: string;
   updatedDate?: string;
   fuelConsumption?: number;

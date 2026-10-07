@@ -1084,9 +1084,23 @@ export async function saveTenantStateDirect(
     }
   };
 
+  // CRITICAL: Supabase Database Authority Check
+  // Only update trucks that actually exist in Supabase for this tenant (or are explicitly marked with _isNew).
+  // If a truck was deleted directly from the Supabase table, NEVER resurrect it!
+  let safeTrucksToUpsert = serializedTrucks;
+  try {
+    const { data: existingDbTrucks } = await supabase.from("trucks").select("id").eq("tenantId", tenantId);
+    if (existingDbTrucks && existingDbTrucks.length > 0) {
+      const existingSet = new Set(existingDbTrucks.map((t: any) => String(t.id).toLowerCase()));
+      safeTrucksToUpsert = serializedTrucks.filter((t: any) => existingSet.has(String(t.id).toLowerCase()) || (t as any)._isNew === true || (t as any).isNew === true);
+    }
+  } catch (err) {
+    console.debug("[saveTenantStateDirect] Existing trucks verification notice:", err);
+  }
+
   await Promise.allSettled([
     safeBulkUpsert("branches", mappedBranches),
-    safeBulkUpsert("trucks", serializedTrucks),
+    safeBulkUpsert("trucks", safeTrucksToUpsert),
     safeBulkUpsert("users", serializedUsers),
     safeBulkUpsert("deliveries", mappedDeliveries),
     safeBulkUpsert("gps_units_setup", gpsUnitsToUpsert),
