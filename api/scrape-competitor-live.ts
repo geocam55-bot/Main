@@ -3,12 +3,16 @@ import { runRetailPriceComparison } from '../src/services/playwright-scraper';
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Allow', 'GET, POST, OPTIONS');
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'Method not allowed' });
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return res.status(405).json({ success: false, error: `Method ${req.method} not allowed` });
   }
 
-  const item = req.body || {};
+  const item = req.method === 'GET' ? req.query || {} : req.body || {};
   const searchTerm = String(item.searchQuery || item.description || item.productName || item.name || item.sku || '').trim();
   if (!searchTerm || searchTerm.length > 300) {
     return res.status(400).json({ success: false, error: 'A search term of 1 to 300 characters is required' });
