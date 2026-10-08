@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateMatchScore,
   extractPrice,
+  extractKentStorePrice,
   getSearchTerms,
   type CandidateProduct,
   type InventoryItem,
@@ -40,5 +41,13 @@ describe('competitor price scraper helpers', () => {
   it('parses grouped currency values and retailer verbal prices', () => {
     expect(extractPrice('$1,299.99')).toBe(1299.99);
     expect(extractPrice('$3 And 98 Cents / each')).toBe(3.98);
+  });
+
+  it('uses the Kent price group for the selected Bayers Lake store', () => {
+    const groupPrices = '55:4251:8.99;41:3081:8.30;39:3060:8.30;37:3050:8.30';
+
+    expect(extractKentStorePrice(groupPrices, '3060')).toBe(8.3);
+    expect(extractKentStorePrice(groupPrices, '4251')).toBe(8.99);
+    expect(extractKentStorePrice(groupPrices, '9999')).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ const { chromium } = require("playwright");
 const similarity = require("string-similarity");
 const fs = require("fs");
 const path = require("path");
+const KENT_STORE_ID = process.env.KENT_STORE_ID?.trim() || "3060";
 
 // ======================================================
 // CONFIGURATION & COMPETITORS
@@ -25,8 +26,8 @@ const COMPETITORS = {
     searchUrl: "https://kent.ca/en/search/?q=",
     cookies: [
       { name: "store", value: "bayers_lake", domain: ".kent.ca" },
-      { name: "selected_store", value: "10", domain: ".kent.ca" },
-      { name: "store_code", value: "10", domain: ".kent.ca" }
+      { name: "selected_store", value: KENT_STORE_ID, domain: ".kent.ca" },
+      { name: "store_code", value: KENT_STORE_ID, domain: ".kent.ca" }
     ],
     headers: {
       "Accept-Language": "en-US,en;q=0.9",
@@ -296,7 +297,7 @@ async function scrapeSearchResults(page, config, searchTerm) {
     });
 
     if (config.id === 1) {
-      const kentResults = await page.evaluate(async (term) => {
+      const kentResults = await page.evaluate(async ({ term, storeId }) => {
         try {
           const cleanQ = term.replace(/[\x27\"]/g, "");
           const searchEndpoint = `https://eucs28.ksearchnet.com/cloud-search/n-search/search?ticket=klevu-164006757741514325&term=${encodeURIComponent(cleanQ)}&responseType=json`;
@@ -304,7 +305,7 @@ async function scrapeSearchResults(page, config, searchTerm) {
           const data = await res.json();
           return (data.result || []).map(r => ({
             title: r.name || "",
-            priceText: String(r.salePrice || r.price || ""),
+            priceText: String((r.groupPrices || "").split(";").map(group => group.split(":")).find(group => group[1] === storeId)?.[2] || ""),
             mfg: r.model_no || r.sku || "",
             sku: r.sku || "",
             upc: r.upc || "",
@@ -315,7 +316,7 @@ async function scrapeSearchResults(page, config, searchTerm) {
         } catch (e) {
           return [];
         }
-      }, searchTerm);
+      }, { term: searchTerm, storeId: KENT_STORE_ID });
 
       if (Array.isArray(kentResults) && kentResults.length > 0) {
         console.log(`  [${config.name}] Retrieved ${kentResults.length} candidate item(s).`);

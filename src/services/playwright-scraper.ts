@@ -19,6 +19,9 @@ if (!chromium) {
 }
 import similarity from 'string-similarity';
 
+// Kent's locator identifier for Halifax - Bayers Lake.
+export const KENT_STORE_ID = process.env.KENT_STORE_ID?.trim() || '3060';
+
 // ======================================================
 // CONFIGURATION & STORE LOCALIZATION
 // ======================================================
@@ -51,8 +54,8 @@ export const COMPETITORS: Record<string, CompetitorConfig> = {
     searchUrl: 'https://kent.ca/en/search/?q=',
     cookies: [
       { name: 'store', value: 'bayers_lake', domain: '.kent.ca' },
-      { name: 'selected_store', value: '10', domain: '.kent.ca' },
-      { name: 'store_code', value: '10', domain: '.kent.ca' }
+      { name: 'selected_store', value: KENT_STORE_ID, domain: '.kent.ca' },
+      { name: 'store_code', value: KENT_STORE_ID, domain: '.kent.ca' }
     ],
     headers: {
       'Accept-Language': 'en-US,en;q=0.9',
@@ -226,6 +229,19 @@ export function extractPrice(rawText?: string | null): number | null {
   if (decimalMatch) {
     const val = parseFloat(decimalMatch[1].replace(/,/g, ''));
     return isNaN(val) ? null : val;
+  }
+
+  return null;
+}
+
+export function extractKentStorePrice(groupPrices: unknown, storeId = KENT_STORE_ID): number | null {
+  if (typeof groupPrices !== 'string') return null;
+
+  for (const group of groupPrices.split(';')) {
+    const [, groupStoreId, rawPrice] = group.split(':');
+    if (groupStoreId?.trim() === storeId && rawPrice) {
+      return extractPrice(rawPrice);
+    }
   }
 
   return null;
@@ -668,7 +684,7 @@ export function getSearchTerms(item: InventoryItem): string[] {
 // ======================================================
 
 /**
- * Fetches the live, localized store price directly from a Kent product page (Store 10 - Bayers Lake)
+ * Fetches the live, localized store price directly from a Kent product page (Bayers Lake)
  * to bypass stale or un-localized Klevu search catalog index prices.
  */
 export async function fetchLiveKentStorePrice(url?: string | null): Promise<number | null> {
@@ -680,8 +696,8 @@ export async function fetchLiveKentStorePrice(url?: string | null): Promise<numb
     
     await page.context().addCookies([
       { name: 'store', value: 'bayers_lake', domain: '.kent.ca', path: '/' },
-      { name: 'selected_store', value: '10', domain: '.kent.ca', path: '/' },
-      { name: 'store_code', value: '10', domain: '.kent.ca', path: '/' }
+      { name: 'selected_store', value: KENT_STORE_ID, domain: '.kent.ca', path: '/' },
+      { name: 'store_code', value: KENT_STORE_ID, domain: '.kent.ca', path: '/' }
     ]);
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
@@ -840,7 +856,7 @@ export async function scrapeSearchResults(
         const rawResults = Array.isArray(data.result) ? data.result : [];
         const results = rawResults.map((r: any) => ({
           title: r.name || '',
-          priceText: (extractPrice(priceValueToText(r.salePrice)) || extractPrice(priceValueToText(r.price)))?.toString() || '',
+          priceText: extractKentStorePrice(r.groupPrices)?.toString() || '',
           mfg: r.model_no || r.sku || '',
           sku: r.sku || '',
           upc: r.upc || '',
@@ -1182,17 +1198,17 @@ export async function createOptimizedPage(browser: Browser): Promise<Page> {
     }
   });
 
-  // Seed store cookies for Halifax Bayers Lake (Kent Store 10) & Halifax Lacewood (Home Depot Store 7126)
+  // Seed store cookies for Halifax Bayers Lake and Halifax Lacewood.
   await context.addCookies([
     { name: 'store', value: 'bayers_lake', domain: '.kent.ca', path: '/' },
     { name: 'store', value: 'bayers_lake', domain: 'kent.ca', path: '/' },
     { name: 'store', value: 'bayers_lake', domain: 'www.kent.ca', path: '/' },
-    { name: 'selected_store', value: '10', domain: '.kent.ca', path: '/' },
-    { name: 'selected_store', value: '10', domain: 'kent.ca', path: '/' },
-    { name: 'selected_store', value: '10', domain: 'www.kent.ca', path: '/' },
-    { name: 'store_code', value: '10', domain: '.kent.ca', path: '/' },
-    { name: 'store_code', value: '10', domain: 'kent.ca', path: '/' },
-    { name: 'store_code', value: '10', domain: 'www.kent.ca', path: '/' },
+    { name: 'selected_store', value: KENT_STORE_ID, domain: '.kent.ca', path: '/' },
+    { name: 'selected_store', value: KENT_STORE_ID, domain: 'kent.ca', path: '/' },
+    { name: 'selected_store', value: KENT_STORE_ID, domain: 'www.kent.ca', path: '/' },
+    { name: 'store_code', value: KENT_STORE_ID, domain: '.kent.ca', path: '/' },
+    { name: 'store_code', value: KENT_STORE_ID, domain: 'kent.ca', path: '/' },
+    { name: 'store_code', value: KENT_STORE_ID, domain: 'www.kent.ca', path: '/' },
     { name: 'store', value: '7126', domain: '.homedepot.ca', path: '/' },
     { name: 'store', value: '7126', domain: 'homedepot.ca', path: '/' },
     { name: 'store', value: '7126', domain: 'www.homedepot.ca', path: '/' },
@@ -1206,21 +1222,21 @@ export async function createOptimizedPage(browser: Browser): Promise<Page> {
   const page = await context.newPage();
 
   // Override navigator properties and seed localStorage for Halifax store location
-  await page.addInitScript(() => {
+  await page.addInitScript((storeId: string) => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     (navigator as any).languages = ['en-CA', 'en-US', 'en'];
     (window as any).chrome = { runtime: {} };
     Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
 
     try {
-      localStorage.setItem('currentStore', JSON.stringify({ id: '10', code: '10', name: 'Bayers Lake', city: 'Halifax' }));
-      localStorage.setItem('selectedStore', '10');
-      localStorage.setItem('storeId', '10');
+      localStorage.setItem('currentStore', JSON.stringify({ id: storeId, code: storeId, name: 'Bayers Lake', city: 'Halifax' }));
+      localStorage.setItem('selectedStore', storeId);
+      localStorage.setItem('storeId', storeId);
       localStorage.setItem('kent_store', 'bayers_lake');
       localStorage.setItem('hd_store_id', '7126');
       localStorage.setItem('homedepot_store', '7126');
     } catch (e) {}
-  });
+  }, KENT_STORE_ID);
 
   return page;
 }
