@@ -153,6 +153,7 @@ export interface CandidateProduct {
   title: string;
   priceText: string;
   price?: number | null;
+  availability?: 'IN_STOCK' | 'OUT_OF_STOCK' | 'UNKNOWN';
   mfg?: string;
   sku?: string;
   upc?: string;
@@ -161,6 +162,27 @@ export interface CandidateProduct {
   brand?: string;
   category?: string;
   url: string;
+}
+
+export interface ScraperApiObservation {
+  retailer: string;
+  endpoint: string;
+  requestMethod?: string;
+  resourceType?: string;
+  requestHeaders?: Record<string, string>;
+  requestPayloadBytes?: number;
+  status?: number;
+  contentType?: string;
+  returnedCount?: number;
+  totalCount?: number;
+  pagesRetrieved?: number;
+  responseKeys?: string[];
+  error?: string;
+}
+
+interface ScraperDiagnostics {
+  errors?: string[];
+  apiResponses?: ScraperApiObservation[];
 }
 
 export type MatchConfidenceLevel = 'EXACT' | 'HIGH' | 'MEDIUM' | 'LOW' | 'REGIONAL_ESTIMATE';
@@ -245,6 +267,71 @@ export function extractKentStorePrice(groupPrices: unknown, storeId = KENT_STORE
   }
 
   return null;
+}
+
+export function kentStoreAvailability(storeInStock: unknown, storeId = KENT_STORE_ID): CandidateProduct['availability'] {
+  if (storeInStock == null || storeInStock === '') return 'UNKNOWN';
+
+  let stores: unknown = storeInStock;
+  if (typeof storeInStock === 'string') {
+    try {
+      stores = JSON.parse(storeInStock);
+    } catch {
+      stores = storeInStock.split(/[;,]/).map(store => store.trim());
+    }
+  }
+  if (!Array.isArray(stores)) return 'UNKNOWN';
+
+  return stores.some(store => String(store) === storeId) ? 'IN_STOCK' : 'OUT_OF_STOCK';
+}
+
+export function parseHomeDepotCandidates(response: unknown): CandidateProduct[] {
+  if (!response || typeof response !== 'object') return [];
+
+  const root = response as Record<string, unknown>;
+  const containers = [root, root.data, root.response]
+    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object'));
+  const products = Array.isArray(response)
+    ? response as Array<Record<string, unknown>>
+    : containers.flatMap(container => [container.products, container.results, container.items])
+      .find(Array.isArray) as Array<Record<string, unknown>> | undefined;
+  if (!products) return [];
+
+  return products.flatMap((product) => {
+    if (!product || typeof product !== 'object') return [];
+    const pricing = product.pricing && typeof product.pricing === 'object'
+      ? product.pricing as Record<string, unknown>
+      : {};
+    const availability = product.availability && typeof product.availability === 'object'
+      ? product.availability as Record<string, unknown>
+      : {};
+    const inStock = product.inStock ?? product.isInStock ?? product.onlineAvailability;
+    const title = String(product.name || product.title || product.productName || '').trim();
+    if (!title) return [];
+
+    const productUrl = product.url || product.productUrl || '';
+    const url = String(productUrl);
+    const price = pricing.displayPrice ?? pricing.value ?? pricing.price ??
+      product.displayPrice ?? product.sellingPrice ?? product.price ?? null;
+
+    return [{
+      title,
+      priceText: priceValueToText(price),
+      availability: availability.status === 'IN_STOCK' || inStock === true || inStock === 'IN_STOCK'
+        ? 'IN_STOCK'
+        : availability.status === 'OUT_OF_STOCK' || inStock === false || inStock === 'OUT_OF_STOCK'
+          ? 'OUT_OF_STOCK'
+          : 'UNKNOWN',
+      sku: String(product.code || product.sku || product.itemId || ''),
+      mfg: String(product.modelNumber || product.manufacturerPartNumber || product.mpn || product.code || ''),
+      upc: String(product.upc || product.barcode || ''),
+      dimensions: String(product.dimensions || ''),
+      description: String(product.description || title),
+      brand: String(product.brand || ''),
+      category: String(product.category || ''),
+      url: url ? (url.startsWith('http') ? url : `https://www.homedepot.ca${url}`) : ''
+    }];
+  });
 }
 
 function priceValueToText(value: unknown): string {
@@ -592,14 +679,14 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
 
 export function getSearchTerms(item: InventoryItem): string[] {
   const terms: string[] = [];
-  const identifierTerms: string[] = [];
   const parsedAttrs = parseItemAttributes(item.attributes);
   const brand = extractBrand(item);
   const rawDesc = (item.description || item.short_description || item.name || '').trim();
+  let cleanedDescription = rawDesc;
 
   // Put the product description first; an internal inventory SKU is rarely searchable at a retailer.
   if (rawDesc) {
-    const cleaned = rawDesc
+    cleanedDescription = rawDesc
       .replace(/["']/g, ' ')
       .replace(/\bSPLP\b/gi, 'Shiplap')
       .replace(/\bLUM\b/gi, 'Lumber')
@@ -612,36 +699,26 @@ export function getSearchTerms(item: InventoryItem): string[] {
       .replace(/&.*$/, '')
       .replace(/\s+/g, ' ')
       .trim();
-    const words = cleaned.split(' ').filter(w => w.length > 1);
-    if (words.length > 4) {
-      terms.push(words.slice(0, 4).join(' '));
-    }
-    if (cleaned) terms.push(cleaned);
+    const words = cleanedDescription.split(' ').filter(w => w.length > 1);
+    if (words.length > 4) terms.push(words.slice(0, 4).join(' '));
+    else if (cleanedDescription) terms.push(cleanedDescription);
   }
 
-  // Retain retailer-facing identifiers as secondary queries.
-  if (item.sku && String(item.sku).trim().length >= 3) {
-    identifierTerms.push(String(item.sku).trim());
-  }
+  const productName = String(item.name || '').trim();
+  if (productName && productName.toLowerCase() !== rawDesc.toLowerCase()) terms.push(productName);
 
-  // 1. UPC barcode (highest precision)
-  if (item.upc && String(item.upc).trim().length >= 6) {
-    identifierTerms.unshift(String(item.upc).trim());
-  }
-
-  // 2. Brand + Manufacturer Part / Model # (highest precision text query)
+  // Search manufacturer identifiers before optional keywords so Vercel's query cap retains them.
   const mfg = item.mfg || item.supplier_sku || parsedAttrs.model || parsedAttrs.mpn;
   if (mfg && String(mfg).trim().length >= 3 && !/^\d{1,3}$/.test(String(mfg))) {
     const cleanMfg = String(mfg).trim();
-    if (brand) {
-      identifierTerms.unshift(`${brand} ${cleanMfg}`);
-    }
-    identifierTerms.unshift(cleanMfg);
+    terms.push(cleanMfg);
   }
 
-  if (item.supplier_sku && String(item.supplier_sku).trim().length >= 3 && item.supplier_sku !== item.sku) {
-    identifierTerms.unshift(String(item.supplier_sku).trim());
+  if (item.upc && String(item.upc).trim().length >= 6) terms.push(String(item.upc).trim());
+  if (cleanedDescription && cleanedDescription.toLowerCase() !== terms[0]?.toLowerCase()) {
+    terms.push(cleanedDescription);
   }
+  if (mfg && brand) terms.push(`${brand} ${String(mfg).trim()}`);
 
   // High-intent catalog keywords supplement the product description.
   const keywords = parseSearchKeywords(item.search_keywords);
@@ -660,7 +737,9 @@ export function getSearchTerms(item: InventoryItem): string[] {
     terms.push(`${brand} ${dims} ${cat}`.trim());
   }
 
-  // Deduplicate and select top 3 most targeted queries
+  // Internal inventory SKUs are usually not indexed by retailers.
+  if (item.sku && String(item.sku).trim().length >= 3) terms.push(String(item.sku).trim());
+
   const unique: string[] = [];
   const seen = new Set<string>();
   for (const t of terms) {
@@ -671,12 +750,7 @@ export function getSearchTerms(item: InventoryItem): string[] {
     }
   }
 
-  const uniqueIdentifiers = identifierTerms.filter((term, index) =>
-    identifierTerms.findIndex(candidate => candidate.toLowerCase() === term.toLowerCase()) === index
-  );
-  return [...unique, ...uniqueIdentifiers]
-    .filter((term, index, all) => all.findIndex(candidate => candidate.toLowerCase() === term.toLowerCase()) === index)
-    .slice(0, 6);
+  return unique.slice(0, 8);
 }
 
 // ======================================================
@@ -838,7 +912,7 @@ export async function scrapeSearchResults(
   page: Page | null,
   config: CompetitorConfig,
   searchTerm: string,
-  diagnostics?: { errors?: string[] }
+  diagnostics?: ScraperDiagnostics
 ): Promise<CandidateProduct[]> {
   const cleanTerm = searchTerm.replace(/[\x27\"]/g, '').trim();
   if (!cleanTerm) return [];
@@ -846,17 +920,58 @@ export async function scrapeSearchResults(
   // Fast-path direct Kent API query (instant response in ~300ms without browser page load)
   if (config.id === 1) {
     try {
-      const searchEndpoint = `https://eucs28.ksearchnet.com/cloud-search/n-search/search?ticket=klevu-164006757741514325&term=${encodeURIComponent(cleanTerm)}&responseType=json`;
-      const res = await fetch(searchEndpoint, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(process.env.VERCEL ? 1800 : 3500)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const rawResults = Array.isArray(data.result) ? data.result : [];
+      const pageSize = 100;
+      const fetchPage = async (offset: number) => {
+        const searchEndpoint = new URL('https://eucs28.ksearchnet.com/cloud-search/n-search/search');
+        searchEndpoint.searchParams.set('ticket', 'klevu-164006757741514325');
+        searchEndpoint.searchParams.set('term', cleanTerm);
+        searchEndpoint.searchParams.set('responseType', 'json');
+        searchEndpoint.searchParams.set('noOfResults', String(pageSize));
+        searchEndpoint.searchParams.set('paginationStartsFrom', String(offset));
+        const res = await fetch(searchEndpoint, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(process.env.VERCEL ? 1800 : 3500)
+        });
+        if (!res.ok) {
+          diagnostics?.errors?.push(`Kent API returned HTTP ${res.status}`);
+          return null;
+        }
+        return { data: await res.json(), contentType: res.headers.get('content-type') || undefined };
+      };
+
+      const firstPage = await fetchPage(0);
+      if (firstPage) {
+        const totalCount = Number(firstPage.data.meta?.totalResultsFound) || 0;
+        const firstResults = Array.isArray(firstPage.data.result) ? firstPage.data.result : [];
+        const offsets = Array.from(
+          { length: Math.ceil(Math.max(0, totalCount - firstResults.length) / pageSize) },
+          (_, index) => (index + 1) * pageSize
+        );
+        const additionalPages: Array<{ data: any; contentType?: string } | null> = [];
+        for (let index = 0; index < offsets.length; index += 4) {
+          additionalPages.push(...await Promise.all(offsets.slice(index, index + 4).map(fetchPage)));
+        }
+        const pageResults = [
+          firstPage,
+          ...additionalPages.filter((page): page is { data: any; contentType?: string } => page !== null)
+        ];
+        const rawResults = pageResults.flatMap(page =>
+          Array.isArray(page.data.result) ? page.data.result : []
+        );
+        diagnostics?.apiResponses?.push({
+          retailer: 'Kent',
+          endpoint: '/cloud-search/n-search/search',
+          status: 200,
+          contentType: firstPage.contentType,
+          returnedCount: rawResults.length,
+          totalCount,
+          pagesRetrieved: pageResults.length,
+          responseKeys: Object.keys(firstPage.data).sort()
+        });
         const results = rawResults.map((r: any) => ({
           title: r.name || '',
           priceText: extractKentStorePrice(r.groupPrices)?.toString() || '',
+          availability: kentStoreAvailability(r.store_in_stock),
           mfg: r.model_no || r.sku || '',
           sku: r.sku || '',
           upc: r.upc || '',
@@ -867,11 +982,15 @@ export async function scrapeSearchResults(
           url: r.url || ''
         }));
         if (results.length > 0) return results;
-      } else {
-        diagnostics?.errors?.push(`Kent API returned HTTP ${res.status}`);
       }
     } catch (apiErr: any) {
-      diagnostics?.errors?.push(`Kent API: ${apiErr.message}`);
+      const error = apiErr?.message || String(apiErr);
+      diagnostics?.errors?.push(`Kent API: ${error}`);
+      diagnostics?.apiResponses?.push({
+        retailer: 'Kent',
+        endpoint: '/cloud-search/n-search/search',
+        error
+      });
       // Fall through to the browser search when the catalog API is unavailable.
     }
   }
@@ -885,33 +1004,41 @@ export async function scrapeSearchResults(
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(process.env.VERCEL ? 1800 : 3500)
+        signal: AbortSignal.timeout(process.env.VERCEL ? 5000 : 12000)
       });
       if (res.ok) {
         const data = await res.json();
-        const hdCandidates: CandidateProduct[] = (data.products || []).map((p: any) => {
-          const priceVal = p.pricing?.displayPrice ?? p.pricing?.value ?? p.price ?? null;
-          return {
-            title: p.name || '',
-            priceText: priceValueToText(priceVal),
-            sku: String(p.code || ''),
-            mfg: p.modelNumber || p.code || '',
-            upc: p.upc || '',
-            dimensions: '',
-            description: p.description || p.name || '',
-            brand: p.brand || '',
-            category: '',
-            url: p.url ? (p.url.startsWith('http') ? p.url : `https://www.homedepot.ca${p.url}`) : ''
-          };
+        const hdCandidates = parseHomeDepotCandidates(data);
+        diagnostics?.apiResponses?.push({
+          retailer: 'Home Depot',
+          endpoint: '/api/search/v1/search',
+          status: res.status,
+          contentType: res.headers.get('content-type') || undefined,
+          returnedCount: hdCandidates.length,
+          totalCount: Number(data?.totalResults ?? data?.totalCount ?? data?.pagination?.totalResults) || undefined,
+          responseKeys: data && typeof data === 'object' ? Object.keys(data).sort() : []
         });
         if (hdCandidates.length > 0) {
           return hdCandidates;
         }
       } else {
+        diagnostics?.apiResponses?.push({
+          retailer: 'Home Depot',
+          endpoint: '/api/search/v1/search',
+          status: res.status,
+          contentType: res.headers.get('content-type') || undefined,
+          returnedCount: 0
+        });
         diagnostics?.errors?.push(`Home Depot API returned HTTP ${res.status}`);
       }
     } catch (hdErr: any) {
-      diagnostics?.errors?.push(`Home Depot API: ${hdErr.message}`);
+      const error = hdErr?.message || String(hdErr);
+      diagnostics?.errors?.push(`Home Depot API: ${error}`);
+      diagnostics?.apiResponses?.push({
+        retailer: 'Home Depot',
+        endpoint: '/api/search/v1/search',
+        error
+      });
       // Fallback to browser navigation if API fails
     }
   }
@@ -919,59 +1046,145 @@ export async function scrapeSearchResults(
   if (!page) return [];
 
   const encodedQuery = encodeURIComponent(cleanTerm).replace(/%20/g, '+');
-  const url = config.searchUrl + encodedQuery;
+  let url = config.searchUrl + encodedQuery;
+  const observedResponseTasks: Promise<void>[] = [];
+  const onResponse = (response: import('playwright').Response) => {
+    const request = response.request();
+    if (request.resourceType() !== 'xhr' && request.resourceType() !== 'fetch') return;
+
+    const parsedUrl = new URL(response.url());
+    const contentType = response.headers()['content-type'] || undefined;
+    const requestHeaders = request.headers();
+    const safeRequestHeaders = Object.fromEntries(
+      ['accept', 'content-type', 'accept-language']
+        .filter(name => requestHeaders[name])
+        .map(name => [name, requestHeaders[name]])
+    );
+    const requestPayload = request.postData();
+    const observation: ScraperApiObservation = {
+      retailer: config.name,
+      endpoint: `${parsedUrl.origin}${parsedUrl.pathname}`,
+      requestMethod: request.method(),
+      resourceType: request.resourceType(),
+      requestHeaders: safeRequestHeaders,
+      requestPayloadBytes: requestPayload ? new TextEncoder().encode(requestPayload).length : 0,
+      status: response.status(),
+      contentType,
+    };
+    diagnostics?.apiResponses?.push(observation);
+    if (!contentType?.includes('json')) return;
+
+    observedResponseTasks.push((async () => {
+      try {
+        const body: unknown = await response.json();
+        if (!body || typeof body !== 'object') return;
+        const record = body as Record<string, unknown>;
+        observation.responseKeys = Object.keys(record).sort();
+        const products = [record.products, record.results, record.items, record.result]
+          .find(Array.isArray);
+        if (Array.isArray(products)) observation.returnedCount = products.length;
+        const meta = record.meta && typeof record.meta === 'object'
+          ? record.meta as Record<string, unknown>
+          : record;
+        const total = Number(meta.totalResultsFound ?? meta.totalResults ?? meta.totalCount);
+        if (Number.isFinite(total) && total > 0) observation.totalCount = total;
+      } catch {
+        observation.error = 'Could not parse JSON response body';
+      }
+    })());
+  };
+  const onRequestFailed = (request: import('playwright').Request) => {
+    if (request.resourceType() !== 'xhr' && request.resourceType() !== 'fetch') return;
+    const parsedUrl = new URL(request.url());
+    const headers = request.headers();
+    diagnostics?.apiResponses?.push({
+      retailer: config.name,
+      endpoint: `${parsedUrl.origin}${parsedUrl.pathname}`,
+      requestMethod: request.method(),
+      resourceType: request.resourceType(),
+      requestHeaders: Object.fromEntries(
+        ['accept', 'content-type', 'accept-language']
+          .filter(name => headers[name])
+          .map(name => [name, headers[name]])
+      ),
+      requestPayloadBytes: request.postData() ? new TextEncoder().encode(request.postData() || '').length : 0,
+      error: request.failure()?.errorText || 'Request failed'
+    });
+  };
 
   try {
-    // Fast timeout for competitor page load
-    await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 3000
-    });
+    page.on('response', onResponse);
+    page.on('requestfailed', onRequestFailed);
+    const candidates = new Map<string, CandidateProduct>();
+    const visitedPages = new Set<string>();
 
-    // Default DOM evaluation for rendered product cards
-    await new Promise(r => setTimeout(r, 1200));
+    for (let pageNumber = 0; pageNumber < 10 && url && !visitedPages.has(url); pageNumber++) {
+      visitedPages.add(url);
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12000 });
+      await page.waitForTimeout(900);
 
-    const candidates = await page.evaluate(({ sel, baseUrl }: { sel: typeof config.selectors; baseUrl: string }) => {
-      const cards = document.querySelectorAll(sel.productCard);
-      const list: CandidateProduct[] = [];
+      let stableScrolls = 0;
+      for (let scroll = 0; scroll < 6 && stableScrolls < 2; scroll++) {
+        const pageCandidates = await page.evaluate(({ sel, baseUrl }: { sel: typeof config.selectors; baseUrl: string }) => {
+          const cards = document.querySelectorAll(sel.productCard);
+          const list: CandidateProduct[] = [];
 
-      for (let i = 0; i < cards.length; i++) {
-        const card = cards[i];
-        const titleEl = card.querySelector(sel.title) as HTMLElement | null;
-        const priceEl = card.querySelector(sel.price) as HTMLElement | null;
-        const mfgEl = card.querySelector(sel.manufacturer) as HTMLElement | null;
-        const upcEl = card.querySelector(sel.upc) as HTMLElement | null;
-        const dimEl = card.querySelector(sel.dimensions) as HTMLElement | null;
-        const descEl = card.querySelector(sel.description) as HTMLElement | null;
-        const linkEl = (card.querySelector(sel.productLink) || card.closest('a')) as HTMLAnchorElement | null;
+          for (const card of cards) {
+            const titleEl = card.querySelector(sel.title) as HTMLElement | null;
+            const priceEl = card.querySelector(sel.price) as HTMLElement | null;
+            const mfgEl = card.querySelector(sel.manufacturer) as HTMLElement | null;
+            const upcEl = card.querySelector(sel.upc) as HTMLElement | null;
+            const dimEl = card.querySelector(sel.dimensions) as HTMLElement | null;
+            const descEl = card.querySelector(sel.description) as HTMLElement | null;
+            const linkEl = (card.querySelector(sel.productLink) || card.closest('a')) as HTMLAnchorElement | null;
+            const title = titleEl?.innerText.trim() || '';
+            if (!title || title.includes('How We Use Cookies')) continue;
 
-        const title = titleEl ? titleEl.innerText.trim() : '';
-        if (!title || title.includes('How We Use Cookies')) continue;
+            let href = linkEl?.getAttribute('href') || '';
+            if (href.startsWith('/')) href = baseUrl + href;
+            list.push({
+              title,
+              priceText: priceEl?.getAttribute('data-price-amount') || priceEl?.innerText.trim() || '',
+              mfg: mfgEl?.innerText.trim() || '',
+              upc: upcEl?.innerText.trim() || '',
+              dimensions: dimEl?.innerText.trim() || '',
+              description: descEl?.innerText.trim() || '',
+              url: href
+            });
+          }
+          return list;
+        }, { sel: config.selectors, baseUrl: config.baseUrl });
 
-        let priceText = priceEl ? (priceEl.getAttribute('data-price-amount') || priceEl.innerText.trim()) : '';
-        let href = linkEl ? linkEl.getAttribute('href') || '' : '';
-        if (href && href.startsWith('/')) {
-          href = baseUrl + href;
+        const countBefore = candidates.size;
+        for (const candidate of pageCandidates) {
+          const key = normalizeUPC(candidate.upc) || normalizeMfg(candidate.mfg) ||
+            candidate.url.toLowerCase() || candidate.title.toLowerCase();
+          candidates.set(key, candidate);
         }
-
-        list.push({
-          title,
-          priceText,
-          mfg: mfgEl ? mfgEl.innerText.trim() : '',
-          upc: upcEl ? upcEl.innerText.trim() : '',
-          dimensions: dimEl ? dimEl.innerText.trim() : '',
-          description: descEl ? descEl.innerText.trim() : '',
-          url: href || ''
-        });
+        stableScrolls = candidates.size === countBefore ? stableScrolls + 1 : 0;
+        if (stableScrolls < 2) {
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await page.waitForTimeout(700);
+        }
       }
 
-      return list;
-    }, { sel: config.selectors, baseUrl: config.baseUrl });
+      url = await page.evaluate(() => {
+        const next = document.querySelector<HTMLAnchorElement>(
+          'a[rel="next"], .pagination-next:not(.disabled) a, a[aria-label*="next" i]'
+        );
+        return next?.href || '';
+      });
+    }
 
-    return candidates;
+    return [...candidates.values()];
   } catch (err: any) {
+    diagnostics?.errors?.push(`${config.name} browser search: ${err.message}`);
     console.warn(`[Playwright Scraper] ${config.name} scrape warning for "${searchTerm}": ${err.message}`);
     return [];
+  } finally {
+    page.off('response', onResponse);
+    page.off('requestfailed', onRequestFailed);
+    await Promise.allSettled(observedResponseTasks);
   }
 }
 
@@ -988,29 +1201,45 @@ export async function findBestProductMatch(
     candidateCounts?: Array<{ term: string; count: number }>;
     errors?: string[];
     bestScore?: number;
+    apiResponses?: ScraperApiObservation[];
   }
 ): Promise<ScoredMatch | null> {
   const allCandidates: CandidateProduct[] = [];
-  const searchTerms = getSearchTerms(inventoryItem).slice(0, page ? 6 : (process.env.VERCEL ? 4 : 6));
+  const searchTerms = getSearchTerms(inventoryItem);
   if (diagnostics) {
     diagnostics.searchTerms = searchTerms;
     diagnostics.candidateCounts = [];
     diagnostics.errors = [];
+    diagnostics.apiResponses = [];
   }
 
   for (const term of searchTerms) {
     try {
       const results = await scrapeSearchResults(page, config, term, diagnostics);
       diagnostics?.candidateCounts?.push({ term, count: results.length });
+      if (
+        config.id === 2 &&
+        !page &&
+        diagnostics?.errors?.some(error => error.startsWith('Home Depot API:'))
+      ) {
+        break;
+      }
       if (results && results.length > 0) {
         allCandidates.push(...results);
-        const hasQualifiedMatch = results.some(cand =>
-          extractPrice(cand.priceText) != null &&
-          calculateMatchScore(inventoryItem, cand) >= Math.max(config.matchThreshold, 65)
+        const normalizedUpc = normalizeUPC(inventoryItem.upc);
+        const parsedAttrs = parseItemAttributes(inventoryItem.attributes);
+        const normalizedMfg = normalizeMfg(
+          inventoryItem.mfg || inventoryItem.supplier_sku || parsedAttrs.model || parsedAttrs.mpn
         );
-        if (hasQualifiedMatch) {
-          break; // Stop upon finding qualified candidates
-        }
+        const hasExactIdentifier = results.some((candidate) => {
+          const candidateUpc = normalizeUPC(candidate.upc);
+          const candidateMfg = normalizeMfg(candidate.mfg || candidate.sku);
+          return Boolean(
+            (normalizedUpc && candidateUpc && normalizedUpc === candidateUpc) ||
+            (normalizedMfg && candidateMfg && normalizedMfg === candidateMfg)
+          );
+        });
+        if (hasExactIdentifier) break;
       }
     } catch (err: any) {
       console.error(`[Puppeteer Scraper] Term "${term}" error:`, err.message);
@@ -1025,7 +1254,7 @@ export async function findBestProductMatch(
   // Deduplicate by title
   const seen = new Set<string>();
   const uniqueCandidates = allCandidates.filter(c => {
-    const key = c.title.toLowerCase();
+    const key = normalizeUPC(c.upc) || normalizeMfg(c.sku) || c.url.toLowerCase() || c.title.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -1073,7 +1302,7 @@ export async function findBestProductMatch(
       candidate,
       score,
       price: parsedPrice,
-      matchFound: score >= Math.max(config.matchThreshold, 65),
+      matchFound: score >= Math.max(config.matchThreshold, 55),
       competitorName: config.name,
       confidenceLevel: confidence,
       matchMethod: method,
@@ -1282,6 +1511,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
     candidateCounts: Array<{ term: string; count: number }>;
     errors: string[];
     bestScore: number;
+    apiResponses: ScraperApiObservation[];
   }> = [];
   let browser: Browser | null = null;
 
@@ -1302,6 +1532,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
         candidateCounts?: Array<{ term: string; count: number }>;
         errors?: string[];
         bestScore?: number;
+        apiResponses?: ScraperApiObservation[];
       } = {};
       try {
         const bestMatch = await findBestProductMatch(page, comp, inventoryItem, searchDiagnostics);
@@ -1311,6 +1542,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
           candidateCounts: searchDiagnostics.candidateCounts || [],
           errors: searchDiagnostics.errors || [],
           bestScore: searchDiagnostics.bestScore || 0,
+          apiResponses: searchDiagnostics.apiResponses || [],
         });
         if (bestMatch?.matchFound && bestMatch.price != null && bestMatch.price > 0) {
           allResults.push({
@@ -1320,6 +1552,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
             modelNumber: bestMatch.candidate.mfg || bestMatch.candidate.sku || undefined,
             price: bestMatch.price,
             salePrice: bestMatch.price,
+            availability: bestMatch.candidate.availability || 'UNKNOWN',
             url: bestMatch.candidate.url || comp.baseUrl,
             matchConfidence: bestMatch.confidenceLevel || 'LOW',
             matchMethod: bestMatch.matchMethod || 'LIVE_SEARCH',
@@ -1332,6 +1565,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
           candidateCounts: searchDiagnostics.candidateCounts || [],
           errors: searchDiagnostics.errors || [],
           bestScore: searchDiagnostics.bestScore || 0,
+          apiResponses: searchDiagnostics.apiResponses || [],
         });
         console.error(`[Price Comparison] Live scrape error for ${comp.name}:`, compErr.message);
       }
@@ -1387,6 +1621,7 @@ export async function runRetailPriceComparison(searchTerm: string, itemDetails: 
       url: r.url,
       matchConfidence: r.matchConfidence,
       matchMethod: r.matchMethod,
+      availability: r.availability,
     }))
   };
 }

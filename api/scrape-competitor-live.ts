@@ -53,7 +53,7 @@ export default async function handler(req: any, res: any) {
         price: match.price,
         regularPrice: match.price,
         currency: 'CAD',
-        availability: 'IN_STOCK',
+        availability: match.availability,
         matchConfidence: match.matchConfidence,
         matchMethod: match.matchMethod,
         sku: match.modelNumber || null,
