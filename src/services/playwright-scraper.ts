@@ -442,6 +442,53 @@ export function extractBrand(item: InventoryItem, text?: string): string {
   return '';
 }
 
+function getComparableMatchTokens(text: string): string[] {
+  const canonicalText = text.toLowerCase()
+    .replace(/\b(?:trm|trim)[\s.-]*tex\b/g, 'trimtex')
+    .replace(/\bcrnrn?bn\b/g, 'corner bead')
+    .replace(/\bcrnr\b/g, 'corner')
+    .replace(/\bcorner[\s-]*bead\b/g, 'corner bead')
+    .replace(/\bd\s*\/\s*w\b/g, 'drywall')
+    .replace(/\b90d\b/g, '90 degree')
+    .replace(/\bply\b/g, 'plywood')
+    .replace(/\bpt\b/g, 'pressure treated')
+    .replace(/\bkd\b/g, 'kiln dried')
+    .replace(/\bbtr\b/g, 'better')
+    .replace(/\bd4s\b/g, 'dressed four sides')
+    .replace(/(\d)(?=[a-z])/g, '$1 ')
+    .replace(/([a-z])(?=\d)/g, '$1 ')
+    .replace(/(\d)["']?\s*x\s*["']?(?=\d)/g, '$1 ')
+    .replace(/\s+x\s+/g, ' ')
+    .replace(/[^a-z0-9/]+/g, ' ');
+  const stopWords = new Set(['the', 'and', 'for', 'with', 'in', 'to', 'of', 'by', 'on', 'at', 'from', 'a', 'an', 'per', 'ea', 'ft', 'inch']);
+
+  return [...new Set(canonicalText.split(/\s+/).filter(token =>
+    token.length > 0 && token !== 'x' && !stopWords.has(token)
+  ))];
+}
+
+function getDimensionSignature(text: string): string[] {
+  const normalized = text.toLowerCase()
+    .replace(/(\d)\s+(\d+\/\d+)/g, '$1-$2')
+    .replace(/\b(?:inches|inch|in|feet|foot|ft)\b\.?/g, ' ')
+    .replace(/["']/g, ' ');
+  const number = String.raw`(?:\d+-\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)`;
+  const pattern = new RegExp(`(?<![a-z0-9])(${number})\\s*x\\s*(${number})(?:\\s*x\\s*(${number}))?`, 'i');
+  const match = normalized.match(pattern);
+
+  return match ? match.slice(1).filter(Boolean) : [];
+}
+
+function normalizeDimensionValue(value: string): string {
+  const mixedFraction = value.match(/^(\d+)-(\d+)\/(\d+)$/);
+  if (mixedFraction) {
+    return String(Number(mixedFraction[1]) + Number(mixedFraction[2]) / Number(mixedFraction[3]));
+  }
+  const fraction = value.match(/^(\d+)\/(\d+)$/);
+  if (fraction) return String(Number(fraction[1]) / Number(fraction[2]));
+  return String(Number(value));
+}
+
 /**
  * Computes match confidence level and metadata based on score and verified match signals
  */
@@ -485,15 +532,37 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
   const fullCandText = `${candTitle} ${candDesc}`.trim();
 
   // HARD VETO 1: Material Category Conflict (Plywood vs Drywall)
-  const invIsPlywood = /\b(?:plywood|sheathing|osb)\b/i.test(fullInvText);
+  const invIsPlywood = /\b(?:ply|plywood|sheathing|osb)\b/i.test(fullInvText);
   const candIsDrywall = /\b(?:drywall|sheetrock|gypsum)\b/i.test(fullCandText);
   if (invIsPlywood && candIsDrywall) return 0;
 
+  const invIsSPF = /\bspf\b/i.test(fullInvText);
+  const candIsDifferentWoodSpecies = /\b(?:maple|oak|cedar|walnut|poplar|birch|mahogany|redwood|cherry)\b/i.test(fullCandText);
+  if (invIsSPF && candIsDifferentWoodSpecies) return 0;
+  if (invIsSPF && /\bknotty\b/i.test(fullCandText)) return 0;
+
+  const invIsDimensionalLumber =
+    /\b(?:lumber|spf|pt brown)\b/i.test(fullInvText) &&
+    /\b\d+\s*[x×]\s*\d+(?:\s*[x×]\s*\d+)?\b/i.test(fullInvText);
+  if (invIsDimensionalLumber && /\b(?:handrail|moulding|molding|door stop|trim board)\b/i.test(fullCandText)) return 0;
+
   // HARD VETO 2: Treated vs Untreated Lumber Mismatch
-  const invIsTreated = /\b(?:treated|pressure|pt|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(fullInvText);
-  const candIsTreated = /\b(?:treated|pressure|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(fullCandText);
-  if (!invIsTreated && candIsTreated) return 0;
-  if (invIsTreated && !candIsTreated) return 0;
+  const getTreatmentStatus = (text: string): 'treated' | 'untreated' | null => {
+    if (/\b(?:untreated|not\s+(?:pressure\s+)?treated|non[\s-]?treated)\b/i.test(text)) {
+      return 'untreated';
+    }
+    if (/\b(?:pressure[\s-]+treated|treated|above[\s-]*ground|ground[\s-]*contact|sienna|micropro)\b/i.test(text)) {
+      return 'treated';
+    }
+    const hasLumberContext = /\b(?:lumber|wood|board|post|joist|deck|timber)\b|\b\d+\s*[x×]\s*\d+\b/i.test(text);
+    if (hasLumberContext && /\bpt\b/i.test(text)) {
+      return 'treated';
+    }
+    return null;
+  };
+  const invTreatmentStatus = getTreatmentStatus(fullInvText);
+  const candidateTreatmentStatus = getTreatmentStatus(fullCandText);
+  if (invTreatmentStatus && candidateTreatmentStatus && invTreatmentStatus !== candidateTreatmentStatus) return 0;
 
   // ==========================================
   // 1. Exact UPC Match (+100)
@@ -610,7 +679,48 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
   // ==========================================
   const invDims = inventoryItem.dimensions || parsedAttrs.dimensions || extractDimensions(fullInvText);
   const candDims = candidate.dimensions || extractDimensions(fullCandText);
-  if (invDims && candDims) {
+  const invDimensionSignature = getDimensionSignature(fullInvText)
+    .map(normalizeDimensionValue);
+  const candidateDimensionSignature = getDimensionSignature(fullCandText)
+    .map(normalizeDimensionValue);
+  const invIsSheetGood = /\b(?:ply|plywood|osb|sheathing|panel)\b/i.test(fullInvText);
+  const invSheetThickness = invIsSheetGood
+    ? fullInvText.match(/\b(1\/4|3\/8|1\/2|5\/8|7\/16|11\/32|15\/32|23\/32|3\/4)\b/i)?.[1]
+    : undefined;
+  if (
+    invDimensionSignature.length === 0 &&
+    invSheetThickness &&
+    candidateDimensionSignature.length >= 1 &&
+    normalizeDimensionValue(invSheetThickness) !== candidateDimensionSignature[0]
+  ) {
+    return 0;
+  }
+  if (
+    invDimensionSignature.length > 1 &&
+    candidateDimensionSignature.length > 1 &&
+    invDimensionSignature.length === candidateDimensionSignature.length
+  ) {
+    const dimensionsMatch = invDimensionSignature.length === 3
+      ? invDimensionSignature[2] === candidateDimensionSignature[2] &&
+        (
+          (invDimensionSignature[0] === candidateDimensionSignature[0] &&
+            invDimensionSignature[1] === candidateDimensionSignature[1]) ||
+          (invDimensionSignature[0] === candidateDimensionSignature[1] &&
+            invDimensionSignature[1] === candidateDimensionSignature[0])
+        )
+      : invDimensionSignature.length === 2 &&
+        (
+          (invDimensionSignature[0] === candidateDimensionSignature[0] &&
+            invDimensionSignature[1] === candidateDimensionSignature[1]) ||
+          (invDimensionSignature[0] === candidateDimensionSignature[1] &&
+            invDimensionSignature[1] === candidateDimensionSignature[0])
+        );
+    if (dimensionsMatch) {
+      score += 40;
+    } else {
+      return 0;
+    }
+  } else if (invDims && candDims && invDimensionSignature.length === 0 && candidateDimensionSignature.length === 0) {
     if (normalizeText(invDims) === normalizeText(candDims)) {
       score += 40;
     }
@@ -620,35 +730,27 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
   // 7. TOKEN & SIGNIFICANT WORDS MATCHING (+ up to 45)
   // ==========================================
   const stopWords = new Set(['the', 'and', 'for', 'with', 'in', 'to', 'of', 'by', 'on', 'at', 'from', 'a', 'an', 'per', 'ea']);
-  const cleanInvWords = [...new Set((invTitle + ' ' + invDesc + ' ' + (inventoryItem.short_description || ''))
-    .replace(/[^a-z0-9\/\- ]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length >= 2 && !stopWords.has(w)))];
+  const cleanInvWords = getComparableMatchTokens(fullInvText).filter(word => !stopWords.has(word));
+  const candidateMatchTokens = new Set(getComparableMatchTokens(fullCandText));
 
   if (cleanInvWords.length > 0) {
-    let matchedWords = 0;
-    for (const word of cleanInvWords) {
-      if (fullCandText.includes(word)) {
-        matchedWords++;
-      }
-    }
+    const matchedWords = cleanInvWords.filter(word => candidateMatchTokens.has(word)).length;
     const tokenRatio = matchedWords / cleanInvWords.length;
     score += Math.round(tokenRatio * 45);
 
     const primaryDescription = inventoryItem.description || inventoryItem.short_description || inventoryItem.name || '';
-    const primaryWords = [...new Set(primaryDescription.toLowerCase()
-      .replace(/[^a-z0-9\/\- ]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 2 && !stopWords.has(w)))].slice(0, 5);
+    const primaryWords = getComparableMatchTokens(primaryDescription)
+      .filter(word => !stopWords.has(word))
+      .slice(0, 5);
     if (primaryWords.length > 0) {
-      const matchedPrimaryWords = primaryWords.filter(word => fullCandText.includes(word)).length;
+      const matchedPrimaryWords = primaryWords.filter(word => candidateMatchTokens.has(word)).length;
       score += Math.round((matchedPrimaryWords / primaryWords.length) * 20);
     }
 
     // Numbers & Spec match bonus (e.g., '01', '4l', '16', '3.25', '6x6')
     const numbersInInv = cleanInvWords.filter(w => /\d/.test(w));
     if (numbersInInv.length > 0) {
-      const matchedNums = numbersInInv.filter(n => fullCandText.includes(n)).length;
+      const matchedNums = numbersInInv.filter(number => candidateMatchTokens.has(number)).length;
       if (matchedNums === numbersInInv.length) {
         score += 20;
       } else if (matchedNums > 0) {
@@ -661,12 +763,15 @@ export function calculateMatchScore(inventoryItem: InventoryItem, candidate: Can
   // 8. ENRICHED DESCRIPTION SIMILARITY (+ up to 25)
   // ==========================================
   const targetDesc = inventoryItem.description || inventoryItem.short_description || inventoryItem.name || '';
-  const candDescText = candidate.title || candidate.description || '';
-  if (targetDesc && candDescText) {
-    const descScore = similarity.compareTwoStrings(
-      targetDesc.toLowerCase().slice(0, 300),
-      candDescText.toLowerCase().slice(0, 300)
-    );
+  const candidateDescriptions = [candidate.title, candidate.description]
+    .filter((description): description is string => Boolean(description));
+  if (targetDesc && candidateDescriptions.length > 0) {
+    const descScore = Math.max(...candidateDescriptions.map(candidateDesc =>
+      similarity.compareTwoStrings(
+        targetDesc.toLowerCase().slice(0, 300),
+        candidateDesc.toLowerCase().slice(0, 300)
+      )
+    ));
     score += Math.round(descScore * 25);
   }
 
@@ -695,13 +800,24 @@ export function getSearchTerms(item: InventoryItem): string[] {
   const brand = extractBrand(item);
   const rawDesc = (item.description || item.short_description || item.name || '').trim();
   const fullDescription = rawDesc.replace(/["']/g, ' ').replace(/\s+/g, ' ').trim();
-  let cleanedDescription = rawDesc;
+  const dimensions = getDimensionSignature(rawDesc);
+  let cleanedDescription = rawDesc
+    .replace(/#\s*(\d+)\s*&\s*(?:BTR|BETTER)\b/gi, '$1 and better')
+    .replace(/#\s*(\d+)/gi, 'number $1')
+    .replace(/\bBTR\b/gi, 'better')
+    .replace(/\bKD\b/gi, 'kiln dried')
+    .replace(/\bPLY\b/gi, 'plywood')
+    .replace(/\bD4S\b/gi, 'dressed four sides')
+    .replace(/\bPT\b(?=\s+(?:BROWN|PLYWOOD|LUMBER|D[124]S)\b)/gi, 'pressure treated')
+    .replace(/&/g, 'and')
+    .replace(/(\d)["']?\s*[x×]\s*["']?(?=\d)/gi, '$1 x ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   // Put the product description first; an internal inventory SKU is rarely searchable at a retailer.
   if (rawDesc) {
     if (fullDescription) terms.push(fullDescription);
-    cleanedDescription = rawDesc
-      .replace(/["']/g, ' ')
+    cleanedDescription = cleanedDescription
       .replace(/\bSPLP\b/gi, 'Shiplap')
       .replace(/\bLUM\b/gi, 'Lumber')
       .replace(/\bBALU\b/gi, 'Baluster')
@@ -709,8 +825,6 @@ export function getSearchTerms(item: InventoryItem): string[] {
       .replace(/\bFRAM\.\b/gi, 'Framing')
       .replace(/\bREG\.\b/gi, 'Regular')
       .replace(/\bELEC\b|\bELECT\b/gi, 'Electric')
-      .replace(/#.*$/, '')
-      .replace(/&.*$/, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -724,6 +838,21 @@ export function getSearchTerms(item: InventoryItem): string[] {
 
   if (item.upc && String(item.upc).trim().length >= 6) terms.push(String(item.upc).trim());
   if (cleanedDescription && cleanedDescription.toLowerCase() !== fullDescription.toLowerCase()) {
+    terms.push(cleanedDescription);
+  }
+  if (dimensions.length >= 2) {
+    if (/\bOSB\b/i.test(rawDesc) && dimensions.length === 3) {
+      terms.push(`${dimensions[0]} OSB ${dimensions[1]} x ${dimensions[2]}`);
+    } else if (/\bSPF\b/i.test(rawDesc)) {
+      terms.push(`SPF ${dimensions.join(' x ')}`);
+      terms.push(`${dimensions.join(' x ')} spruce lumber`);
+    } else if (/\bPT\b|\bpressure[\s-]*treated\b/i.test(rawDesc)) {
+      const color = /\bbrown\b/i.test(rawDesc) ? 'brown ' : '';
+      terms.push(`pressure treated ${color}${dimensions.join(' x ')}`);
+    } else if (/\b(?:PLY|PLYWOOD)\b/i.test(rawDesc)) {
+      terms.push(`${dimensions.join(' x ')} plywood`);
+    }
+  } else if (/\b(?:PLY|PLYWOOD)\b/i.test(rawDesc)) {
     terms.push(cleanedDescription);
   }
   const words = cleanedDescription.split(' ').filter(w => w.length > 1);

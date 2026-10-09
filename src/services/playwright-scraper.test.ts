@@ -59,6 +59,264 @@ describe('competitor price scraper helpers', () => {
     expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(55);
   });
 
+  it('matches treated lumber when the retailer uses the PT abbreviation', () => {
+    const item: InventoryItem = {
+      sku: 'INTERNAL-PT',
+      name: 'Pressure treated 2x4 lumber',
+      description: 'pressure treated 2x4 lumber',
+    };
+    const candidate: CandidateProduct = {
+      title: 'PT 2x4x8 Premium Lumber',
+      priceText: '$8.99',
+      url: 'https://example.test/product/pt-lumber',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThan(0);
+  });
+
+  it('rejects non-SPF species for SPF dimensional lumber', () => {
+    const item: InventoryItem = {
+      sku: '0971041',
+      name: 'SPF #3&BTR KD 1X3X8',
+      description: 'SPF #3&BTR KD 1X3X8',
+    };
+    const candidate: CandidateProduct = {
+      title: "1 x 3 x 8' Maple Board",
+      priceText: '$44.78',
+      url: 'https://example.test/product/maple-board',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBe(0);
+  });
+
+  it('scores SPF lumber when a caller passes the full description as dimensions', () => {
+    const item: InventoryItem = {
+      sku: '0971041',
+      name: 'SPF #3&BTR KD 1X3X8',
+      description: 'SPF #3&BTR KD 1X3X8',
+      dimensions: 'SPF #3&BTR KD 1X3X8',
+    };
+    const candidate: CandidateProduct = {
+      title: "1 x 3 x 8' SPF Lumber Kiln Dried",
+      priceText: '$3.99',
+      url: 'https://example.test/product/spf-lumber',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(65);
+  });
+
+  it('matches dimensionally equivalent spruce strapping from retailer results', () => {
+    const item: InventoryItem = {
+      sku: '0971041',
+      name: 'SPF #3&BTR KD 1X3X8',
+      description: 'SPF #3&BTR KD 1X3X8',
+      dimensions: 'SPF #3&BTR KD 1X3X8',
+    };
+    const candidate: CandidateProduct = {
+      title: '1 in. x 3 in. x 8 ft. Spruce Strapping',
+      priceText: '$2.68',
+      url: 'https://example.test/product/spruce-strapping',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(65);
+  });
+
+  it('rejects SPF lumber candidates with a different board size', () => {
+    const item: InventoryItem = {
+      sku: '0971041',
+      name: 'SPF #3&BTR KD 1X3X8',
+      description: 'SPF #3&BTR KD 1X3X8',
+    };
+    const candidate: CandidateProduct = {
+      title: "2 x 3 x 10' #2 & Better SPF Lumber Kiln Dried",
+      priceText: '$5.09',
+      url: 'https://example.test/product/wrong-spf-size',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBe(0);
+  });
+
+  it('does not treat an unmarked retailer listing as an untreated lumber mismatch', () => {
+    const item: InventoryItem = {
+      sku: 'INTERNAL-PT',
+      name: 'Pressure treated 2x4 lumber',
+      description: 'pressure treated 2x4 lumber',
+    };
+    const candidate: CandidateProduct = {
+      title: '2x4x8 Lumber',
+      priceText: '$8.99',
+      url: 'https://example.test/product/lumber',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThan(0);
+  });
+
+  it('rejects an explicitly untreated listing for treated inventory', () => {
+    const item: InventoryItem = {
+      sku: 'INTERNAL-PT',
+      name: 'Pressure treated 2x4 lumber',
+      description: 'pressure treated 2x4 lumber',
+    };
+    const candidate: CandidateProduct = {
+      title: 'Untreated 2x4x8 Lumber',
+      priceText: '$8.99',
+      url: 'https://example.test/product/untreated-lumber',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBe(0);
+  });
+
+  it('uses a retailer description for similarity when its title is abbreviated', () => {
+    const item: InventoryItem = {
+      sku: 'INTERNAL-003',
+      name: 'Roof anchor',
+      description: 'blue roof anchor 16 inch galvanized steel for residential roof framing applications',
+    };
+    const candidate: CandidateProduct = {
+      title: 'Roof Anchor',
+      description: 'Blue roof anchor 16 inch galvanized steel for residential roof framing applications',
+      priceText: '$12.99',
+      url: 'https://example.test/product/roof-anchor',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(75);
+  });
+
+  it('matches compressed dimensions and common building-material abbreviations', () => {
+    const item: InventoryItem = {
+      sku: '8480008',
+      name: 'BULLNOSE CRNRBN TRMTEX D/W 8',
+      description: 'BULLNOSE CRNRBN TRMTEX D/W 8',
+    };
+    const candidate: CandidateProduct = {
+      title: 'Trim-Tex 90 Degree Bullnose Drywall Corner Bead 8 ft',
+      priceText: '$4.99',
+      url: 'https://example.test/product/corner-bead',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(55);
+  });
+
+  it('builds expanded search terms for SPF, plywood, and PT Brown SKUs', () => {
+    const cases = [
+      {
+        item: { sku: '0971041', name: 'SPF #3&BTR KD 1X3X8', description: 'SPF #3&BTR KD 1X3X8' },
+        expected: 'SPF 3 and better kiln dried 1 x 3 x 8',
+      },
+      {
+        item: { sku: '0938011', name: '3/8 SPRUCE SELECT PLY *Y*', description: '3/8 SPRUCE SELECT PLY *Y*' },
+        expected: '3/8 SPRUCE SELECT plywood *Y*',
+      },
+      {
+        item: { sku: '0938042', name: 'OSB SQUARE (10.5)7/16X4X8 WHITE', description: 'OSB SQUARE (10.5)7/16X4X8 WHITE' },
+        expected: 'OSB SQUARE (10.5)7/16 x 4 x 8 WHITE',
+        focused: '7/16 OSB 4 x 8',
+      },
+      {
+        item: { sku: '84895021', name: "PT BROWN 2X4\"X8'", description: "PT BROWN 2X4\"X8'" },
+        expected: "pressure treated BROWN 2 x 4 x 8'",
+      },
+    ];
+
+    for (const { item, expected, focused } of cases) {
+      const terms = getSearchTerms(item);
+      expect(terms[1]).toBe(expected);
+      if (focused) expect(terms).toContain(focused);
+    }
+    expect(getSearchTerms(cases[0].item)).toContain('SPF 1 x 3 x 8');
+    expect(getSearchTerms(cases[0].item)).toContain('1 x 3 x 8 spruce lumber');
+  });
+
+  it('rejects handrail results for PT Brown dimensional lumber', () => {
+    const item: InventoryItem = {
+      sku: '84895021',
+      name: 'PT BROWN 2X4 X8',
+      description: 'PT BROWN 2X4 X8',
+    };
+    const candidate: CandidateProduct = {
+      title: "Marwood Wood Handrail 2 x 4 x 8' Brown",
+      priceText: '$23.39',
+      url: 'https://example.test/product/handrail',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBe(0);
+  });
+
+  it('does not give a strong match bonus when product dimensions disagree', () => {
+    const item: InventoryItem = {
+      sku: 'DRYWALL-4X8',
+      name: 'Drywall lightweight 1/2 x 4 x 8',
+      description: 'Drywall lightweight 1/2 x 4 x 8',
+    };
+    const candidate: CandidateProduct = {
+      title: 'CGC Lightweight Drywall Panel 1/2 in x 4 ft x 10 ft',
+      priceText: '$15.99',
+      url: 'https://example.test/product/drywall-4x10',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeLessThan(55);
+  });
+
+  it('matches trim-board dimensions after retailer wording expands the fractions', () => {
+    const item: InventoryItem = {
+      sku: '10200034',
+      name: 'VERSATEX 3/4X3 1/2X12 PVC TRIM',
+      description: 'VERSATEX 3/4X3 1/2X12 PVC TRIM',
+    };
+    const candidate: CandidateProduct = {
+      title: 'Versatex 3/4 in. x 3-1/2 in. x 12 ft. PVC trim board',
+      priceText: '$41.99',
+      url: 'https://example.test/product/versatex-trim',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(55);
+  });
+
+  it('rejects a same-product trim listing with the wrong length', () => {
+    const item: InventoryItem = {
+      sku: '10200034',
+      name: 'VERSATEX 3/4X3 1/2X12 PVC TRIM',
+      description: 'VERSATEX 3/4X3 1/2X12 PVC TRIM',
+    };
+    const candidate: CandidateProduct = {
+      title: '3-1/2 in. x 3/4 in. x 14 ft. primed MDF casing moulding',
+      priceText: '$73.48',
+      url: 'https://example.test/product/wrong-length-moulding',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeLessThan(55);
+  });
+
+  it('accepts equivalent mixed-fraction trim dimensions in swapped width order', () => {
+    const item: InventoryItem = {
+      sku: '10200034',
+      name: 'VERSATEX 3/4X3 1/2X12 PVC TRIM',
+      description: 'VERSATEX 3/4X3 1/2X12 PVC TRIM',
+    };
+    const candidate: CandidateProduct = {
+      title: "3-1/2 in. x 3/4 in. x 12 ft. Versatex PVC trim board",
+      priceText: '$41.99',
+      url: 'https://example.test/product/versatex-trim',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(55);
+  });
+
+  it('rejects plywood with the wrong thickness when inventory omits sheet length and width', () => {
+    const item: InventoryItem = {
+      sku: '0938011',
+      name: '3/8 SPRUCE SELECT PLY',
+      description: '3/8 SPRUCE SELECT PLY',
+    };
+    const candidate: CandidateProduct = {
+      title: '3/4 in. x 4 ft. x 8 ft. Spruce Plywood Select',
+      priceText: '$71.48',
+      url: 'https://example.test/product/wrong-plywood-thickness',
+    };
+
+    expect(calculateMatchScore(item, candidate)).toBe(0);
+  });
+
   it('parses grouped currency values and retailer verbal prices', () => {
     expect(extractPrice('$1,299.99')).toBe(1299.99);
     expect(extractPrice('$3 And 98 Cents / each')).toBe(3.98);

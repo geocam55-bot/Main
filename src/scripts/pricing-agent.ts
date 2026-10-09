@@ -384,7 +384,11 @@ async function findBestKentMatch(invItem: InventoryItem): Promise<ScoredMatch | 
     const results = await searchKentFast(term);
     if (results.length > 0) {
       allCandidates.push(...results);
-      break;
+      const strongPricedMatch = results.some(candidate =>
+        extractPrice(candidate.priceText) != null &&
+        calculateMatchScore(invItem, candidate) >= Math.max(kentComp.matchThreshold, 65)
+      );
+      if (strongPricedMatch) break;
     }
   }
 
@@ -666,7 +670,7 @@ export async function runCompetitivePricing() {
               attributes: item.attributes || {},
               mfg: item.supplier_sku || parsedAttrs.model || parsedAttrs.mpn || "",
               upc: item.upc || "",
-              dimensions: parsedAttrs.dimensions || parsedAttrs.size || item.description || item.name || "",
+              dimensions: parsedAttrs.dimensions || parsedAttrs.size || "",
               category: item.category || "",
               unit_price: item.unit_price ? (item.unit_price > 100 ? item.unit_price / 100 : item.unit_price) : 0
             };
