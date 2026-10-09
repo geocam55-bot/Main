@@ -22,6 +22,19 @@ export const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with', 'do', 'you', 'have', 'show', 'me', 'please', 'i', 'want', 'can', 'item', 'items', 'find'
 ]);
 
+export function normalizeInventorySearchQuery(query: string): string {
+  return query
+    .trim()
+    .replace(/[?!.,]+$/g, '')
+    .replace(/^(?:(?:please\s+)?(?:can|could|would)\s+you\s+)?(?:show|find|search|list|display)\s+(?:me\s+)?(?:all\s+)?(?:of\s+)?(?:the\s+)?/i, '')
+    .replace(/^(?:i\s+(?:want|need)\s+to\s+|do\s+you\s+have\s+)/i, '')
+    .replace(/^(?:all\s+)?(?:the\s+)?/i, '')
+    .replace(/\b(?:that\s+(?:have|has)|in\s+(?:the\s+)?description|description|containing)\b/gi, ' ')
+    .replace(/\b(?:items?|products?)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const SYNONYM_MAP: Record<string, string[]> = {
   pt: ['treated', 'pressure-treated', 'pressure treated', 'outdoor', 'exterior'],
   treated: ['pt', 'pressure-treated', 'pressure treated', 'outdoor', 'exterior'],
@@ -452,4 +465,3 @@ export function buildInventoryRelaxedSearchClause(query: string): string {
   const unique = Array.from(new Set(allSubClauses));
   return unique.join(',');
 }
-

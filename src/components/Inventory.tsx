@@ -343,6 +343,9 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   } | null>(null);
   const notificationTimeoutRef = useRef<number | null>(null);
   const migrationCheckedRef = useRef(false);
+  const performanceIndexesStartedRef = useRef(false);
+  const categoriesRequestedForOrgRef = useRef<string | null>(null);
+  const authContextRef = useRef<{ userId: string; authUser: any; profile: any } | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -803,15 +806,20 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     try {
       setIsLoading(true);
       
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      if (authError || !authUser) {
-        setIsLoading(false);
-        setTableExists(false);
-        showAlert('error', 'Please log in to access inventory');
-        return;
+      if (!authContextRef.current || authContextRef.current.userId !== user.id) {
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        if (authError || !authUser) {
+          setIsLoading(false);
+          setTableExists(false);
+          showAlert('error', 'Please log in to access inventory');
+          return;
+        }
+
+        const profile = await ensureUserProfile(authUser.id);
+        authContextRef.current = { userId: user.id, authUser, profile };
       }
-      
-      const profile = await ensureUserProfile(authUser.id);
+
+      const { authUser, profile } = authContextRef.current;
       const userOrgId = profile.organization_id;
       
       if (!userOrgId) {
@@ -821,10 +829,11 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
         return;
       }
 
-      // Auto-reconcile database schema if not checked yet
+      // Keep the required schema check in the load path, but provision indexes asynchronously.
       if (!migrationCheckedRef.current) {
+        migrationCheckedRef.current = true;
         try {
-          await supabase.rpc('exec_sql', {
+          const { error: schemaError } = await supabase.rpc('exec_sql', {
             sql: `
               DO $$
               BEGIN
@@ -846,46 +855,28 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory' AND column_name = 'price_levels') THEN
                   ALTER TABLE public.inventory ADD COLUMN price_levels JSONB DEFAULT '{}'::jsonb;
                 END IF;
+                EXECUTE 'DROP FUNCTION IF EXISTS public.get_distinct_categories(uuid)';
+                EXECUTE $function$
+                  CREATE OR REPLACE FUNCTION public.get_distinct_categories(org_id text)
+                  RETURNS TABLE(category text)
+                  LANGUAGE plpgsql
+                  SECURITY DEFINER
+                  AS $body$
+                  BEGIN
+                    RETURN QUERY
+                    SELECT DISTINCT i.category::text
+                    FROM public.inventory i
+                    WHERE i.organization_id = org_id AND i.category IS NOT NULL AND i.category != '';
+                  END;
+                  $body$;
+                $function$;
+                EXECUTE 'GRANT EXECUTE ON FUNCTION public.get_distinct_categories(text) TO anon, authenticated, service_role';
               END $$;
             `
           });
-          
-          // ⚡ Optimistically create performance indexes sequentially in the background on first load
-          const performanceIndexes = [
-            'CREATE INDEX IF NOT EXISTS idx_inventory_org_name ON public.inventory(organization_id, name);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_org_category ON public.inventory(organization_id, category);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_org_sku ON public.inventory(organization_id, sku);',
-            'CREATE EXTENSION IF NOT EXISTS pg_trgm;',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_name_trgm ON public.inventory USING gin(name gin_trgm_ops);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_description_trgm ON public.inventory USING gin(description gin_trgm_ops);',
-            'CREATE INDEX IF NOT EXISTS idx_inventory_sku_trgm ON public.inventory USING gin(sku gin_trgm_ops);',
-            `DROP FUNCTION IF EXISTS public.get_distinct_categories(uuid);`,
-            `CREATE OR REPLACE FUNCTION public.get_distinct_categories(org_id text)
-             RETURNS TABLE(category text)
-             LANGUAGE plpgsql
-             SECURITY DEFINER
-             AS $func$
-             BEGIN
-               RETURN QUERY
-               SELECT DISTINCT i.category::text
-               FROM public.inventory i
-               WHERE i.organization_id = org_id AND i.category IS NOT NULL AND i.category != '';
-             END;
-             $func$;`,
-            'GRANT EXECUTE ON FUNCTION public.get_distinct_categories(text) TO anon, authenticated, service_role;',
-            'ANALYZE public.inventory;'
-          ];
-          for (const idxSql of performanceIndexes) {
-            try {
-              await supabase.rpc('exec_sql', { sql: idxSql });
-            } catch (idxErr) {
-              console.warn('Silent fallback during auto-indexing:', idxSql, idxErr);
-            }
-          }
-
-          migrationCheckedRef.current = true;
+          if (schemaError) console.warn('Failed to reconcile inventory schema:', schemaError);
         } catch (err) {
-          // Silent fallback if RPC not allowed
+          console.warn('Failed to reconcile inventory schema:', err);
         }
       }
       
@@ -912,38 +903,69 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       setItems(mappedItems);
       setTotalCount(count);
 
-      // Fetch distinct categories across the whole database for this organization.
-      try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: userOrgId });
-
-        if (!rpcError && rpcData) {
-          const uniqueCats = rpcData
-            .map((row: any) => typeof row === 'object' ? row.category : row)
-            .filter(Boolean);
-          const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim())))
-            .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-          setAvailableCategories(sorted);
-        } else {
-          const { data: categoryData, error: categoryError } = await supabase
-            .from('inventory')
-            .select('category')
-            .eq('organization_id', userOrgId);
-
-          if (categoryError) throw categoryError;
-          const uniqueCats = (categoryData || []).map(item => item.category).filter(Boolean) as string[];
-          const sorted = Array.from(new Set(uniqueCats.map(c => c.trim())))
-            .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-          setAvailableCategories(sorted);
-        }
-      } catch (categoryError) {
-        console.warn('Failed to fetch inventory categories:', categoryError);
-      }
       setServerLowStockCount(serverLowStock || 0); // 📊 Store server-calculated low stock count
       setTableExists(true);
       setIsLoading(false);
       
       // Track load time
       setLoadTimeMs(loadTime);
+
+      if (!performanceIndexesStartedRef.current) {
+        performanceIndexesStartedRef.current = true;
+        void (async () => {
+          const performanceIndexes = [
+            'CREATE INDEX IF NOT EXISTS idx_inventory_org_name ON public.inventory(organization_id, name);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_org_category ON public.inventory(organization_id, category);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_org_sku ON public.inventory(organization_id, sku);',
+            'CREATE EXTENSION IF NOT EXISTS pg_trgm;',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_name_trgm ON public.inventory USING gin(name gin_trgm_ops);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_description_trgm ON public.inventory USING gin(description gin_trgm_ops);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_sku_trgm ON public.inventory USING gin(sku gin_trgm_ops);',
+            'ANALYZE public.inventory;'
+          ];
+          for (const sql of performanceIndexes) {
+            try {
+              const { error } = await supabase.rpc('exec_sql', { sql });
+              if (error) console.warn('Failed to create inventory performance index:', error);
+            } catch (error) {
+              console.warn('Failed to create inventory performance index:', error);
+            }
+          }
+        })();
+      }
+
+      // Load categories after the inventory table is visible and only once per organization.
+      if (categoriesRequestedForOrgRef.current !== userOrgId) {
+        categoriesRequestedForOrgRef.current = userOrgId;
+        void (async () => {
+          try {
+            const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: userOrgId });
+            if (!rpcError && rpcData) {
+              const uniqueCats = rpcData
+                .map((row: any) => typeof row === 'object' ? row.category : row)
+                .filter(Boolean);
+              const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim())))
+                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+              setAvailableCategories(sorted);
+              return;
+            }
+
+            if (rpcError) console.warn('Distinct inventory categories RPC failed; using table fallback:', rpcError);
+            const { data: categoryData, error: categoryError } = await supabase
+              .from('inventory')
+              .select('category')
+              .eq('organization_id', userOrgId);
+            if (categoryError) throw categoryError;
+            const uniqueCats = (categoryData || []).map(item => item.category).filter(Boolean) as string[];
+            const sorted = Array.from(new Set(uniqueCats.map(c => c.trim())))
+              .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+            setAvailableCategories(sorted);
+          } catch (categoryError) {
+            console.warn('Failed to fetch inventory categories:', categoryError);
+            categoriesRequestedForOrgRef.current = null;
+          }
+        })();
+      }
       
       // Show optimization instructions if critically slow (not for 1-2s loads)
       if (loadTime > 5000 && count > 1000 && currentPage === 1) {
@@ -2087,8 +2109,12 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                   <AIChatSearchBar
                     moduleName="inventory"
                     onApplyFilters={(f) => {
-                      if (f.search) setSearchQuery(f.search);
-                      if (f.category && f.category !== 'all') setCategoryFilter(f.category);
+                      setSearchQuery(f.search || '');
+                      const matchedCategory = availableCategories.find(
+                        category => category.toLowerCase() === String(f.category || '').toLowerCase()
+                      );
+                      setCategoryFilter(matchedCategory || 'all');
+                      setCurrentPage(1);
                     }}
                     placeholder="Ask AI (e.g. 'Show me all products that have Spruce and 2x4 in description')..."
                   />

@@ -2899,26 +2899,28 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       organisationId: resolvedOrgId || undefined
     };
 
+    let tempTaskId = "";
+    const supabase = createClient();
     try {
-      const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       
-      let tempTaskId = "";
       if (connectionMode === "supabase") {
         tempTaskId = "temp-manual-" + Math.random().toString(36).slice(2, 8);
         tempTask.id = tempTaskId;
-        const { data: catData } = await supabase
+        const { data: catData, error: readTaskError } = await supabase
           .from('kv_store_8405be07')
           .select('value')
           .eq('key', 'import_export_tasks')
           .maybeSingle();
+        if (readTaskError) throw readTaskError;
         let currentTasks = catData?.value || [];
         if (!Array.isArray(currentTasks)) currentTasks = [];
         currentTasks.push({ ...tempTask, createdAt: new Date().toISOString() });
-        await supabase.from('kv_store_8405be07').upsert({
+        const { error: saveTaskError } = await supabase.from('kv_store_8405be07').upsert({
           key: 'import_export_tasks',
           value: currentTasks
         });
+        if (saveTaskError) throw saveTaskError;
       } else {
         const registerRes = await safeFetch("/api/import-export/tasks", {
           method: "POST",
@@ -2926,35 +2928,29 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           body: JSON.stringify(tempTask)
         });
         const registerData = await parseResponseJson(registerRes);
-        if (registerData.success) tempTaskId = registerData.task.id;
+        if (!registerData.success || !registerData.task?.id) {
+          throw new Error(registerData.error || "Could not create an instant import/export task.");
+        }
+        tempTaskId = registerData.task.id;
       }
       
       if (tempTaskId) {
-        const runRes = await safeFetch(`/api/import-export/tasks/${tempTaskId}/run`, {
-          method: "POST",
-          headers: session?.access_token ? {
-            "Authorization": `Bearer ${session.access_token}`
-          } : {}
-        }, 120000);
-        const runData = await parseResponseJson(runRes);
-        
-        // delete temporary helper
+        let runData: any;
         if (connectionMode === "supabase") {
-          const { data: catData } = await supabase
-            .from('kv_store_8405be07')
-            .select('value')
-            .eq('key', 'import_export_tasks')
-            .maybeSingle();
-          let currentTasks = catData?.value || [];
-          if (Array.isArray(currentTasks)) {
-            currentTasks = currentTasks.filter((t: any) => t.id !== tempTaskId);
-            await supabase.from('kv_store_8405be07').upsert({
-              key: 'import_export_tasks',
-              value: currentTasks
-            });
-          }
+          const { data, error } = await supabase.functions.invoke(
+            'make-server-8405be07/import-export/execute-task',
+            { body: { taskId: tempTaskId } }
+          );
+          if (error) throw error;
+          runData = { ...data, logResult: data?.log || data?.logResult };
         } else {
-          await safeFetch(`/api/import-export/tasks/${tempTaskId}`, { method: "DELETE" });
+          const runRes = await safeFetch(`/api/import-export/tasks/${tempTaskId}/run`, {
+            method: "POST",
+            headers: session?.access_token ? {
+            "Authorization": `Bearer ${session.access_token}`
+            } : {}
+          }, 120000);
+          runData = await parseResponseJson(runRes);
         }
 
         if (runData.success) {
@@ -2975,6 +2971,29 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     } catch (err: any) {
       toast.error(`Error executing manual process: ${err.message}`, { id: "manual-job" });
     } finally {
+      if (tempTaskId) {
+        try {
+          if (connectionMode === "supabase") {
+            const { data: catData, error: readError } = await supabase
+              .from('kv_store_8405be07')
+              .select('value')
+              .eq('key', 'import_export_tasks')
+              .maybeSingle();
+            if (readError) throw readError;
+            const currentTasks = Array.isArray(catData?.value) ? catData.value : [];
+            const { error: saveError } = await supabase.from('kv_store_8405be07').upsert({
+              key: 'import_export_tasks',
+              value: currentTasks.filter((task: any) => task.id !== tempTaskId)
+            });
+            if (saveError) throw saveError;
+          } else {
+            const response = await safeFetch(`/api/import-export/tasks/${tempTaskId}`, { method: "DELETE" });
+            if (!response.ok) throw new Error(`Server returned ${response.status} while removing temporary task.`);
+          }
+        } catch (cleanupError) {
+          console.error("Failed to remove temporary instant import/export task:", cleanupError);
+        }
+      }
       setManualIsProcessing(false);
     }
   };

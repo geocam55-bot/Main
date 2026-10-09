@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { normalizeInventorySearchQuery } from '../../utils/inventory-keywords';
 
 interface AIChatSearchBarProps {
   moduleName: 'inventory' | 'shopping-list' | 'competitive-pricing';
@@ -56,6 +57,14 @@ export function AIChatSearchBar({
         const data = await res.json();
         const aiReply = data.reply || `Here are the results for "${userMsg}".`;
         const filters = data.filters || { search: userMsg };
+        if (moduleName === 'inventory') {
+          const normalizedSearch = normalizeInventorySearchQuery(filters.search || userMsg);
+          const priceTerms = [
+            filters.priceMin != null ? `over $${filters.priceMin}` : '',
+            filters.priceMax != null ? `under $${filters.priceMax}` : ''
+          ].filter(Boolean);
+          filters.search = [normalizedSearch, ...priceTerms].filter(Boolean).join(' ');
+        }
 
         setMessages([...newMessages, { role: 'assistant', text: aiReply, filters }]);
         onApplyFilters(filters);
@@ -64,7 +73,10 @@ export function AIChatSearchBar({
       }
     } catch (err) {
       // Fallback local keyword extraction
-      const fallbackFilters = { search: userMsg, category: 'all' };
+      const fallbackFilters = {
+        search: moduleName === 'inventory' ? normalizeInventorySearchQuery(userMsg) : userMsg,
+        category: 'all'
+      };
       setMessages([
         ...newMessages,
         {

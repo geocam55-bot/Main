@@ -1,11 +1,8 @@
 // @ts-nocheck
 import { createClient } from './supabase/client';
 import {
-  buildInventoryOrSearchClause,
   buildInventoryAndSearchClause,
-  buildInventoryRelaxedSearchClause,
-  expandInventorySearchTerms,
-  STOP_WORDS
+  buildInventoryRelaxedSearchClause
 } from './inventory-keywords';
 
 const supabase = createClient();
@@ -75,17 +72,6 @@ function parseSearchQuery(query: string): {
   const searchTerms = cleanedQuery.replace(/\s+/g, ' ').trim();
 
   return { searchTerms, priceFilter };
-}
-
-/**
- * Simple stemming function to handle singular/plural
- */
-function stem(word: string): string {
-  word = word.toLowerCase();
-  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
-  if (word.endsWith('es')) return word.slice(0, -2);
-  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
-  return word;
 }
 
 /**
@@ -249,6 +235,10 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
     if (categoryFilter && categoryFilter !== 'all') {
       query = query.eq('category', categoryFilter);
       lowStockQuery = lowStockQuery.eq('category', categoryFilter);
+    }
+    if (statusFilter && statusFilter !== 'all') {
+      query = query.eq('status', statusFilter);
+      lowStockQuery = lowStockQuery.eq('status', statusFilter);
     }
 
     // Apply sorting and pagination to the main query
