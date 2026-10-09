@@ -466,24 +466,30 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         value: filePayload
       });
       if (upsertErr) {
-        console.warn("Supabase virtual file upsert warning (using local fallback):", upsertErr);
-        return;
+        throw new Error(`Could not save "${fileName}" to Supabase storage: ${upsertErr.message}`);
       }
 
       const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
-      const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', catKey).maybeSingle();
+      const { data: catData, error: readCategoryError } = await supabase
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', catKey)
+        .maybeSingle();
+      if (readCategoryError) throw readCategoryError;
       let currentFiles = catData?.value || [];
       if (!Array.isArray(currentFiles)) currentFiles = [];
 
       currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
       currentFiles.push(fileMeta);
 
-      await supabase.from('kv_store_8405be07').upsert({
+      const { error: saveCategoryError } = await supabase.from('kv_store_8405be07').upsert({
         key: catKey,
         value: currentFiles
       });
+      if (saveCategoryError) throw saveCategoryError;
     } catch (err: any) {
-      console.warn("Supabase virtual file save network warning (using local fallback):", err?.message || err);
+      console.error("Supabase virtual file save failed:", err?.message || err);
+      throw err;
     }
   };
 
@@ -2954,10 +2960,12 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         }
 
         if (runData.success) {
-          if (runData.logResult.status === 'success') {
-            toast.success(`Success! ${runData.logResult.message}`, { id: "manual-job", duration: 5000 });
+          const resultStatus = runData.logResult?.status;
+          const resultMessage = runData.logResult?.message || runData.error;
+          if (resultStatus === 'success') {
+            toast.success(`Success! ${resultMessage || 'Import/export completed.'}`, { id: "manual-job", duration: 5000 });
           } else {
-            toast.error(`Job failed: ${runData.logResult.message}`, { id: "manual-job", duration: 5000 });
+            toast.error(`Job failed: ${resultMessage || 'The server did not return execution details.'}`, { id: "manual-job", duration: 8000 });
           }
           fetchStats();
           fetchFiles("local");
@@ -2965,7 +2973,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           fetchHistory();
           fetchCrmRecords(previewModule);
         } else {
-          toast.error("Manual processing failed.", { id: "manual-job" });
+          const failureMessage = runData.logResult?.message || runData.error;
+          toast.error(
+            failureMessage ? `Manual process failed: ${failureMessage}` : "Manual process failed: The server did not return an error message.",
+            { id: "manual-job", duration: 10000 }
+          );
         }
       }
     } catch (err: any) {
