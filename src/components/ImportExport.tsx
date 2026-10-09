@@ -2947,7 +2947,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             'make-server-8405be07/import-export/execute-task',
             { body: { taskId: tempTaskId } }
           );
-          if (error) throw error;
+          if (error) {
+            const context = error.context;
+            if (context instanceof Response) {
+              const responseBody = await context.clone().json().catch(() => null);
+              const responseMessage =
+                responseBody?.error ||
+                responseBody?.message ||
+                responseBody?.log?.message ||
+                responseBody?.logResult?.message;
+              if (responseMessage) throw new Error(responseMessage);
+            }
+            throw error;
+          }
           runData = { ...data, logResult: data?.log || data?.logResult };
         } else {
           const runRes = await safeFetch(`/api/import-export/tasks/${tempTaskId}/run`, {
@@ -2959,9 +2971,17 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           runData = await parseResponseJson(runRes);
         }
 
-        if (runData.success) {
-          const resultStatus = runData.logResult?.status;
-          const resultMessage = runData.logResult?.message || runData.error;
+        const runLog = runData?.logResult || runData?.log || runData?.result?.log;
+        const runSucceeded = runData?.success === true ||
+          (runData?.success == null && runLog?.status === 'success');
+        const resultMessage = runLog?.message ||
+          runData?.error ||
+          runData?.message ||
+          runData?.details ||
+          runData?.error_description;
+
+        if (runSucceeded) {
+          const resultStatus = runLog?.status;
           if (resultStatus === 'success') {
             toast.success(`Success! ${resultMessage || 'Import/export completed.'}`, { id: "manual-job", duration: 5000 });
           } else {
@@ -2973,9 +2993,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           fetchHistory();
           fetchCrmRecords(previewModule);
         } else {
-          const failureMessage = runData.logResult?.message || runData.error;
+          const responseDetails = runData == null
+            ? "The server returned an empty response."
+            : JSON.stringify(runData).slice(0, 800);
           toast.error(
-            failureMessage ? `Manual process failed: ${failureMessage}` : "Manual process failed: The server did not return an error message.",
+            `Manual process failed: ${resultMessage || responseDetails}`,
             { id: "manual-job", duration: 10000 }
           );
         }

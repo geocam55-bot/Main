@@ -2657,6 +2657,10 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
       }
     }
 
+    if (executionStatus === "failed" && !logMsg) {
+      logMsg = "Import/export execution failed without diagnostic details.";
+    }
+
     const logRecord = {
       id: "log-" + Math.random().toString(36).slice(2, 11),
       taskId: taskId,
@@ -2700,6 +2704,7 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
 
     return c.json({
       success: executionStatus === "success",
+      ...(executionStatus === "failed" ? { error: logMsg } : {}),
       log: logRecord,
       task
     });
