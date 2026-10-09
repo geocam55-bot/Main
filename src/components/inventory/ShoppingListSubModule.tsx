@@ -827,7 +827,17 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
         }
       }));
 
-      toast.loading(`Scraped ${Math.min(chunkStart + BATCH_SIZE, updatedList.length)} of ${updatedList.length} shopping list items...`, { id: 'shopping-scrape' });
+      toast.loading(
+        `Scraped ${Math.min(chunkStart + BATCH_SIZE, updatedList.length)} of ${updatedList.length} shopping list items...`,
+        {
+          id: 'shopping-scrape',
+          style: {
+            backgroundColor: '#fff',
+            color: '#111827',
+            borderColor: '#d1d5db',
+          },
+        }
+      );
     }
 
     setShoppingList(updatedList);
