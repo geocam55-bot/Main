@@ -33,14 +33,16 @@ const REFRESH_COOLDOWN_MS = 30_000;
 
 // Keep the cache fresh whenever auth state changes (login, logout, refresh).
 // The very first event Supabase fires is INITIAL_SESSION — resolve the gate.
-const { data: { subscription: _authSub } } = supabase.auth.onAuthStateChange(
-  (event, session) => {
+if (supabase?.auth && typeof supabase.auth.onAuthStateChange === 'function') {
+  supabase.auth.onAuthStateChange((event, session) => {
     _cachedToken = session?.access_token ?? null;
     _cachedTokenExpiresAtMs = session?.expires_at ? session.expires_at * 1000 : null;
     // Resolve the gate on any first event (INITIAL_SESSION, SIGNED_IN, etc.)
     _authReady();
-  },
-);
+  });
+} else {
+  _authReady();
+}
 
 // Safety net: if onAuthStateChange never fires (edge case), unblock after 2s
 setTimeout(() => _authReady(), 2000);

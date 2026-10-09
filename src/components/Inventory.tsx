@@ -912,52 +912,31 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       setItems(mappedItems);
       setTotalCount(count);
 
-      // Fetch distinct categories across the whole database for this organization via server API
+      // Fetch distinct categories across the whole database for this organization.
       try {
-        const headers = await getServerHeaders();
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/categories`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ organizationId: userOrgId })
-        });
-        
-        if (response.ok) {
-          const catResult = await response.json();
-          if (catResult && catResult.matched !== false && Array.isArray(catResult.categories)) {
-            setAvailableCategories(catResult.categories);
-          } else {
-            throw new Error('API returned unmatched route fallback or invalid categories payload');
-          }
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: userOrgId });
+
+        if (!rpcError && rpcData) {
+          const uniqueCats = rpcData
+            .map((row: any) => typeof row === 'object' ? row.category : row)
+            .filter(Boolean);
+          const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim())))
+            .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+          setAvailableCategories(sorted);
         } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const { data: categoryData, error: categoryError } = await supabase
+            .from('inventory')
+            .select('category')
+            .eq('organization_id', userOrgId);
+
+          if (categoryError) throw categoryError;
+          const uniqueCats = (categoryData || []).map(item => item.category).filter(Boolean) as string[];
+          const sorted = Array.from(new Set(uniqueCats.map(c => c.trim())))
+            .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+          setAvailableCategories(sorted);
         }
-      } catch (catErr) {
-        console.warn('Failed to fetch categories via server API, trying local RPC/select fallback:', catErr);
-        // Fetch distinct categories across the whole database for this organization
-        try {
-          const { data: rpcData, error: rpcError } = await supabase.rpc('get_distinct_categories', { org_id: userOrgId });
-          
-          if (!rpcError && rpcData) {
-            // rpcData can be an array of objects like { category: "appliances" } or strings
-            const uniqueCats = rpcData.map((row: any) => typeof row === 'object' ? row.category : row).filter(Boolean);
-            const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-            setAvailableCategories(sorted);
-          } else {
-            // Fallback if RPC fails or is not found
-            const { data: categoryData, error: categoryError } = await supabase
-              .from('inventory')
-              .select('category')
-              .eq('organization_id', userOrgId);
-            
-            if (!categoryError && categoryData) {
-              const uniqueCats = categoryData.map(item => item.category).filter(Boolean) as string[];
-              const sorted = Array.from(new Set(uniqueCats.map((c: string) => c.trim()))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-              setAvailableCategories(sorted);
-            }
-          }
-        } catch (innerErr) {
-          console.warn('All distinct category fetches failed:', innerErr);
-        }
+      } catch (categoryError) {
+        console.warn('Failed to fetch inventory categories:', categoryError);
       }
       setServerLowStockCount(serverLowStock || 0); // 📊 Store server-calculated low stock count
       setTableExists(true);

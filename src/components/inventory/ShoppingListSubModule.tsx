@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -213,6 +213,8 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
   const [historyTarget, setHistoryTarget] = useState<ShoppingListItem | null>(null);
   const [isSearchingPrices, setIsSearchingPrices] = useState(false);
   const [scrapingItemIds, setScrapingItemIds] = useState<Set<string>>(new Set());
+  const bulkScrapeInProgressRef = useRef(false);
+  const singleScrapeInProgressRef = useRef(new Set<string>());
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
   const [isEditingPrices, setIsEditingPrices] = useState(false);
   const [overrideKentPrice, setOverrideKentPrice] = useState('');
@@ -664,19 +666,23 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
 
   // Search Competitor Prices for all items in shopping list using the exact same scraping tools as Competitive Pricing
   const handleSearchCompetitorPrices = async () => {
+    if (bulkScrapeInProgressRef.current || singleScrapeInProgressRef.current.size > 0) return;
     if (shoppingList.length === 0) {
       toast.error('Add items to the shopping list first');
       return;
     }
 
+    bulkScrapeInProgressRef.current = true;
     setIsSearchingPrices(true);
     toast.info(`Searching live competitor prices (${kentConfig.name} & ${hdConfig.name}) for ${shoppingList.length} items...`);
 
     let updatedCount = 0;
     let itemsWithLivePrices = 0;
+    let skippedItems = 0;
     const updatedList = [...shoppingList];
-    const BATCH_SIZE = 3;
+    const BATCH_SIZE = 2;
 
+    try {
     for (let chunkStart = 0; chunkStart < updatedList.length; chunkStart += BATCH_SIZE) {
       const chunk = updatedList.slice(chunkStart, chunkStart + BATCH_SIZE);
       await Promise.all(chunk.map(async (item, chunkIdx) => {
@@ -691,6 +697,13 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
           sku: item.sku,
           mfgPartNumber: item.mfgPartNumber || item.modelNumber,
         });
+
+        if (/unknown sku|sku not found in inventory master table/i.test(
+          `${item.name} ${item.description || ''} ${itemDesc || ''}`
+        )) {
+          skippedItems++;
+          return;
+        }
 
         const kentDirectUrl = buildCompetitorSearchUrl('kent', effectiveSearchTerm);
         const hdDirectUrl = buildCompetitorSearchUrl('homeDepot', effectiveSearchTerm);
@@ -817,14 +830,22 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
       toast.loading(`Scraped ${Math.min(chunkStart + BATCH_SIZE, updatedList.length)} of ${updatedList.length} shopping list items...`, { id: 'shopping-scrape' });
     }
 
-    toast.dismiss('shopping-scrape');
     setShoppingList(updatedList);
-    setIsSearchingPrices(false);
-    toast.success(`Live price search complete. Found prices for ${itemsWithLivePrices} of ${updatedCount} items.`);
+    toast.success(
+      `Live price search complete. Found prices for ${itemsWithLivePrices} of ${updatedCount} items.` +
+      (skippedItems > 0 ? ` Skipped ${skippedItems} items without product details.` : '')
+    );
+    } finally {
+      toast.dismiss('shopping-scrape');
+      bulkScrapeInProgressRef.current = false;
+      setIsSearchingPrices(false);
+    }
   };
 
   // Scrape competitor prices for a single item on demand
   const handleScrapeSingleItem = async (item: ShoppingListItem) => {
+    if (bulkScrapeInProgressRef.current || singleScrapeInProgressRef.current.has(item.id)) return;
+    singleScrapeInProgressRef.current.add(item.id);
     const targetId = item.inventoryId || item.id;
     const { title: itemTitle, description: itemDesc } = resolveInventoryTitles(item.name, item.description, item.category);
     const effectiveSearchTerm = extractRealProductSearchTerm({
@@ -996,6 +1017,7 @@ export function ShoppingListSubModule({ onSelectProduct, onInspectProduct }: Sho
       );
       toast.info(`Live competitor pricing unavailable for "${itemTitle}"`);
     } finally {
+      singleScrapeInProgressRef.current.delete(item.id);
       setScrapingItemIds((prev) => {
         const next = new Set(prev);
         next.delete(item.id);

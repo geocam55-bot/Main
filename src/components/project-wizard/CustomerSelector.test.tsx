@@ -23,6 +23,9 @@ vi.mock('../../utils/supabase/client', () => ({
       }),
     }),
   }),
+  getSupabaseUrl: () => 'https://example.supabase.co',
+  handleAuthError: vi.fn(),
+  clearStaleAuthTokens: vi.fn(),
 }));
 
 describe('CustomerSelector', () => {

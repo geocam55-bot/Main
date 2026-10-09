@@ -23,6 +23,9 @@ vi.mock('../utils/supabase/client', () => ({
       refreshSession: (...args: any[]) => refreshSessionMock(...args),
     },
   }),
+  getSupabaseUrl: () => 'https://example.supabase.co',
+  handleAuthError: vi.fn(),
+  clearStaleAuthTokens: vi.fn(),
 }));
 
 vi.mock('../utils/server-function-url', () => ({

@@ -5,6 +5,7 @@ import {
 } from './src/utils/inventory-keywords';
 // Deployment: Vercel redeploy with env vars active (2026-08-18)
 import express from 'express';
+import { createServer as createHttpServer } from 'node:http';
 import path from 'path';
 import cors from 'cors';
 import multer from 'multer';
@@ -3828,6 +3829,7 @@ Return JSON matching this schema:
     try {
       const { getPlaywrightBrowser, findBestProductMatch, COMPETITORS } = await import('./src/services/playwright-scraper.js');
       let page: any = null;
+      let homeDepotPage: any = null;
       let browser: any = null;
       let context: any = null;
 
@@ -3838,6 +3840,7 @@ Return JSON matching this schema:
           userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         });
         page = await context.newPage();
+        homeDepotPage = await context.newPage();
       } catch (launchErr: any) {
         diagnosticLogs.push(`[Scraper Notice] Headless browser unavailable; utilizing direct high-speed store scrapers.`);
       }
@@ -3859,20 +3862,30 @@ Return JSON matching this schema:
 
       diagnosticLogs.push(`[Scraper] Starting live competitor search for: ${primarySearchTerm}`);
 
-      // 1. Kent Live Scraping
-      try {
-        if (context && COMPETITORS.kent.cookies && COMPETITORS.kent.cookies.length) {
-          const formattedCookies = COMPETITORS.kent.cookies.map(c => ({
-            name: c.name,
-            value: c.value,
-            domain: c.domain,
-            path: "/"
-          }));
-          await context.addCookies(formattedCookies);
-        }
-        
-        const kentMatch = await findBestProductMatch(page, COMPETITORS.kent, invItem);
-        if (kentMatch?.matchFound && kentMatch.price != null && kentMatch.price > 0) {
+      const addStoreCookies = async (competitor: typeof COMPETITORS.kent) => {
+        if (!context || !competitor.cookies?.length) return;
+        await context.addCookies(competitor.cookies.map(cookie => ({
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain,
+          path: "/"
+        })));
+      };
+      const cookieResults = await Promise.allSettled([
+        addStoreCookies(COMPETITORS.kent),
+        addStoreCookies(COMPETITORS.homeDepot)
+      ]);
+      if (cookieResults[0].status === 'rejected') {
+        diagnosticLogs.push(`[Kent Cookie Setup Error] ${cookieResults[0].reason?.message || cookieResults[0].reason}`);
+      }
+      if (cookieResults[1].status === 'rejected') {
+        diagnosticLogs.push(`[Home Depot Cookie Setup Error] ${cookieResults[1].reason?.message || cookieResults[1].reason}`);
+      }
+
+      const scrapeKent = async () => {
+        try {
+          const kentMatch = await findBestProductMatch(page, COMPETITORS.kent, invItem);
+          if (kentMatch?.matchFound && kentMatch.price != null && kentMatch.price > 0) {
             freshKent = kentMatch.price;
             kentTitle = kentMatch.candidate.title;
             kentUrl = kentMatch.candidate.url;
@@ -3880,27 +3893,18 @@ Return JSON matching this schema:
             kentMethod = kentMatch.matchMethod || 'AUTOMATED_SCRAPER';
             kentConf = kentMatch.confidenceLevel || (kentMatch.score >= 80 ? 'EXACT' : kentMatch.score >= 45 ? 'HIGH' : 'MEDIUM');
             diagnosticLogs.push(`[Kent Live Scraper] Found match: ${kentTitle} at $${freshKent} (Score: ${kentMatch.score}, Conf: ${kentConf})`);
-        } else {
+          } else {
             diagnosticLogs.push(`[Kent Live Scraper] No qualified match found (Score: ${kentMatch ? kentMatch.score : 0})`);
+          }
+        } catch (err: any) {
+          diagnosticLogs.push(`[Kent Scraper Error] ${err.message}`);
         }
-      } catch (err: any) {
-        diagnosticLogs.push(`[Kent Scraper Error] ${err.message}`);
-      }
+      };
 
-      // 2. Home Depot Live Scraping
-      try {
-        if (context && COMPETITORS.homeDepot.cookies && COMPETITORS.homeDepot.cookies.length) {
-          const formattedCookies = COMPETITORS.homeDepot.cookies.map(c => ({
-            name: c.name,
-            value: c.value,
-            domain: c.domain,
-            path: "/"
-          }));
-          await context.addCookies(formattedCookies);
-        }
-
-        const hdMatch = await findBestProductMatch(page, COMPETITORS.homeDepot, invItem);
-        if (hdMatch?.matchFound && hdMatch.price != null && hdMatch.price > 0) {
+      const scrapeHomeDepot = async () => {
+        try {
+          const hdMatch = await findBestProductMatch(homeDepotPage, COMPETITORS.homeDepot, invItem);
+          if (hdMatch?.matchFound && hdMatch.price != null && hdMatch.price > 0) {
             freshHd = hdMatch.price;
             hdTitle = hdMatch.candidate.title;
             hdUrl = hdMatch.candidate.url;
@@ -3908,15 +3912,21 @@ Return JSON matching this schema:
             hdMethod = hdMatch.matchMethod || 'AUTOMATED_SCRAPER';
             hdConf = hdMatch.confidenceLevel || (hdMatch.score >= 80 ? 'EXACT' : hdMatch.score >= 45 ? 'HIGH' : 'MEDIUM');
             diagnosticLogs.push(`[Home Depot Live Scraper] Found match: ${hdTitle} at $${freshHd} (Score: ${hdMatch.score}, Conf: ${hdConf})`);
-        } else {
+          } else {
             diagnosticLogs.push(`[Home Depot Live Scraper] No qualified match found (Score: ${hdMatch ? hdMatch.score : 0})`);
+          }
+        } catch (err: any) {
+          diagnosticLogs.push(`[Home Depot Scraper Error] ${err.message}`);
         }
-      } catch (err: any) {
-        diagnosticLogs.push(`[Home Depot Scraper Error] ${err.message}`);
-      }
+      };
+
+      await Promise.all([scrapeKent(), scrapeHomeDepot()]);
 
       if (page) {
         try { await page.close(); } catch (e) {}
+      }
+      if (homeDepotPage) {
+        try { await homeDepotPage.close(); } catch (e) {}
       }
       if (context) {
         try { await context.close(); } catch (e) {}
@@ -4267,8 +4277,15 @@ Return JSON matching this schema:
   });
 
   // Direct live competitor scraper endpoint (accepts both GET and POST to prevent 405 Method Not Allowed errors)
+  const inFlightLiveScrapes = new Map<string, Promise<any[]>>();
+  let liveScrapeRequestSequence = 0;
   const handleScrapeLive = async (req: any, res: any) => {
+    const requestId = ++liveScrapeRequestSequence;
+    const requestStartedAt = Date.now();
     res.setHeader('Content-Type', 'application/json');
+    res.once('finish', () => {
+      console.info(`[Scrape-Live ${requestId}] HTTP ${res.statusCode} completed in ${Date.now() - requestStartedAt}ms`);
+    });
     try {
       const payload = { ...(req.method === 'GET' ? req.query : req.body), ...(req.query || {}) };
       const { productId, sku, name, productName, description, category, yourPrice, unitPrice, upc, mfgPartNumber, searchQuery } = payload;
@@ -4319,7 +4336,32 @@ Return JSON matching this schema:
 
       let competitors: any[] = [];
       try {
-        competitors = await executeDynamicCompetitorSearch(mergedProduct, criteria);
+        const normalizeKeyPart = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+        const scrapeKey = JSON.stringify([
+          normalizeKeyPart(mergedProduct.productId),
+          normalizeKeyPart(mergedProduct.sku),
+          normalizeKeyPart(criteria.upc),
+          normalizeKeyPart(criteria.mfgPartNumber),
+          normalizeKeyPart(criteria.description),
+          normalizeKeyPart(criteria.productName),
+          normalizeKeyPart(criteria.searchQuery),
+        ]);
+        let scrapePromise = inFlightLiveScrapes.get(scrapeKey);
+        if (scrapePromise) {
+          console.info(`[Scrape-Live ${requestId}] Joining in-flight scrape`);
+        } else {
+          scrapePromise = executeDynamicCompetitorSearch(mergedProduct, criteria);
+          inFlightLiveScrapes.set(scrapeKey, scrapePromise);
+          void scrapePromise.then(
+            () => {
+              if (inFlightLiveScrapes.get(scrapeKey) === scrapePromise) inFlightLiveScrapes.delete(scrapeKey);
+            },
+            () => {
+              if (inFlightLiveScrapes.get(scrapeKey) === scrapePromise) inFlightLiveScrapes.delete(scrapeKey);
+            }
+          );
+        }
+        competitors = await scrapePromise;
       } catch (execErr: any) {
         console.warn('[Scrape-Live Execution Warning]:', execErr.message);
         competitors = [
@@ -6048,19 +6090,18 @@ self.addEventListener('activate', (event) => {
     res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
   });
 
+  const httpServer = createHttpServer(app);
   const isProduction = process.env.NODE_ENV === "production" || process.env.USE_STATIC_BUILD === "true";
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
-  const vite = await createViteServer({
-  // Express owns the HTTP server in development. Keep Vite in middleware
-  // mode and disable HMR because the preview does not expose Vite's socket.
-  server: {
-  middlewareMode: true,
-  hmr: false,
-  },
-    appType: "custom",
-  });
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer },
+      },
+      appType: "custom",
+    });
     app.use(vite.middlewares);
 
     app.get('*all', async (req, res, next) => {
@@ -6173,7 +6214,7 @@ self.addEventListener('activate', (event) => {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }

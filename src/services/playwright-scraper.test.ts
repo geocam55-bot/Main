@@ -34,11 +34,21 @@ describe('competitor price scraper helpers', () => {
     expect(terms).toContain('123456789012');
   });
 
+  it('preserves the full supplied description as the first retailer query', () => {
+    const terms = getSearchTerms({
+      sku: 'INTERNAL-002',
+      name: 'Pipe fitting',
+      description: 'Pipe fitting #123 & adapter',
+    });
+
+    expect(terms[0]).toBe('Pipe fitting #123 & adapter');
+  });
+
   it('scores a product using descriptive inventory text when the name is generic', () => {
     const item: InventoryItem = {
       sku: 'INTERNAL-001',
       name: 'Miscellaneous',
-      description: 'blue roof anchor 16 inch',
+      description: 'blue roof anchor 16 inch galvanized steel for residential roof framing applications',
     };
     const candidate: CandidateProduct = {
       title: 'Blue Roof Anchor 16 Inch',
@@ -46,7 +56,7 @@ describe('competitor price scraper helpers', () => {
       url: 'https://example.test/product',
     };
 
-    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(65);
+    expect(calculateMatchScore(item, candidate)).toBeGreaterThanOrEqual(55);
   });
 
   it('parses grouped currency values and retailer verbal prices', () => {
@@ -79,11 +89,36 @@ describe('competitor price scraper helpers', () => {
     });
 
     expect(terms.slice(0, 4)).toEqual([
-      'Simpson Strong-Tie galvanized hurricane',
-      'Simpson Strong-Tie connector',
+      'Simpson Strong-Tie galvanized hurricane tie for roof framing use',
       'H2.5A',
       '044315123456',
+      'Simpson Strong-Tie galvanized hurricane',
     ]);
+  });
+
+  it('searches the full description first and stops after a strong priced match', async () => {
+    const description = 'blue roof anchor 16 inch galvanized steel for residential roof framing applications';
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify({
+      products: [{
+        title: 'Blue Roof Anchor 16 Inch',
+        price: 12.99,
+        productUrl: '/product/blue-roof-anchor',
+      }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const match = await findBestProductMatch(null, COMPETITORS.homeDepot, {
+      sku: 'INTERNAL-001',
+      name: 'Miscellaneous',
+      description,
+    });
+
+    expect(match).toMatchObject({ matchFound: true, price: 12.99 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('q')).toBe(description);
   });
 
   it('normalizes common Home Depot search response shapes', () => {
@@ -106,6 +141,7 @@ describe('competitor price scraper helpers', () => {
       sku: 'HD-123',
       mfg: 'H2.5A',
       availability: 'IN_STOCK',
+      storePriceVerified: true,
       url: 'https://www.homedepot.ca/product/framing-connector/100123',
     })]);
     expect(parseHomeDepotCandidates({ products: 'invalid' })).toEqual([]);
@@ -148,6 +184,7 @@ describe('competitor price scraper helpers', () => {
     expect(candidates[0]).toMatchObject({
       priceText: '8.3',
       availability: 'IN_STOCK',
+      storePriceVerified: true,
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(apiResponses[0]).toMatchObject({ pagesRetrieved: 2, totalCount: 150 });
@@ -173,5 +210,81 @@ describe('competitor price scraper helpers', () => {
       endpoint: '/api/search/v1/search',
       error: 'network timeout',
     });
+  });
+
+  it('does not retry failed Home Depot HTTP requests when diagnostics are omitted', async () => {
+    const fetchMock = vi.fn(async () => new Response('service unavailable', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const match = await findBestProductMatch(null, COMPETITORS.homeDepot, {
+      sku: 'INTERNAL-001',
+      name: 'Framing connector',
+    });
+
+    expect(match).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry failed Kent HTTP requests when the browser is unavailable', async () => {
+    const fetchMock = vi.fn(async () => new Response('service unavailable', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const match = await findBestProductMatch(null, COMPETITORS.kent, {
+      sku: 'INTERNAL-001',
+      name: 'Framing connector',
+    });
+
+    expect(match).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables repeated browser fallbacks after a navigation failure but keeps API searches', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const page = {
+      on: vi.fn(),
+      off: vi.fn(),
+      goto: vi.fn().mockRejectedValue(new Error('net::ERR_HTTP2_PROTOCOL_ERROR')),
+    };
+
+    const match = await findBestProductMatch(page as any, COMPETITORS.homeDepot, {
+      sku: 'INTERNAL-001',
+      name: 'Framing connector',
+      description: 'Framing connector galvanized steel residential roof support',
+    });
+
+    expect(match).toBeNull();
+    expect(page.goto).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('bounds API-only search to the full description and two fallback terms', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const match = await findBestProductMatch(null, COMPETITORS.homeDepot, {
+      sku: 'INTERNAL-001',
+      name: 'Generic fitting',
+      description: 'Structural framing connector',
+      mfg: 'H2.5A',
+      upc: '044315123456',
+    });
+
+    expect(match).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const queriedTerms = fetchMock.mock.calls.map(([input]) =>
+      new URL(String(input)).searchParams.get('q')
+    );
+    expect(queriedTerms).toEqual([
+      'Structural framing connector',
+      'H2.5A',
+      '044315123456',
+    ]);
   });
 });
