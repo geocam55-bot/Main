@@ -36,6 +36,11 @@ export interface OrganizationSettings {
   updated_at?: string;
 }
 
+export interface EnvironmentSettingsResponse {
+  values: Record<string, string>;
+  configuredSecrets: string[];
+}
+
 // Fields that may not exist as columns in the organization_settings table.
 // These are stripped before upsert to avoid PGRST204 errors,
 // and are handled via localStorage fallback instead.
@@ -524,4 +529,40 @@ export async function setOrgMode(organizationId: string, userMode: OrgUserMode):
   }
 
   return localData;
+}
+
+export async function getEnvironmentSettingsClient(
+  scope: 'system' | 'tenant',
+  organizationId?: string,
+): Promise<EnvironmentSettingsResponse> {
+  const headers = await getServerHeaders();
+  const path = scope === 'system' ? 'system-variables' : 'tenant-variables';
+  const query = scope === 'tenant' && organizationId
+    ? `?organization_id=${encodeURIComponent(organizationId)}`
+    : '';
+  const response = await fetch(`${SERVER_BASE}/settings/${path}${query}`, { headers });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.error || `Failed to load ${scope} settings (${response.status})`);
+  }
+  return result as EnvironmentSettingsResponse;
+}
+
+export async function saveEnvironmentSettingsClient(
+  scope: 'system' | 'tenant',
+  values: Record<string, string>,
+  clearKeys: string[],
+  organizationId?: string,
+): Promise<void> {
+  const headers = await getServerHeaders();
+  const path = scope === 'system' ? 'system-variables' : 'tenant-variables';
+  const response = await fetch(`${SERVER_BASE}/settings/${path}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ organization_id: organizationId, values, clear_keys: clearKeys }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.error || `Failed to save ${scope} settings (${response.status})`);
+  }
 }

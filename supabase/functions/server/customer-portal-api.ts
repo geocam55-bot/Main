@@ -2,6 +2,7 @@ import { Hono } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import * as kv from './kv_store.tsx';
 import { extractUserToken } from './auth-helper.ts';
+import { getConfiguredValue, getSystemEnvironmentSettings } from './environment-config.ts';
 
 /**
  * Customer Portal API
@@ -268,7 +269,7 @@ export function customerPortalAPI(app: Hono) {
         inviteCode,
         email: contactEmail,
         contactName: contact.name,
-        appUrl: Deno.env.get('APP_URL') || '',
+        appUrl: getConfiguredValue(await getSystemEnvironmentSettings(), 'APP_URL'),
       });
     } catch (err: any) {
       console.error('[portal] Error creating invite:', err);

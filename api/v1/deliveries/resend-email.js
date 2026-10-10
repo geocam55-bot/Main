@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { getSystemSettings } from '../../_lib/systemSettings.js';
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -87,11 +88,22 @@ export default async function handler(req, res) {
     const ticketRef = deliveryId || trackingNumToUse;
 
     // SMTP Configuration
-    let smtpHost = (process.env.SMTP_HOST || "smtp.ionos.com").trim();
-    const smtpUser = (process.env.SMTP_USER || "support@prospacescrm.ca").trim();
-    const smtpPass = (process.env.SMTP_PASS || "tV3p&HP#1!!1234").trim();
-    let smtpPort = parseInt((process.env.SMTP_PORT || "587").trim(), 10);
-    const senderAddress = (process.env.SMTP_FROM || smtpUser || "support@prospacescrm.ca").replace(/.*<([^>]+)>.*/, '$1').trim();
+    const managedSettings = await getSystemSettings([
+      'SYSTEM_SMTP_HOST', 'SYSTEM_SMTP_USERNAME', 'SYSTEM_SMTP_PASSWORD', 'SYSTEM_SMTP_PORT',
+      'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_PORT', 'SMTP_FROM', 'SUPPORT_EMAIL_ADDRESS',
+    ]);
+    let smtpHost = (managedSettings.SYSTEM_SMTP_HOST || managedSettings.SMTP_HOST || process.env.SMTP_HOST || "smtp.ionos.com").trim();
+    const smtpUser = (managedSettings.SYSTEM_SMTP_USERNAME || managedSettings.SMTP_USER || process.env.SMTP_USER || "support@prospacescrm.ca").trim();
+    const smtpPass = (managedSettings.SYSTEM_SMTP_PASSWORD || managedSettings.SMTP_PASS || process.env.SMTP_PASS || "").trim();
+    let smtpPort = parseInt((managedSettings.SYSTEM_SMTP_PORT || managedSettings.SMTP_PORT || process.env.SMTP_PORT || "587").trim(), 10);
+    const senderAddress = (managedSettings.SUPPORT_EMAIL_ADDRESS || managedSettings.SMTP_FROM || process.env.SMTP_FROM || smtpUser || "support@prospacescrm.ca").replace(/.*<([^>]+)>.*/, '$1').trim();
+
+    if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+      return res.status(500).json({ success: false, error: "System SMTP port must be between 1 and 65535." });
+    }
+    if (!smtpPass) {
+      return res.status(500).json({ success: false, error: "System SMTP password is not configured." });
+    }
 
     if (smtpHost.toLowerCase().includes("ionos")) {
       smtpHost = "smtp.ionos.com";

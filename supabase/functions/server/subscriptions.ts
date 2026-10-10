@@ -3,6 +3,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import * as kv from './kv_store.tsx';
 import { extractUserToken } from './auth-helper.ts';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { getConfiguredValue, getSystemEnvironmentSettings } from './environment-config.ts';
 
 /**
  * Subscription & Billing routes (KV-backed).
@@ -20,11 +21,11 @@ const PREFIX = '/make-server-8405be07';
 
 const DEFAULT_FREE_ACCOUNT_BILLING_SUPPORT_EMAIL = 'support@prospacescrm.ca';
 
-function getScopedEmailConfig() {
-  const supportEmail = (Deno.env.get('SUPPORT_EMAIL_ADDRESS') || DEFAULT_FREE_ACCOUNT_BILLING_SUPPORT_EMAIL).trim();
-  const smtpHost = (Deno.env.get('SYSTEM_SMTP_HOST') || 'smtp.ionos.com').trim();
-  const smtpPort = Number(Deno.env.get('SYSTEM_SMTP_PORT') || '587');
-  const smtpSecurity = (Deno.env.get('SYSTEM_SMTP_SECURITY') || 'tls').trim().toLowerCase();
+function getScopedEmailConfig(settings: Record<string, string>) {
+  const supportEmail = getConfiguredValue(settings, 'SUPPORT_EMAIL_ADDRESS', DEFAULT_FREE_ACCOUNT_BILLING_SUPPORT_EMAIL).trim();
+  const smtpHost = getConfiguredValue(settings, 'SYSTEM_SMTP_HOST', 'smtp.ionos.com').trim();
+  const smtpPort = Number(getConfiguredValue(settings, 'SYSTEM_SMTP_PORT', '587'));
+  const smtpSecurity = getConfiguredValue(settings, 'SYSTEM_SMTP_SECURITY', 'tls').trim().toLowerCase();
   return {
     supportEmail,
     smtp: {
@@ -42,11 +43,12 @@ async function sendSystemSmtpEmail(params: {
   htmlBody: string;
   textBody?: string;
 }): Promise<{ sender: string }> {
-  const smtpHost = (Deno.env.get('SYSTEM_SMTP_HOST') || 'smtp.ionos.com').trim();
-  const smtpPort = Number(Deno.env.get('SYSTEM_SMTP_PORT') || '587');
-  const smtpUsername = (Deno.env.get('SYSTEM_SMTP_USERNAME') || '').trim();
-  const smtpPassword = Deno.env.get('SYSTEM_SMTP_PASSWORD') || '';
-  const sender = (Deno.env.get('SUPPORT_EMAIL_ADDRESS') || DEFAULT_FREE_ACCOUNT_BILLING_SUPPORT_EMAIL).trim();
+  const settings = await getSystemEnvironmentSettings();
+  const smtpHost = getConfiguredValue(settings, 'SYSTEM_SMTP_HOST', 'smtp.ionos.com').trim();
+  const smtpPort = Number(getConfiguredValue(settings, 'SYSTEM_SMTP_PORT', '587'));
+  const smtpUsername = getConfiguredValue(settings, 'SYSTEM_SMTP_USERNAME').trim();
+  const smtpPassword = getConfiguredValue(settings, 'SYSTEM_SMTP_PASSWORD');
+  const sender = getConfiguredValue(settings, 'SUPPORT_EMAIL_ADDRESS', DEFAULT_FREE_ACCOUNT_BILLING_SUPPORT_EMAIL).trim();
 
   if (!smtpUsername || !smtpPassword) {
     throw new Error('System SMTP credentials are not configured');
@@ -333,7 +335,8 @@ export function subscriptions(app: Hono) {
       trialEndDate.setDate(trialEndDate.getDate() + 15);
       const trialEnd = trialEndDate.toISOString();
 
-      const { supportEmail } = getScopedEmailConfig();
+      const systemSettings = await getSystemEnvironmentSettings();
+      const { supportEmail } = getScopedEmailConfig(systemSettings);
       const starterPlanPrice = await resolvePlanPrice('starter', 'month');
 
       const subscription: any = {
@@ -384,11 +387,11 @@ export function subscriptions(app: Hono) {
             <h1>Welcome to ProSpaces CRM, ${firstName}!</h1>
             <p>Your free 15-day trial account has been created.</p>
             <p><strong>Temporary Password:</strong> ${password}</p>
-            <p><strong>Sign in here:</strong> <a href="${Deno.env.get('VITE_APP_URL') || 'https://app.prospacescrm.ca'}/member-login">ProSpaces Login</a></p>
+            <p><strong>Sign in here:</strong> <a href="${getConfiguredValue(systemSettings, 'VITE_APP_URL', getConfiguredValue(systemSettings, 'APP_URL', 'https://app.prospacescrm.ca'))}/member-login">ProSpaces Login</a></p>
             <p>On your first login, you'll be asked to set a permanent password.</p>
             <p>Your trial expires on ${trialEndDate.toLocaleDateString()}. After that, you'll need to select a plan to continue.</p>
             <br/>
-            <p style="color: #666; font-size: 12px;">Questions? Contact support@prospacescrm.ca</p>
+            <p style="color: #666; font-size: 12px;">Questions? Contact ${supportEmail}</p>
           `,
         });
       } catch (emailErr: any) {
@@ -511,7 +514,7 @@ export function subscriptions(app: Hono) {
       }
 
       const amount = await resolvePlanPrice(plan_id as PlanId, billing_interval);
-      const { supportEmail } = getScopedEmailConfig();
+      const { supportEmail } = getScopedEmailConfig(await getSystemEnvironmentSettings());
 
       const subId = crypto.randomUUID();
       const subscription: Subscription = {
@@ -641,7 +644,7 @@ export function subscriptions(app: Hono) {
       }
 
       const amount = await resolvePlanPrice(newPlanId, newInterval);
-      const { supportEmail } = getScopedEmailConfig();
+      const { supportEmail } = getScopedEmailConfig(await getSystemEnvironmentSettings());
 
       const updated: Subscription = {
         ...existing,
@@ -738,7 +741,7 @@ export function subscriptions(app: Hono) {
       await kv.set(`subscription:${auth.orgId}:${targetUserId}`, updated);
 
       const plan = PLANS[existing.plan_id];
-      const { supportEmail } = getScopedEmailConfig();
+      const { supportEmail } = getScopedEmailConfig(await getSystemEnvironmentSettings());
       const eventId = crypto.randomUUID();
       const event: BillingEvent = {
         id: eventId,
@@ -803,7 +806,7 @@ export function subscriptions(app: Hono) {
 
         // Simulate renewal payment
         const plan = PLANS[existing.plan_id];
-        const { supportEmail } = getScopedEmailConfig();
+        const { supportEmail } = getScopedEmailConfig(await getSystemEnvironmentSettings());
         const paymentId = crypto.randomUUID();
         const paymentEvent: BillingEvent = {
           id: paymentId,
@@ -841,7 +844,7 @@ export function subscriptions(app: Hono) {
       // Sort newest first
       events.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      const scopedEmailConfig = getScopedEmailConfig();
+      const scopedEmailConfig = getScopedEmailConfig(await getSystemEnvironmentSettings());
       return c.json({
         events,
         support_email: scopedEmailConfig.supportEmail,
@@ -954,7 +957,7 @@ export function subscriptions(app: Hono) {
 
       const plan = PLANS[sub.plan_id];
       const now = new Date();
-      const { supportEmail } = getScopedEmailConfig();
+      const { supportEmail } = getScopedEmailConfig(await getSystemEnvironmentSettings());
 
       // Simulate payment
       const paymentId = crypto.randomUUID();

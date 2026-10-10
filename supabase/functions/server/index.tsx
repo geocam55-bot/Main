@@ -19,6 +19,7 @@ import { modelsAPI } from './models-api.ts';
 import { customerPortalAPI } from './customer-portal-api.ts';
 import { fixContactOwnership } from './fix-contact-ownership.ts';
 import { fixProfileMismatch } from './fix-profile-mismatch.ts';
+import { getConfiguredValue, getSystemEnvironmentSettings } from './environment-config.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ProSpaces CRM — Consolidated Edge Function (v5 — 2025-02-21)
@@ -47,6 +48,7 @@ function sanitizeRedirectUri(uri: string): string {
 }
 
 async function resolveAzureSecrets() {
+  const systemSettings = await getSystemEnvironmentSettings();
   let clientId = '';
   let clientSecret = '';
   let redirectUri = '';
@@ -68,10 +70,10 @@ async function resolveAzureSecrets() {
 
   // 2. Fall back to system Deno.env ONLY if we have nothing from database KV store
   if (!clientId || !clientSecret) {
-    clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
-    clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
-    redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
-    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
+    clientId = getConfiguredValue(systemSettings, 'AZURE_CLIENT_ID');
+    clientSecret = getConfiguredValue(systemSettings, 'AZURE_CLIENT_SECRET');
+    redirectUri = redirectUri || getConfiguredValue(systemSettings, 'AZURE_REDIRECT_URI');
+    tenantId = tenantId || getConfiguredValue(systemSettings, 'AZURE_TENANT_ID', 'common');
     if (clientId && clientSecret) {
       console.log('[Fallback Engine] Loaded fallback system Azure credentials from Deno.env:', { clientId, redirectUri, tenantId });
     }
@@ -84,6 +86,7 @@ async function resolveAzureSecrets() {
 }
 
 async function resolveGoogleSecrets() {
+  const systemSettings = await getSystemEnvironmentSettings();
   let clientId = '';
   let clientSecret = '';
   let redirectUri = '';
@@ -103,9 +106,9 @@ async function resolveGoogleSecrets() {
 
   // 2. Fall back to system Deno.env ONLY if we have nothing from database KV store
   if (!clientId || !clientSecret) {
-    clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
-    clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-    redirectUri = redirectUri || Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+    clientId = getConfiguredValue(systemSettings, 'GOOGLE_CLIENT_ID');
+    clientSecret = getConfiguredValue(systemSettings, 'GOOGLE_CLIENT_SECRET');
+    redirectUri = redirectUri || getConfiguredValue(systemSettings, 'GOOGLE_REDIRECT_URI');
     if (clientId && clientSecret) {
       console.log('[Fallback Engine] Loaded fallback system Google credentials from Deno.env:', { clientId, redirectUri });
     }
@@ -892,6 +895,191 @@ app.put(`${PREFIX}/settings/organization`, async (c) => {
     console.log(`[PUT /settings/organization] Returning: export_templates=${merged.export_templates ? merged.export_templates.length + ' templates' : 'none'}`);
     return c.json({ settings: merged, source: 'server' });
   } catch (err: any) { return c.json({ error: err.message }, 500); }
+});
+
+const SYSTEM_VARIABLE_KEYS = new Set([
+  'APP_URL',
+  'VITE_APP_URL',
+  'SUPPORT_EMAIL_ADDRESS',
+  'SYSTEM_SMTP_HOST',
+  'SYSTEM_SMTP_PORT',
+  'SYSTEM_SMTP_SECURITY',
+  'SYSTEM_SMTP_USERNAME',
+  'SYSTEM_SMTP_PASSWORD',
+  'SMTP_HOST',
+  'SMTP_PORT',
+  'SMTP_USER',
+  'SMTP_PASS',
+  'SMTP_FROM',
+  'GEMINI_API_KEY',
+  'GOOGLE_MAPS_PLATFORM_KEY',
+  'AZURE_CLIENT_ID',
+  'AZURE_CLIENT_SECRET',
+  'AZURE_TENANT_ID',
+  'AZURE_REDIRECT_URI',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'GOOGLE_REDIRECT_URI',
+]);
+const TENANT_VARIABLE_KEYS = new Set([
+  'FLEET_COMPLETE_URL',
+  'FLEET_COMPLETE_API_URL',
+  'FLEET_COMPLETE_ORG_UUID',
+  'FLEET_COMPLETE_USERNAME',
+  'FLEET_COMPLETE_PASSWORD',
+  'FLEET_COMPLETE_API_KEY',
+]);
+const SECRET_VARIABLE_KEYS = new Set([
+  'SYSTEM_SMTP_PASSWORD',
+  'SMTP_PASS',
+  'GEMINI_API_KEY',
+  'GOOGLE_MAPS_PLATFORM_KEY',
+  'AZURE_CLIENT_SECRET',
+  'GOOGLE_CLIENT_SECRET',
+  'FLEET_COMPLETE_PASSWORD',
+  'FLEET_COMPLETE_API_KEY',
+]);
+
+function canAccessTenantVariables(auth: any, organizationId: string) {
+  return ['admin', 'super_admin'].includes(auth.profile.role)
+    && (auth.profile.role === 'super_admin' || organizationId === auth.profile.organization_id);
+}
+
+async function getScopedVariables(
+  supabase: any,
+  table: 'system_settings' | 'tenant_settings',
+  organizationId?: string,
+) {
+  let query = supabase.from(table).select('setting_key, setting_value');
+  if (table === 'tenant_settings') query = query.eq('organization_id', organizationId);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const allowedKeys = table === 'system_settings' ? SYSTEM_VARIABLE_KEYS : TENANT_VARIABLE_KEYS;
+  const values: Record<string, string> = {};
+  const configuredSecrets: string[] = [];
+  for (const row of data || []) {
+    if (!allowedKeys.has(row.setting_key)) continue;
+    if (SECRET_VARIABLE_KEYS.has(row.setting_key)) {
+      if (row.setting_value) configuredSecrets.push(row.setting_key);
+    } else {
+      values[row.setting_key] = row.setting_value;
+    }
+  }
+  return { values, configuredSecrets };
+}
+
+async function saveScopedVariables(
+  supabase: any,
+  table: 'system_settings' | 'tenant_settings',
+  allowedKeys: Set<string>,
+  organizationId: string | undefined,
+  body: any,
+) {
+  if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {
+    return { error: 'values must be an object' };
+  }
+  const clearKeys = body.clear_keys ?? [];
+  if (!Array.isArray(clearKeys) || clearKeys.some((key: unknown) => typeof key !== 'string')) {
+    return { error: 'clear_keys must be an array of setting names' };
+  }
+  const submittedKeys = Object.keys(body.values);
+  if (
+    submittedKeys.some((key) => !allowedKeys.has(key))
+    || clearKeys.some((key: string) => !allowedKeys.has(key) || !SECRET_VARIABLE_KEYS.has(key))
+  ) {
+    return { error: 'One or more setting names are not allowed' };
+  }
+
+  for (const key of submittedKeys) {
+    const value = body.values[key];
+    if (typeof value !== 'string' || value.length > 10000) {
+      return { error: `Invalid value for ${key}` };
+    }
+  }
+
+  if (clearKeys.length > 0) {
+    let deleteQuery = supabase.from(table).delete().in('setting_key', clearKeys);
+    if (table === 'tenant_settings') deleteQuery = deleteQuery.eq('organization_id', organizationId);
+    const { error } = await deleteQuery;
+    if (error) return { error: error.message };
+  }
+
+  const rows = [];
+  for (const key of submittedKeys) {
+    const value = body.values[key];
+    if (clearKeys.includes(key) || (SECRET_VARIABLE_KEYS.has(key) && value === '')) continue;
+    rows.push({
+      ...(table === 'tenant_settings' ? { organization_id: organizationId } : {}),
+      setting_key: key,
+      setting_value: value,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  if (rows.length === 0) return { error: null };
+  const conflict = table === 'system_settings' ? 'setting_key' : 'organization_id,setting_key';
+  const { error } = await supabase.from(table).upsert(rows, { onConflict: conflict });
+  return { error: error?.message || null };
+}
+
+app.get(`${PREFIX}/settings/system-variables`, async (c) => {
+  try {
+    const auth = await authenticateUser(c);
+    if (auth.error) return c.json({ error: auth.error }, auth.status);
+    if (auth.internal || auth.profile.role !== 'super_admin') return c.json({ error: 'Super Admin access required' }, 403);
+    return c.json(await getScopedVariables(auth.supabase, 'system_settings'));
+  } catch (err: any) {
+    console.error('[settings/system-variables] GET failed:', err?.message || err);
+    return c.json({ error: err?.message || 'Failed to load system settings' }, 500);
+  }
+});
+
+app.put(`${PREFIX}/settings/system-variables`, async (c) => {
+  try {
+    const auth = await authenticateUser(c);
+    if (auth.error) return c.json({ error: auth.error }, auth.status);
+    if (auth.internal || auth.profile.role !== 'super_admin') return c.json({ error: 'Super Admin access required' }, 403);
+    const result = await saveScopedVariables(auth.supabase, 'system_settings', SYSTEM_VARIABLE_KEYS, undefined, await c.req.json());
+    if (result.error) return c.json({ error: result.error }, 400);
+    return c.json({ success: true });
+  } catch (err: any) {
+    console.error('[settings/system-variables] PUT failed:', err?.message || err);
+    return c.json({ error: err?.message || 'Failed to save system settings' }, 500);
+  }
+});
+
+app.get(`${PREFIX}/settings/tenant-variables`, async (c) => {
+  try {
+    const auth = await authenticateUser(c);
+    if (auth.error) return c.json({ error: auth.error }, auth.status);
+    if (auth.internal || !['admin', 'super_admin'].includes(auth.profile.role)) return c.json({ error: 'Admin access required' }, 403);
+    const organizationId = c.req.query('organization_id') || auth.profile.organization_id;
+    if (!organizationId) return c.json({ error: 'No organization context' }, 400);
+    if (!canAccessTenantVariables(auth, organizationId)) return c.json({ error: 'Cannot access another organization’s settings' }, 403);
+    return c.json(await getScopedVariables(auth.supabase, 'tenant_settings', organizationId));
+  } catch (err: any) {
+    console.error('[settings/tenant-variables] GET failed:', err?.message || err);
+    return c.json({ error: err?.message || 'Failed to load tenant settings' }, 500);
+  }
+});
+
+app.put(`${PREFIX}/settings/tenant-variables`, async (c) => {
+  try {
+    const auth = await authenticateUser(c);
+    if (auth.error) return c.json({ error: auth.error }, auth.status);
+    if (auth.internal || !['admin', 'super_admin'].includes(auth.profile.role)) return c.json({ error: 'Admin access required' }, 403);
+    const body = await c.req.json();
+    const organizationId = body.organization_id || auth.profile.organization_id;
+    if (!organizationId) return c.json({ error: 'No organization context' }, 400);
+    if (!canAccessTenantVariables(auth, organizationId)) return c.json({ error: 'Cannot update another organization’s settings' }, 403);
+    const result = await saveScopedVariables(auth.supabase, 'tenant_settings', TENANT_VARIABLE_KEYS, organizationId, body);
+    if (result.error) return c.json({ error: result.error }, 400);
+    return c.json({ success: true });
+  } catch (err: any) {
+    console.error('[settings/tenant-variables] PUT failed:', err?.message || err);
+    return c.json({ error: err?.message || 'Failed to save tenant settings' }, 500);
+  }
 });
 
 app.get(`${PREFIX}/settings/theme`, async (c) => {

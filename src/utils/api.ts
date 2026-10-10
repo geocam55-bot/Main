@@ -31,7 +31,7 @@ import { getAllAppointmentsClient, createAppointmentClient, updateAppointmentCli
 import { getAllBidsClient, getBidsByOpportunityClient, createBidClient, updateBidClient, deleteBidClient, fixBidOrganizationIds } from './bids-client';
 import { getAllTasksClient, createTaskClient, updateTaskClient, deleteTaskClient } from './tasks-client';
 import { getAllNotesClient, createNoteClient, deleteNoteClient, getNotesByContactClient } from './notes-client';
-import { getUserPreferencesClient, upsertUserPreferencesClient, getOrganizationSettingsClient, upsertOrganizationSettingsClient, updateOrganizationNameClient, updateUserProfileClient, getOrgMode, setOrgMode } from './settings-client';
+import { getUserPreferencesClient, upsertUserPreferencesClient, getOrganizationSettingsClient, upsertOrganizationSettingsClient, updateOrganizationNameClient, updateUserProfileClient, getOrgMode, setOrgMode, getEnvironmentSettingsClient, saveEnvironmentSettingsClient } from './settings-client';
 import { getJourneys, createJourney, updateJourney, deleteJourney, getLandingPages, createLandingPage, updateLandingPage, deleteLandingPage, getLeadScores, updateLeadScore, getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, getLeadScoreStats } from './marketing-client';
 import { getServerHeaders } from './server-headers';
 import { getSupabaseUrl } from './supabase/client';
@@ -612,6 +612,9 @@ export const settingsAPI = {
   updateUserProfile: (userId: string, data: any) => updateUserProfileClient(userId, data),
   getOrgMode: (organizationId: string) => getOrgMode(organizationId),
   setOrgMode: (organizationId: string, mode: 'single' | 'multi') => setOrgMode(organizationId, mode),
+  getEnvironmentSettings: (scope: 'system' | 'tenant', organizationId?: string) => getEnvironmentSettingsClient(scope, organizationId),
+  saveEnvironmentSettings: (scope: 'system' | 'tenant', values: Record<string, string>, clearKeys: string[], organizationId?: string) =>
+    saveEnvironmentSettingsClient(scope, values, clearKeys, organizationId),
 };
 
 // Campaigns APIs - use direct Supabase client

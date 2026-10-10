@@ -112,6 +112,7 @@ import CompetitorsSettings from './settings/CompetitorsSettings';
 import { useTheme, type ThemeMode } from './ThemeProvider';
 import { CustomFieldsDialog } from './settings/CustomFieldsDialog';
 import { SettingsModuleHelp } from './SettingsModuleHelp';
+import { EnvironmentSettingsPanel } from './settings/EnvironmentSettingsPanel';
 
 function ThemeModeCard() {
   const { themeMode, setThemeMode, theme } = useTheme();
@@ -1310,6 +1311,8 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
             <TabsTrigger value="profile" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Profile</TabsTrigger>
             <TabsTrigger value="notifications" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Notifications</TabsTrigger>
             {canManageSettings && <TabsTrigger value="organization" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Organization</TabsTrigger>}
+            {canManageSettings && <TabsTrigger value="tenant-variables" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Tenant Variables</TabsTrigger>}
+            {isSuperAdmin && <TabsTrigger value="system-variables" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">System Variables</TabsTrigger>}
             {canManageSettings && <TabsTrigger value="module-settings" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Module Defaults</TabsTrigger>}
             {canManageSettings && <TabsTrigger value="diagnostics" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Diagnostics</TabsTrigger>}
             <TabsTrigger value="appearance" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Appearance</TabsTrigger>
@@ -1498,6 +1501,18 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canManageSettings && (
+          <TabsContent value="tenant-variables" className="space-y-4">
+            <EnvironmentSettingsPanel scope="tenant" organizationId={user.organizationId} />
+          </TabsContent>
+        )}
+
+        {isSuperAdmin && (
+          <TabsContent value="system-variables" className="space-y-4">
+            <EnvironmentSettingsPanel scope="system" />
+          </TabsContent>
+        )}
 
         {canManageSettings && (
           <TabsContent value="organization" className="space-y-4">
