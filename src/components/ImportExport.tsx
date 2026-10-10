@@ -2960,6 +2960,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             }
             throw error;
           }
+          if (data?.matched === false) {
+            throw new Error(
+              `The deployed Supabase function does not have the import/export route (${data.method || 'POST'} ${data.path || 'unknown path'}). Deploy the updated make-server-8405be07 Edge Function and retry.`
+            );
+          }
           runData = { ...data, logResult: data?.log || data?.logResult };
         } else {
           const runRes = await safeFetch(`/api/import-export/tasks/${tempTaskId}/run`, {
