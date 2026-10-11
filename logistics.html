@@ -10,6 +10,24 @@
     <link rel="shortcut icon" href="/logistics-favicon.jpg" />
     <link rel="apple-touch-icon" href="/logistics-logo.jpg" />
     <script>
+      // Suppress benign dev-server WebSocket HMR errors (HMR disabled in preview environment)
+      window.addEventListener('error', function(event) {
+        var msg = (event && event.message) || (event && event.error && event.error.message) || '';
+        if (/websocket/i.test(msg) || /closed without opened/i.test(msg)) {
+          if (event.preventDefault) event.preventDefault();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(event) {
+        var msg = (event && event.reason && (event.reason.message || String(event.reason))) || '';
+        if (/websocket/i.test(msg) || /closed without opened/i.test(msg)) {
+          if (event.preventDefault) event.preventDefault();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        }
+      }, true);
+    </script>
+    <script>
       (function() {
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(function(registrations) {

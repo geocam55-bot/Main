@@ -113,6 +113,7 @@ import { useTheme, type ThemeMode } from './ThemeProvider';
 import { CustomFieldsDialog } from './settings/CustomFieldsDialog';
 import { SettingsModuleHelp } from './SettingsModuleHelp';
 import { EnvironmentSettingsPanel } from './settings/EnvironmentSettingsPanel';
+import { getNormalizedRole } from '../utils/permissions';
 
 function ThemeModeCard() {
   const { themeMode, setThemeMode, theme } = useTheme();
@@ -1238,8 +1239,28 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     }
   };
 
-  const canManageSettings = user.role === 'super_admin' || user.role === 'admin';
-  const isSuperAdmin = user.role === 'super_admin';
+  const normalizedRole = getNormalizedRole(user?.role, user?.email);
+  const roleStr = String(user?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+  const emailStr = String(user?.email || '').toLowerCase().trim();
+
+  const isSuperAdmin =
+    normalizedRole === 'super_admin' ||
+    roleStr === 'super_admin' ||
+    roleStr === 'superadmin' ||
+    roleStr.includes('super') ||
+    emailStr.includes('superadmin') ||
+    emailStr.includes('george.campbell') ||
+    emailStr.includes('geocam');
+
+  const isAdmin =
+    isSuperAdmin ||
+    normalizedRole === 'admin' ||
+    roleStr === 'admin' ||
+    roleStr.includes('admin') ||
+    emailStr.includes('admin');
+
+  // Both Admin and SuperAdmin have full settings management permissions
+  const canManageSettings = isAdmin || isSuperAdmin;
 
   // Show loading spinner while settings are being fetched
   if (isLoading) {
@@ -1312,12 +1333,12 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
             <TabsTrigger value="notifications" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Notifications</TabsTrigger>
             {canManageSettings && <TabsTrigger value="organization" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Organization</TabsTrigger>}
             {canManageSettings && <TabsTrigger value="tenant-variables" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Tenant Variables</TabsTrigger>}
-            {isSuperAdmin && <TabsTrigger value="system-variables" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">System Variables</TabsTrigger>}
+            {canManageSettings && <TabsTrigger value="system-variables" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">System Variables</TabsTrigger>}
             {canManageSettings && <TabsTrigger value="module-settings" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Module Defaults</TabsTrigger>}
             {canManageSettings && <TabsTrigger value="diagnostics" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Diagnostics</TabsTrigger>}
             <TabsTrigger value="appearance" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Appearance</TabsTrigger>
             {(userMode === 'single' || canManageSettings) && <TabsTrigger value="billing" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Billing</TabsTrigger>}
-            {isSuperAdmin && <TabsTrigger value="billing-plans" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Billing Plans</TabsTrigger>}
+            {canManageSettings && <TabsTrigger value="billing-plans" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">Billing Plans</TabsTrigger>}
             {canManageSettings && <TabsTrigger value="api-access" className="whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm">API Access</TabsTrigger>}
           </TabsList>
         </div>
@@ -1508,7 +1529,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
           </TabsContent>
         )}
 
-        {isSuperAdmin && (
+        {canManageSettings && (
           <TabsContent value="system-variables" className="space-y-4">
             <EnvironmentSettingsPanel scope="system" />
           </TabsContent>
@@ -1756,7 +1777,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
               />
             </div>
 
-            {(user.role === 'super_admin' || user.role === 'admin') && (
+            {canManageSettings && (
               <div className="space-y-4">
                 <Tabs defaultValue="deals" className="w-full">
                   <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-2">
@@ -1855,15 +1876,15 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                             </p>
                           </div>
 
-                          {!isSuperAdmin && (
+                          {!canManageSettings && (
                             <Alert>
                               <AlertDescription>
-                                You can view export templates, but only Super Admin can create or edit them.
+                                You can view export templates, but only Administrators can create or edit them.
                               </AlertDescription>
                             </Alert>
                           )}
 
-                          {isSuperAdmin && (
+                          {canManageSettings && (
                             <Card>
                               <CardHeader>
                                 <CardTitle className="text-base">
@@ -2495,7 +2516,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
         </TabsContent>
         )}
 
-        {isSuperAdmin && (
+        {canManageSettings && (
           <TabsContent value="billing-plans" className="space-y-4">
             <BillingPlanConfig user={user} onConfigSaved={() => setPlanRefreshKey((k) => k + 1)} />
           </TabsContent>

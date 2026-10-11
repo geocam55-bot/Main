@@ -1,15 +1,15 @@
-// @ts-nocheck
 import { createClient } from './supabase/client';
-import { projectId, publicAnonKey } from './supabase/info';
-import { getServerHeaders, getUserAccessToken } from './server-headers';
-import { HARDCODED_DEFAULTS_BY_SKU } from './default-skus-fallback';
+import { getServerHeaders } from './server-headers';
+import { buildServerFunctionUrl } from './server-function-url';
+
+const supabase = createClient();
 
 export interface ProjectWizardDefault {
   id?: string;
   organization_id: string;
-  planner_type: 'deck' | 'garage' | 'shed' | 'roof' | 'kitchen' | 'finishing';
-  material_type?: string; // For deck: 'spruce', 'treated', 'composite', 'cedar'
-  material_category: string; // e.g., 'decking', 'joists', 'posts', etc.
+  planner_type: string;
+  material_type: string;
+  material_category: string;
   inventory_item_id?: string;
   created_at?: string;
   updated_at?: string;
@@ -18,898 +18,311 @@ export interface ProjectWizardDefault {
 export interface InventoryItem {
   id: string;
   name: string;
-  sku: string;
-  category: string;
-  description: string;
+  sku?: string;
+  category?: string;
+  description?: string;
 }
 
-const isUuid = (value: string | null | undefined): boolean =>
-  !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-
-const normalizeKeyPart = (value: string | null | undefined): string =>
-  (value || '').trim().toLowerCase();
-
-const makeDefaultsRowKey = (row: Pick<ProjectWizardDefault, 'planner_type' | 'material_type' | 'material_category'>): string =>
-  `${normalizeKeyPart(row.planner_type)}-${normalizeKeyPart(row.material_type || 'default')}-${normalizeKeyPart(row.material_category)}`;
-
-function dedupeDefaultsByNewest(defaults: ProjectWizardDefault[]): ProjectWizardDefault[] {
-  const latestByKey = new Map<string, ProjectWizardDefault>();
-
-  defaults.forEach((row) => {
-    const key = makeDefaultsRowKey(row);
-    const prev = latestByKey.get(key);
-    if (!prev) {
-      latestByKey.set(key, row);
-      return;
-    }
-
-    const prevTime = Date.parse(prev.updated_at || prev.created_at || '');
-    const nextTime = Date.parse(row.updated_at || row.created_at || '');
-
-    // Prefer strictly fresher timestamps. On ties, keep the first-seen row;
-    // combined with server-side DESC ordering, this preserves newest row deterministically.
-    // If both timestamps are missing/invalid, keep later-seen row as a fallback.
-    const shouldReplace =
-      (!Number.isNaN(nextTime) && (Number.isNaN(prevTime) || nextTime > prevTime))
-      || (Number.isNaN(nextTime) && Number.isNaN(prevTime));
-
-    if (shouldReplace) {
-      latestByKey.set(key, row);
-    }
-  });
-
-  return Array.from(latestByKey.values());
-}
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
-}
-
-function getPlannerDefaultsStorageKey(organizationId: string, userId: string): string {
-  return `planner_defaults_${organizationId}_${userId}`;
-}
-
-async function resolveEffectiveUserId(fallbackUserId: string): Promise<string> {
-  if (fallbackUserId && fallbackUserId !== 'undefined' && fallbackUserId !== 'null') {
-    return fallbackUserId;
-  }
-  try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    return user?.id || fallbackUserId;
-  } catch {
-    return fallbackUserId;
-  }
-}
-
-async function resolveOrganizationId(userId: string): Promise<string> {
-  try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.id) {
-      const { data: profile } = await supabase.from('profiles' as any).select('organization_id').eq('id', user.id).maybeSingle();
-      if (profile?.organization_id) return profile.organization_id;
-    }
-  } catch {
-    // ignore
-  }
-  return '';
-}
-
-function readPlannerDefaultsFromLocalStorageWithFallback(
-  organizationId: string,
-  preferredUserId: string,
-  fallbackUserId: string
-): Record<string, string> {
-  const preferred = readPlannerDefaultsFromLocalStorage(organizationId, preferredUserId);
-  if (Object.keys(preferred).length > 0) return preferred;
-  if (preferredUserId === fallbackUserId) return preferred;
-  return readPlannerDefaultsFromLocalStorage(organizationId, fallbackUserId);
-}
-
-function readPlannerDefaultsFromLocalStorage(organizationId: string, userId: string): Record<string, string> {
-  try {
-    const key = getPlannerDefaultsStorageKey(organizationId, userId);
-    const raw = localStorage.getItem(key);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function writePlannerDefaultsToLocalStorage(organizationId: string, userId: string, defaults: Record<string, string>): void {
-  try {
-    const key = getPlannerDefaultsStorageKey(organizationId, userId);
-    localStorage.setItem(key, JSON.stringify(defaults));
-  } catch {
-    // best-effort cache only
-  }
-}
-
-/**
- * Merges loaded database defaults with hardcoded defaults as fallbacks.
- * This guarantees the planner has functional defaults even on a fresh/empty database organization.
- */
-export async function mergeWithHardcodedFallbacks(
-  organizationId: string,
-  dbDefaults: ProjectWizardDefault[]
-): Promise<ProjectWizardDefault[]> {
-  try {
-    const existingKeys = new Set(
-      dbDefaults.map(d =>
-        `${(d.planner_type || 'deck').toLowerCase()}::${(d.material_type || 'default').toLowerCase()}::${(d.material_category || '').toLowerCase()}`
-      )
-    );
-
-    const missingKeys: Array<{ category: string; sku: string }> = [];
-    Object.entries(HARDCODED_DEFAULTS_BY_SKU).forEach(([categoryKey, sku]) => {
-      let materialCategory = categoryKey;
-      if (categoryKey === 'beams') materialCategory = 'Beams';
-      else if (categoryKey === 'joists') materialCategory = 'Joists';
-      else if (categoryKey === 'rim joists') materialCategory = 'Rim Joists';
-      else if (categoryKey === 'ledger board') materialCategory = 'Ledger Board';
-      else if (categoryKey === 'posts') materialCategory = 'Posts';
-      else if (categoryKey === 'decking boards') materialCategory = 'Decking Boards';
-      else if (categoryKey === 'railing posts') materialCategory = 'Railing Posts';
-      else if (categoryKey === 'railing top rail') materialCategory = 'Railing Top Rail';
-      else if (categoryKey === 'railing bottom rail') materialCategory = 'Railing Bottom Rail';
-      else if (categoryKey === 'railing balusters') materialCategory = 'Railing Balusters';
-      else if (categoryKey === 'stair treads') materialCategory = 'Stair Treads';
-      else if (categoryKey === 'stair stringers') materialCategory = 'Stair Stringers';
-      else if (categoryKey === 'stair risers') materialCategory = 'Stair Risers';
-      else if (categoryKey === 'concrete mix') materialCategory = 'Concrete Mix';
-      else if (categoryKey === 'deck screws') materialCategory = 'Deck Screws';
-      else if (categoryKey === 'lag screws') materialCategory = 'Lag Screws';
-      else if (categoryKey === 'structural screws') materialCategory = 'Structural Screws';
-      else if (categoryKey === 'joist hangers') materialCategory = 'Joist Hangers';
-      else if (categoryKey === 'post anchors') materialCategory = 'Post Anchors';
-      else if (categoryKey === 'ledger flashing') materialCategory = 'Ledger Flashing';
-
-      const lookupKey = `deck::treated::${materialCategory.toLowerCase()}`;
-      if (!existingKeys.has(lookupKey)) {
-        missingKeys.push({ category: materialCategory, sku });
-      }
-    });
-
-    if (missingKeys.length === 0) {
-      return dbDefaults;
-    }
-
-    const skusToQuery = missingKeys.map(k => k.sku);
-    const supabase = createClient();
-    const { data: items, error } = await supabase
-      .from('inventory' as any)
-      .select('id, sku')
-      .eq('organization_id', organizationId)
-      .in('sku', skusToQuery);
-
-    if (error || !items || items.length === 0) {
-      return dbDefaults;
-    }
-
-    const skuToId = new Map<string, string>();
-    items.forEach(it => {
-      if (it.sku) skuToId.set(it.sku.toLowerCase(), it.id);
-    });
-
-    const merged = [...dbDefaults];
-    missingKeys.forEach(m => {
-      const itemId = skuToId.get(m.sku.toLowerCase());
-      if (itemId) {
-        merged.push({
-          organization_id: organizationId,
-          planner_type: 'deck',
-          material_type: 'treated',
-          material_category: m.category,
-          inventory_item_id: itemId,
-        });
-      }
-    });
-
-    return merged;
-  } catch (err) {
-    console.error('Error merging hardcoded fallbacks:', err);
-    return dbDefaults;
-  }
-}
-
-/**
- * Get all project wizard defaults for an organization (organization-level only)
- * Routes through the Edge Function server to bypass RLS.
- * @param organizationId - The organization ID
- */
 export async function getProjectWizardDefaults(organizationId: string): Promise<ProjectWizardDefault[]> {
-  // Fetching org defaults via server
-  
+  if (!organizationId) return [];
   try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/project-wizard-defaults?organization_id=${encodeURIComponent(organizationId)}&_ts=${Date.now()}`,
-      {
-        method: 'GET',
-        headers: await getServerHeaders(),
-        cache: 'no-store',
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl(`/project-wizard-defaults?organization_id=${encodeURIComponent(organizationId)}`);
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.defaults)) {
+        return data.defaults;
       }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      // Server error fetching defaults - return hardcoded fallback if possible
-      const fallback = await mergeWithHardcodedFallbacks(organizationId, []);
-      return dedupeDefaultsByNewest(fallback);
     }
-
-    const result = await response.json();
-    const rawDefaults = result.defaults || [];
-    const merged = await mergeWithHardcodedFallbacks(organizationId, rawDefaults);
-    // Guard against legacy duplicate rows; newest row wins per logical key.
-    return dedupeDefaultsByNewest(merged);
-  } catch (error) {
-    // Unexpected error fetching defaults - try hardcoded fallback
-    const fallback = await mergeWithHardcodedFallbacks(organizationId, []);
-    return dedupeDefaultsByNewest(fallback);
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Server fetch failed, falling back to direct query:', err);
   }
+
+  try {
+    const { data, error } = await supabase
+      .from('project_wizard_defaults')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false, nullsFirst: false });
+    if (!error && Array.isArray(data)) {
+      return data;
+    }
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Direct fetch error:', err);
+  }
+
+  return [];
 }
 
-/**
- * Get raw project wizard defaults without client-side dedupe.
- * Used by admin save flow to identify and clean duplicate rows.
- */
-export async function getProjectWizardDefaultsRaw(organizationId: string): Promise<ProjectWizardDefault[]> {
+export const getProjectWizardDefaultsRaw = getProjectWizardDefaults;
+
+export async function upsertProjectWizardDefault(config: ProjectWizardDefault): Promise<boolean> {
   try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/project-wizard-defaults?organization_id=${encodeURIComponent(organizationId)}&_ts=${Date.now()}`,
-      {
-        method: 'GET',
-        headers: await getServerHeaders(),
-        cache: 'no-store',
-      }
-    );
-
-    if (!response.ok) {
-      return mergeWithHardcodedFallbacks(organizationId, []);
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl('/project-wizard-defaults');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (res.ok) {
+      return true;
     }
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Server upsert failed:', err);
+  }
 
-    const result = await response.json();
-    const rawDefaults = result.defaults || [];
-    return mergeWithHardcodedFallbacks(organizationId, Array.isArray(rawDefaults) ? rawDefaults : []);
+  try {
+    const { error } = await supabase
+      .from('project_wizard_defaults')
+      .upsert(config, { onConflict: 'organization_id,planner_type,material_type,material_category' });
+    return !error;
   } catch {
-    return mergeWithHardcodedFallbacks(organizationId, []);
-  }
-}
-
-/**
- * Get user-specific defaults from database
- */
-export async function getUserDefaults(userId: string, organizationId: string): Promise<Record<string, string>> {
-  // Fetching user defaults
-  
-  try {
-    const effectiveUserId = await resolveEffectiveUserId(userId);
-    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : await resolveOrganizationId(userId);
-    const safeOrgId = resolvedOrgId || 'default-org';
-    const token = await getUserAccessToken();
-
-    if (!token) {
-      // No session, fall back to local cache
-      return readPlannerDefaultsFromLocalStorageWithFallback(safeOrgId, effectiveUserId, userId);
-    }
-
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${encodeURIComponent(safeOrgId)}/${encodeURIComponent(effectiveUserId)}`,
-      {
-        method: 'GET',
-        headers: await getServerHeaders({ 'X-User-Token': token }),
-      }
-    );
-
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 500) {
-        // Server has no defaults (or not reachable); use local cache fallback
-        return readPlannerDefaultsFromLocalStorageWithFallback(safeOrgId, effectiveUserId, userId);
-      }
-      // Error fetching user defaults
-      return readPlannerDefaultsFromLocalStorageWithFallback(safeOrgId, effectiveUserId, userId);
-    }
-
-    const data = await response.json();
-    // User defaults fetched successfully
-    const defaults = data.defaults || {};
-    writePlannerDefaultsToLocalStorage(safeOrgId, effectiveUserId, defaults);
-    if (effectiveUserId !== userId) {
-      writePlannerDefaultsToLocalStorage(safeOrgId, userId, defaults);
-    }
-    return defaults;
-  } catch (error) {
-    // Unexpected error loading user defaults
-    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : 'default-org';
-    return readPlannerDefaultsFromLocalStorage(resolvedOrgId, userId);
-  }
-}
-
-/**
- * Save user-specific defaults to database
- */
-export async function saveUserDefaults(userId: string, organizationId: string, defaults: Record<string, string>): Promise<boolean> {
-  // Saving user defaults
-  
-  try {
-    const effectiveUserId = await resolveEffectiveUserId(userId);
-    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : await resolveOrganizationId(userId);
-    const safeOrgId = resolvedOrgId || 'default-org';
-
-    // Keep a local cache so planner pricing can still resolve defaults if API read fails.
-    writePlannerDefaultsToLocalStorage(safeOrgId, effectiveUserId, defaults);
-    if (effectiveUserId !== userId) {
-      writePlannerDefaultsToLocalStorage(safeOrgId, userId, defaults);
-    }
-
-    const token = await getUserAccessToken();
-
-    if (!token) {
-      console.warn('[project-wizard-defaults] Cannot save defaults to server: missing user session token.');
-      // No session, cannot save user defaults
-      return false;
-    }
-
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${encodeURIComponent(safeOrgId)}/${encodeURIComponent(effectiveUserId)}`,
-      {
-        method: 'POST',
-        headers: await getServerHeaders({ 'X-User-Token': token }),
-        body: JSON.stringify({ defaults }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.warn('[project-wizard-defaults] Failed to sync user defaults to server. Status:', response.status, 'Error Body:', errorText);
-      // Still saved to local cache successfully, so we can return true for local resilience
-      return true;
-    }
-
-    // User defaults saved successfully
-    return true;
-  } catch (error: any) {
-    const errMsg = error?.message || String(error);
-    if (errMsg.includes('Failed to fetch') || errMsg.includes('fetch') || errMsg.includes('NetworkError')) {
-      console.warn('[project-wizard-defaults] saveUserDefaults network offline or unreachable, saved locally:', errMsg);
-      return true;
-    }
-    console.error('[project-wizard-defaults] Unexpected error inside saveUserDefaults:', errMsg);
-    // Unexpected error saving user defaults
     return false;
   }
 }
 
-/**
- * Delete user-specific defaults from database (restore to org defaults)
- */
-export async function deleteUserDefaults(userId: string, organizationId: string): Promise<boolean> {
-  // Deleting user defaults
-  let safeOrgId = 'default-org';
-  let effectiveUserId = userId;
-  
-  try {
-    effectiveUserId = await resolveEffectiveUserId(userId);
-    const resolvedOrgId = organizationId && organizationId !== 'undefined' ? organizationId : await resolveOrganizationId(userId);
-    safeOrgId = resolvedOrgId || 'default-org';
-
-    // Clear local storage first so user has immediate local feedback
-    try {
-      localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, effectiveUserId));
-      if (effectiveUserId !== userId) {
-        localStorage.removeItem(getPlannerDefaultsStorageKey(safeOrgId, userId));
-      }
-    } catch (lsErr) {
-      // ignore cache cleanup errors
-    }
-
-    const token = await getUserAccessToken();
-    if (!token) {
-      // No session, cannot delete user defaults on server, but already deleted locally
-      return true;
-    }
-
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/user-planner-defaults/${encodeURIComponent(safeOrgId)}/${encodeURIComponent(effectiveUserId)}`,
-      {
-        method: 'DELETE',
-        headers: await getServerHeaders({ 'X-User-Token': token }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.warn('[project-wizard-defaults] Server failed to delete user defaults. Status:', response.status, 'Error Body:', errorText);
-      // We still return true because local storage has been successfully cleared
-      return true;
-    }
-
-    return true;
-  } catch (error: any) {
-    const errMsg = error?.message || String(error);
-    if (errMsg.includes('Failed to fetch') || errMsg.includes('fetch') || errMsg.includes('NetworkError')) {
-      console.warn('[project-wizard-defaults] deleteUserDefaults network offline or unreachable, but cleared locally:', errMsg);
-      return true;
-    }
-    console.error('[project-wizard-defaults] Unexpected error inside deleteUserDefaults:', errMsg);
-    return false;
-  }
-}
-
-/**
- * Purge all planner defaults data for an organization.
- * Removes org defaults rows, org conversion factors, and all user defaults for the org.
- */
-export async function purgePlannerDefaultsForOrganization(organizationId: string): Promise<{
-  success: boolean;
-  deletedTableRows?: number;
-  deletedUserDefaultKeys?: number;
-}> {
-  try {
-    const token = await getUserAccessToken();
-
-    if (!token) {
-      return { success: false };
-    }
-
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/planner-defaults-purge/${encodeURIComponent(organizationId)}`,
-      {
-        method: 'DELETE',
-        headers: await getServerHeaders(),
-      }
-    );
-
-    if (!response.ok) {
-      return { success: false };
-    }
-
-    const data = await response.json();
-    return {
-      success: true,
-      deletedTableRows: Number(data.deletedTableRows || 0),
-      deletedUserDefaultKeys: Number(data.deletedUserDefaultKeys || 0),
-    };
-  } catch {
-    return { success: false };
-  }
-}
-
-/**
- * Migrate user defaults from localStorage to database
- * This should be called once to migrate existing localStorage data
- */
-export async function migrateUserDefaultsFromLocalStorage(userId: string, organizationId: string): Promise<boolean> {
-  // Starting migration from localStorage to database
-  
-  try {
-    const effectiveUserId = await resolveEffectiveUserId(userId);
-    // Check if there's data in localStorage
-    const preferredKey = `planner_defaults_${organizationId}_${effectiveUserId}`;
-    const fallbackKey = `planner_defaults_${organizationId}_${userId}`;
-    const stored = localStorage.getItem(preferredKey) || localStorage.getItem(fallbackKey);
-    
-    if (!stored) {
-      // No localStorage data to migrate
-      return true; // Nothing to migrate, but not an error
-    }
-    
-    const localDefaults = JSON.parse(stored);
-    const itemCount = Object.keys(localDefaults).length;
-    
-    if (itemCount === 0) {
-      // localStorage data is empty, nothing to migrate
-      // Clean up empty localStorage entry
-      localStorage.removeItem(preferredKey);
-      localStorage.removeItem(fallbackKey);
-      return true;
-    }
-    
-    // Found items in localStorage to migrate
-    
-    // Check if database already has data
-    const existingDefaults = await getUserDefaults(effectiveUserId, organizationId);
-    
-    if (Object.keys(existingDefaults).length > 0) {
-      // Database already has user defaults, skipping migration
-      // Optionally clean up localStorage since data is already in DB
-      localStorage.removeItem(preferredKey);
-      localStorage.removeItem(fallbackKey);
-      return true;
-    }
-    
-    // Migrate the data
-    const success = await saveUserDefaults(effectiveUserId, organizationId, localDefaults);
-    
-    if (success) {
-      // Migration successful, cleaning up localStorage
-      localStorage.removeItem(preferredKey);
-      localStorage.removeItem(fallbackKey);
-      return true;
-    } else {
-      // Migration failed, keeping localStorage data
-      return false;
-    }
-  } catch (error) {
-    // Error during migration
-    return false;
-  }
-}
-
-/**
- * Upsert a project wizard default via the server (bypasses RLS)
- */
-export async function upsertProjectWizardDefault(defaultConfig: ProjectWizardDefault): Promise<ProjectWizardDefault | null> {
-  // Upserting default via server
-  
-  try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/project-wizard-defaults`,
-      {
-        method: 'POST',
-        headers: await getServerHeaders(),
-        body: JSON.stringify(defaultConfig),
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      // Server error upserting default
-      return null;
-    }
-
-    const result = await response.json();
-    // Default saved successfully via server
-    return result.default || null;
-  } catch (error) {
-    // Unexpected error upserting default
-    return null;
-  }
-}
-
-/**
- * Batch upsert project wizard defaults via the server (bypasses RLS)
- * More efficient than calling upsertProjectWizardDefault individually.
- */
-export async function batchUpsertProjectWizardDefaults(defaults: ProjectWizardDefault[]): Promise<{ savedCount: number; success: boolean; failedCount?: number; failedRows?: Array<{ planner_type?: string; material_type?: string | null; material_category?: string | null; reason?: string; code?: string }> }> {
-  // Batch upserting defaults via server
-  
-  try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/project-wizard-defaults/batch`,
-      {
-        method: 'POST',
-        headers: await getServerHeaders(),
-        body: JSON.stringify({ defaults }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      // Server error in batch upsert
-      return { savedCount: 0, success: false };
-    }
-
-    const result = await response.json();
-    // Batch saved defaults via server
-    const savedCount = Number(result.savedCount || 0);
-    const failedCount = Number(result.failedCount || 0);
-    const success = typeof result.success === 'boolean' ? result.success : failedCount === 0;
-    return {
-      savedCount,
-      success,
-      failedCount,
-      failedRows: Array.isArray(result.failedRows) ? result.failedRows : [],
-    };
-  } catch (error) {
-    // Unexpected error in batch upsert
-    return { savedCount: 0, success: false };
-  }
-}
-
-/**
- * Delete a project wizard default via the server (bypasses RLS)
- */
 export async function deleteProjectWizardDefault(id: string): Promise<boolean> {
-  // Deleting default via server
-  
   try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/project-wizard-defaults/${encodeURIComponent(id)}`,
-      {
-        method: 'DELETE',
-        headers: await getServerHeaders(),
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      // Server error deleting default
-      return false;
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl(`/project-wizard-defaults/${id}`);
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers,
+    });
+    if (res.ok) {
+      return true;
     }
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Server delete failed:', err);
+  }
 
-    // Default deleted successfully via server
-    return true;
-  } catch (error) {
-    // Unexpected error deleting default
+  try {
+    const { error } = await supabase
+      .from('project_wizard_defaults')
+      .delete()
+      .eq('id', id);
+    return !error;
+  } catch {
     return false;
   }
 }
 
-/**
- * Get inventory items for dropdown (limited fields)
- * If itemIds is provided, only fetch those specific items
- */
-export async function getInventoryItemsForDropdown(organizationId: string, itemIds?: string[]): Promise<InventoryItem[]> {
-  // Fetching inventory items for organization
-  
+export async function getInventoryItemsForDropdown(
+  organizationId: string,
+  itemIds?: string[]
+): Promise<InventoryItem[]> {
+  if (!organizationId) return [];
   try {
-    const filteredItemIds = itemIds
-      ? Array.from(new Set(itemIds.filter((id) => isUuid(id))))
-      : undefined;
-
-    // Preferred path: server endpoint (service-role backed) so non-admin roles
-    // can resolve defaults inventory items even when direct table reads are restricted.
-    try {
-      const idsParam = filteredItemIds && filteredItemIds.length > 0
-        ? `?ids=${encodeURIComponent(filteredItemIds.join(','))}`
-        : '';
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/project-wizard-inventory/${encodeURIComponent(organizationId)}${idsParam}`,
-        {
-          method: 'GET',
-          headers: await getServerHeaders(),
-        }
-      );
-
-      if (response.ok) {
-        const payload = await response.json();
-        const serverItems = Array.isArray(payload?.items) ? payload.items : [];
-        if (serverItems.length > 0 || (filteredItemIds && filteredItemIds.length > 0)) {
-          return serverItems;
-        }
-        // If requesting full list and server returns empty, continue to fallback path.
-      }
-    } catch {
-      // Fall back to direct client query.
+    const headers = await getServerHeaders();
+    let query = '';
+    if (itemIds && itemIds.length > 0) {
+      query = `?ids=${encodeURIComponent(itemIds.join(','))}`;
     }
-
-    const supabase = createClient();
-    
-    // Try to get user, with fallback to session
-    let authUser;
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      // Fallback: check if there's a session
-      const token = await getUserAccessToken();
-      if (!token) {
-        // User not authenticated, returning empty inventory
-        return [];
-      }
-
-      const { data: { user: fallbackUser } } = await supabase.auth.getUser();
-      if (!fallbackUser) {
-        return [];
-      }
-
-      authUser = fallbackUser;
-      // Using refreshed auth state for inventory lookup
-    } else {
-      authUser = user;
-    }
-
-    // If specific item IDs are provided, fetch only those items
-    if (filteredItemIds && filteredItemIds.length > 0) {
-      // Fetching specific items
-
-      // Large id lists can exceed URL/query limits in PostgREST.
-      // Query in chunks and merge results.
-      const uniqueIds = filteredItemIds;
-      const idChunks = chunkArray(uniqueIds, 50);
-      let allMatchedItems: InventoryItem[] = [];
-
-      for (const idChunk of idChunks) {
-        const { data, error } = await supabase
-          .from('inventory' as any)
-          .select('id, name, sku, category, description')
-          .eq('organization_id', organizationId)
-          .in('id', idChunk);
-
-        if (error) {
-          if (error.code === 'PGRST205' || error.code === '42P01') {
-            // inventory table does not exist
-            return [];
-          }
-          // Continue; partial data is better than blank UI.
-          continue;
-        }
-
-        if (data?.length) {
-          allMatchedItems = [...allMatchedItems, ...data];
-        }
-      }
-
-      // Fetched specific items
-      return allMatchedItems;
-    }
-
-    // Otherwise, fetch ALL items using pagination
-    // Fetching all inventory items
-    
-    let allItems: InventoryItem[] = [];
-    let page = 0;
-    const pageSize = 1000;
-    let hasMore = true;
-    
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('inventory' as any)
-        .select('id, name, sku, category, description')
-        .eq('organization_id', organizationId)
-        .order('name', { ascending: true })
-        .range(page * pageSize, (page + 1) * pageSize - 1);
-
-      if (error) {
-        if (error.code === 'PGRST205' || error.code === '42P01') {
-          // inventory table does not exist
-          return [];
-        }
-        // Error fetching inventory items
-        return allItems; // Return what we have so far
-      }
-
-      if (data && data.length > 0) {
-        allItems = [...allItems, ...data];
-        // Fetched page of items
-        
-        // If we got less than pageSize, we've reached the end
-        if (data.length < pageSize) {
-          hasMore = false;
-        } else {
-          page++;
-        }
-      } else {
-        hasMore = false;
+    const url = buildServerFunctionUrl(`/project-wizard-inventory/${organizationId}${query}`);
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.items)) {
+        return data.items;
       }
     }
-
-    // Fetched all items
-    return allItems;
-  } catch (error) {
-    // Unexpected error fetching inventory items
-    return [];
-  }
-}
-
-/**
- * Extract conversion factors from user defaults for a given planner type.
- * CF entries are stored with `-cf` suffix keys (e.g., "deck-treated-Deck Screws-cf": "10").
- * Returns a map of lowercased category name -> numeric conversion factor.
- */
-export function extractConversionFactors(
-  userDefaults: Record<string, string>,
-  plannerType: string,
-  materialType?: string
-): Record<string, number> {
-  const cfMap: Record<string, number> = {};
-  const normalizedMaterialType = (materialType || 'default').toLowerCase();
-  const prefixes = [`${plannerType}-${normalizedMaterialType}-`];
-
-  if (normalizedMaterialType.startsWith('aluminum-')) {
-    prefixes.push(`${plannerType}-aluminum-`);
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Failed to fetch inventory items via server:', err);
   }
 
-  Object.entries(userDefaults).forEach(([key, value]) => {
-    const matchingPrefix = prefixes.find((prefix) => key.toLowerCase().startsWith(prefix));
-    if (matchingPrefix && key.endsWith('-cf')) {
-      const categoryName = key.slice(matchingPrefix.length, -3);
-      const numVal = parseFloat(value);
-      if (!isNaN(numVal) && numVal > 0 && numVal !== 1 && cfMap[categoryName.toLowerCase()] === undefined) {
-        cfMap[categoryName.toLowerCase()] = numVal;
-      }
+  try {
+    let query = supabase
+      .from('inventory')
+      .select('id, name, sku, category, description')
+      .eq('organization_id', organizationId);
+    if (itemIds && itemIds.length > 0) {
+      query = query.in('id', itemIds);
     }
-  });
+    const { data, error } = await query.order('name', { ascending: true }).limit(1000);
+    if (!error && Array.isArray(data)) {
+      return data;
+    }
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Direct inventory query failed:', err);
+  }
 
-  // Extracted conversion factors
-  return cfMap;
+  return [];
 }
 
-/**
- * Get org-level conversion factors from the server (KV-backed).
- */
 export async function getOrgConversionFactors(organizationId: string): Promise<Record<string, string>> {
-  // Fetching org conversion factors
-
+  if (!organizationId) return {};
   try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/org-conversion-factors/${encodeURIComponent(organizationId)}`,
-      {
-        method: 'GET',
-        headers: await getServerHeaders(),
-      }
-    );
-
-    if (!response.ok) {
-      // Error fetching org CFs
-      return {};
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl(`/org-conversion-factors/${organizationId}`);
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      return data.conversionFactors || {};
     }
-
-    const data = await response.json();
-    // Org CFs fetched
-    return data.conversionFactors || {};
-  } catch (error) {
-    // Unexpected error fetching org CFs
-    return {};
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Failed to get org conversion factors:', err);
   }
+  return {};
 }
 
-/**
- * Save org-level conversion factors to the server (KV-backed).
- */
-export async function saveOrgConversionFactors(organizationId: string, conversionFactors: Record<string, string>): Promise<boolean> {
-  // Saving org conversion factors
-
+export async function saveOrgConversionFactors(
+  organizationId: string,
+  conversionFactors: Record<string, string>
+): Promise<boolean> {
+  if (!organizationId) return false;
   try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/org-conversion-factors/${encodeURIComponent(organizationId)}`,
-      {
-        method: 'POST',
-        headers: await getServerHeaders(),
-        body: JSON.stringify({ conversionFactors }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      // Error saving org CFs
-      return false;
-    }
-
-    // Org CFs saved successfully
-    return true;
-  } catch (error) {
-    // Unexpected error saving org CFs
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl(`/org-conversion-factors/${organizationId}`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversionFactors }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Failed to save org conversion factors:', err);
     return false;
   }
 }
 
-/**
- * Extract org-level conversion factors for a specific planner type from the flat map.
- * Org CFs are stored as "plannerType-materialType-categoryName": "value".
- * Returns a map of lowercased category name -> numeric conversion factor.
- */
-export function extractOrgConversionFactors(
-  orgCFs: Record<string, string>,
+export async function getUserDefaults(
+  userId: string,
+  organizationId: string
+): Promise<Record<string, string>> {
+  if (!userId || !organizationId) return {};
+  try {
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl(`/user-planner-defaults/${organizationId}/${userId}`);
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      return data.defaults || {};
+    }
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Failed to get user defaults:', err);
+  }
+  return {};
+}
+
+export async function saveUserDefaults(
+  userId: string,
+  organizationId: string,
+  defaults: Record<string, string>
+): Promise<boolean> {
+  if (!userId || !organizationId) return false;
+  try {
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl(`/user-planner-defaults/${organizationId}/${userId}`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaults }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Failed to save user defaults:', err);
+    return false;
+  }
+}
+
+export async function deleteUserDefaults(
+  userId: string,
+  organizationId: string
+): Promise<boolean> {
+  if (!userId || !organizationId) return false;
+  try {
+    const headers = await getServerHeaders();
+    const url = buildServerFunctionUrl(`/user-planner-defaults/${organizationId}/${userId}`);
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers,
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Failed to delete user defaults:', err);
+    return false;
+  }
+}
+
+export async function migrateUserDefaultsFromLocalStorage(
+  userId: string,
+  organizationId: string
+): Promise<boolean> {
+  if (typeof window === 'undefined' || !userId || !organizationId) return false;
+  const localStorageKey = `planner_defaults_${organizationId}_${userId}`;
+  const stored = localStorage.getItem(localStorageKey);
+  if (!stored) {
+    return true;
+  }
+
+  try {
+    const localDefaults = JSON.parse(stored);
+    if (!localDefaults || typeof localDefaults !== 'object' || Object.keys(localDefaults).length === 0) {
+      localStorage.removeItem(localStorageKey);
+      return true;
+    }
+
+    const currentServerDefaults = await getUserDefaults(userId, organizationId);
+    const merged = { ...currentServerDefaults, ...localDefaults };
+    const saved = await saveUserDefaults(userId, organizationId, merged);
+    if (saved) {
+      localStorage.removeItem(localStorageKey);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('[project-wizard-defaults] Migration error:', err);
+    return false;
+  }
+}
+
+export function extractConversionFactors(
+  defaults: Record<string, any>,
   plannerType: string,
   materialType?: string
 ): Record<string, number> {
-  const cfMap: Record<string, number> = {};
-  const normalizedMaterialType = (materialType || 'default').toLowerCase();
-  const prefixes = [`${plannerType}-${normalizedMaterialType}-`];
+  const result: Record<string, number> = {};
+  if (!defaults || typeof defaults !== 'object') return result;
 
-  if (normalizedMaterialType.startsWith('aluminum-')) {
-    prefixes.push(`${plannerType}-aluminum-`);
-  }
+  const targetPlanner = (plannerType || '').toLowerCase();
+  const targetMaterial = (materialType || 'default').toLowerCase();
 
-  Object.entries(orgCFs).forEach(([key, value]) => {
-    const matchingPrefix = prefixes.find((prefix) => key.toLowerCase().startsWith(prefix));
-    if (matchingPrefix) {
-      const categoryName = key.slice(matchingPrefix.length);
-      const numVal = parseFloat(value);
-      if (!isNaN(numVal) && numVal > 0 && numVal !== 1 && cfMap[categoryName.toLowerCase()] === undefined) {
-        cfMap[categoryName.toLowerCase()] = numVal;
+  Object.entries(defaults).forEach(([key, rawVal]) => {
+    if (rawVal === undefined || rawVal === null || rawVal === '') return;
+    const num = typeof rawVal === 'number' ? rawVal : parseFloat(String(rawVal));
+    if (isNaN(num)) return;
+
+    const lowerKey = key.toLowerCase();
+    const isCFKey = lowerKey.endsWith('-cf');
+    const cleanKey = isCFKey ? lowerKey.slice(0, -3) : lowerKey;
+
+    const parts = cleanKey.split('-');
+    if (parts.length >= 3) {
+      const pType = parts[0];
+      const mType = parts[1];
+      const category = parts.slice(2).join('-');
+
+      if (pType === targetPlanner && (mType === targetMaterial || mType === 'default' || !materialType)) {
+        result[category] = num;
+        result[cleanKey] = num;
+        result[key] = num;
       }
+    } else {
+      result[cleanKey] = num;
+      result[key] = num;
     }
   });
 
-  return cfMap;
+  return result;
+}
+
+export function extractOrgConversionFactors(
+  orgCFs: Record<string, any>,
+  plannerType: string,
+  materialType?: string
+): Record<string, number> {
+  return extractConversionFactors(orgCFs, plannerType, materialType);
 }

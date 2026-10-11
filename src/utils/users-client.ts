@@ -5,11 +5,6 @@ import { getServerHeaders } from './server-headers';
 
 const supabase = createClient();
 
-function normalizeUserRole(role: unknown): string {
-  const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return normalized === 'super_user' || normalized === 'superadmin' ? 'super_admin' : normalized;
-}
-
 export interface ClientUser {
   id: string;
   email: string;
@@ -20,8 +15,6 @@ export interface ClientUser {
   last_login?: string;
   created_at: string;
   avatar_url?: string;
-  manager_id?: string | null;
-  billing_plan?: string | null;
 }
 
 /**
@@ -60,30 +53,6 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
-async function readUserMutationResponse(response: Response, action: string): Promise<any> {
-  const responseText = await response.text();
-  let result: any = {};
-  try {
-    result = responseText ? JSON.parse(responseText) : {};
-  } catch {
-    result = {};
-  }
-
-  if (result?.matched === false) {
-    throw new Error('The hosted user-management function is outdated. Deploy the latest make-server-8405be07 Edge Function, then try again.');
-  }
-
-  if (action === 'delete' && response.status === 404 && /user not found/i.test(result?.error || '')) {
-    return { success: false, alreadyRemoved: true };
-  }
-
-  if (!response.ok || !result?.success) {
-    throw new Error(result?.error || `Failed to ${action} user (HTTP ${response.status})`);
-  }
-
-  return result;
-}
-
 /**
  * Fetch profiles from the server-side API (bypasses RLS)
  */
@@ -95,7 +64,6 @@ async function fetchProfilesFromServer(accessToken: string): Promise<any[] | nul
     const response = await fetch(serverUrl, {
       method: 'GET',
       headers,
-      cache: 'no-store',
     });
 
     if (!response.ok) {
@@ -185,7 +153,7 @@ export async function getAllUsersClient(): Promise<{ users: ClientUser[] }> {
       return { users: [] };
     }
 
-    const currentUserRole = normalizeUserRole(user.user_metadata?.role || 'standard_user');
+    const currentUserRole = user.user_metadata?.role || 'standard_user';
     const currentUserOrgId = user.user_metadata?.organizationId;
     
     // Current user info available for debugging if needed
@@ -317,7 +285,7 @@ export async function inviteUserClient(data: { email: string; name: string; role
       throw new Error('Not authenticated');
     }
 
-    const currentUserRole = normalizeUserRole(user.user_metadata?.role || 'standard_user');
+    const currentUserRole = user.user_metadata?.role || 'standard_user';
     let currentUserOrgId = user.user_metadata?.organizationId;
 
     // FALLBACK: If metadata has invalid org ID, fetch from profiles table
@@ -426,6 +394,13 @@ export async function updateUserClient(id: string, updates: Partial<ClientUser>)
       throw new Error('Not authenticated');
     }
 
+    // Check if profiles table exists
+    const profilesTableExists = await checkProfilesTableExists();
+    
+    if (!profilesTableExists) {
+      throw new Error('Profiles table not set up. Please run the database migration first.');
+    }
+
     const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/users/${id}`;
     const headers = await getServerHeaders();
     const response = await fetch(serverUrl, {
@@ -437,14 +412,16 @@ export async function updateUserClient(id: string, updates: Partial<ClientUser>)
         role: updates.role,
         organization_id: updates.organization_id,
         status: updates.status,
-        manager_id: updates.manager_id,
-        billing_plan: updates.billing_plan,
       }),
     });
 
-    const result = await readUserMutationResponse(response, 'update');
+    const result = await response.json();
 
-    return { user: result.user, warnings: result.warnings || [] };
+    if (!response.ok || !result?.success) {
+      throw new Error(result?.error || 'Failed to update user');
+    }
+
+    return { user: result.user };
   } catch (error: any) {
     // Error in updateUserClient
     throw error;
@@ -466,12 +443,25 @@ export async function deleteUserClient(id: string) {
       throw new Error('Cannot delete yourself');
     }
 
-    const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/users/${encodeURIComponent(id)}`;
-    const headers = await getServerHeaders();
-    const response = await fetch(serverUrl, { method: 'DELETE', headers });
-    const result = await readUserMutationResponse(response, 'delete');
+    // Check if profiles table exists
+    const profilesTableExists = await checkProfilesTableExists();
+    
+    if (!profilesTableExists) {
+      throw new Error('Profiles table not set up. Please run the database migration first.');
+    }
 
-    return { success: true, alreadyRemoved: result?.alreadyRemoved === true };
+    // Delete from profiles table
+    const { error } = await supabase
+      .from('profiles' as any)
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      // Error deleting user
+      throw new Error('Failed to delete user: ' + error.message);
+    }
+
+    return { success: true };
   } catch (error: any) {
     // Error in deleteUserClient
     throw error;
@@ -490,7 +480,7 @@ export async function resetPasswordClient(userId: string, newPassword: string) {
       throw new Error('Not authenticated');
     }
 
-    const currentUserRole = normalizeUserRole(user.user_metadata?.role || 'standard_user');
+    const currentUserRole = user.user_metadata?.role || 'standard_user';
     
     // Check permissions
     if (currentUserRole !== 'super_admin' && currentUserRole !== 'admin') {

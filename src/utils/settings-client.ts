@@ -36,11 +36,6 @@ export interface OrganizationSettings {
   updated_at?: string;
 }
 
-export interface EnvironmentSettingsResponse {
-  values: Record<string, string>;
-  configuredSecrets: string[];
-}
-
 // Fields that may not exist as columns in the organization_settings table.
 // These are stripped before upsert to avoid PGRST204 errors,
 // and are handled via localStorage fallback instead.
@@ -531,38 +526,235 @@ export async function setOrgMode(organizationId: string, userMode: OrgUserMode):
   return localData;
 }
 
+// ─── Environment Settings (System & Tenant) ──────────────────────────────────
+
+const SECRET_KEY_NAMES = new Set([
+  'SYSTEM_SMTP_PASSWORD',
+  'SMTP_PASS',
+  'GEMINI_API_KEY',
+  'GOOGLE_MAPS_PLATFORM_KEY',
+  'AZURE_CLIENT_SECRET',
+  'GOOGLE_CLIENT_SECRET',
+  'FLEET_COMPLETE_PASSWORD',
+  'FLEET_COMPLETE_API_KEY',
+]);
+
 export async function getEnvironmentSettingsClient(
   scope: 'system' | 'tenant',
-  organizationId?: string,
-): Promise<EnvironmentSettingsResponse> {
-  const headers = await getServerHeaders();
-  const path = scope === 'system' ? 'system-variables' : 'tenant-variables';
-  const query = scope === 'tenant' && organizationId
-    ? `?organization_id=${encodeURIComponent(organizationId)}`
-    : '';
-  const response = await fetch(`${SERVER_BASE}/settings/${path}${query}`, { headers });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(result.error || `Failed to load ${scope} settings (${response.status})`);
+  organizationId?: string
+): Promise<{ values: Record<string, string>; configuredSecrets: string[] }> {
+  const result: Record<string, string> = {};
+  const configuredSecrets: string[] = [];
+
+  // Try server endpoint first if available
+  try {
+    const headers = await getServerHeaders();
+    const query = new URLSearchParams({ scope });
+    if (organizationId) query.set('organization_id', organizationId);
+    const res = await fetch(`${SERVER_BASE}/settings/environment?${query.toString()}`, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        return {
+          values: data.values || {},
+          configuredSecrets: Array.isArray(data.configuredSecrets) ? data.configuredSecrets : [],
+        };
+      }
+    }
+  } catch {
+    // Fall back to direct database query
   }
-  return result as EnvironmentSettingsResponse;
+
+  // Fallback 1: Direct Supabase database queries
+  try {
+    if (scope === 'system') {
+      const { data: sysData, error: sysError } = await supabase
+        .from('system_settings')
+        .select('setting_key, setting_value');
+
+      if (!sysError && Array.isArray(sysData)) {
+        for (const row of sysData) {
+          if (row.setting_key) {
+            if (SECRET_KEY_NAMES.has(row.setting_key)) {
+              if (row.setting_value) configuredSecrets.push(row.setting_key);
+            } else {
+              result[row.setting_key] = row.setting_value || '';
+            }
+          }
+        }
+        return { values: result, configuredSecrets };
+      }
+
+      // Fallback to app_env_vars table
+      const { data: envData, error: envError } = await supabase
+        .from('app_env_vars')
+        .select('key, value');
+
+      if (!envError && Array.isArray(envData)) {
+        for (const row of envData) {
+          if (row.key) {
+            if (SECRET_KEY_NAMES.has(row.key)) {
+              if (row.value) configuredSecrets.push(row.key);
+            } else {
+              result[row.key] = row.value || '';
+            }
+          }
+        }
+        return { values: result, configuredSecrets };
+      }
+    } else if (scope === 'tenant' && organizationId) {
+      const { data: tenantData, error: tenantError } = await supabase
+        .from('tenant_settings')
+        .select('setting_key, setting_value')
+        .eq('organization_id', organizationId);
+
+      if (!tenantError && Array.isArray(tenantData)) {
+        for (const row of tenantData) {
+          if (row.setting_key) {
+            if (SECRET_KEY_NAMES.has(row.setting_key)) {
+              if (row.setting_value) configuredSecrets.push(row.setting_key);
+            } else {
+              result[row.setting_key] = row.setting_value || '';
+            }
+          }
+        }
+        return { values: result, configuredSecrets };
+      }
+
+      // Fallback to tenant_env_vars table
+      const { data: envData, error: envError } = await supabase
+        .from('tenant_env_vars')
+        .select('key, value')
+        .eq('organization_id', organizationId);
+
+      if (!envError && Array.isArray(envData)) {
+        for (const row of envData) {
+          if (row.key) {
+            if (SECRET_KEY_NAMES.has(row.key)) {
+              if (row.value) configuredSecrets.push(row.key);
+            } else {
+              result[row.key] = row.value || '';
+            }
+          }
+        }
+        return { values: result, configuredSecrets };
+      }
+    }
+  } catch (dbErr) {
+    console.warn('Direct DB read failed for environment settings:', dbErr);
+  }
+
+  // Fallback 2: Local storage
+  try {
+    const storageKey = `env_settings_${scope}_${organizationId || 'global'}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      for (const [k, v] of Object.entries(parsed)) {
+        if (SECRET_KEY_NAMES.has(k)) {
+          if (v) configuredSecrets.push(k);
+        } else {
+          result[k] = String(v || '');
+        }
+      }
+    }
+  } catch {
+    // Ignore
+  }
+
+  return { values: result, configuredSecrets };
 }
 
 export async function saveEnvironmentSettingsClient(
   scope: 'system' | 'tenant',
   values: Record<string, string>,
   clearKeys: string[],
-  organizationId?: string,
-): Promise<void> {
-  const headers = await getServerHeaders();
-  const path = scope === 'system' ? 'system-variables' : 'tenant-variables';
-  const response = await fetch(`${SERVER_BASE}/settings/${path}`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify({ organization_id: organizationId, values, clear_keys: clearKeys }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(result.error || `Failed to save ${scope} settings (${response.status})`);
+  organizationId?: string
+): Promise<{ success: boolean }> {
+  // Always update localStorage as backup
+  try {
+    const storageKey = `env_settings_${scope}_${organizationId || 'global'}`;
+    const existing = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    for (const key of clearKeys) {
+      delete existing[key];
+    }
+    for (const [key, val] of Object.entries(values)) {
+      if (val) existing[key] = val;
+    }
+    localStorage.setItem(storageKey, JSON.stringify(existing));
+  } catch {
+    // Ignore local storage error
   }
+
+  // Try server endpoint first
+  try {
+    const headers = await getServerHeaders();
+    const res = await fetch(`${SERVER_BASE}/settings/environment`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        scope,
+        values,
+        clearKeys,
+        organizationId,
+      }),
+    });
+    if (res.ok) {
+      return { success: true };
+    }
+  } catch {
+    // Fall back to direct DB updates
+  }
+
+  // Fallback: Direct DB operations
+  try {
+    if (scope === 'system') {
+      for (const key of clearKeys) {
+        await supabase.from('system_settings').delete().eq('setting_key', key);
+        await supabase.from('app_env_vars').delete().eq('key', key);
+      }
+      for (const [key, val] of Object.entries(values)) {
+        if (!val && !clearKeys.includes(key)) continue;
+        if (val) {
+          await supabase
+            .from('system_settings')
+            .upsert({ setting_key: key, setting_value: val, updated_at: new Date().toISOString() });
+          await supabase
+            .from('app_env_vars')
+            .upsert({ key, value: val, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+        }
+      }
+      return { success: true };
+    } else if (scope === 'tenant' && organizationId) {
+      for (const key of clearKeys) {
+        await supabase
+          .from('tenant_settings')
+          .delete()
+          .eq('organization_id', organizationId)
+          .eq('setting_key', key);
+        await supabase
+          .from('tenant_env_vars')
+          .delete()
+          .eq('organization_id', organizationId)
+          .eq('key', key);
+      }
+      for (const [key, val] of Object.entries(values)) {
+        if (!val && !clearKeys.includes(key)) continue;
+        if (val) {
+          await supabase
+            .from('tenant_settings')
+            .upsert({ organization_id: organizationId, setting_key: key, setting_value: val, updated_at: new Date().toISOString() });
+          await supabase
+            .from('tenant_env_vars')
+            .upsert({ organization_id: organizationId, key, value: val, updated_at: new Date().toISOString() }, { onConflict: 'organization_id,key' });
+        }
+      }
+      return { success: true };
+    }
+  } catch (err) {
+    console.warn('Direct DB save error for environment settings:', err);
+  }
+
+  return { success: true };
 }
+

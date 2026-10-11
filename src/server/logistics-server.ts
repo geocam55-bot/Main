@@ -10,29 +10,15 @@ import { createClient } from "@supabase/supabase-js";
 // dotenv config removed
 
 let aiClient: GoogleGenAI | null = null;
-let aiClientKey: string | null = null;
 
-async function getGeminiClient(): Promise<GoogleGenAI> {
-  let key: string | undefined;
-  const supabase = getSupabase(true);
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('system_settings')
-      .select('setting_value')
-      .eq('setting_key', 'GEMINI_API_KEY')
-      .maybeSingle();
-    if (error && error.code !== 'PGRST205' && error.code !== '42P01') {
-      throw new Error(`Failed to load Gemini system setting: ${error.message}`);
-    }
-    key = data?.setting_value;
-  }
-  key = key || process.env.GEMINI_API_KEY;
+function getGeminiClient(): GoogleGenAI {
+  const key = process.env.GEMINI_API_KEY;
   if (!key || key === "MY_GEMINI_API_KEY" || key.trim() === "" || key.trim() === "undefined") {
     throw new Error(
       "GEMINI_API_KEY is currently unconfigured or set to a placeholder. To activate the OCR engine, please open the 'Settings > Secrets' panel in your AI Studio build workspace, verify that GEMINI_API_KEY is correctly set with your Gemini API key, and then either restart or re-publish your applet."
     );
   }
-  if (!aiClient || aiClientKey !== key) {
+  if (!aiClient) {
     aiClient = new GoogleGenAI({
       apiKey: key,
       httpOptions: {
@@ -41,7 +27,6 @@ async function getGeminiClient(): Promise<GoogleGenAI> {
         }
       }
     });
-    aiClientKey = key;
   }
   return aiClient;
 }
@@ -4910,10 +4895,10 @@ Output schema keys:
       let aiClient;
       let usedGemini = false;
       try {
-        aiClient = await getGeminiClient();
+        aiClient = getGeminiClient();
         usedGemini = true;
       } catch (err: any) {
-        console.warn(`Gemini configuration unavailable; performing real Tesseract OCR on photo scan buffer: ${err.message}`);
+        console.info("Gemini API key not configured, performing real Tesseract OCR on photo scan buffer...");
       }
 
       if (usedGemini && aiClient) {
@@ -5233,10 +5218,10 @@ Return the structured results in the required JSON format.`;
       let aiClient;
       let usedGemini = false;
       try {
-        aiClient = await getGeminiClient();
+        aiClient = getGeminiClient();
         usedGemini = true;
       } catch (err: any) {
-        console.warn(`Gemini configuration unavailable; executing server-side Tesseract OCR extraction: ${err.message}`);
+        console.info("Gemini API key not configured, executing server-side Tesseract OCR extraction...");
       }
 
       if (usedGemini && aiClient) {

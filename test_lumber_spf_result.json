@@ -1,0 +1,51 @@
+{
+  "testRunAt": "2026-10-08T10:41:16.000Z",
+  "query": "SPF 2X4X8' LUMBER #2 & BETTER",
+  "summary": {
+    "matchesFound": true,
+    "lowestPriceStore": "Home Depot",
+    "lowestPrice": 3.98,
+    "highestPrice": 19.98,
+    "difference": 16.00,
+    "savingsPercent": 80.08
+  },
+  "results": [
+    {
+      "store": "Home Depot",
+      "productName": "2-inch x 4-inch x 8-ft SPF Premium Stud Lumber",
+      "modelNumber": "112108",
+      "price": 3.98,
+      "currency": "CAD",
+      "url": "https://www.homedepot.ca/product/1000112108",
+      "matchConfidence": "HIGH",
+      "matchMethod": "HIGH_TOKEN_MATCH",
+      "availability": "IN_STOCK"
+    },
+    {
+      "store": "Kent Building Supplies",
+      "productName": "2 x 4 x 8' Knotty Pine",
+      "modelNumber": "228272",
+      "price": 19.98,
+      "currency": "CAD",
+      "url": "https://kent.ca/en/2-x-4-x-8-knotty-pine-1242177",
+      "matchConfidence": "HIGH",
+      "matchMethod": "HIGH_TOKEN_MATCH",
+      "availability": "IN_STOCK"
+    }
+  ],
+  "diagnostics": {
+    "homeDepot": {
+      "searchTerms": ["SPF 2X4X8 LUMBER", "QUERY-1791456010977"],
+      "candidatesFound": 12,
+      "bestScore": 92
+    },
+    "kent": {
+      "searchTerms": ["SPF 2X4X8 LUMBER", "QUERY-1791456010977"],
+      "candidatesFound": 6,
+      "bestScore": 79
+    },
+    "rona": {
+      "status": "Cloudflare protection encountered during live browser session"
+    }
+  }
+}

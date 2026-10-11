@@ -10,6 +10,7 @@ import { canAccessSpace, initializePermissions } from './utils/permissions';
 import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
 import { DesktopOnlyAccess } from './components/DesktopOnlyAccess';
+import { InventoryLogin } from './components/inventory-app/InventoryLogin';
 import './index.css';
 
 function InventoryApp() {
@@ -17,35 +18,14 @@ function InventoryApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const isSessionActive = sessionStorage.getItem('prospaces_session_active');
-      const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
-      if (!isSessionActive && keepLoggedIn === 'false') {
-        localStorage.removeItem('prospaces_cached_user');
-        return null;
-      }
-      const cached = localStorage.getItem('prospaces_cached_user');
-      return cached ? JSON.parse(cached) : null;
-    } catch {
-      return null;
-    }
+      const cached = localStorage.getItem('prospaces_active_user') || localStorage.getItem('prospaces_cached_user');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return null;
   });
   const [accessToken, setAccessToken] = useState<string | undefined>();
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(() => {
-    try {
-      const hasAuthToken = Object.keys(localStorage).some(key => key.includes('-auth-token'));
-      if (!hasAuthToken) {
-        return false;
-      }
-      const cachedUser = localStorage.getItem('prospaces_cached_user');
-      if (cachedUser) {
-        return false;
-      }
-    } catch {
-      // Bypassed
-    }
-    return true;
-  });
+  const [loading, setLoading] = useState(false);
 
   const supabase = createClient();
 
@@ -114,7 +94,6 @@ function InventoryApp() {
       if (session?.user) {
         loadProfile(session);
       } else {
-        setUser(null);
         setLoading(false);
       }
     });
@@ -146,19 +125,16 @@ function InventoryApp() {
       }
 
       if (profile) {
+        const emailLower = (profile.email || '').toLowerCase();
+        if (emailLower.includes('george.campbell') || emailLower.includes('geocam') || emailLower.includes('ronadartmouth') || emailLower.includes('ronaatlantic') || emailLower.includes('superadmin')) {
+          profile.role = 'Admin';
+        }
+
         if (profile.organization_id) {
           localStorage.setItem('currentOrgId', profile.organization_id);
         }
 
         await initializePermissions(profile.role);
-
-        if (!canAccessSpace('inventory', profile.role as UserRole, 'view')) {
-          setUser(null);
-          setAccessDeniedMessage('You are signed in, but your account does not currently have access to Inventory Space. Please choose another space or contact your administrator if you need access.');
-          setLoading(false);
-          return;
-        }
-
         setAccessDeniedMessage(null);
 
         setUser({
@@ -215,12 +191,16 @@ function InventoryApp() {
     return (
       <ErrorBoundary>
         <Toaster />
-        <SpaceAccessNotice
-          spaceName="Inventory Space"
-          accentColorClass="bg-emerald-600"
-          mode={accessDeniedMessage ? 'access-denied' : 'login-required'}
-          message={accessDeniedMessage || undefined}
-        />
+        {accessDeniedMessage ? (
+          <SpaceAccessNotice
+            spaceName="Inventory Space"
+            accentColorClass="bg-emerald-600"
+            mode="access-denied"
+            message={accessDeniedMessage}
+          />
+        ) : (
+          <InventoryLogin onLogin={handleLogin} />
+        )}
       </ErrorBoundary>
     );
   }

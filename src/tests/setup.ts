@@ -1,4 +1,4 @@
-import { expect, afterEach, vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
@@ -77,9 +77,17 @@ vi.mock('../utils/supabase', () => ({
   supabase: mockSupabaseClient,
 }));
 
+vi.mock('../utils/server-headers', () => ({
+  getServerHeaders: vi.fn(async () => ({ 'Content-Type': 'application/json' })),
+}));
+
 // Mock toast notifications
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    loading: vi.fn(),
+    dismiss: vi.fn(),
   },
 }));

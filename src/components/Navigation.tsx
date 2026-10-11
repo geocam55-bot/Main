@@ -44,7 +44,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import type { User as UserType } from '../App';
 import type { Organization } from '../App';
-import { canView } from '../utils/permissions';
+import { canView, getNormalizedRole } from '../utils/permissions';
 import { Logo } from './Logo';
 import { useTheme } from './ThemeProvider';
 import { useAISuggestions } from '../hooks/useAISuggestions';
@@ -97,9 +97,15 @@ export function Navigation({
     };
   }, []);
 
+  const normalizedRole = getNormalizedRole(user?.role, user?.email);
+  const roleStr = String(user?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+  const isSuperAdmin = normalizedRole === 'super_admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr.includes('super');
+  const isAdmin = isSuperAdmin || normalizedRole === 'admin' || roleStr === 'admin' || roleStr.includes('admin');
+  const isManagerOrDirector = normalizedRole === 'manager' || normalizedRole === 'director';
+
   // Base navigation items
   const baseNavItems =
-    user.role !== 'super_admin'
+    !isSuperAdmin
       ? [
           { id: 'main-panels', label: 'Home', icon: LayoutDashboard },
           { id: 'dashboard', label: 'Dashboard', icon: Gauge },
@@ -115,8 +121,7 @@ export function Navigation({
       : [];
 
   const managerNavItems =
-    (user.role === 'manager' || user.role === 'director' || user.role === 'admin') &&
-    user.role !== 'super_admin'
+    (isManagerOrDirector || isAdmin) && !isSuperAdmin
       ? [{ id: 'team-dashboard', label: 'Team Dashboard', icon: UsersRound }]
       : [];
 
@@ -124,7 +129,7 @@ export function Navigation({
   const buildAdminSubmenu = () => {
     const submenuItems = [];
 
-    if (user.role === 'super_admin') {
+    if (isSuperAdmin) {
       submenuItems.push(
         { id: 'tenants', label: 'Organizations', icon: Building2 },
         { id: 'users', label: 'Users', icon: UserCog },
@@ -133,34 +138,34 @@ export function Navigation({
         { id: 'scheduled-jobs', label: 'Scheduled Jobs', icon: Clock }
       );
     } else {
-      if (canView('users', user.role)) {
+      if (canView('users', user.role) || isAdmin) {
         submenuItems.push({ id: 'users', label: 'Users', icon: UserCog });
       }
-      if (canView('security', user.role)) {
+      if (canView('security', user.role) || isAdmin) {
         submenuItems.push({ id: 'security', label: 'Security', icon: Shield });
       }
-      if (['admin', 'manager', 'director'].includes(user.role)) {
+      if (isAdmin || isManagerOrDirector) {
         submenuItems.push({ id: 'portal-admin', label: 'Customer Portal', icon: Globe });
       }
-      if (canView('import-export', user.role) && organization?.import_export_enabled !== false) {
+      if ((canView('import-export', user.role) || isAdmin) && organization?.import_export_enabled !== false) {
         submenuItems.push({ id: 'import-export', label: 'Import/Export', icon: Upload });
         submenuItems.push({ id: 'scheduled-jobs', label: 'Scheduled Jobs', icon: Clock });
       }
     }
 
-    if (['admin', 'super_admin'].includes(user.role) && currentPlanId === 'enterprise') {
+    if (isAdmin && currentPlanId === 'enterprise') {
       submenuItems.push({ id: 'audit-log', label: 'Audit Log', icon: History });
     }
 
-    if (canView('settings', user.role)) {
+    if (canView('settings', user.role) || isAdmin) {
       submenuItems.push({ id: 'settings', label: 'Settings', icon: Settings });
     }
 
-    if (['admin', 'super_admin'].includes(user.role)) {
+    if (isAdmin) {
       submenuItems.push({ id: 'subscription-billing', label: 'Billing', icon: CreditCard });
     }
 
-    if (user.role === 'super_admin') {
+    if (isSuperAdmin || isAdmin) {
       submenuItems.push({ id: 'subscription-agreement', label: 'Subscription Agreement', icon: FileText });
     }
 
@@ -275,7 +280,7 @@ export function Navigation({
           })}
 
           {/* Email Dropdown (Contains Email Inbox, Tasks, Appointments) */}
-          {user.role !== 'super_admin' && (
+          {!isSuperAdmin && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium focus:outline-none ${
@@ -579,7 +584,7 @@ export function Navigation({
               <DropdownMenuSeparator />
 
               {/* Email Options in mobile menu */}
-              {user.role !== 'super_admin' && (
+              {!isSuperAdmin && (
                 <div className="space-y-1">
                   <p className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Email Modules</p>
                   <button

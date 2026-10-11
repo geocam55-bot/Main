@@ -19,18 +19,12 @@ import { modelsAPI } from './models-api.ts';
 import { customerPortalAPI } from './customer-portal-api.ts';
 import { fixContactOwnership } from './fix-contact-ownership.ts';
 import { fixProfileMismatch } from './fix-profile-mismatch.ts';
-import { getConfiguredValue, getSystemEnvironmentSettings } from './environment-config.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ProSpaces CRM — Consolidated Edge Function (v5 — 2025-02-21)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const PREFIX = '/make-server-8405be07';
-
-function normalizeUserRole(role: unknown): string {
-  const normalized = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return normalized === 'super_user' || normalized === 'superadmin' ? 'super_admin' : normalized;
-}
 
 function sanitizeRedirectUri(uri: string): string {
   if (!uri) return '';
@@ -48,7 +42,6 @@ function sanitizeRedirectUri(uri: string): string {
 }
 
 async function resolveAzureSecrets() {
-  const systemSettings = await getSystemEnvironmentSettings();
   let clientId = '';
   let clientSecret = '';
   let redirectUri = '';
@@ -70,10 +63,10 @@ async function resolveAzureSecrets() {
 
   // 2. Fall back to system Deno.env ONLY if we have nothing from database KV store
   if (!clientId || !clientSecret) {
-    clientId = getConfiguredValue(systemSettings, 'AZURE_CLIENT_ID');
-    clientSecret = getConfiguredValue(systemSettings, 'AZURE_CLIENT_SECRET');
-    redirectUri = redirectUri || getConfiguredValue(systemSettings, 'AZURE_REDIRECT_URI');
-    tenantId = tenantId || getConfiguredValue(systemSettings, 'AZURE_TENANT_ID', 'common');
+    clientId = Deno.env.get('AZURE_CLIENT_ID') || '';
+    clientSecret = Deno.env.get('AZURE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('AZURE_REDIRECT_URI') || '';
+    tenantId = tenantId || Deno.env.get('AZURE_TENANT_ID') || 'common';
     if (clientId && clientSecret) {
       console.log('[Fallback Engine] Loaded fallback system Azure credentials from Deno.env:', { clientId, redirectUri, tenantId });
     }
@@ -86,7 +79,6 @@ async function resolveAzureSecrets() {
 }
 
 async function resolveGoogleSecrets() {
-  const systemSettings = await getSystemEnvironmentSettings();
   let clientId = '';
   let clientSecret = '';
   let redirectUri = '';
@@ -106,9 +98,9 @@ async function resolveGoogleSecrets() {
 
   // 2. Fall back to system Deno.env ONLY if we have nothing from database KV store
   if (!clientId || !clientSecret) {
-    clientId = getConfiguredValue(systemSettings, 'GOOGLE_CLIENT_ID');
-    clientSecret = getConfiguredValue(systemSettings, 'GOOGLE_CLIENT_SECRET');
-    redirectUri = redirectUri || getConfiguredValue(systemSettings, 'GOOGLE_REDIRECT_URI');
+    clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
+    clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+    redirectUri = redirectUri || Deno.env.get('GOOGLE_REDIRECT_URI') || '';
     if (clientId && clientSecret) {
       console.log('[Fallback Engine] Loaded fallback system Google credentials from Deno.env:', { clientId, redirectUri });
     }
@@ -178,11 +170,10 @@ async function authenticateUser(c: any) {
       error: null,
       status: 200,
       supabase,
-      internal: true,
       user: mockUser as any,
       profile: {
         ...profile,
-        role: normalizeUserRole(profile?.role || 'admin'),
+        role: profile?.role || 'admin',
         organization_id: profile?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a'
       }
     };
@@ -197,7 +188,7 @@ async function authenticateUser(c: any) {
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) return { error: 'Unauthorized: ' + (authError?.message || 'No user'), status: 401, supabase, user: null as any, profile: null as any };
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-  const effectiveRole = normalizeUserRole(profile?.role || user.user_metadata?.role || 'standard_user');
+  const effectiveRole = profile?.role || user.user_metadata?.role || 'standard_user';
   const effectiveOrg = profile?.organization_id || user.user_metadata?.organizationId;
   return { error: null, status: 200, supabase, user, profile: { ...profile, role: effectiveRole, organization_id: effectiveOrg } };
 }
@@ -471,7 +462,7 @@ app.get(`${PREFIX}/quotes/tracking-status`, async (c) => {
     const { error: colErr } = await auth.supabase.from('quotes').select('tracking_status').limit(0);
     if (colErr) return c.json({ trackingStatuses: [], columnExists: false });
     let query = auth.supabase.from('quotes').select('id, tracking_status, status, title, contact_name');
-    if (normalizeUserRole(auth.profile.role) !== 'super_admin' && auth.profile.organization_id) {
+    if (auth.profile.role !== 'super_admin' && auth.profile.organization_id) {
       query = query.or(`organization_id.eq.${auth.profile.organization_id},organization_id.is.null`);
     }
     const { data } = await query;
@@ -895,191 +886,6 @@ app.put(`${PREFIX}/settings/organization`, async (c) => {
     console.log(`[PUT /settings/organization] Returning: export_templates=${merged.export_templates ? merged.export_templates.length + ' templates' : 'none'}`);
     return c.json({ settings: merged, source: 'server' });
   } catch (err: any) { return c.json({ error: err.message }, 500); }
-});
-
-const SYSTEM_VARIABLE_KEYS = new Set([
-  'APP_URL',
-  'VITE_APP_URL',
-  'SUPPORT_EMAIL_ADDRESS',
-  'SYSTEM_SMTP_HOST',
-  'SYSTEM_SMTP_PORT',
-  'SYSTEM_SMTP_SECURITY',
-  'SYSTEM_SMTP_USERNAME',
-  'SYSTEM_SMTP_PASSWORD',
-  'SMTP_HOST',
-  'SMTP_PORT',
-  'SMTP_USER',
-  'SMTP_PASS',
-  'SMTP_FROM',
-  'GEMINI_API_KEY',
-  'GOOGLE_MAPS_PLATFORM_KEY',
-  'AZURE_CLIENT_ID',
-  'AZURE_CLIENT_SECRET',
-  'AZURE_TENANT_ID',
-  'AZURE_REDIRECT_URI',
-  'GOOGLE_CLIENT_ID',
-  'GOOGLE_CLIENT_SECRET',
-  'GOOGLE_REDIRECT_URI',
-]);
-const TENANT_VARIABLE_KEYS = new Set([
-  'FLEET_COMPLETE_URL',
-  'FLEET_COMPLETE_API_URL',
-  'FLEET_COMPLETE_ORG_UUID',
-  'FLEET_COMPLETE_USERNAME',
-  'FLEET_COMPLETE_PASSWORD',
-  'FLEET_COMPLETE_API_KEY',
-]);
-const SECRET_VARIABLE_KEYS = new Set([
-  'SYSTEM_SMTP_PASSWORD',
-  'SMTP_PASS',
-  'GEMINI_API_KEY',
-  'GOOGLE_MAPS_PLATFORM_KEY',
-  'AZURE_CLIENT_SECRET',
-  'GOOGLE_CLIENT_SECRET',
-  'FLEET_COMPLETE_PASSWORD',
-  'FLEET_COMPLETE_API_KEY',
-]);
-
-function canAccessTenantVariables(auth: any, organizationId: string) {
-  return ['admin', 'super_admin'].includes(auth.profile.role)
-    && (auth.profile.role === 'super_admin' || organizationId === auth.profile.organization_id);
-}
-
-async function getScopedVariables(
-  supabase: any,
-  table: 'system_settings' | 'tenant_settings',
-  organizationId?: string,
-) {
-  let query = supabase.from(table).select('setting_key, setting_value');
-  if (table === 'tenant_settings') query = query.eq('organization_id', organizationId);
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const allowedKeys = table === 'system_settings' ? SYSTEM_VARIABLE_KEYS : TENANT_VARIABLE_KEYS;
-  const values: Record<string, string> = {};
-  const configuredSecrets: string[] = [];
-  for (const row of data || []) {
-    if (!allowedKeys.has(row.setting_key)) continue;
-    if (SECRET_VARIABLE_KEYS.has(row.setting_key)) {
-      if (row.setting_value) configuredSecrets.push(row.setting_key);
-    } else {
-      values[row.setting_key] = row.setting_value;
-    }
-  }
-  return { values, configuredSecrets };
-}
-
-async function saveScopedVariables(
-  supabase: any,
-  table: 'system_settings' | 'tenant_settings',
-  allowedKeys: Set<string>,
-  organizationId: string | undefined,
-  body: any,
-) {
-  if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {
-    return { error: 'values must be an object' };
-  }
-  const clearKeys = body.clear_keys ?? [];
-  if (!Array.isArray(clearKeys) || clearKeys.some((key: unknown) => typeof key !== 'string')) {
-    return { error: 'clear_keys must be an array of setting names' };
-  }
-  const submittedKeys = Object.keys(body.values);
-  if (
-    submittedKeys.some((key) => !allowedKeys.has(key))
-    || clearKeys.some((key: string) => !allowedKeys.has(key) || !SECRET_VARIABLE_KEYS.has(key))
-  ) {
-    return { error: 'One or more setting names are not allowed' };
-  }
-
-  for (const key of submittedKeys) {
-    const value = body.values[key];
-    if (typeof value !== 'string' || value.length > 10000) {
-      return { error: `Invalid value for ${key}` };
-    }
-  }
-
-  if (clearKeys.length > 0) {
-    let deleteQuery = supabase.from(table).delete().in('setting_key', clearKeys);
-    if (table === 'tenant_settings') deleteQuery = deleteQuery.eq('organization_id', organizationId);
-    const { error } = await deleteQuery;
-    if (error) return { error: error.message };
-  }
-
-  const rows = [];
-  for (const key of submittedKeys) {
-    const value = body.values[key];
-    if (clearKeys.includes(key) || (SECRET_VARIABLE_KEYS.has(key) && value === '')) continue;
-    rows.push({
-      ...(table === 'tenant_settings' ? { organization_id: organizationId } : {}),
-      setting_key: key,
-      setting_value: value,
-      updated_at: new Date().toISOString(),
-    });
-  }
-
-  if (rows.length === 0) return { error: null };
-  const conflict = table === 'system_settings' ? 'setting_key' : 'organization_id,setting_key';
-  const { error } = await supabase.from(table).upsert(rows, { onConflict: conflict });
-  return { error: error?.message || null };
-}
-
-app.get(`${PREFIX}/settings/system-variables`, async (c) => {
-  try {
-    const auth = await authenticateUser(c);
-    if (auth.error) return c.json({ error: auth.error }, auth.status);
-    if (auth.internal || auth.profile.role !== 'super_admin') return c.json({ error: 'Super Admin access required' }, 403);
-    return c.json(await getScopedVariables(auth.supabase, 'system_settings'));
-  } catch (err: any) {
-    console.error('[settings/system-variables] GET failed:', err?.message || err);
-    return c.json({ error: err?.message || 'Failed to load system settings' }, 500);
-  }
-});
-
-app.put(`${PREFIX}/settings/system-variables`, async (c) => {
-  try {
-    const auth = await authenticateUser(c);
-    if (auth.error) return c.json({ error: auth.error }, auth.status);
-    if (auth.internal || auth.profile.role !== 'super_admin') return c.json({ error: 'Super Admin access required' }, 403);
-    const result = await saveScopedVariables(auth.supabase, 'system_settings', SYSTEM_VARIABLE_KEYS, undefined, await c.req.json());
-    if (result.error) return c.json({ error: result.error }, 400);
-    return c.json({ success: true });
-  } catch (err: any) {
-    console.error('[settings/system-variables] PUT failed:', err?.message || err);
-    return c.json({ error: err?.message || 'Failed to save system settings' }, 500);
-  }
-});
-
-app.get(`${PREFIX}/settings/tenant-variables`, async (c) => {
-  try {
-    const auth = await authenticateUser(c);
-    if (auth.error) return c.json({ error: auth.error }, auth.status);
-    if (auth.internal || !['admin', 'super_admin'].includes(auth.profile.role)) return c.json({ error: 'Admin access required' }, 403);
-    const organizationId = c.req.query('organization_id') || auth.profile.organization_id;
-    if (!organizationId) return c.json({ error: 'No organization context' }, 400);
-    if (!canAccessTenantVariables(auth, organizationId)) return c.json({ error: 'Cannot access another organization’s settings' }, 403);
-    return c.json(await getScopedVariables(auth.supabase, 'tenant_settings', organizationId));
-  } catch (err: any) {
-    console.error('[settings/tenant-variables] GET failed:', err?.message || err);
-    return c.json({ error: err?.message || 'Failed to load tenant settings' }, 500);
-  }
-});
-
-app.put(`${PREFIX}/settings/tenant-variables`, async (c) => {
-  try {
-    const auth = await authenticateUser(c);
-    if (auth.error) return c.json({ error: auth.error }, auth.status);
-    if (auth.internal || !['admin', 'super_admin'].includes(auth.profile.role)) return c.json({ error: 'Admin access required' }, 403);
-    const body = await c.req.json();
-    const organizationId = body.organization_id || auth.profile.organization_id;
-    if (!organizationId) return c.json({ error: 'No organization context' }, 400);
-    if (!canAccessTenantVariables(auth, organizationId)) return c.json({ error: 'Cannot update another organization’s settings' }, 403);
-    const result = await saveScopedVariables(auth.supabase, 'tenant_settings', TENANT_VARIABLE_KEYS, organizationId, body);
-    if (result.error) return c.json({ error: result.error }, 400);
-    return c.json({ success: true });
-  } catch (err: any) {
-    console.error('[settings/tenant-variables] PUT failed:', err?.message || err);
-    return c.json({ error: err?.message || 'Failed to save tenant settings' }, 500);
-  }
 });
 
 app.get(`${PREFIX}/settings/theme`, async (c) => {
@@ -2845,10 +2651,6 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
       }
     }
 
-    if (executionStatus === "failed" && !logMsg) {
-      logMsg = "Import/export execution failed without diagnostic details.";
-    }
-
     const logRecord = {
       id: "log-" + Math.random().toString(36).slice(2, 11),
       taskId: taskId,
@@ -2892,7 +2694,6 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
 
     return c.json({
       success: executionStatus === "success",
-      ...(executionStatus === "failed" ? { error: logMsg } : {}),
       log: logRecord,
       task
     });
@@ -3902,10 +3703,7 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
   try {
     const auth = await authenticateUser(c);
     if (auth.error) return c.json({ error: auth.error }, auth.status);
-    if (auth.internal) return c.json({ error: 'Internal service identity cannot manage users' }, 403);
-    const actorRole = normalizeUserRole(auth.profile.role);
-    const isSuperAdmin = actorRole === 'super_admin';
-    if (actorRole !== 'admin' && !isSuperAdmin) {
+    if (!['admin', 'super_admin'].includes(auth.profile.role)) {
       return c.json({ error: 'Forbidden' }, 403);
     }
 
@@ -3928,16 +3726,12 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
     if (existingProfileError) return c.json({ error: existingProfileError.message }, 500);
     if (!existingProfile) return c.json({ error: 'User not found' }, 404);
 
-    if (!isSuperAdmin && existingProfile.organization_id !== auth.profile.organization_id) {
+    if (auth.profile.role !== 'super_admin' && existingProfile.organization_id !== auth.profile.organization_id) {
       return c.json({ error: 'Forbidden' }, 403);
     }
 
-    if (!isSuperAdmin && nextOrgId && nextOrgId !== auth.profile.organization_id) {
+    if (auth.profile.role !== 'super_admin' && nextOrgId && nextOrgId !== auth.profile.organization_id) {
       return c.json({ error: 'Admins can only assign users within their own organization' }, 403);
-    }
-
-    if (!isSuperAdmin && nextRole && normalizeUserRole(nextRole) === 'super_admin') {
-      return c.json({ error: 'Only a super admin can assign the super admin role' }, 403);
     }
 
     const finalName = nextName ?? existingProfile.name;
@@ -3946,10 +3740,10 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
     const finalOrgId = nextOrgId ?? existingProfile.organization_id;
     const finalStatus = nextStatus ?? existingProfile.status;
 
-    const { data: authUserData, error: getAuthUserError } = await auth.supabase.auth.admin.getUserById(id);
-    if (getAuthUserError) return c.json({ error: getAuthUserError.message }, 500);
+    const { data: authUsersData, error: listUsersError } = await auth.supabase.auth.admin.listUsers();
+    if (listUsersError) return c.json({ error: listUsersError.message }, 500);
 
-    const authUser = authUserData.user;
+    const authUser = authUsersData.users?.find((user: any) => user.id === id);
     if (!authUser) return c.json({ error: 'Auth user not found' }, 404);
 
     const mergedUserMetadata = {
@@ -3982,106 +3776,7 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
 
     if (profileUpdateError) return c.json({ error: profileUpdateError.message }, 500);
 
-    const warnings: string[] = [];
-    if (body.manager_id !== undefined) {
-      const { error: managerUpdateError } = await auth.supabase
-        .from('profiles')
-        .update({ manager_id: body.manager_id || null })
-        .eq('id', id);
-      if (managerUpdateError) {
-        if (managerUpdateError.code === 'PGRST204' || managerUpdateError.code === '42703') {
-          warnings.push('User details were saved, but manager assignment requires the manager_id database migration.');
-        } else {
-          return c.json({ error: managerUpdateError.message }, 500);
-        }
-      } else {
-        updatedProfile.manager_id = body.manager_id || null;
-      }
-    }
-
-    if (body.billing_plan !== undefined) {
-      const { error: planUpdateError } = await auth.supabase
-        .from('profiles')
-        .update({ billing_plan: body.billing_plan || null })
-        .eq('id', id);
-      if (planUpdateError) {
-        if (planUpdateError.code === 'PGRST204' || planUpdateError.code === '42703') {
-          warnings.push('User details were saved, but billing plan storage is not available in the profiles table.');
-        } else {
-          return c.json({ error: planUpdateError.message }, 500);
-        }
-      } else {
-        updatedProfile.billing_plan = body.billing_plan || null;
-      }
-    }
-
-    return c.json({ success: true, user: updatedProfile, warnings });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
-  }
-});
-
-app.delete(`${PREFIX}/users/:id`, async (c) => {
-  try {
-    const auth = await authenticateUser(c);
-    if (auth.error) return c.json({ error: auth.error }, auth.status);
-    if (auth.internal) return c.json({ error: 'Internal service identity cannot manage users' }, 403);
-
-    const actorRole = normalizeUserRole(auth.profile.role);
-    const isSuperAdmin = actorRole === 'super_admin';
-    if (actorRole !== 'admin' && !isSuperAdmin) return c.json({ error: 'Forbidden' }, 403);
-
-    const id = c.req.param('id');
-    if (!id) return c.json({ error: 'Missing user id' }, 400);
-    if (id === auth.user.id) return c.json({ error: 'Cannot delete yourself' }, 400);
-
-    const { data: targetProfile, error: profileError } = await auth.supabase
-      .from('profiles')
-      .select('id, organization_id, role')
-      .eq('id', id)
-      .maybeSingle();
-    if (profileError) return c.json({ error: profileError.message }, 500);
-
-    let targetAuthUser: any = null;
-    if (!targetProfile) {
-      const { data: authUserData, error: authLookupError } = await auth.supabase.auth.admin.getUserById(id);
-      if (authLookupError) {
-        const isNotFound = authLookupError.status === 404 || authLookupError.message?.toLowerCase().includes('not found');
-        return c.json({ error: isNotFound ? 'User not found in Auth or profiles' : authLookupError.message }, isNotFound ? 404 : 500);
-      }
-      if (!authUserData?.user) return c.json({ error: 'User not found in Auth or profiles' }, 404);
-      targetAuthUser = authUserData.user;
-    }
-
-    const targetOrganizationId = targetProfile?.organization_id || targetAuthUser?.user_metadata?.organizationId;
-    const targetRole = normalizeUserRole(targetProfile?.role || targetAuthUser?.user_metadata?.role);
-
-    if (!isSuperAdmin && targetOrganizationId !== auth.profile.organization_id) {
-      return c.json({ error: 'Forbidden' }, 403);
-    }
-    if (!isSuperAdmin && targetRole === 'super_admin') {
-      return c.json({ error: 'Only a super admin can delete a super admin user' }, 403);
-    }
-
-    const { error: deleteError } = await auth.supabase.auth.admin.deleteUser(id);
-    if (deleteError && !deleteError.message?.toLowerCase().includes('not found')) {
-      return c.json({ error: deleteError.message }, 500);
-    }
-
-    const { error: profileDeleteError } = await auth.supabase.from('profiles').delete().eq('id', id);
-    if (profileDeleteError) {
-      return c.json({ error: `Auth user removal was attempted, but profile cleanup failed: ${profileDeleteError.message}` }, 500);
-    }
-
-    const { data: remainingProfile, error: verifyError } = await auth.supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle();
-    if (verifyError) return c.json({ error: `Could not verify profile removal: ${verifyError.message}` }, 500);
-    if (remainingProfile) return c.json({ error: 'Profile still exists after the delete operation' }, 500);
-
-    return c.json({ success: true, deletedUserId: id, profileRemoved: true });
+    return c.json({ success: true, user: updatedProfile });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }

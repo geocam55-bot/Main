@@ -25,7 +25,12 @@ vi.mock('../../utils/inventory-client', () => ({
 }));
 
 vi.mock('../../utils/supabase/client', () => ({
-  createClient: () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }),
+  createClient: () => ({
+    auth: {
+      getUser: async () => ({ data: { user: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
+    }
+  }),
   getSupabaseUrl: () => 'https://example.supabase.co',
   handleAuthError: vi.fn(),
   clearStaleAuthTokens: vi.fn(),

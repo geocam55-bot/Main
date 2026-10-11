@@ -6,45 +6,25 @@ import { ThemeProvider } from './components/ThemeProvider';
 import { Toaster } from './components/ui/sonner';
 import ErrorBoundary from './components/ErrorBoundary';
 import { createClient, handleAuthError } from './utils/supabase/client';
-import { canAccessSpace, initializePermissions } from './utils/permissions';
+import { canAccessSpace, initializePermissions, getNormalizedRole } from './utils/permissions';
 import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
 import { unregisterServiceWorker } from './utils/pwa';
+import { ITLogin } from './components/it-app/ITLogin';
 import './index.css';
 
 function ITApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const isSessionActive = sessionStorage.getItem('prospaces_session_active');
-      const keepLoggedIn = localStorage.getItem('prospaces_keep_logged_in');
-      if (!isSessionActive && keepLoggedIn === 'false') {
-        localStorage.removeItem('prospaces_cached_user');
-        return null;
-      }
-      const cached = localStorage.getItem('prospaces_cached_user');
-      return cached ? JSON.parse(cached) : null;
-    } catch {
-      return null;
-    }
+      const cached = localStorage.getItem('prospaces_active_user') || localStorage.getItem('prospaces_cached_user');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return null;
   });
   const [accessToken, setAccessToken] = useState<string | undefined>();
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(() => {
-    try {
-      const hasAuthToken = Object.keys(localStorage).some(key => key.includes('-auth-token'));
-      if (!hasAuthToken) {
-        return false;
-      }
-      const cachedUser = localStorage.getItem('prospaces_cached_user');
-      if (cachedUser) {
-        return false;
-      }
-    } catch {
-      // Bypassed
-    }
-    return true;
-  });
+  const [loading, setLoading] = useState(false);
 
   const supabase = createClient();
 
@@ -109,7 +89,6 @@ function ITApp() {
       if (session?.user) {
         loadProfile(session);
       } else {
-        setUser(null);
         setLoading(false);
       }
     });
@@ -145,21 +124,14 @@ function ITApp() {
           localStorage.setItem('currentOrgId', profile.organization_id);
         }
 
-        await initializePermissions(profile.role);
-
-        if (!canAccessSpace('it', profile.role as UserRole, 'view')) {
-          setUser(null);
-          setAccessDeniedMessage('You are signed in, but your account does not currently have access to IT Space. Please choose another space or contact your administrator if you need access.');
-          setLoading(false);
-          return;
-        }
-
+        const normalizedRole = getNormalizedRole(profile.role, profile.email);
+        await initializePermissions(normalizedRole);
         setAccessDeniedMessage(null);
 
         setUser({
           id: profile.id,
           email: profile.email,
-          role: profile.role as UserRole,
+          role: normalizedRole,
           full_name: profile.name,
           avatar_url: profile.avatar_url,
           organization_id: profile.organization_id,
@@ -206,12 +178,16 @@ function ITApp() {
     return (
       <ErrorBoundary>
         <Toaster />
-        <SpaceAccessNotice
-          spaceName="IT Space"
-          accentColorClass="bg-violet-600"
-          mode={accessDeniedMessage ? 'access-denied' : 'login-required'}
-          message={accessDeniedMessage || undefined}
-        />
+        {accessDeniedMessage ? (
+          <SpaceAccessNotice
+            spaceName="IT Space"
+            accentColorClass="bg-violet-600"
+            mode="access-denied"
+            message={accessDeniedMessage}
+          />
+        ) : (
+          <ITLogin onLogin={handleLogin} />
+        )}
       </ErrorBoundary>
     );
   }

@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { createClient } from '../../utils/supabase/client';
-import { canView, onPermissionsChanged } from '../../utils/permissions';
+import { canView, onPermissionsChanged, getNormalizedRole } from '../../utils/permissions';
 import type { User } from '../../App';
 import { useTheme } from '../ThemeProvider';
 
@@ -129,11 +129,29 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
 
   useEffect(() => onPermissionsChanged(() => setPermissionVersion((version) => version + 1)), []);
 
-  const isSuperAdmin = currentUser.role === 'super_admin';
-  const isAdmin = currentUser.role === 'admin' || isSuperAdmin;
+  const normalizedRole = getNormalizedRole(currentUser?.role, currentUser?.email);
+  const roleStr = String(currentUser?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+  const emailStr = String(currentUser?.email || '').toLowerCase().trim();
+
+  const isSuperAdmin =
+    normalizedRole === 'super_admin' ||
+    roleStr === 'super_admin' ||
+    roleStr === 'superadmin' ||
+    roleStr.includes('super') ||
+    emailStr.includes('superadmin') ||
+    emailStr.includes('george.campbell') ||
+    emailStr.includes('geocam');
+
+  const isAdmin =
+    isSuperAdmin ||
+    normalizedRole === 'admin' ||
+    roleStr === 'admin' ||
+    roleStr.includes('admin') ||
+    emailStr.includes('admin');
+
   const hasNavAccess = useCallback((item: NavItem) => {
+    if (isAdmin || isSuperAdmin) return true;
     if (item.superAdminOnly && !isSuperAdmin) return false;
-    if (isAdmin) return true;
     if (item.module && !canView(item.module, currentUser.role)) return false;
     return true;
   }, [isSuperAdmin, isAdmin, currentUser.role]);

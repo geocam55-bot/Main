@@ -1,147 +1,122 @@
 // @ts-nocheck
 import { createClient } from './supabase/client';
+import { ensureUserProfile } from './ensure-profile';
+
+const supabase = createClient();
 
 export async function getAllProjectManagersClient() {
-  const supabase = createClient();
-  
-  const { data: projectManagers, error } = await supabase
-    .from('project_managers' as any)
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        return { projectManagers: [] };
+      }
+    }
 
-  if (error) {
-    // Error loading project managers
-    // Throw error if table not found so UI can detect it
-    if (error.code === 'PGRST205' || error.code === '42P01') {
+    const { data, error } = await supabase
+      .from('project_managers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST204') {
+        return { projectManagers: [], tableNotFound: true };
+      }
       throw error;
     }
+
+    return { projectManagers: data || [] };
+  } catch (error: any) {
     return { projectManagers: [] };
   }
-
-  return { projectManagers: projectManagers || [] };
 }
 
 export async function getProjectManagersByCustomerClient(customerId: string) {
-  const supabase = createClient();
-  
-  if (!customerId) {
-    // No customer ID provided
-    return { projectManagers: [] };
-  }
-  
-  const { data: projectManagers, error } = await supabase
-    .from('project_managers' as any)
-    .select('*')
-    .eq('customer_id', customerId)
-    .order('created_at', { ascending: false });
+  try {
+    if (!customerId) return { projectManagers: [] };
 
-  if (error) {
-    // Error loading project managers for customer
-    // Throw error if table not found so UI can detect it
-    if (error.code === 'PGRST205' || error.code === '42P01') {
+    const { data, error } = await supabase
+      .from('project_managers')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST204') {
+        return { projectManagers: [], tableNotFound: true };
+      }
       throw error;
     }
+
+    return { projectManagers: data || [] };
+  } catch (error: any) {
     return { projectManagers: [] };
   }
-
-  return { projectManagers: projectManagers || [] };
 }
 
-export async function createProjectManagerClient(data: any) {
-  const supabase = createClient();
+export async function createProjectManagerClient(pmData: any) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-  // Get current user to retrieve organization_id
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) {
-    throw new Error('Not authenticated');
+    let organizationId = user.user_metadata?.organizationId;
+    try {
+      const profile = await ensureUserProfile(user.id);
+      if (profile?.organization_id) {
+        organizationId = profile.organization_id;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const newPm = {
+      ...pmData,
+      organization_id: organizationId || pmData.organization_id || '',
+    };
+
+    const { data, error } = await supabase
+      .from('project_managers')
+      .insert([newPm])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return { projectManager: data };
+  } catch (error: any) {
+    throw error;
   }
-  
-  const organizationId = user.user_metadata?.organizationId;
-  
-  if (!organizationId) {
-    throw new Error('Organization ID not found');
-  }
-
-  const projectManagerData = {
-    customer_id: data.customerId,
-    name: data.name,
-    email: data.email || null,
-    phone: data.phone || null,
-    mailing_address: data.mailingAddress || null,
-    organization_id: organizationId,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data: projectManager, error } = await supabase
-    .from('project_managers' as any)
-    .insert(projectManagerData)
-    .select()
-    .single();
-
-  if (error) {
-    // Error creating project manager
-    throw new Error(error.message);
-  }
-
-  return {
-    projectManager: {
-      ...projectManager,
-      customerId: projectManager.customer_id,
-      mailingAddress: projectManager.mailing_address,
-      createdAt: projectManager.created_at,
-      updatedAt: projectManager.updated_at,
-    },
-  };
 }
 
-export async function updateProjectManagerClient(id: string, data: any) {
-  const supabase = createClient();
-  
-  const updateData = {
-    name: data.name,
-    email: data.email || null,
-    phone: data.phone || null,
-    mailing_address: data.mailingAddress || null,
-    updated_at: new Date().toISOString(),
-  };
+export async function updateProjectManagerClient(id: string, pmData: any) {
+  try {
+    const { data, error } = await supabase
+      .from('project_managers')
+      .update(pmData)
+      .eq('id', id)
+      .select()
+      .single();
 
-  const { data: projectManager, error } = await supabase
-    .from('project_managers' as any)
-    .update(updateData)
-    .eq('id', id)
-    .select()
-    .single();
+    if (error) throw error;
 
-  if (error) {
-    // Error updating project manager
-    throw new Error(error.message);
+    return { projectManager: data };
+  } catch (error: any) {
+    throw error;
   }
-
-  return {
-    projectManager: {
-      ...projectManager,
-      customerId: projectManager.customer_id,
-      mailingAddress: projectManager.mailing_address,
-      createdAt: projectManager.created_at,
-      updatedAt: projectManager.updated_at,
-    },
-  };
 }
 
 export async function deleteProjectManagerClient(id: string) {
-  const supabase = createClient();
-  
-  const { error } = await supabase
-    .from('project_managers' as any)
-    .delete()
-    .eq('id', id);
+  try {
+    const { error } = await supabase
+      .from('project_managers')
+      .delete()
+      .eq('id', id);
 
-  if (error) {
-    // Error deleting project manager
-    throw new Error(error.message);
+    if (error) throw error;
+
+    return { success: true };
+  } catch (error: any) {
+    throw error;
   }
-
-  return { success: true };
 }

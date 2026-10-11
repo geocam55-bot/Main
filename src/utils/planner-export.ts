@@ -1,86 +1,70 @@
 import {
   buildCsv,
-  buildCustomText,
   buildXml,
+  buildCustomText,
   downloadTextFile,
   sanitizeFilename,
   type CustomExportTemplate,
+  type ExportFormat
 } from './export-engine';
 
-export interface PlannerSavedDesignLike {
+export interface PlannerExportData {
   name: string;
-  description?: string | null;
+  description?: string;
   total_cost?: number;
   materials?: any[];
   created_at?: string;
+  [key: string]: any;
 }
 
-export interface PlannerExportFile {
-  content: string;
-  filename: string;
-  mimeType: string;
+export interface PlannerExportResult {
+  ok: boolean;
+  error?: string;
+  file?: {
+    filename: string;
+    content: string;
+    mimeType: string;
+  };
 }
 
-export function buildPlannerExportRows(design: PlannerSavedDesignLike, projectType: string): Record<string, unknown>[] {
-  const createdAt = design.created_at || '';
-  const normalizedTotal = Number(design.total_cost ?? 0);
+export function buildPlannerExportRows(design: PlannerExportData, projectType: string): Record<string, unknown>[] {
   const designMeta = {
     project_type: projectType,
-    design_name: design.name,
-    title: design.name,
-    quote_number: `${projectType.toUpperCase()}-${String(new Date(createdAt || Date.now()).getTime()).slice(-6)}`,
+    design_name: design.name || `${projectType}-design`,
     description: design.description || '',
-    total_cost: normalizedTotal,
-    total: normalizedTotal,
-    created_at: createdAt,
-    updated_at: createdAt,
-    saved_at: createdAt,
+    total_cost: design.total_cost ?? 0,
+    saved_at: design.created_at || new Date().toISOString(),
     material_count: Array.isArray(design.materials) ? design.materials.length : 0,
   };
 
   if (!Array.isArray(design.materials) || design.materials.length === 0) {
-    return [
-      {
-        ...designMeta,
-        material_name: '',
-        sku: '',
-        category: '',
-        quantity: '',
-        unit_price: '',
-        line_total: '',
-      },
-    ];
+    return [{
+      ...designMeta,
+      material_name: '',
+      sku: '',
+      category: '',
+      quantity: '',
+      unit_price: '',
+      line_total: '',
+      unit_of_measure: '',
+    }];
   }
 
   return design.materials.map((item: any) => {
     const quantity = item.quantity ?? item.qty ?? '';
     const unitPrice = item.unit_price ?? item.unitPrice ?? item.price ?? '';
-    const lineTotalRaw =
-      item.total ?? item.line_total ?? item.lineTotal ?? (Number(quantity || 0) * Number(unitPrice || 0));
-    const lineTotalNumber = Number(lineTotalRaw);
-    const normalizedLineTotal = Number.isFinite(lineTotalNumber)
-      ? lineTotalNumber
-      : (lineTotalRaw ?? '');
-    const materialName = item.name || item.material || item.description || item.itemName || '';
-    const itemId = item.itemId || item.id || item.sku || '';
+    const lineTotal = item.total ?? item.line_total ?? (Number(quantity || 0) * Number(unitPrice || 0));
     const unit = item.unit_of_measure || item.unitOfMeasure || item.unit || item.uom || '';
 
     return {
       ...designMeta,
-      material_name: materialName,
+      material_name: item.name || item.material || item.description || '',
       description: item.description || '',
-      itemName: materialName,
-      item_name: materialName,
       sku: item.sku || '',
-      itemId,
-      item_id: itemId,
       category: item.category || '',
       quantity,
-      qty: quantity,
       unit_price: unitPrice,
-      unitPrice,
-      line_total: normalizedLineTotal,
-      lineTotal: normalizedLineTotal,
+      line_total: Number.isFinite(lineTotal) ? lineTotal : '',
       unit_of_measure: unit,
       unit,
       units: unit,
@@ -88,71 +72,75 @@ export function buildPlannerExportRows(design: PlannerSavedDesignLike, projectTy
   });
 }
 
-export function exportPlannerDesign(
-  design: PlannerSavedDesignLike,
-  projectType: string,
-  format: 'csv' | 'xml' | 'custom',
-  templates: CustomExportTemplate[],
-  customTemplateId?: string
-): { ok: boolean; error?: string } {
-  const result = createPlannerExportFile(design, projectType, format, templates, customTemplateId);
-  if (!result.ok) {
-    return result;
-  }
-
-  downloadTextFile(result.file.content, result.file.filename, result.file.mimeType);
-  return { ok: true };
-}
-
 export function createPlannerExportFile(
-  design: PlannerSavedDesignLike,
+  design: PlannerExportData,
   projectType: string,
-  format: 'csv' | 'xml' | 'custom',
-  templates: CustomExportTemplate[],
+  exportFormat: ExportFormat,
+  exportTemplates?: CustomExportTemplate[],
   customTemplateId?: string
-): { ok: true; file: PlannerExportFile } | { ok: false; error: string } {
-  const rows = buildPlannerExportRows(design, projectType);
-  const safeName = sanitizeFilename(design.name || `${projectType}-design`);
-  const datePart = new Date().toISOString().split('T')[0];
+): PlannerExportResult {
+  try {
+    const rows = buildPlannerExportRows(design, projectType);
+    const safeName = sanitizeFilename(design.name || `${projectType}-design`);
+    const datePart = new Date().toISOString().split('T')[0];
 
-  if (format === 'xml') {
-    const xmlContent = buildXml(rows, `${projectType}_designs`, 'design_row');
-    return {
-      ok: true,
-      file: {
-        content: xmlContent,
-        filename: `${safeName}_${datePart}.xml`,
-        mimeType: 'application/xml;charset=utf-8;',
-      },
-    };
-  }
-
-  if (format === 'custom') {
-    const template = templates.find((item) => item.id === customTemplateId);
-    if (!template) {
-      return { ok: false, error: 'Choose a custom export template before exporting.' };
+    if (exportFormat === 'custom' && customTemplateId && exportTemplates) {
+      const template = exportTemplates.find((t) => t.id === customTemplateId);
+      if (!template) {
+        return { ok: false, error: 'Custom template not found.' };
+      }
+      const ext = template.file_extension ? `.${template.file_extension.replace(/^\./, '')}` : '.txt';
+      const filename = `${safeName}-${datePart}${ext}`;
+      const content = buildCustomText(rows, template);
+      return {
+        ok: true,
+        file: {
+          filename,
+          content,
+          mimeType: 'text/plain;charset=utf-8',
+        },
+      };
     }
 
-    const content = buildCustomText(rows, template);
-    const extension = (template.file_extension || 'txt').replace(/^\./, '');
-    const templateName = sanitizeFilename(template.name || 'custom');
+    if (exportFormat === 'xml') {
+      const filename = `${safeName}-${datePart}.xml`;
+      const content = buildXml(rows, 'planner_export', 'item');
+      return {
+        ok: true,
+        file: {
+          filename,
+          content,
+          mimeType: 'application/xml;charset=utf-8',
+        },
+      };
+    }
+
+    // Default: CSV
+    const filename = `${safeName}-${datePart}.csv`;
+    const content = buildCsv(rows);
     return {
       ok: true,
       file: {
+        filename,
         content,
-        filename: `${safeName}_${templateName}_${datePart}.${extension}`,
-        mimeType: 'text/plain;charset=utf-8;',
+        mimeType: 'text/csv;charset=utf-8',
       },
     };
+  } catch (err: any) {
+    return { ok: false, error: err.message || 'Export generation failed.' };
   }
+}
 
-  const csvContent = buildCsv(rows);
-  return {
-    ok: true,
-    file: {
-      content: csvContent,
-      filename: `${safeName}_${datePart}.csv`,
-      mimeType: 'text/csv;charset=utf-8;',
-    },
-  };
+export function exportPlannerDesign(
+  design: PlannerExportData,
+  projectType: string,
+  exportFormat: ExportFormat,
+  exportTemplates?: CustomExportTemplate[],
+  customTemplateId?: string
+): PlannerExportResult {
+  const result = createPlannerExportFile(design, projectType, exportFormat, exportTemplates, customTemplateId);
+  if (result.ok && result.file) {
+    downloadTextFile(result.file.content, result.file.filename, result.file.mimeType);
+  }
+  return result;
 }
