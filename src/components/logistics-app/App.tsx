@@ -233,6 +233,58 @@ function deduplicateTrucks(trucksList: Truck[]): Truck[] {
 }
 
 export default function App({ onLogout }: { onLogout?: () => void } = {}) {
+  // Dynamically update title, favicon, apple-touch-icon, and PWA manifest for Logistics / Driver
+  useEffect(() => {
+    const isDriver = window.location.pathname.toLowerCase().includes('/driver');
+    document.title = isDriver ? 'ProSpaces Driver Portal' : 'ProSpaces Logistics & Fleet';
+
+    const updateIcon = (selector: string, href: string) => {
+      let link = document.querySelector(selector) as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        if (selector.includes('icon')) link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = href;
+    };
+
+    updateIcon("link[rel*='icon']", '/logistics-favicon.jpg');
+    updateIcon("link[rel='apple-touch-icon']", '/logistics-logo.png');
+
+    const manifestObj = {
+      name: isDriver ? 'ProSpaces Driver Portal' : 'ProSpaces Logistics & Fleet',
+      short_name: isDriver ? 'Driver' : 'Logistics',
+      start_url: isDriver ? '/driver' : '/logistics',
+      display: 'standalone',
+      background_color: '#0f172a',
+      theme_color: '#2563eb',
+      icons: [
+        {
+          src: '/logistics-logo.png',
+          sizes: '192x192 512x512',
+          type: 'image/png',
+          purpose: 'any maskable'
+        }
+      ]
+    };
+
+    const stringManifest = JSON.stringify(manifestObj);
+    const blob = new Blob([stringManifest], { type: 'application/json' });
+    const manifestURL = URL.createObjectURL(blob);
+
+    let manifestLink = document.querySelector("link[rel='manifest']") as HTMLLinkElement;
+    if (!manifestLink) {
+      manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      document.head.appendChild(manifestLink);
+    }
+    manifestLink.href = manifestURL;
+
+    return () => {
+      URL.revokeObjectURL(manifestURL);
+    };
+  }, []);
+
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
       const path = window.location.pathname.toLowerCase();
