@@ -603,7 +603,7 @@ export default function DriverMobileApp({
       if (pickedTruckUnit && delTruckUnit && pickedTruckUnit === delTruckUnit) return true;
 
       // 5. License plate match
-      if (pickedPlate && delTruckLower.includes(pickedPlate)) return true;
+      if (pickedTruckPlate && delTruckLower.includes(pickedTruckPlate)) return true;
 
       return false;
     });
