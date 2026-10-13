@@ -1478,11 +1478,12 @@ export function buildTenantDeliveryEmailHtml(params: {
 }
 
 export function getSmtpConfig() {
-  let smtpHost = (process.env.SMTP_HOST || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
-  const smtpUser = (process.env.SMTP_USER || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
-  const smtpPass = (process.env.SMTP_PASS || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
-  let smtpPort = parseInt((process.env.SMTP_PORT || "587").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, ''), 10);
-  const smtpFrom = (process.env.SMTP_FROM || "ProSpaces Logistics <support@prospacescrm.ca>").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  let smtpHost = (process.env.SMTP_HOST || process.env.SYSTEM_SMTP_HOST || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  const smtpUser = (process.env.SMTP_USER || process.env.SYSTEM_SMTP_USERNAME || process.env.SYSTEM_SMTP_USER || process.env.SMTP_EMAIL || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  const smtpPass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.SYSTEM_SMTP_PASSWORD || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  let smtpPort = parseInt((process.env.SMTP_PORT || process.env.SYSTEM_SMTP_PORT || "587").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, ''), 10);
+  const smtpEmail = (process.env.SMTP_EMAIL || smtpUser || "").trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
+  const smtpFrom = (process.env.SMTP_FROM || process.env.SMTP_FROM_EMAIL || (smtpEmail ? `ProSpaces Support <${smtpEmail}>` : "ProSpaces Logistics <support@prospacescrm.ca>")).trim().replace(/^['"\\\'\\\"]+|['"\\\'\\\"]+$/g, '');
 
   if (smtpPort === 485) {
     smtpPort = 465;
@@ -1498,7 +1499,7 @@ export function getSmtpConfig() {
   }
 
   const isConfigured = !!(smtpHost && smtpUser && smtpPass);
-  return { smtpHost, smtpUser, smtpPass, smtpPort, smtpFrom, isConfigured };
+  return { smtpHost, smtpUser, smtpPass, smtpPort, smtpEmail, smtpFrom, isConfigured };
 }
 
 /**

@@ -2418,6 +2418,118 @@ async function startServer() {
   const upload = multer({ dest: uploadDir });
 
   // API router / endpoints
+  app.post('/api/secure-env/delete', async (req, res) => {
+    try {
+      const { scope, key, organizationId } = req.body;
+      if (!key) {
+        return res.status(400).json({ success: false, error: 'Key is required' });
+      }
+
+      if (scope === 'tenant') {
+        const orgId = organizationId || 'default_org';
+        const { error } = await supabase
+          .from('tenant_env_vars')
+          .delete()
+          .eq('organization_id', orgId)
+          .eq('key', key);
+        if (error) {
+          return res.status(500).json({ success: false, error: error.message });
+        }
+        return res.json({ success: true, message: `Deleted ${key} from tenant_env_vars` });
+      } else {
+        const { error } = await supabase
+          .from('app_env_vars')
+          .delete()
+          .eq('key', key);
+        if (error) {
+          return res.status(500).json({ success: false, error: error.message });
+        }
+        return res.json({ success: true, message: `Deleted ${key} from app_env_vars` });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
+  app.post('/api/secure-env/save', async (req, res) => {
+    try {
+      const { scope, organizationId, key, value, description } = req.body;
+      if (!key || value === undefined) {
+        return res.status(400).json({ success: false, error: 'Key and Value are required' });
+      }
+
+      const cleanKey = String(key).trim().toUpperCase();
+      const cleanVal = String(value);
+
+      if (scope === 'tenant') {
+        const orgId = organizationId || 'default_org';
+        const { error } = await supabase
+          .from('tenant_env_vars')
+          .upsert({
+            organization_id: orgId,
+            key: cleanKey,
+            value: cleanVal,
+            description: description || null,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'organization_id,key' });
+
+        if (error) {
+          console.error('[Server /api/secure-env/save] Tenant save error:', error);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+        return res.json({ success: true, message: `Saved ${cleanKey} to tenant_env_vars` });
+      } else {
+        const { error } = await supabase
+          .from('app_env_vars')
+          .upsert({
+            key: cleanKey,
+            value: cleanVal,
+            description: description || null,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+
+        if (error) {
+          console.error('[Server /api/secure-env/save] App save error:', error);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+        return res.json({ success: true, message: `Saved ${cleanKey} to app_env_vars` });
+      }
+    } catch (err: any) {
+      console.error('[Server /api/secure-env/save] Exception:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
+  app.get('/api/secure-env/list', async (req, res) => {
+    try {
+      const { scope, organizationId } = req.query;
+      if (scope === 'tenant') {
+        const orgId = String(organizationId || 'default_org');
+        const { data, error } = await supabase
+          .from('tenant_env_vars')
+          .select('*')
+          .eq('organization_id', orgId)
+          .order('key');
+        if (error) {
+          return res.status(500).json({ success: false, error: error.message, vars: [] });
+        }
+        return res.json({ success: true, vars: data || [] });
+      } else {
+        const { data, error } = await supabase
+          .from('app_env_vars')
+          .select('*')
+          .order('key');
+        if (error) {
+          return res.status(500).json({ success: false, error: error.message, vars: [] });
+        }
+        return res.json({ success: true, vars: data || [] });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Server error', vars: [] });
+    }
+  });
+
+
   app.post('/api/import-export/upload', upload.single('file'), (req, res) => {
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });
