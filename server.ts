@@ -2529,6 +2529,51 @@ async function startServer() {
     }
   });
 
+  // General-purpose KV Store routes with service_role auth for RLS resilience
+  app.get('/api/kv/get', async (req, res) => {
+    try {
+      const key = String(req.query.key || '').trim();
+      if (!key) return res.status(400).json({ error: 'Key is required' });
+      const { data, error } = await supabase
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', key)
+        .maybeSingle();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ key, value: data ? data.value : null });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Server error' });
+    }
+  });
+
+  app.post('/api/kv/set', async (req, res) => {
+    try {
+      const { key, value } = req.body;
+      if (!key) return res.status(400).json({ error: 'Key is required' });
+      const { error } = await supabase
+        .from('kv_store_8405be07')
+        .upsert({ key, value });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, key });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Server error' });
+    }
+  });
+
+  app.post('/api/kv/delete', async (req, res) => {
+    try {
+      const { key } = req.body;
+      if (!key) return res.status(400).json({ error: 'Key is required' });
+      const { error } = await supabase
+        .from('kv_store_8405be07')
+        .delete()
+        .eq('key', key);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, key });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Server error' });
+    }
+  });
 
   app.post('/api/import-export/upload', upload.single('file'), (req, res) => {
     if (!req.file) {
@@ -5864,19 +5909,7 @@ Return JSON matching this schema:
     };
 
     try {
-      // Auto-remedy RLS constraints on kv_store table by dynamically disabling RLS via the database RPC
-      try {
-        console.log('[Server Config Sync] Checking and ensuring RLS on kv_store_8405be07 is configured...');
-        const rlsSql = 'ALTER TABLE kv_store_8405be07 DISABLE ROW LEVEL SECURITY;';
-        const { error: rpcError } = await supabase.rpc('exec_sql', { sql: rlsSql });
-        if (rpcError) {
-          console.log('[Server Config Sync] RPC to disable RLS on kv_store_8405be07 returned message:', rpcError.message || rpcError);
-        } else {
-          console.log('[Server Config Sync] Successfully disabled RLS on kv_store_8405be07 table.');
-        }
-      } catch (rlsErr: any) {
-        console.log('[Server Config Sync] Failed to run RLS auto-remedy:', rlsErr.message || rlsErr);
-      }
+      console.log('[Server Config Sync] kv_store_8405be07 RLS enabled, accessing via authenticated service role.');
 
       const azureClientId = process.env.AZURE_CLIENT_ID;
       const azureClientSecret = process.env.AZURE_CLIENT_SECRET;
