@@ -18,6 +18,16 @@ export interface AdditionalDeliveryStop {
   createdAt?: string;
 }
 
+export interface CargoManifestItem {
+  line: string | number;       // LINE
+  ordered: string | number;    // ORDERED
+  sku: string;                 // SKU
+  description: string;         // DESCRIPTION
+  units: string;               // UNITS (e.g. EA, PC, BD, BOX, BAG, LF, SQFT)
+  pricePer: string;            // PRICE/ PER
+  extension: string;           // EXTENSION
+}
+
 export interface DeliveryRecord {
   id: string; // Barcode ID (e.g., SO-10293-A)
   invoiceNumber: string;
@@ -50,6 +60,7 @@ export interface DeliveryRecord {
   scheduledSlot?: 'AM' | 'PM';
   deliveryCategory?: 'Retail' | 'Pro' | 'Transfer';
   additionalStops?: AdditionalDeliveryStop[]; // List of additional stops along the route
+  cargoManifest?: CargoManifestItem[]; // Cargo Manifest for the order extracted from SKU BOX
   history: HistoryEvent[];
   tenantId?: string;
 }

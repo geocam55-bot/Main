@@ -71,12 +71,7 @@ import iconMultiLocation from '../assets/landing/icons/icon-multi-location.svg';
 
 import grainOverlay from '../assets/landing/backgrounds/grain-overlay.svg';
 
-/* Optional production background — falls back to CSS gradient if absent */
-let environmentBg: string | null = null;
-try {
-  // @ts-ignore
-  environmentBg = new URL(/* @vite-ignore */ '../assets/landing/backgrounds/environment-bg.webp', import.meta.url).href;
-} catch { /* no-op */ }
+const environmentBg: string | null = null;
 
 /* ═══════════════════════════════════════════════════════════════
    TYPES & DATA  (per design spec)

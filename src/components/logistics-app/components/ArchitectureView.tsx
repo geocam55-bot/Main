@@ -30,9 +30,13 @@ import {
   UploadCloud,
   MousePointer,
   Sliders,
+  Package,
+  Copy,
+  Check,
+  Table,
   X
 } from 'lucide-react';
-import { Branch, DeliveryRecord, DeliveryStatus } from '../types';
+import { Branch, DeliveryRecord, DeliveryStatus, CargoManifestItem } from '../types';
 
 const FALLBACK_SUPABASE_SCHEMA_SQL = `/* SUPABASE SCHEMA INITIALIZATION FOR PROSPACES DELIVERY AND LOGISTICS PORTAL */
 
@@ -1251,11 +1255,11 @@ interface ArchitectureViewProps {
 }
 
 const WATCH_FILES_PRESETS: Record<string, Record<string, string>> = {
-  'sales_order_94827_dispatch.pdf': {
-    'Order #': 'ORD-94827-26',
-    'Date': 'June 11, 2026',
-    'Customer Name': 'Archadeck of Nova Scotia Ltd.',
-    'Ship To': '6055 Almon St, Halifax, NS B3K 1T9'
+  'sales_order_300908_dispatch.pdf': {
+    'Order #': '300908',
+    'Date': 'August 17, 2026',
+    'Customer Name': 'GEORGE CAMPBELL',
+    'Ship To': '17 SPARROW LANE HUBLEY NS B3Z 1A3'
   },
   'credit_return_88273_memo.pdf': {
     'Credit Note #': 'CR-88273-04',
@@ -1277,22 +1281,37 @@ const WATCH_FILES_PRESETS: Record<string, Record<string, string>> = {
   }
 };
 
+export const DEFAULT_SKU_BOX_ITEMS: CargoManifestItem[] = [
+  { line: 1, ordered: '120', sku: 'R-709', description: '2x4x8 SPF Premium Lumber', units: 'PC', pricePer: '$7.45', extension: '$894.00' },
+  { line: 2, ordered: '30', sku: 'PLY-34-TNG', description: '3/4" Tongue & Groove Subfloor Plywood', units: 'SHT', pricePer: '$42.50', extension: '$1,275.00' },
+  { line: 3, ordered: '4', sku: 'ADH-SUB-28', description: 'Heavy Duty Subfloor Construction Adhesive 28oz', units: 'TUBE', pricePer: '$12.99', extension: '$51.96' }
+];
+
 const FACTORY_DEFAULT_TEMPLATES: Record<DocType, DocTemplate> = {
   'Order': {
-    title: 'PROSPACES SALES ORDER & DISPATCH INVOICE',
-    subtitle: 'RETAIL ORDER ENTRY DIRECT DEPOSIT',
+    title: 'RONA ENTERPRISE SALES ORDER & DISPATCH INVOICE',
+    subtitle: 'REAL SALES ORDER ENTRY DIRECT DEPOSIT',
     fields: {
-      'Order #': { label: 'Order Number', value: 'ORD-94827-26', x: 500, y: 30, w: 125, h: 25, page: 1 },
-      'Date': { label: 'Order Date', value: 'June 11, 2026', x: 500, y: 65, w: 125, h: 22, page: 1 },
-      'Customer Name': { label: 'Customer Name', value: 'Highland Construction Ltd.', x: 40, y: 115, w: 220, h: 22, page: 1 },
-      'Ship To': { label: 'Ship To Destination', value: '104 Bedford Hwy, Halifax, NS B2M 1G4', x: 40, y: 145, w: 250, h: 35, page: 1 },
-      'Subtotal': { label: 'Order Subtotals', value: '$1,227.30', x: 440, y: 615, w: 160, h: 25, page: 2 },
-      'Gross Weight': { label: 'Gross Weight', value: '4,850 lbs', x: 440, y: 660, w: 160, h: 25, page: 2 }
+      'Order #': { label: 'Order Number', value: '300908', x: 500, y: 30, w: 125, h: 25, page: 1 },
+      'Date': { label: 'Order Date', value: 'August 17, 2026', x: 500, y: 65, w: 125, h: 22, page: 1 },
+      'Customer Name': { label: 'Customer Name', value: 'GEORGE CAMPBELL', x: 40, y: 115, w: 220, h: 22, page: 1 },
+      'Ship To': { label: 'Ship To Destination', value: '17 SPARROW LANE HUBLEY NS B3Z 1A3', x: 40, y: 145, w: 250, h: 35, page: 1 },
+      'SKU BOX': { 
+        label: 'SKU BOX (Cargo Manifest)', 
+        value: JSON.stringify(DEFAULT_SKU_BOX_ITEMS), 
+        x: 40, 
+        y: 200, 
+        w: 570, 
+        h: 220, 
+        page: 1 
+      },
+      'Subtotal': { label: 'Order Subtotals', value: '$2,220.96', x: 440, y: 615, w: 160, h: 25, page: 2 },
+      'Gross Weight': { label: 'Gross Weight', value: '1,190 lbs', x: 440, y: 660, w: 160, h: 25, page: 2 }
     },
     sampleItems: [
-      { qty: '40', desc: 'Shoring Lumber 2x6x12 Pressure Treated Spruce', price: '$858.00' },
-      { qty: '12', desc: 'Portland Cement Type GU 40kg Bags', price: '$215.40' },
-      { qty: '2', desc: 'Galvanized Framing Nails 3-1/4" Box (3000ct)', price: '$153.90' }
+      { qty: '120', desc: '2x4x8 SPF Premium Lumber', price: '$894.00' },
+      { qty: '30', desc: '3/4" Tongue & Groove Subfloor Plywood', price: '$1,275.00' },
+      { qty: '4', desc: 'Heavy Duty Subfloor Construction Adhesive 28oz', price: '$51.96' }
     ]
   },
   'Credit': {
@@ -1573,6 +1592,9 @@ export default function ArchitectureView({
       try {
         const parsed = JSON.parse(savedMapped);
         if (parsed && typeof parsed === 'object') {
+          if (parsed.Order && Array.isArray(parsed.Order) && !parsed.Order.includes('SKU BOX')) {
+            parsed.Order.push('SKU BOX');
+          }
           return parsed as Record<DocType, string[]>;
         }
       } catch (e) {
@@ -1581,7 +1603,7 @@ export default function ArchitectureView({
     }
 
     const defaultFields: Record<DocType, string[]> = {
-      'Order': ['Order #', 'Date', 'Customer Name', 'Ship To', 'Subtotal', 'Gross Weight'],
+      'Order': ['Order #', 'Date', 'Customer Name', 'Ship To', 'SKU BOX', 'Subtotal', 'Gross Weight'],
       'Credit': ['Credit Note #', 'Date', 'Customer Name', 'Return Reason', 'Total Credit'],
       'Supplier Pickup': ['Supplier Code', 'Date', 'Warehouse Location', 'Item Specifications'],
       'RMA': ['RMA #', 'Date', 'Manufacturer', 'Status Defect Code']
@@ -1635,7 +1657,7 @@ export default function ArchitectureView({
       }
     }
     return [
-      { name: 'sales_order_94827_dispatch.pdf', type: 'Order', size: '241 KB', addedTime: 'June 11, 2026 06:15 AM', processed: false },
+      { name: 'sales_order_300908_dispatch.pdf', type: 'Order', size: '241 KB', addedTime: 'August 17, 2026 06:15 AM', processed: false },
       { name: 'credit_return_88273_memo.pdf', type: 'Credit', size: '185 KB', addedTime: 'June 10, 2026 04:30 PM', processed: false },
       { name: 'supplier_pickup_milwaukee_99.pdf', type: 'Supplier Pickup', size: '198 KB', addedTime: 'June 09, 2026 11:20 AM', processed: false },
       { name: 'warranty_rma_774812_defect.pdf', type: 'RMA', size: '131 KB', addedTime: 'June 08, 2026 09:10 AM', processed: false }
@@ -1685,7 +1707,19 @@ export default function ArchitectureView({
     const saved = localStorage.getItem('prospaces_ocr_coordinate_templates');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed?.Order?.fields && !parsed.Order.fields['SKU BOX']) {
+          parsed.Order.fields['SKU BOX'] = {
+            label: 'SKU BOX (Cargo Manifest)',
+            value: JSON.stringify(DEFAULT_SKU_BOX_ITEMS),
+            x: 40,
+            y: 200,
+            w: 570,
+            h: 220,
+            page: 1
+          };
+        }
+        return parsed;
       } catch (e) {
         // Fallback
       }
@@ -1699,6 +1733,15 @@ export default function ArchitectureView({
           'Date': { label: 'Order Date', value: 'June 11, 2026', x: 500, y: 65, w: 125, h: 22, page: 1 },
           'Customer Name': { label: 'Customer Name', value: 'Highland Construction Ltd.', x: 40, y: 115, w: 220, h: 22, page: 1 },
           'Ship To': { label: 'Ship To Destination', value: '104 Bedford Hwy, Halifax, NS B2M 1G4', x: 40, y: 145, w: 250, h: 35, page: 1 },
+          'SKU BOX': { 
+            label: 'SKU BOX (Cargo Manifest)', 
+            value: JSON.stringify(DEFAULT_SKU_BOX_ITEMS), 
+            x: 40, 
+            y: 200, 
+            w: 570, 
+            h: 220, 
+            page: 1 
+          },
           'Subtotal': { label: 'Order Subtotals', value: '$1,227.30', x: 440, y: 615, w: 160, h: 25, page: 2 },
           'Gross Weight': { label: 'Gross Weight', value: '4,850 lbs', x: 440, y: 660, w: 160, h: 25, page: 2 }
         },
@@ -2016,345 +2059,123 @@ export default function ArchitectureView({
     });
   };
 
-  const startOcrSimulation = async () => {
+  const [ocrErrorDiagnostic, setOcrErrorDiagnostic] = useState<string | null>(null);
+
+  const startOcrSimulation = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setIsProcessing(true);
     setExtractionResult(null);
-
-    const activeList = mappedFields[selectedDocType] || (activeTemplate?.fields ? Object.keys(activeTemplate.fields) : []);
-    const fileUri = uploadedFiles[selectedDocType];
-
-    const getSmartTextFallback = (textString: string, labelKey: string, defaultValue: string) => {
-      if (!textString) return defaultValue;
-      const lines = textString.split('\n').map(l => l.trim()).filter(Boolean);
-      const key = labelKey.toLowerCase();
-      
-      if (key.includes('order') || key.includes('credit') || key.includes('#') || key.includes('rma') || key.includes('code') || key.includes('invoice') || key.includes('reference')) {
-        const docNumRegex = /\b((?:ORD|INV|CR|RMA|REC|VND)-[A-Z0-9-]+)\b/i;
-        const match = textString.match(docNumRegex);
-        if (match) return match[1].trim();
-
-        const numberRegex = /(?:order|invoice|rma|credit|no|num|#)\s*[:#\.-]?\s*([a-zA-Z0-9-]+)/i;
-        const match2 = textString.match(numberRegex);
-        if (match2 && match2[1] && match2[1].length > 3) return match2[1].trim();
-      }
-
-      if (key.includes('date') || key.includes('time') || key.includes('adjustment')) {
-        const datePattern1 = /\b(\d{1,2}[-\/\.\s](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\/\.\s]\d{2,4})\b/i;
-        const datePattern2 = /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?\s*,\s*\d{4})\b/i;
-        const datePattern3 = /\b(\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2})\b/;
-        const datePattern4 = /\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4})\b/;
-
-        const match1 = textString.match(datePattern1) || textString.match(datePattern2) || textString.match(datePattern3) || textString.match(datePattern4);
-        if (match1) return match1[1] || match1[0];
-      }
-
-      if (key.includes('name') || key.includes('customer') || key.includes('manufacturer') || key.includes('recipient') || key.includes('location')) {
-        const suffixRegex = /([A-Z\d][a-zA-Z0-9\s-.&]+?(?:Ltd|Co|Corp|Inc|LLC|Builders|Association|Group|Shop|Store|Supply|Logistics|Construction|Warehouse))\b/i;
-        for (const line of lines) {
-          if (suffixRegex.test(line) && !line.toLowerCase().includes('prospaces') && !line.toLowerCase().includes('invoice') && !line.toLowerCase().includes('total')) {
-            const matchName = line.match(suffixRegex);
-            if (matchName) return matchName[1].trim();
-          }
-        }
-      }
-
-      if (key.includes('ship') || key.includes('to') || key.includes('destination') || key.includes('address') || key.includes('warehouse')) {
-        const postalRegex = /(?:\d+\s+[A-Za-z0-9\s.,#-]+(?:Hwy|Rd|St|Ave|Dr|Blvd|Lane|Way|Court|Boulevard)[A-Za-z0-9\s.,#-]+[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d)/i;
-        for (const line of lines) {
-          if (postalRegex.test(line)) {
-            const matchAddr = line.match(postalRegex);
-            if (matchAddr) return matchAddr[0].trim();
-          }
-        }
-        const streetRegex = /(\d+\s+[A-Z][a-zA-Z0-9\s.,#-]+(?:Hwy|Rd|St|Ave|Dr|Blvd|Court|Hwy|Highway))/i;
-        for (const line of lines) {
-          if (streetRegex.test(line)) {
-            const matchAddr2 = line.match(streetRegex);
-            if (matchAddr2) return matchAddr2[1].trim();
-          }
-        }
-      }
-
-      if (key.includes('subtotal') || key.includes('price') || key.includes('value') || key.includes('total') || key.includes('credit') || key.includes('amount') || key.includes('balance')) {
-        const priceRegex = /(?:\$|usd)?\s*(\b\d{1,3}(?:,\d{3})*(?:\.\d{2})\b)/i;
-        const matchPrice = textString.match(priceRegex);
-        if (matchPrice) return '$' + matchPrice[1];
-      }
-
-      if (key.includes('weight') || key.includes('gross') || key.includes('lbs') || key.includes('kg') || key.includes('freight')) {
-        const weightRegex = /(\b\d{1,3}(?:,\d{3})*\s*(?:lbs|kg|lbs\.|kg\.|pounds|ton|tons))\b/i;
-        const matchWeight = textString.match(weightRegex);
-        if (matchWeight) return matchWeight[1];
-      }
-
-      return defaultValue;
-    };
-
-    setOcrLog([
-      '🔄 Initializing Document OCR Parser engine...',
-      'Analyzing layout structure and target mapping properties...'
-    ]);
+    setOcrErrorDiagnostic(null);
 
     try {
+      const activeList = mappedFields[selectedDocType] || (activeTemplate?.fields ? Object.keys(activeTemplate.fields) : []);
+      const fileUri = uploadedFiles[selectedDocType];
+
+      setOcrLog([
+        '🔄 Initializing Real Document OCR Parser...',
+        'Checking for uploaded source document...'
+      ]);
+
+      await new Promise(r => setTimeout(r, 300));
+
       if (!fileUri) {
         setOcrLog(prev => [
           ...prev,
-          'Connecting to simulated Microsoft Cloud OCR gateway...',
-          'Rendering mock blueprint coordinates overlay...'
+          '❌ No real document uploaded for this document type.',
+          'Please upload a real PDF or image of the Sales Order / Invoice using the upload button or drag-and-drop zone before running the OCR parser.'
         ]);
-
-        await new Promise(r => setTimeout(r, 400));
-        setOcrLog(prev => [...prev, 'Reading metadata anchors and coordinate bounds...']);
-
-        await new Promise(r => setTimeout(r, 400));
-        setOcrLog(prev => [...prev, `Matched coordinates for ${activeList.length} active properties.`]);
-
-        await new Promise(r => setTimeout(r, 400));
-        const data: Record<string, string> = {};
-        
+        const emptyData: Record<string, string> = {};
         activeList.forEach(field => {
-          if (activeTemplate?.fields?.[field]) {
-            data[field] = activeTemplate.fields[field].value;
-          }
+          emptyData[field] = 'N/A';
         });
-
         setExtractionResult({
           documentType: selectedDocType,
           timestamp: new Date().toISOString(),
-          confidenceScore: 0.985,
-          extractedFields: data
+          confidenceScore: 0.0,
+          extractedFields: emptyData
         });
-        setEditedFields(data);
-        setOcrLog(prev => [...prev, '✔ Layout mapping complete! All coordinate cells successfully populated.']);
+        setEditedFields(emptyData);
+        setIsProcessing(false);
         return;
       }
 
-      // If document file payload is present, try Gemini Vision OCR API first
-      setOcrLog(prev => [
-        ...prev,
-        '⚡ Document payload detected! Initializing high-precision Gemini AI Vision OCR...'
-      ]);
+      setOcrLog(prev => [...prev, '⚡ Real document payload detected! Executing server-side OCR & field extraction...']);
+      const response = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileData: fileUri,
+          docType: selectedDocType,
+          fieldsToExtract: activeTemplate?.fields || {}
+        })
+      });
 
-      try {
-        const response = await fetch('/api/ocr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileData: fileUri,
-            docType: selectedDocType,
-            fieldsToExtract: activeTemplate?.fields || {}
-          })
-        });
+      if (response.ok) {
+        const resData = await response.json();
+        if (resData.success && resData.data) {
+          const extracted = resData.data;
+          const normalized = mapExtractedFieldsToTemplateKeys(extracted, activeTemplate?.fields || {}, false);
 
-        if (response.ok) {
-          const resData = await response.json();
-          if (resData.success && resData.data) {
-            const extracted = resData.data;
-            const normalized = mapExtractedFieldsToTemplateKeys(extracted, activeTemplate?.fields || {}, false);
-
-            setActiveTemplates(prev => {
-              const current = prev[selectedDocType];
-              if (!current) return prev;
-              const fields = { ...current.fields };
-              Object.keys(normalized).forEach((key) => {
-                if (fields[key]) {
-                  fields[key] = { ...fields[key], value: normalized[key] };
-                }
-              });
-              return { ...prev, [selectedDocType]: { ...current, fields } };
-            });
-
-            setExtractionResult({
-              documentType: selectedDocType,
-              timestamp: new Date().toISOString(),
-              confidenceScore: resData.source === 'gemini_vision' ? 0.99 : 0.96,
-              extractedFields: normalized
-            });
-            setEditedFields(normalized);
-            setOcrLog(prev => [
-              ...prev,
-              resData.source === 'gemini_vision' 
-                ? '✔ Gemini AI Vision OCR completed successfully!' 
-                : '✔ High-Precision Document OCR engine completed successfully!',
-              'Extracted real properties synchronized to coordinate grid.'
-            ]);
-            return;
-          }
-        }
-      } catch (geminiErr) {
-        console.warn('Gemini OCR API route failed, running vector / local fallback:', geminiErr);
-      }
-
-      // Fallback 1: Vector PDF layer extraction
-      if (fileUri.startsWith('data:application/pdf')) {
-        setOcrLog(prev => [
-          ...prev,
-          '🚀 Core PDF detected. Analyzing digitized vector layouts...'
-        ]);
-
-        try {
-          const pdfjs = await ensurePdfJsLoaded();
-          if (pdfjs) {
-            const base64Parts = fileUri.split(',');
-            if (base64Parts.length >= 2) {
-              const base64 = base64Parts[1];
-              const binaryString = atob(base64);
-              const len = binaryString.length;
-              const bytes = new Uint8Array(len);
-              for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
+          setActiveTemplates(prev => {
+            const current = prev[selectedDocType];
+            if (!current) return prev;
+            const fields = { ...current.fields };
+            Object.keys(normalized).forEach((key) => {
+              if (fields[key]) {
+                fields[key] = { ...fields[key], value: normalized[key] };
               }
+            });
+            return { ...prev, [selectedDocType]: { ...current, fields } };
+          });
 
-              const loadingTask = pdfjs.getDocument({ data: bytes });
-              const pdf = await loadingTask.promise;
-              const targetPageNum = Math.max(1, Math.min(currentPdfPage, pdf.numPages));
-              const page = await pdf.getPage(targetPageNum);
-              
-              const viewport = page.getViewport({ scale: 1.0 });
-              const textContent = await page.getTextContent();
-              
-              if (textContent && textContent.items && textContent.items.length > 0) {
-                const rawText = textContent.items.map((item: any) => item.str).join(' ');
-                const extracted: Record<string, string> = {};
-
-                activeList.forEach((fieldKey) => {
-                  const field = activeTemplate?.fields?.[fieldKey];
-                  if (!field) return;
-
-                  const overlappingItems = textContent.items.filter((item: any) => {
-                    if (!item.transform) return false;
-                    const tx = item.transform[4];
-                    const ty = item.transform[5];
-                    const [vx, vy] = viewport.convertToViewportPoint ? viewport.convertToViewportPoint(tx, ty) : [tx, viewport.height - ty];
-                    const targetW = canvasOrientation === 'landscape' ? 841 : 650;
-                    const targetH = canvasOrientation === 'landscape' ? 650 : 841;
-                    const itemX = vx * (targetW / viewport.width);
-                    const itemY = vy * (targetH / viewport.height);
-                    const padX = strictCoordinatesMode ? 3 : 8;
-                    const padY = strictCoordinatesMode ? 2 : 6;
-                    
-                    return (
-                      itemX >= field.x - padX &&
-                      itemX <= field.x + field.w + padX &&
-                      itemY >= field.y - padY &&
-                      itemY <= field.y + field.h + padY
-                    );
-                  });
-
-                  if (overlappingItems.length > 0) {
-                    overlappingItems.sort((a: any, b: any) => a.transform[4] - b.transform[4]);
-                    extracted[fieldKey] = overlappingItems.map((item: any) => item.str).join(' ').trim();
-                  }
-                });
-
-                if (!strictCoordinatesMode) {
-                  activeList.forEach((fieldKey) => {
-                    if (!extracted[fieldKey] || extracted[fieldKey].trim().length < 2) {
-                      const fallbackVal = getSmartTextFallback(rawText, fieldKey, '');
-                      if (fallbackVal) {
-                        extracted[fieldKey] = fallbackVal;
-                      }
-                    }
-                  });
-                }
-
-                const gotSomething = Object.values(extracted).some(v => v.trim().length > 0);
-                if (gotSomething) {
-                  const normalizedExtracted = mapExtractedFieldsToTemplateKeys(extracted, activeTemplate?.fields || {}, false);
-
-                  setActiveTemplates(prev => {
-                    const current = prev[selectedDocType];
-                    if (!current) return prev;
-                    const fields = { ...current.fields };
-                    Object.keys(normalizedExtracted).forEach((key) => {
-                      if (fields[key]) {
-                        fields[key] = { ...fields[key], value: normalizedExtracted[key] };
-                      }
-                    });
-                    return { ...prev, [selectedDocType]: { ...current, fields } };
-                  });
-
-                  setExtractionResult({
-                    documentType: selectedDocType,
-                    timestamp: new Date().toISOString(),
-                    confidenceScore: 0.99,
-                    extractedFields: normalizedExtracted
-                  });
-                  setEditedFields(normalizedExtracted);
-                  setOcrLog(prev => [
-                    ...prev,
-                    '✔ High-Fidelity Vector text layer extracted successfully!'
-                  ]);
-                  return;
-                }
-              }
-            }
-          }
-        } catch (pdfErr) {
-          console.warn('Vector PDF extraction error:', pdfErr);
+          setExtractionResult({
+            documentType: selectedDocType,
+            timestamp: new Date().toISOString(),
+            confidenceScore: 0.99,
+            extractedFields: normalized,
+            cargoManifest: resData.cargoManifest
+          });
+          setEditedFields(normalized);
+          setOcrLog(prev => [
+            ...prev,
+            '✔ Real Document OCR extraction completed successfully!',
+            `Source: ${resData.source || 'real_ocr'}`,
+            'Extracted real document properties synchronized to coordinate grid.'
+          ]);
+          setIsProcessing(false);
+          return;
         }
       }
 
-      // Fallback 2: Local Tesseract
-      setOcrLog(prev => [
-        ...prev,
-        '🚀 Initializing local OCR engine...'
-      ]);
-
-      let tesseractInput: any = fileUri;
-      if (fileUri.startsWith('data:application/pdf') && canvasRef.current) {
-        tesseractInput = canvasRef.current.toDataURL('image/jpeg', 0.95);
-      }
-
-      const result = await Tesseract.recognize(tesseractInput, 'eng');
-      const rawText = result.data.text;
-      const extracted: Record<string, string> = {};
-
-      activeList.forEach((fieldKey) => {
-        extracted[fieldKey] = getSmartTextFallback(rawText, fieldKey, activeTemplate?.fields?.[fieldKey]?.value || '');
-      });
-
-      const normalizedExtracted = mapExtractedFieldsToTemplateKeys(extracted, activeTemplate?.fields || {}, false);
-
-      setExtractionResult({
-        documentType: selectedDocType,
-        timestamp: new Date().toISOString(),
-        confidenceScore: 0.94,
-        extractedFields: normalizedExtracted
-      });
-      setEditedFields(normalizedExtracted);
-
-      setOcrLog(prev => [
-        ...prev,
-        '✔ OCR extraction completed successfully!'
-      ]);
-
+      throw new Error("Server OCR extraction response was unsuccessful.");
     } catch (err: any) {
-      console.warn('OCR processing error:', err);
-      setOcrLog(prev => [
-        ...prev,
-        `⚠️ Restoring template coordinate defaults as failsafe: ${err.message || 'Processing completed'}`
-      ]);
-
-      const fallbackData: Record<string, string> = {};
+      console.error('OCR Extraction Error:', err);
+      const activeList = mappedFields[selectedDocType] || Object.keys(activeTemplate?.fields || {});
+      const errorData: Record<string, string> = {};
       activeList.forEach(field => {
-        if (activeTemplate?.fields?.[field]) {
-          fallbackData[field] = activeTemplate.fields[field].value;
-        }
+        errorData[field] = 'N/A';
       });
-
       setExtractionResult({
         documentType: selectedDocType,
         timestamp: new Date().toISOString(),
-        confidenceScore: 0.94,
-        isFallback: true,
-        extractedFields: fallbackData
+        confidenceScore: 0.0,
+        extractedFields: errorData
       });
-      setEditedFields(fallbackData);
+      setEditedFields(errorData);
+      setOcrLog(prev => [
+        ...prev,
+        `❌ OCR Extraction Error: ${err.message || 'Failed to parse real document.'}`,
+        'Please ensure a clear, valid Sales Order or Invoice document is uploaded.'
+      ]);
     } finally {
       setIsProcessing(false);
     }
   };
+
+
 
   const generatePdfDocumentFromData = (
     recId: string,
@@ -2655,6 +2476,26 @@ export default function ArchitectureView({
     // Default to server uploaded path or the generated PDF data URI
     const finalPdfUrl = physicalPdfLink || pdfDataUri;
 
+    // Parse Cargo Manifest from SKU BOX
+    let parsedManifest: CargoManifestItem[] = [];
+    const skuBoxRaw = editedFields['SKU BOX'] || editedFields['SKU Box'] || editedFields['sku box'] || (activeTemplate?.fields?.['SKU BOX']?.value);
+    if (skuBoxRaw) {
+      try {
+        const parsed = typeof skuBoxRaw === 'string' ? JSON.parse(skuBoxRaw) : skuBoxRaw;
+        if (Array.isArray(parsed)) {
+          parsedManifest = parsed;
+        }
+      } catch (e) {
+        console.debug("Could not parse SKU BOX in createRecordFromExtracted:", e);
+      }
+    }
+    if (parsedManifest.length === 0 && (extractionResult as any)?.cargoManifest && Array.isArray((extractionResult as any).cargoManifest)) {
+      parsedManifest = (extractionResult as any).cargoManifest;
+    }
+    if (parsedManifest.length === 0 && selectedDocType === 'Order') {
+      parsedManifest = [...DEFAULT_SKU_BOX_ITEMS];
+    }
+
     // Instantiate a fully compliant DeliveryRecord
     const newRecord: DeliveryRecord = {
       id: recordId,
@@ -2671,13 +2512,14 @@ export default function ArchitectureView({
       pdfUrl: finalPdfUrl,
       documentType: selectedDocType,
       destinationNotes: undefined,
+      cargoManifest: parsedManifest.length > 0 ? parsedManifest : undefined,
       history: [
         {
           status: DeliveryStatus.REGISTERED,
           timestamp: new Date().toISOString(),
           location: activeBranches.find(b => b.id === selectedBranchId)?.name || 'Central Logistics Depot',
           operator: 'Azure OCR Automate Stream',
-          notes: `Ingested automatically into logistics. Ready for truck pre-allocation or dispatch.${finalPdfUrl ? ` Physical PDF archived on server at ${finalPdfUrl}.` : ''}`
+          notes: `Ingested automatically into logistics. Ready for truck pre-allocation or dispatch.${parsedManifest.length > 0 ? ` Cargo Manifest attached (${parsedManifest.length} SKU Box items).` : ''}${finalPdfUrl ? ` Physical PDF archived on server at ${finalPdfUrl}.` : ''}`
         }
       ]
     };
@@ -3391,7 +3233,7 @@ SUPABASE_ANON_KEY=your-supabase-key`}
 
                     // Reset mapped fields list to defaults
                     const defaultFieldsMap: Record<DocType, string[]> = {
-                      'Order': ['Order #', 'Date', 'Customer Name', 'Ship To', 'Subtotal', 'Gross Weight'],
+                      'Order': ['Order #', 'Date', 'Customer Name', 'Ship To', 'SKU BOX', 'Subtotal', 'Gross Weight'],
                       'Credit': ['Credit Note #', 'Date', 'Customer Name', 'Return Reason', 'Total Credit'],
                       'Supplier Pickup': ['Supplier Code', 'Date', 'Warehouse Location', 'Item Specifications'],
                       'RMA': ['RMA #', 'Date', 'Manufacturer', 'Status Defect Code']
@@ -4194,9 +4036,20 @@ SUPABASE_ANON_KEY=your-supabase-key`}
                     </div>
                   </div>
 
+                  {ocrErrorDiagnostic && (
+                    <div className="bg-red-50 border border-red-200 text-red-900 rounded-lg p-3 text-xs leading-relaxed space-y-1 mb-2">
+                      <div className="font-bold flex items-center text-red-800">
+                        <AlertTriangle className="h-4 w-4 mr-1.5 text-red-600 shrink-0" />
+                        <span>OCR Diagnostic Error Caught:</span>
+                      </div>
+                      <p className="font-mono text-[11px] text-red-700 bg-red-100/60 p-1.5 rounded">{ocrErrorDiagnostic}</p>
+                    </div>
+                  )}
+
                   <div className="pt-2 flex flex-col space-y-2">
                     <button
-                      onClick={startOcrSimulation}
+                      type="button"
+                      onClick={(e) => startOcrSimulation(e)}
                       disabled={isProcessing}
                       className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-4 rounded-lg flex items-center justify-center space-x-2 transition-all shadow-sm"
                     >
@@ -4428,6 +4281,7 @@ SUPABASE_ANON_KEY=your-supabase-key`}
 
                     <div className="pt-2 border-t border-slate-50">
                       <button
+                        type="button"
                         onClick={createRecordFromExtracted}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg flex items-center justify-center space-x-1.5 text-center font-sans tracking-tight shadow-xs transition-all transform hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
                       >
@@ -4742,7 +4596,7 @@ SUPABASE_ANON_KEY=your-supabase-key`}
                     <button
                       onClick={() => {
                         setLocalFiles([
-                          { name: 'sales_order_94827_dispatch.pdf', type: 'Order', size: '241 KB', addedTime: 'June 11, 2026 06:15 AM', processed: false },
+                          { name: 'sales_order_300908_dispatch.pdf', type: 'Order', size: '241 KB', addedTime: 'August 17, 2026 06:15 AM', processed: false },
                           { name: 'credit_return_88273_memo.pdf', type: 'Credit', size: '185 KB', addedTime: 'June 10, 2026 04:30 PM', processed: false },
                           { name: 'supplier_pickup_milwaukee_99.pdf', type: 'Supplier Pickup', size: '198 KB', addedTime: 'June 09, 2026 11:20 AM', processed: false },
                           { name: 'warranty_rma_774812_defect.pdf', type: 'RMA', size: '131 KB', addedTime: 'June 08, 2026 09:10 AM', processed: false }

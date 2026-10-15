@@ -6,10 +6,11 @@ import {
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
   Truck as TruckIcon, MoreVertical, Edit, Trash2, Plus, X, ExternalLink,
-  List, LayoutGrid, Mail
+  List, LayoutGrid, Mail, Package
 } from 'lucide-react';
 import DragDropFreightBoard from './DragDropFreightBoard';
 import { PhysicalDocumentModal } from './PhysicalDocumentModal';
+import { CargoManifestModal } from './CargoManifestModal';
 
 interface DeliveryQueueProps {
   deliveries: DeliveryRecord[];
@@ -475,6 +476,7 @@ export default function DeliveryQueue({
   const [editingRecord, setEditingRecord] = useState<DeliveryRecord | null>(null);
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
   const [previewDocDelivery, setPreviewDocDelivery] = useState<DeliveryRecord | null>(null);
+  const [previewManifestDelivery, setPreviewManifestDelivery] = useState<DeliveryRecord | null>(null);
   const [emailStatusBanner, setEmailStatusBanner] = useState<{
     message: string;
     details?: string;
@@ -1230,6 +1232,7 @@ export default function DeliveryQueue({
           manualFullTrucks={manualFullTrucks}
           onUpdateManualFullTrucks={onUpdateManualFullTrucks}
           isViewOnly={isViewOnly}
+          onViewCargoManifest={(d) => setPreviewManifestDelivery(d)}
         />
       ) : (
         <>
@@ -1372,6 +1375,19 @@ export default function DeliveryQueue({
                             </button>
                           </>
                         )}
+                        <span className="text-xs text-slate-300">|</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewManifestDelivery(delivery);
+                          }}
+                          className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-sans font-extrabold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors cursor-pointer"
+                          title="View SKU Box Cargo Manifest"
+                        >
+                          <Package className="h-3 w-3 mr-1 text-blue-600 animate-pulse" />
+                          <span>Manifest {delivery.cargoManifest?.length ? `(${delivery.cargoManifest.length})` : ''}</span>
+                        </button>
                       </div>
 
                       <div className="flex items-center space-x-2 mt-1">

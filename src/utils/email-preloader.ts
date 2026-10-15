@@ -82,14 +82,15 @@ async function _backgroundSync(accountId: string, headers: Record<string, string
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ accountId, limit: 50 }),
     });
+    if (!res.ok) {
+      return; // Fail silently if edge function is unconfigured or returns 500
+    }
     const data = await res.json();
     if (data.success) {
       // Sync completed
-    } else {
-      // Non-fatal: account may not have tokens stored yet (e.g. DB-only account without OAuth grant)
     }
   } catch (err: any) {
-    // Sync exception ignored
+    // Sync exception ignored silently
   }
 }
 

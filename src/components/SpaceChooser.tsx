@@ -9,11 +9,7 @@ import type { UserRole } from '../App';
 /* ── Asset imports (shared with LandingPage) ── */
 import grainOverlay from '../assets/landing/backgrounds/grain-overlay.svg';
 
-let environmentBg: string | null = null;
-try {
-  // @ts-ignore
-  environmentBg = new URL(/* @vite-ignore */ '../assets/landing/backgrounds/environment-bg.webp', import.meta.url).href;
-} catch { /* no-op */ }
+const environmentBg: string | null = null;
 
 interface SpaceChooserProps {
   userRole: UserRole;

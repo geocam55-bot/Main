@@ -153,6 +153,11 @@ export const DEFAULT_DELIVERIES: DeliveryRecord[] = [
         isHazardous: false
       }
     ],
+    cargoManifest: [
+      { line: 1, ordered: '120', sku: 'R-709', description: '2x4x8 SPF Premium Lumber', units: 'PC', pricePer: '$7.45', extension: '$894.00' },
+      { line: 2, ordered: '30', sku: 'PLY-34-TNG', description: '3/4" Tongue & Groove Subfloor Plywood', units: 'SHT', pricePer: '$42.50', extension: '$1,275.00' },
+      { line: 3, ordered: '4', sku: 'ADH-SUB-28', description: 'Heavy Duty Subfloor Construction Adhesive 28oz', units: 'TUBE', pricePer: '$12.99', extension: '$51.96' }
+    ],
     history: [
       {
         status: 'REGISTERED',

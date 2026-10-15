@@ -4794,10 +4794,10 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         if (matchWeight) extractedValue = matchWeight[1];
       }
 
-      // 7. If not found in text, fallback to template field default value
+      // 7. If not found in text, set to N/A or empty (no simulation or mock values allowed)
       const invalidWords = ["created", "job no", "order #", "date", "subtotal", "total", "customer name", "ship to", "gross weight", "n/a", "undefined"];
       if (!extractedValue || invalidWords.includes(extractedValue.toLowerCase().trim())) {
-        extractedValue = (fObj?.value && fObj.value !== "MOCK_VALUE" && fObj.value !== "undefined") ? fObj.value : "";
+        extractedValue = "N/A";
       }
 
       result[fieldKey] = extractedValue;
@@ -4905,7 +4905,7 @@ Output schema keys:
       if (usedGemini && aiClient) {
         try {
           const response = await aiClient.models.generateContent({
-            model: "gemini-flash-latest",
+            model: "gemini-2.5-flash",
             contents: {
               parts: [
                 {
@@ -5191,6 +5191,8 @@ Output schema keys:
         .map(([key, fObj]: [string, any]) => `- "${key}" (${fObj.label}): Extract the exact value found in the document.`)
         .join("\n");
 
+      const hasSkuBox = Object.keys(fieldsToExtract).some(k => k.toLowerCase().includes("sku box") || (fieldsToExtract[k]?.label || "").toLowerCase().includes("sku box"));
+
       const prompt = `You are a high-precision corporate logistics document OCR parser.
 Extract the exact values for the requested fields from this document.
 The document type is: ${docType}
@@ -5203,6 +5205,13 @@ CRITICAL RULES:
 2. DO NOT return any extra fields that are not in the "Requested fields to extract" list.
 3. For any requested fields that are missing, unavailable, or cannot be parsed directly from the document text, you MUST reply with "N/A" rather than a blank or simulated value.
 4. Ensure all textual items match the document exactly without changing spelling or casing where editable. 
+${hasSkuBox ? `5. SPECIAL INSTRUCTION FOR "SKU BOX":
+When extracting the "SKU BOX" field, this represents the Cargo Manifest table of items for the sales order invoice.
+Extract the line items from the SKU Box table columns going Left to Right:
+LINE (line index), ORDERED (quantity ordered), SKU (product item code), DESCRIPTION (item description/specs), UNITS (UOM e.g. PC, EA, SHT, BAG, BOX, LF), PRICE/ PER (unit price), EXTENSION (extended total price).
+Return the result for "SKU BOX" as a valid JSON stringified array of objects:
+[{"line": 1, "ordered": "40", "sku": "...", "description": "...", "units": "PC", "pricePer": "$21.45", "extension": "$858.00"}]
+If no items table is found, return an empty array string "[]".` : ''}
 Return the structured results in the required JSON format.`;
 
       const properties: Record<string, any> = {};
@@ -5228,7 +5237,7 @@ Return the structured results in the required JSON format.`;
       if (usedGemini && aiClient) {
         try {
           const response = await aiClient.models.generateContent({
-            model: "gemini-flash-latest",
+            model: "gemini-2.5-flash",
             contents: {
               parts: [
                 {
@@ -5258,6 +5267,7 @@ Return the structured results in the required JSON format.`;
             const parsedJson = JSON.parse(rawText.trim());
 
             // Ensure all fields have valid values (fallback to template default if N/A or empty)
+            let extractedCargoManifest: any[] = [];
             Object.keys(fieldsToExtract).forEach((fieldKey) => {
               const val = parsedJson[fieldKey];
               const defaultVal = fieldsToExtract[fieldKey]?.value || '';
@@ -5266,6 +5276,17 @@ Return the structured results in the required JSON format.`;
                 parsedJson[fieldKey] = (defaultVal && defaultVal !== "MOCK_VALUE") ? defaultVal : "";
               } else {
                 parsedJson[fieldKey] = strVal;
+              }
+
+              if (fieldKey.toLowerCase().includes("sku box") || (fieldsToExtract[fieldKey]?.label || "").toLowerCase().includes("sku box")) {
+                try {
+                  const candidate = typeof parsedJson[fieldKey] === 'string' ? JSON.parse(parsedJson[fieldKey]) : parsedJson[fieldKey];
+                  if (Array.isArray(candidate)) {
+                    extractedCargoManifest = candidate;
+                  }
+                } catch (e) {
+                  console.debug("Could not parse SKU BOX JSON array directly:", e);
+                }
               }
             });
 
@@ -5277,6 +5298,7 @@ Return the structured results in the required JSON format.`;
             return res.json({
               success: true,
               data: parsedJson,
+              cargoManifest: extractedCargoManifest.length > 0 ? extractedCargoManifest : undefined,
               savedImage,
               fileUrl: savedImage?.fileUrl,
               source: 'gemini_vision'

@@ -685,6 +685,7 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     const scheduledSlot = d.scheduledSlot || meta.scheduledSlot || d.scheduled_slot;
     const deliveryCategory = d.deliveryCategory || d.delivery_category || meta.deliveryCategory;
     const additionalStops = d.additionalStops || d.additional_stops || meta.additionalStops || meta.additional_stops || [];
+    const cargoManifest = (d.cargoManifest && Array.isArray(d.cargoManifest)) ? d.cargoManifest : (meta.cargoManifest || (d as any).cargo_manifest || []);
     const history = (d.history && Array.isArray(d.history) && d.history.length > 0) ? d.history : (meta.history || []);
 
     return {
@@ -721,6 +722,7 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
       scheduledSlot,
       deliveryCategory,
       additionalStops,
+      cargoManifest,
       history
     };
   });
@@ -1002,6 +1004,7 @@ export async function saveTenantStateDirect(
       scheduledSlot: d.scheduledSlot,
       deliveryCategory: d.deliveryCategory,
       additionalStops: d.additionalStops || [],
+      cargoManifest: d.cargoManifest || meta.cargoManifest || (d as any).cargo_manifest || [],
       history: d.history ? (typeof d.history === 'string' ? JSON.parse(d.history) : d.history) : []
     };
 
@@ -1025,6 +1028,28 @@ export async function saveTenantStateDirect(
     }
     
     return obj;
+  });
+
+  // Prepare Order Cargo Manifest table records (if order_cargo_manifests table is provisioned)
+  const manifestItemsToUpsert: any[] = [];
+  (deliveries || []).forEach(d => {
+    if (d && d.cargoManifest && Array.isArray(d.cargoManifest) && d.cargoManifest.length > 0) {
+      d.cargoManifest.forEach((item: any, idx: number) => {
+        manifestItemsToUpsert.push({
+          id: `${d.id}-line-${item.line || idx + 1}`,
+          tenant_id: String(tenantId),
+          delivery_id: String(d.id),
+          line_number: Number(item.line) || (idx + 1),
+          ordered_quantity: String(item.ordered || '0'),
+          sku: String(item.sku || ''),
+          description: String(item.description || ''),
+          units: String(item.units || 'EA'),
+          price_per: String(item.pricePer || ''),
+          extension: String(item.extension || ''),
+          updated_at: new Date().toISOString()
+        });
+      });
+    }
   });
 
   // Prepare GPS units setup records
@@ -1103,6 +1128,7 @@ export async function saveTenantStateDirect(
     safeBulkUpsert("trucks", safeTrucksToUpsert),
     safeBulkUpsert("users", serializedUsers),
     safeBulkUpsert("deliveries", mappedDeliveries),
+    safeBulkUpsert("order_cargo_manifests", manifestItemsToUpsert),
     safeBulkUpsert("gps_units_setup", gpsUnitsToUpsert),
     safeBulkUpsert("gps_unit_setup", gpsUnitsToUpsert),
     safeBulkUpsert("gps_tracking_history", historyPointsToInsert),

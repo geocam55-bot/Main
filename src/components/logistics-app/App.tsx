@@ -287,6 +287,9 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
 
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
+      const savedTab = localStorage.getItem('prospaces_active_tab');
+      if (savedTab) return savedTab;
+
       const path = window.location.pathname.toLowerCase();
       const search = new URLSearchParams(window.location.search);
       const tabParam = search.get('tab') || search.get('view');
@@ -299,6 +302,12 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     } catch (e) {}
     return 'telematics';
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('prospaces_active_tab', activeTab);
+    } catch (e) {}
+  }, [activeTab]);
 
   // Keep activeTab synchronized if URL parameters or history changes
   useEffect(() => {
@@ -3718,7 +3727,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       }`} id="prospaces-body">
 
         {/* Secondary Sub-navigation for Fleet Setup */}
-        {['stores', 'trucks', 'gps', 'users', 'architecture'].includes(activeTab) && (
+        {['stores', 'trucks', 'gps', 'users'].includes(activeTab) && (
           <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 p-1 rounded-xl flex flex-nowrap overflow-x-auto gap-1 shadow-inner w-full scrollbar-none select-none animate-fade-in" id="prospaces-subnav" style={{ WebkitOverflowScrolling: 'touch' }}>
             <button
               onClick={() => setActiveTab('stores')}
