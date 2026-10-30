@@ -747,33 +747,32 @@ export default function DriverRouteMap({
 
   // Fallback key discovery & API endpoint lookup from tenant defaults
   useEffect(() => {
-    if (!apiKey) {
-      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
-      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
-      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+    const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+    const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+    const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
 
-      fetch(url)
-        .then(res => res.json())
-        .then(data => {
-          if (data?.key && data.key !== 'YOUR_API_KEY' && data.key.trim().length > 5) {
-            const cleanKey = data.key.trim();
-            setApiKey(cleanKey);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
-              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
-            }
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.key && data.key !== 'YOUR_API_KEY' && data.key.trim().length > 5) {
+          const cleanKey = data.key.trim();
+          setApiKey(cleanKey);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+            (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
           }
-        })
-        .catch(err => {
-          console.warn('Google Maps key fetch notice:', err);
-        })
-        .finally(() => {
-          setIsLoadingKey(false);
-        });
-    } else {
-      setIsLoadingKey(false);
-    }
-  }, [apiKey]);
+          if (data.isDevelopmentMode || data.billingEnabled === false) {
+            setMapAuthError(true);
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Google Maps key fetch notice:', err);
+      })
+      .finally(() => {
+        setIsLoadingKey(false);
+      });
+  }, []);
 
   // Catch Maps authentication failure
   useEffect(() => {

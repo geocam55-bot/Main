@@ -1224,6 +1224,24 @@ export default function App() {
     unregisterServiceWorker().catch(() => {
       // Ignore failures; app works without SW.
     });
+
+    // Sync Google Maps API key from saved Supabase system variables on app startup
+    fetch('/api/maps-key')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.key && data.key.trim().length > 5) {
+          const k = data.key.trim();
+          (window as any).GOOGLE_MAPS_PLATFORM_KEY = k;
+          (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY = k;
+          try {
+            localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', k);
+            if (data.source) {
+              localStorage.setItem('GOOGLE_MAPS_KEY_SOURCE', data.source);
+            }
+          } catch (e) {}
+        }
+      })
+      .catch(() => {});
   }, []);
 
   return <RouterProvider router={router} />;

@@ -1957,8 +1957,23 @@ app.use((req, res, next) => {
       if (supabase) {
         const targetKeys = ['GOOGLE_MAPS_PLATFORM_KEY', 'GOOGLE_MAPS_API_KEY', 'VITE_GOOGLE_MAPS_PLATFORM_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'MAPS_API_KEY', 'GOOGLE_MAP_KEY'];
 
-        // 1. If tenantId is specified, look in tenant_env_vars for this specific tenant / organization
-        if (requestedTenantId) {
+        // 1. PRIMARY PRIORITY: Saved Supabase System Variables (app_env_vars)
+        const { data: appData } = await supabase
+          .from('app_env_vars')
+          .select('key, value, updated_at')
+          .in('key', targetKeys)
+          .order('updated_at', { ascending: false });
+
+        if (appData && appData.length > 0) {
+          const found = appData.find((d: any) => d.value && d.value.trim().length > 5);
+          if (found) {
+            key = found.value.trim();
+            source = 'supabase_system_variables (app_env_vars)';
+          }
+        }
+
+        // 2. Secondary: If tenantId is specified, check tenant_env_vars for this specific tenant / organization
+        if (!key && requestedTenantId) {
           const { data: directData } = await supabase
             .from('tenant_env_vars')
             .select('key, value')
@@ -1991,7 +2006,7 @@ app.use((req, res, next) => {
           }
         }
 
-        // 2. If still no key, check ANY configured row in tenant_env_vars that has a Google Maps key
+        // 3. Fallback: Check ANY configured row in tenant_env_vars that has a Google Maps key
         if (!key) {
           const { data: anyTenantData } = await supabase
             .from('tenant_env_vars')
@@ -2004,22 +2019,6 @@ app.use((req, res, next) => {
             if (found) {
               key = found.value.trim();
               source = `tenant_env_vars:${found.organization_id}`;
-            }
-          }
-        }
-
-        // 3. If still no key, check app_env_vars table
-        if (!key) {
-          const { data: appData } = await supabase
-            .from('app_env_vars')
-            .select('key, value')
-            .in('key', targetKeys);
-
-          if (appData && appData.length > 0) {
-            const found = appData.find((d: any) => d.value && d.value.trim().length > 5);
-            if (found) {
-              key = found.value.trim();
-              source = 'app_env_vars';
             }
           }
         }

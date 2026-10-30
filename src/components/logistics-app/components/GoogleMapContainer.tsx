@@ -192,12 +192,15 @@ export default function GoogleMapContainer({
   });
   const [useBuiltInMap, setUseBuiltInMap] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
+      const explicit = localStorage.getItem('prospaces_force_google_maps');
+      if (explicit === 'true') return false;
       if ((window as any).GOOGLE_MAPS_BILLING_ERROR) return true;
       try {
         if (sessionStorage.getItem('gmp_billing_error') === 'true') return true;
       } catch (e) {}
     }
-    return false;
+    // Clean, high-performance Built-In Fleet Canvas active by default
+    return true;
   });
   const [dismissBanner, setDismissBanner] = useState<boolean>(false);
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
@@ -260,77 +263,46 @@ export default function GoogleMapContainer({
     const globalKey = (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY || (typeof window !== 'undefined' ? (window as any).GOOGLE_MAPS_PLATFORM_KEY : '');
     info += `Global key: ${globalKey ? 'Found (len ' + globalKey.length + ')' : 'None'}\n`;
     
-    if (!apiKey) {
-      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
-      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
-      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+    const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+    const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+    const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
 
-      info += `Fetching from ${url} (tenant: ${tenantId || 'default'})...\n`;
-      setDebugInfo(info);
-      fetch(url)
-        .then(res => {
-          info += `Fetch status: ${res.status} ${res.statusText}\n`;
-          setDebugInfo(info);
-          return res.json();
-        })
-        .then(data => {
-          info += `JSON received: ${data ? JSON.stringify(data).substring(0, 50) : 'none'}\n`;
-          if (data?.key && data.key !== 'YOUR_API_KEY' && data.key.trim().length > 5) {
-            const cleanKey = data.key.trim();
-            setApiKey(cleanKey);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
-              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
-            }
-            if (data.isDevelopmentMode || data.billingEnabled === false) {
-              setIsDevelopmentMode(true);
-              setBillingMessage(data.billingMessage || '');
-              setUseBuiltInMap(true);
-              setMapAuthError(true);
-              if (typeof window !== 'undefined') {
-                (window as any).GOOGLE_MAPS_BILLING_ERROR = true;
-                try { sessionStorage.setItem('gmp_billing_error', 'true'); } catch (e) {}
-              }
-              info += `Key loaded from ${data.source}: Development Mode detected (Google Cloud billing pending).\n`;
-            } else {
-              setIsDevelopmentMode(false);
-              setMapAuthError(false);
-              info += `Successfully set API key from ${data.source || 'tenant defaults'} (Production Mode)!\n`;
-            }
-          } else {
-            info += `API key is missing or is placeholder in response\n`;
+    info += `Syncing from Supabase system variables via ${url}...\n`;
+    setDebugInfo(info);
+
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.key && data.key !== 'YOUR_API_KEY' && data.key.trim().length > 5) {
+          const cleanKey = data.key.trim();
+          setApiKey(cleanKey);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+            (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
           }
-          setDebugInfo(info);
-        })
-        .catch(err => {
-          info += `Fetch error: ${err.message || err}\n`;
-          console.error('Failed to load dynamic maps API key:', err);
-          setDebugInfo(info);
-        })
-        .finally(() => {
-          setIsLoadingKey(false);
-        });
-    } else {
-      info += `API Key active: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}\n`;
-      setDebugInfo(info);
-      setIsLoadingKey(false);
-      // Validate billing in background
-      fetch('/api/maps-key')
-        .then(r => r.json())
-        .then(d => {
-          if (d && (d.isDevelopmentMode || d.billingEnabled === false)) {
+          if (data.isDevelopmentMode || data.billingEnabled === false) {
             setIsDevelopmentMode(true);
-            setBillingMessage(d.billingMessage || '');
-            setUseBuiltInMap(true);
+            setBillingMessage(data.billingMessage || '');
             setMapAuthError(true);
-          } else if (d && d.billingEnabled) {
+          } else {
             setIsDevelopmentMode(false);
             setMapAuthError(false);
           }
-        })
-        .catch(() => {});
-    }
-  }, [apiKey]);
+          info += `Successfully synced key from ${data.source || 'Supabase system variables'}\n`;
+        } else {
+          info += `API key is missing or is placeholder in response\n`;
+        }
+        setDebugInfo(info);
+      })
+      .catch(err => {
+        info += `Fetch error: ${err.message || err}\n`;
+        console.error('Failed to load maps key from Supabase system variables:', err);
+        setDebugInfo(info);
+      })
+      .finally(() => {
+        setIsLoadingKey(false);
+      });
+  }, []);
 
   useEffect(() => {
     const originalAuthFailure = (window as any).gm_authFailure;
@@ -552,6 +524,7 @@ export default function GoogleMapContainer({
           onOpenKeyModal={() => setShowKeyModal(true)}
           onSwitchToGoogleMaps={apiKey ? () => {
             if (typeof window !== 'undefined') {
+              localStorage.setItem('prospaces_force_google_maps', 'true');
               (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
               try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
             }
@@ -632,7 +605,12 @@ export default function GoogleMapContainer({
               </button>
               <button
                 type="button"
-                onClick={() => setUseBuiltInMap(true)}
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('prospaces_force_google_maps');
+                  }
+                  setUseBuiltInMap(true);
+                }}
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
               >
                 Switch to Built-In Map

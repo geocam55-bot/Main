@@ -469,40 +469,32 @@ export default function TelematicsMapView({
     return true;
   });
 
-  // Runtime fallback to load Google Maps key from tenant defaults
   useEffect(() => {
-    if (!apiKey) {
-      setIsLoadingKey(true);
-      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
-      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
-      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+    setIsLoadingKey(true);
+    const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+    const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+    const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
 
-      fetch(url)
-        .then(r => r.json())
-        .then(d => {
-          const k = d.key || d.apiKey;
-          if (k && k !== 'YOUR_API_KEY' && k.trim().length > 5) {
-            const cleanKey = k.trim();
-            setApiKey(cleanKey);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
-              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
-            }
-            if (d.isDevelopmentMode || d.billingEnabled === false) {
-              setMapAuthError(true);
-            }
+    fetch(url)
+      .then(r => r.json())
+      .then(d => {
+        const k = d.key || d.apiKey;
+        if (k && k !== 'YOUR_API_KEY' && k.trim().length > 5) {
+          const cleanKey = k.trim();
+          setApiKey(cleanKey);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+            (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
           }
-        })
-        .catch(err => {
-          console.warn('[TelematicsMapView] Maps key fetch notice:', err);
-        })
-        .finally(() => {
-          setIsLoadingKey(false);
-        });
-    } else {
-      setIsLoadingKey(false);
-    }
-  }, [apiKey]);
+        }
+      })
+      .catch(err => {
+        console.warn('[TelematicsMapView] Maps key fetch notice:', err);
+      })
+      .finally(() => {
+        setIsLoadingKey(false);
+      });
+  }, []);
 
   const [mapTypeId, setMapTypeId] = useState<string>('roadmap');
   const [showTraffic, setShowTraffic] = useState<boolean>(false);

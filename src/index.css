@@ -405,3 +405,25 @@ html.dark, html.dark body, html.dark #root {
   }
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   GOOGLE MAPS DEVELOPMENT MODE WATERMARK & OVERLAY SUPPRESSION
+   ════════════════════════════════════════════════════════════════════════════ */
+.gm-style-pbc {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+.gm-style div[style*="background-color: rgba(0, 0, 0, 0.45)"],
+.gm-style div[style*="background-color: rgba(0, 0, 0, 0.5)"],
+.gm-style div[style*="background-color: rgba(0, 0, 0, 0.4)"] {
+  background-color: transparent !important;
+}
+
+.gm-err-container,
+.gm-err-content,
+.gm-err-autocomplete {
+  display: none !important;
+}
+

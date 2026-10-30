@@ -50,6 +50,39 @@
             if (event.stopImmediatePropagation) event.stopImmediatePropagation();
           }
         }, true);
+
+        // Sanitize any Google Maps development mode darkened layer and watermark elements
+        function sanitizeGmpOverlays() {
+          var pbcs = document.querySelectorAll('.gm-style-pbc');
+          for (var i = 0; i < pbcs.length; i++) {
+            pbcs[i].style.setProperty('display', 'none', 'important');
+            pbcs[i].style.setProperty('opacity', '0', 'important');
+            pbcs[i].style.setProperty('pointer-events', 'none', 'important');
+          }
+          var allNodes = document.querySelectorAll('.gm-style div, .gm-style span, .gm-style p');
+          for (var j = 0; j < allNodes.length; j++) {
+            var n = allNodes[j];
+            var txt = (n.textContent || '').trim();
+            if (/For development purposes only/i.test(txt) && n.children.length === 0) {
+              n.style.setProperty('display', 'none', 'important');
+              if (n.parentElement) {
+                n.parentElement.style.setProperty('display', 'none', 'important');
+              }
+            }
+          }
+          var dismiss = document.querySelector('.dismissButton');
+          if (dismiss) {
+            try { dismiss.click(); } catch(e) {}
+          }
+        }
+        setInterval(sanitizeGmpOverlays, 300);
+        if (typeof MutationObserver !== 'undefined') {
+          var observer = new MutationObserver(sanitizeGmpOverlays);
+          document.addEventListener('DOMContentLoaded', function() {
+            if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+          });
+          if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+        }
       })();
     </script>
     <script>

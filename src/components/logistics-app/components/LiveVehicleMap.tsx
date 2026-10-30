@@ -392,30 +392,25 @@ export default function LiveVehicleMap({
 
   // Runtime key fetch fallback from tenant defaults
   useEffect(() => {
-    if (!apiKey) {
-      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
-      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
-      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+    const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+    const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+    const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
 
-      fetch(url)
-        .then(r => r.json())
-        .then(d => {
-          const k = d.key || d.apiKey;
-          if (k && k !== 'YOUR_API_KEY' && k.trim().length > 5) {
-            const cleanKey = k.trim();
-            setApiKey(cleanKey);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
-              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
-            }
-            if (d.isDevelopmentMode || d.billingEnabled === false) {
-              setMapAuthError(true);
-            }
+    fetch(url)
+      .then(r => r.json())
+      .then(d => {
+        const k = d.key || d.apiKey;
+        if (k && k !== 'YOUR_API_KEY' && k.trim().length > 5) {
+          const cleanKey = k.trim();
+          setApiKey(cleanKey);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+            (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
           }
-        })
-        .catch(() => {});
-    }
-  }, [apiKey]);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [inputKey, setInputKey] = useState<string>('');

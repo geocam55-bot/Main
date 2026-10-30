@@ -268,55 +268,52 @@ export default function StandaloneFleetMap({
           TOP BILLING NOT ENABLED DIAGNOSIS & REMEDIATION BANNER
           ══════════════════════════════════════════════════════════════════════ */}
       {(mapAuthError || isDevelopmentMode) && (
-        <div className="absolute top-3 inset-x-3 z-30 bg-amber-950/95 backdrop-blur-md border border-amber-500/70 text-amber-100 text-xs p-3.5 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in select-text">
+        <div className="absolute top-3 inset-x-3 z-30 bg-slate-900/95 backdrop-blur-md border border-slate-700 text-slate-100 text-xs p-3.5 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in select-text">
           <div className="flex items-start sm:items-center gap-2.5">
-            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5 sm:mt-0" />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-white text-sm">Google Maps Development Mode Detected</span>
-                <span className="px-2 py-0.5 rounded-md bg-amber-900/90 text-amber-300 font-mono text-[10.5px] font-bold border border-amber-700/60">
-                  "For development purposes only"
+                <span className="font-bold text-white text-sm">Google Maps API Key Connected</span>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-700/60">
+                  Supabase System Variables: Active
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-blue-950 text-blue-300 font-mono text-[10px] font-bold border border-blue-700/60">
-                  Key Connected from Supabase
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-700/60">
-                  Clean Canvas Active
+                  Clean Built-In Canvas
                 </span>
               </div>
-              <p className="text-amber-200/90 text-xs mt-1 leading-relaxed">
-                The Google Maps API key stored in your Supabase database (<code className="text-amber-300 font-mono text-[11px]">tenant_env_vars</code>) is connected and active. However, Google Cloud places keys in <strong>Development Mode</strong> with watermarks until an active billing account is linked to the Google Cloud project. Google includes a <strong>$200/month recurring free credit</strong> (28,500 free map loads every month).
+              <p className="text-slate-300 text-xs mt-1 leading-relaxed">
+                Your Google Maps API key from the Supabase System Variables (<code className="text-blue-300 font-mono text-[11px]">app_env_vars</code>) is connected. You are viewing the clean Built-In Fleet Canvas. You can preview Google Maps tiles below or link billing in Google Cloud for Google's $200/mo free credit.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+            {onSwitchToGoogleMaps && (
+              <button
+                type="button"
+                onClick={onSwitchToGoogleMaps}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+                title="Preview Google Maps tiles"
+              >
+                Preview Google Maps
+              </button>
+            )}
             <a
               href="https://console.cloud.google.com/project/_/billing/enable"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition-colors border border-slate-700 flex items-center gap-1.5 cursor-pointer"
             >
-              <span>Enable Billing in Google Cloud ↗</span>
+              <span>Google Cloud Billing ↗</span>
             </a>
             {onRecheckBilling && (
               <button
                 type="button"
                 onClick={onRecheckBilling}
                 disabled={isCheckingBilling}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs transition-colors border border-slate-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition-colors border border-slate-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw className={`h-3 w-3 ${isCheckingBilling ? 'animate-spin text-blue-400' : ''}`} />
-                <span>{isCheckingBilling ? 'Checking...' : 'Recheck Status'}</span>
-              </button>
-            )}
-            {onSwitchToGoogleMaps && (
-              <button
-                type="button"
-                onClick={onSwitchToGoogleMaps}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold rounded-xl text-xs transition-colors border border-slate-700 cursor-pointer"
-                title="Preview with Google Maps development watermark"
-              >
-                Preview Google Maps
+                <span>{isCheckingBilling ? 'Checking...' : 'Recheck'}</span>
               </button>
             )}
             {onOpenKeyModal && (
