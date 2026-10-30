@@ -380,23 +380,37 @@ export default function LiveVehicleMap({
 
   // API Key handling
   const [apiKey, setApiKey] = useState<string>(() => {
-    if (GOOGLE_MAPS_KEY_ENV && GOOGLE_MAPS_KEY_ENV !== 'YOUR_API_KEY') return GOOGLE_MAPS_KEY_ENV;
     if (typeof window !== 'undefined') {
+      const winKey = (window as any).GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+      if (winKey && winKey !== 'YOUR_API_KEY') return winKey;
       const stored = localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY');
       if (stored && stored !== 'YOUR_API_KEY') return stored;
     }
+    if (GOOGLE_MAPS_KEY_ENV && GOOGLE_MAPS_KEY_ENV !== 'YOUR_API_KEY') return GOOGLE_MAPS_KEY_ENV;
     return '';
   });
 
-  // Runtime key fetch fallback
+  // Runtime key fetch fallback from tenant defaults
   useEffect(() => {
     if (!apiKey) {
-      fetch('/api/maps-key')
+      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+
+      fetch(url)
         .then(r => r.json())
         .then(d => {
           const k = d.key || d.apiKey;
-          if (k && k !== 'YOUR_API_KEY') {
-            setApiKey(k);
+          if (k && k !== 'YOUR_API_KEY' && k.trim().length > 5) {
+            const cleanKey = k.trim();
+            setApiKey(cleanKey);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
+            }
+            if (d.isDevelopmentMode || d.billingEnabled === false) {
+              setMapAuthError(true);
+            }
           }
         })
         .catch(() => {});
@@ -405,6 +419,33 @@ export default function LiveVehicleMap({
 
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [inputKey, setInputKey] = useState<string>('');
+  const [mapAuthError, setMapAuthError] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      if ((window as any).GOOGLE_MAPS_BILLING_ERROR) return true;
+      try {
+        if (sessionStorage.getItem('gmp_billing_error') === 'true') return true;
+      } catch (e) {}
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const originalAuthFailure = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.warn('[LiveVehicleMap] gm_authFailure triggered');
+      if (typeof window !== 'undefined') {
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = true;
+        try { sessionStorage.setItem('gmp_billing_error', 'true'); } catch (e) {}
+      }
+      setMapAuthError(true);
+      if (typeof originalAuthFailure === 'function') {
+        originalAuthFailure();
+      }
+    };
+    return () => {
+      (window as any).gm_authFailure = originalAuthFailure;
+    };
+  }, []);
 
   // Save manual key to localStorage
   const handleSaveApiKey = (e: React.FormEvent) => {
@@ -413,8 +454,12 @@ export default function LiveVehicleMap({
     if (clean) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', clean);
+        (window as any).GOOGLE_MAPS_PLATFORM_KEY = clean;
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
+        try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
       }
       setApiKey(clean);
+      setMapAuthError(false);
       setShowKeyModal(false);
     }
   };
@@ -689,6 +734,51 @@ export default function LiveVehicleMap({
                 />
               ))}
             </Map>
+
+            {/* Top Billing / Referrer Error Notification Banner */}
+            {mapAuthError && (
+              <div className="absolute top-3 inset-x-3 z-30 bg-amber-950/95 backdrop-blur-md border border-amber-500/70 text-amber-100 text-xs p-3.5 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in select-text">
+                <div className="flex items-start sm:items-center gap-2.5">
+                  <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-white text-sm">Google Maps Billing Not Enabled</span>
+                      <span className="px-2 py-0.5 rounded-md bg-amber-900/90 text-amber-300 font-mono text-[10.5px] font-bold border border-amber-700/60">
+                        BillingNotEnabledMapError
+                      </span>
+                    </div>
+                    <p className="text-amber-200/90 text-xs mt-1 leading-relaxed">
+                      Your Google Maps API key from Supabase is loaded, but Google Cloud requires a billing account linked to this project ($200 monthly free credit).
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+                  <a
+                    href="https://console.cloud.google.com/project/_/billing/enable"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <span>Enable Billing ↗</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyModal(true)}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition-colors border border-slate-700 cursor-pointer"
+                  >
+                    Change Key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapAuthError(false)}
+                    className="p-1.5 text-amber-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                    title="Dismiss notice"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </APIProvider>
         ) : (
           /* Fallback: Interactive Map Interface when API Key is pending */

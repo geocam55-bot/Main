@@ -2461,6 +2461,12 @@ async function startServer() {
       const cleanKey = String(key).trim().toUpperCase();
       const cleanVal = String(value);
 
+      if (cleanKey.includes('MAPS') || cleanKey.includes('GOOGLE_MAPS')) {
+        process.env.GOOGLE_MAPS_PLATFORM_KEY = cleanVal;
+        process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY = cleanVal;
+        process.env.GOOGLE_MAPS_API_KEY = cleanVal;
+      }
+
       if (scope === 'tenant') {
         const orgId = organizationId || 'default_org';
         const { error } = await supabase

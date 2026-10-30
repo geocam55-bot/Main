@@ -449,26 +449,58 @@ export default function TelematicsMapView({
   viewingTripsFor
 }: TelematicsMapViewProps) {
   const [apiKey, setApiKey] = useState<string>(() => {
-    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') return API_KEY_STATIC;
     if (typeof window !== 'undefined') {
+      const winKey = (window as any).GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+      if (winKey && winKey !== 'YOUR_API_KEY') return winKey;
       const stored = localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY');
       if (stored && stored !== 'YOUR_API_KEY') return stored;
     }
+    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') return API_KEY_STATIC;
     return '';
   });
+  const [isLoadingKey, setIsLoadingKey] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const winKey = (window as any).GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+      if (winKey && winKey !== 'YOUR_API_KEY') return false;
+      const stored = localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY');
+      if (stored && stored !== 'YOUR_API_KEY') return false;
+    }
+    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') return false;
+    return true;
+  });
 
-  // Runtime fallback if key was not static at compile time
+  // Runtime fallback to load Google Maps key from tenant defaults
   useEffect(() => {
     if (!apiKey) {
-      fetch('/api/maps-key')
+      setIsLoadingKey(true);
+      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+
+      fetch(url)
         .then(r => r.json())
         .then(d => {
           const k = d.key || d.apiKey;
-          if (k && k !== 'YOUR_API_KEY') {
-            setApiKey(k);
+          if (k && k !== 'YOUR_API_KEY' && k.trim().length > 5) {
+            const cleanKey = k.trim();
+            setApiKey(cleanKey);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
+            }
+            if (d.isDevelopmentMode || d.billingEnabled === false) {
+              setMapAuthError(true);
+            }
           }
         })
-        .catch(() => {});
+        .catch(err => {
+          console.warn('[TelematicsMapView] Maps key fetch notice:', err);
+        })
+        .finally(() => {
+          setIsLoadingKey(false);
+        });
+    } else {
+      setIsLoadingKey(false);
     }
   }, [apiKey]);
 
@@ -479,13 +511,25 @@ export default function TelematicsMapView({
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [manualKeyInput, setManualKeyInput] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
-  const [mapAuthError, setMapAuthError] = useState<boolean>(false);
+  const [mapAuthError, setMapAuthError] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      if ((window as any).GOOGLE_MAPS_BILLING_ERROR) return true;
+      try {
+        if (sessionStorage.getItem('gmp_billing_error') === 'true') return true;
+      } catch (e) {}
+    }
+    return false;
+  });
 
   // Detect Google Maps Authentication Failure (e.g. ApiProjectMapError or Referrer restrictions)
   useEffect(() => {
     const originalAuthFailure = (window as any).gm_authFailure;
     (window as any).gm_authFailure = () => {
       console.warn('[Google Maps] gm_authFailure triggered');
+      if (typeof window !== 'undefined') {
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = true;
+        try { sessionStorage.setItem('gmp_billing_error', 'true'); } catch (e) {}
+      }
       setMapAuthError(true);
       if (typeof originalAuthFailure === 'function') {
         originalAuthFailure();
@@ -512,8 +556,12 @@ export default function TelematicsMapView({
     if (trimmed) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', trimmed);
+        (window as any).GOOGLE_MAPS_PLATFORM_KEY = trimmed;
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
+        try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
       }
       setApiKey(trimmed);
+      setMapAuthError(false);
       setShowKeyModal(false);
     }
   };
@@ -603,15 +651,40 @@ export default function TelematicsMapView({
         </div>
       )}
 
-      <APIProvider 
-        apiKey={apiKey} 
-        version="weekly"
-        onError={(err) => {
-          console.warn('[Google Maps] APIProvider error:', err);
-          setMapAuthError(true);
-        }}
-      >
-        <div className="relative w-full h-full flex-1">
+      {isLoadingKey ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900 text-slate-300">
+          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="text-xs font-semibold text-slate-300">Loading Google Maps Telematics canvas...</p>
+          <p className="text-[11px] text-slate-500 mt-1">Syncing API key from tenant defaults...</p>
+        </div>
+      ) : !apiKey ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900 text-slate-300 text-center">
+          <div className="max-w-md w-full bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+            <div className="h-10 w-10 mx-auto rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+              <Key className="h-5 w-5" />
+            </div>
+            <h3 className="text-base font-bold text-white">Google Maps API Key Required</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Google Maps key was not found in your tenant defaults. Enter a key below or save it in Tenant Variables.
+            </p>
+            <button
+              onClick={() => setShowKeyModal(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Configure Google Maps Key
+            </button>
+          </div>
+        </div>
+      ) : (
+        <APIProvider 
+          apiKey={apiKey} 
+          version="weekly"
+          onError={(err) => {
+            console.warn('[Google Maps] APIProvider error:', err);
+            setMapAuthError(true);
+          }}
+        >
+          <div className="relative w-full h-full flex-1">
           <Map
             defaultCenter={REGIONAL_CENTER}
             defaultZoom={12}
@@ -907,27 +980,34 @@ export default function TelematicsMapView({
             </div>
           </div>
 
-          {/* ── Key Auth / Referrer Error Notification ── */}
+          {/* ── Key Auth / Billing / Referrer Error Notification ── */}
           {mapAuthError && (
-            <div className="absolute top-14 inset-x-3 z-30 bg-amber-950/95 backdrop-blur-md border border-amber-500/70 text-amber-100 text-xs p-3 rounded-xl shadow-xl flex items-center justify-between gap-3 animate-in fade-in select-text">
-              <div className="flex items-center gap-2.5">
-                <AlertCircle className="h-4.5 w-4.5 text-amber-400 shrink-0" />
+            <div className="absolute top-14 inset-x-3 z-30 bg-amber-950/95 backdrop-blur-md border border-amber-500/70 text-amber-100 text-xs p-3 rounded-xl shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in select-text">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
                 <div>
-                  <span className="font-bold text-white">Google Maps Authorization Issue:</span>{' '}
-                  <span className="text-amber-200 text-[11.5px]">
-                    The key was supplied from your environment/Vercel. If your key has HTTP Referrer Restrictions in Google Cloud, add{' '}
-                    <code className="bg-amber-900/80 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300 border border-amber-700/50">
-                      {typeof window !== 'undefined' ? `${window.location.origin}/*` : '*.run.app/*'}
-                    </code>{' '}
-                    to the Google Cloud Console allowed referrers.
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-white">Google Maps Billing Not Enabled</span>
+                    <span className="px-1.5 py-0.5 rounded bg-amber-900/80 text-amber-300 font-mono text-[10px] font-bold border border-amber-700/60">BillingNotEnabledMapError</span>
+                  </div>
+                  <p className="text-amber-200 text-[11.5px] mt-0.5 leading-relaxed">
+                    Your Google Maps API key from the database was loaded, but the associated Google Cloud project requires a billing account to be linked. Google provides $200 free credit monthly.
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <a
+                  href="https://console.cloud.google.com/project/_/billing/enable"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Enable Billing ↗</span>
+                </a>
                 <button
                   type="button"
                   onClick={() => setShowKeyModal(true)}
-                  className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs transition-colors cursor-pointer"
                 >
                   Change Key
                 </button>
@@ -944,6 +1024,7 @@ export default function TelematicsMapView({
           )}
         </div>
       </APIProvider>
+      )}
     </div>
   );
 }

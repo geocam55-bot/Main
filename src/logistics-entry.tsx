@@ -103,6 +103,23 @@ function LogisticsEntryApp() {
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handleResize);
+
+    const fetchMapsKey = async () => {
+      try {
+        const storedTenant = localStorage.getItem('prospaces_active_tenant');
+        const tenantId = storedTenant ? (JSON.parse(storedTenant).id || '') : '';
+        const res = await fetch(tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key');
+        if (res.ok) {
+          const d = await res.json();
+          if (d?.key && typeof d.key === 'string' && d.key.trim().length > 5) {
+            localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', d.key.trim());
+            (window as any).GOOGLE_MAPS_PLATFORM_KEY = d.key.trim();
+          }
+        }
+      } catch {}
+    };
+    fetchMapsKey();
+
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 

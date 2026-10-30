@@ -1947,21 +1947,159 @@ app.use((req, res, next) => {
     });
   });
 
-  app.get("/api/maps-key", (req, res) => {
-    const rawKey =
-      process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-      process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-      process.env.GOOGLE_MAPS_API_KEY ||
-      process.env.VITE_GOOGLE_MAPS_API_KEY ||
-      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-      process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
-      process.env.GOOGLE_MAP_KEY ||
-      process.env.MAPS_API_KEY ||
-      "";
-    res.json({
-      key: rawKey.trim()
-    });
-  });
+  const handleMapsKeyRequest = async (req: express.Request, res: express.Response) => {
+    try {
+      const requestedTenantId = (req.query.tenantId || req.query.organizationId || req.headers['x-tenant-id'] || '').toString().trim();
+      let key = "";
+      let source = "none";
+
+      const supabase = getSupabase(req, true);
+      if (supabase) {
+        const targetKeys = ['GOOGLE_MAPS_PLATFORM_KEY', 'GOOGLE_MAPS_API_KEY', 'VITE_GOOGLE_MAPS_PLATFORM_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'MAPS_API_KEY', 'GOOGLE_MAP_KEY'];
+
+        // 1. If tenantId is specified, look in tenant_env_vars for this specific tenant / organization
+        if (requestedTenantId) {
+          const { data: directData } = await supabase
+            .from('tenant_env_vars')
+            .select('key, value')
+            .eq('organization_id', requestedTenantId)
+            .in('key', targetKeys);
+            
+          if (directData && directData.length > 0) {
+            const found = directData.find((d: any) => d.value && d.value.trim().length > 5);
+            if (found) {
+              key = found.value.trim();
+              source = `tenant_env_vars:${requestedTenantId}`;
+            }
+          }
+
+          // If requestedTenantId is 'rona_atlantic' or similar, also check known organization UUIDs like '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+          if (!key && (requestedTenantId === 'rona_atlantic' || requestedTenantId.toLowerCase().includes('rona'))) {
+            const { data: ronaData } = await supabase
+              .from('tenant_env_vars')
+              .select('key, value')
+              .eq('organization_id', '34638283-7b3d-47e2-bec8-a9e600e28c4a')
+              .in('key', targetKeys);
+              
+            if (ronaData && ronaData.length > 0) {
+              const found = ronaData.find((d: any) => d.value && d.value.trim().length > 5);
+              if (found) {
+                key = found.value.trim();
+                source = 'tenant_env_vars:rona_atlantic_uuid';
+              }
+            }
+          }
+        }
+
+        // 2. If still no key, check ANY configured row in tenant_env_vars that has a Google Maps key
+        if (!key) {
+          const { data: anyTenantData } = await supabase
+            .from('tenant_env_vars')
+            .select('organization_id, key, value')
+            .in('key', targetKeys)
+            .order('updated_at', { ascending: false });
+
+          if (anyTenantData && anyTenantData.length > 0) {
+            const found = anyTenantData.find((d: any) => d.value && d.value.trim().length > 5);
+            if (found) {
+              key = found.value.trim();
+              source = `tenant_env_vars:${found.organization_id}`;
+            }
+          }
+        }
+
+        // 3. If still no key, check app_env_vars table
+        if (!key) {
+          const { data: appData } = await supabase
+            .from('app_env_vars')
+            .select('key, value')
+            .in('key', targetKeys);
+
+          if (appData && appData.length > 0) {
+            const found = appData.find((d: any) => d.value && d.value.trim().length > 5);
+            if (found) {
+              key = found.value.trim();
+              source = 'app_env_vars';
+            }
+          }
+        }
+      }
+
+      // 4. Fallback to process.env
+      if (!key) {
+        const rawKey =
+          process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+          process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+          process.env.GOOGLE_MAPS_API_KEY ||
+          process.env.VITE_GOOGLE_MAPS_API_KEY ||
+          process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+          process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
+          process.env.GOOGLE_MAP_KEY ||
+          process.env.MAPS_API_KEY ||
+          "";
+        if (rawKey && rawKey.trim().length > 5) {
+          key = rawKey.trim();
+          source = 'process_env';
+        }
+      }
+
+      // Cache into memory for current process
+      if (key) {
+        process.env.GOOGLE_MAPS_PLATFORM_KEY = key;
+        process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY = key;
+        process.env.GOOGLE_MAPS_API_KEY = key;
+      }
+
+      // Check Google Maps billing status to diagnose development mode vs production mode
+      let isBillingEnabled = false;
+      let billingMessage = "";
+      if (key) {
+        try {
+          const testRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=Halifax&key=${encodeURIComponent(key)}`, {
+            signal: AbortSignal.timeout(4000)
+          });
+          const testData = await testRes.json();
+          if (testData.status === 'OK' || testData.status === 'ZERO_RESULTS') {
+            isBillingEnabled = true;
+            billingMessage = "Production Mode: Billing active & verified with Google Cloud.";
+          } else if (testData.status === 'REQUEST_DENIED' && /billing/i.test(testData.error_message || '')) {
+            isBillingEnabled = false;
+            billingMessage = "Development Mode: Google Cloud requires a billing account linked to this project to remove the 'For development purposes only' watermark ($200 free monthly credit included).";
+          } else {
+            isBillingEnabled = false;
+            billingMessage = testData.error_message || testData.status || "Unknown status";
+          }
+        } catch (e: any) {
+          billingMessage = "Verification timeout (defaulting to safe mode)";
+        }
+      }
+
+      return res.json({
+        success: true,
+        key: key || "",
+        source,
+        isDevelopmentMode: !isBillingEnabled,
+        billingEnabled: isBillingEnabled,
+        billingMessage,
+        billingEnableUrl: "https://console.cloud.google.com/project/_/billing/enable"
+      });
+    } catch (err: any) {
+      console.error("[/api/maps-key] error:", err);
+      const fallbackKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY || "").trim();
+      return res.json({
+        success: !!fallbackKey,
+        key: fallbackKey,
+        source: 'error_fallback',
+        isDevelopmentMode: true,
+        billingEnabled: false,
+        billingMessage: "Error resolving key from database",
+        billingEnableUrl: "https://console.cloud.google.com/project/_/billing/enable"
+      });
+    }
+  };
+
+  app.get("/api/maps-key", handleMapsKeyRequest);
+  app.get("/api/v1/maps-key", handleMapsKeyRequest);
 
   // Public DB diagnostics endpoint to compare dev/prod data counts
   app.get("/api/debug-db", async (req, res) => {

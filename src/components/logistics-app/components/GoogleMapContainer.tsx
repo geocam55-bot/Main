@@ -1,8 +1,35 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { Branch, DeliveryRecord, Truck, DeliveryStatus } from '../types';
-import { Activity, Settings, MapPin, Truck as TruckIcon, User, Clock, Users, MoreVertical, X, Car, Store as StoreIcon, Warehouse as WarehouseIcon, Building } from 'lucide-react';
+import { 
+  Activity, 
+  Settings, 
+  MapPin, 
+  Truck as TruckIcon, 
+  User, 
+  Clock, 
+  Users, 
+  MoreVertical, 
+  X, 
+  Car, 
+  Store as StoreIcon, 
+  Warehouse as WarehouseIcon, 
+  Building,
+  AlertCircle,
+  AlertTriangle,
+  ExternalLink,
+  ZoomIn,
+  ZoomOut,
+  LocateFixed,
+  Layers,
+  RefreshCw,
+  Check,
+  CheckCircle2,
+  Navigation2,
+  Key
+} from 'lucide-react';
 import { TeardropTruckMarker } from './TeardropTruckMarker';
+import StandaloneFleetMap from './StandaloneFleetMap';
 import { 
   getBranchCoordinates, 
   getDeliveryCoordinates, 
@@ -127,33 +154,89 @@ export default function GoogleMapContainer({
   setViewingTrackEventsTruckId,
 }: GoogleMapContainerProps) {
   const [apiKey, setApiKey] = useState<string>(() => {
-    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
-      return API_KEY_STATIC;
-    }
     if (typeof window !== 'undefined') {
+      const winKey = (window as any).GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+      if (winKey && winKey !== 'YOUR_API_KEY') return winKey;
       const stored = localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY');
       if (stored && stored !== 'YOUR_API_KEY') {
         return stored;
       }
     }
+    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
+      return API_KEY_STATIC;
+    }
     return '';
   });
   const [isLoadingKey, setIsLoadingKey] = useState<boolean>(() => {
-    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
-      return false;
-    }
     if (typeof window !== 'undefined') {
+      const winKey = (window as any).GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+      if (winKey && winKey !== 'YOUR_API_KEY') return false;
       const stored = localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY');
       if (stored && stored !== 'YOUR_API_KEY') {
         return false;
       }
     }
+    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
+      return false;
+    }
     return true;
   });
-  const [mapAuthError, setMapAuthError] = useState<boolean>(false);
+  const [mapAuthError, setMapAuthError] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      if ((window as any).GOOGLE_MAPS_BILLING_ERROR) return true;
+      try {
+        if (sessionStorage.getItem('gmp_billing_error') === 'true') return true;
+      } catch (e) {}
+    }
+    return false;
+  });
+  const [useBuiltInMap, setUseBuiltInMap] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      if ((window as any).GOOGLE_MAPS_BILLING_ERROR) return true;
+      try {
+        if (sessionStorage.getItem('gmp_billing_error') === 'true') return true;
+      } catch (e) {}
+    }
+    return false;
+  });
+  const [dismissBanner, setDismissBanner] = useState<boolean>(false);
+  const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
+  const [manualKeyInput, setManualKeyInput] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [inputKey, setInputKey] = useState<string>('');
+  const [isDevelopmentMode, setIsDevelopmentMode] = useState<boolean>(true);
+  const [billingMessage, setBillingMessage] = useState<string>('');
+  const [isCheckingBilling, setIsCheckingBilling] = useState<boolean>(false);
+
+  const recheckBilling = async () => {
+    setIsCheckingBilling(true);
+    try {
+      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+      const url = `/api/maps-key?refresh=true${tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : ''}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data) {
+        if (data.billingEnabled) {
+          setIsDevelopmentMode(false);
+          setMapAuthError(false);
+          setUseBuiltInMap(false);
+          if (typeof window !== 'undefined') {
+            (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
+            try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
+          }
+        } else {
+          setIsDevelopmentMode(true);
+          setBillingMessage(data.billingMessage || '');
+        }
+      }
+    } catch (e) {
+      console.warn('Billing check notice:', e);
+    } finally {
+      setIsCheckingBilling(false);
+    }
+  };
 
   const handleSaveKey = (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,20 +244,30 @@ export default function GoogleMapContainer({
     if (trimmed) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', trimmed);
+        (window as any).GOOGLE_MAPS_PLATFORM_KEY = trimmed;
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
+        try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
       }
       setApiKey(trimmed);
       setMapAuthError(false);
+      setUseBuiltInMap(false);
+      recheckBilling();
     }
   };
 
   useEffect(() => {
     let info = `Static key: ${API_KEY_STATIC ? 'Found (len ' + API_KEY_STATIC.length + ')' : 'None'}\n`;
-    info += `Global key: ${(globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ? 'Found (len ' + (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY.length + ')' : 'None'}\n`;
+    const globalKey = (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY || (typeof window !== 'undefined' ? (window as any).GOOGLE_MAPS_PLATFORM_KEY : '');
+    info += `Global key: ${globalKey ? 'Found (len ' + globalKey.length + ')' : 'None'}\n`;
     
     if (!apiKey) {
-      info += `Fetching from /api/maps-key...\n`;
+      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+
+      info += `Fetching from ${url} (tenant: ${tenantId || 'default'})...\n`;
       setDebugInfo(info);
-      fetch('/api/maps-key')
+      fetch(url)
         .then(res => {
           info += `Fetch status: ${res.status} ${res.statusText}\n`;
           setDebugInfo(info);
@@ -182,9 +275,28 @@ export default function GoogleMapContainer({
         })
         .then(data => {
           info += `JSON received: ${data ? JSON.stringify(data).substring(0, 50) : 'none'}\n`;
-          if (data?.key && data.key !== 'YOUR_API_KEY') {
-            setApiKey(data.key);
-            info += `Successfully set API key!\n`;
+          if (data?.key && data.key !== 'YOUR_API_KEY' && data.key.trim().length > 5) {
+            const cleanKey = data.key.trim();
+            setApiKey(cleanKey);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
+            }
+            if (data.isDevelopmentMode || data.billingEnabled === false) {
+              setIsDevelopmentMode(true);
+              setBillingMessage(data.billingMessage || '');
+              setUseBuiltInMap(true);
+              setMapAuthError(true);
+              if (typeof window !== 'undefined') {
+                (window as any).GOOGLE_MAPS_BILLING_ERROR = true;
+                try { sessionStorage.setItem('gmp_billing_error', 'true'); } catch (e) {}
+              }
+              info += `Key loaded from ${data.source}: Development Mode detected (Google Cloud billing pending).\n`;
+            } else {
+              setIsDevelopmentMode(false);
+              setMapAuthError(false);
+              info += `Successfully set API key from ${data.source || 'tenant defaults'} (Production Mode)!\n`;
+            }
           } else {
             info += `API key is missing or is placeholder in response\n`;
           }
@@ -202,14 +314,35 @@ export default function GoogleMapContainer({
       info += `API Key active: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}\n`;
       setDebugInfo(info);
       setIsLoadingKey(false);
+      // Validate billing in background
+      fetch('/api/maps-key')
+        .then(r => r.json())
+        .then(d => {
+          if (d && (d.isDevelopmentMode || d.billingEnabled === false)) {
+            setIsDevelopmentMode(true);
+            setBillingMessage(d.billingMessage || '');
+            setUseBuiltInMap(true);
+            setMapAuthError(true);
+          } else if (d && d.billingEnabled) {
+            setIsDevelopmentMode(false);
+            setMapAuthError(false);
+          }
+        })
+        .catch(() => {});
     }
   }, [apiKey]);
 
   useEffect(() => {
     const originalAuthFailure = (window as any).gm_authFailure;
     (window as any).gm_authFailure = () => {
+      console.warn('[Google Maps] gm_authFailure triggered: auto-switching to Built-In Fleet Canvas');
+      if (typeof window !== 'undefined') {
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = true;
+        try { sessionStorage.setItem('gmp_billing_error', 'true'); } catch (e) {}
+      }
       setMapAuthError(true);
-      if (originalAuthFailure) {
+      setUseBuiltInMap(true);
+      if (typeof originalAuthFailure === 'function') {
         originalAuthFailure();
       }
     };
@@ -237,15 +370,34 @@ export default function GoogleMapContainer({
     );
   }
 
-  if (!apiKey) {
+  if (!apiKey && !useBuiltInMap) {
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[400px] p-6 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 text-center font-sans overflow-y-auto">
         <div className="max-w-md w-full space-y-5 my-auto">
           <div className="space-y-2">
             <h2 className="text-xl font-bold text-amber-400">Google Maps API Key Required</h2>
             <p className="text-sm text-slate-300">
-              The Google Maps component requires a valid Maps API Key to load.
+              The Google Maps Platform component requires a valid Maps API Key, or you can run with the high-precision built-in fleet map.
             </p>
+          </div>
+
+          {/* Quick Launch Built-in Map */}
+          <div className="p-4 bg-blue-600/10 border border-blue-500/30 rounded-2xl text-left space-y-2.5">
+            <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
+              <Layers className="h-4 w-4" />
+              <span>Instant Built-In Fleet Canvas</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Track live trucks, view stores, and monitor active orders immediately without configuring an external Google Maps API key.
+            </p>
+            <button
+              type="button"
+              onClick={() => setUseBuiltInMap(true)}
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Activity className="h-4 w-4" />
+              <span>Launch Built-In Fleet Canvas (No Key Required)</span>
+            </button>
           </div>
 
           {/* Option A: Manual Entry for Shared / Live Preview */}
@@ -255,7 +407,7 @@ export default function GoogleMapContainer({
               <p className="text-sm font-semibold text-white">For Shared / Live Builds (Quick Access):</p>
             </div>
             <p className="text-xs text-slate-400 leading-normal">
-              Because AI Studio environment secrets are kept secure and hidden on public Shared/Live builds, you can paste your Google Maps API key here. It is saved only in your local browser storage:
+              Paste your Google Maps API key here to enable native Google Maps tiles. It is saved in your browser storage:
             </p>
             <form onSubmit={handleSaveKey} className="flex gap-2">
               <input
@@ -303,44 +455,116 @@ export default function GoogleMapContainer({
     );
   }
 
-  if (mapAuthError) {
+  // When Built-In Map is selected (or after Google Maps auth/billing failure)
+  if (useBuiltInMap) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[400px] p-6 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 text-center font-sans overflow-y-auto">
-        <div className="max-w-md space-y-4 my-auto">
-          <div className="inline-flex p-3 bg-red-500/10 rounded-full text-red-400 mb-1">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-red-400">Google Maps Authorization Failed</h2>
-          <p className="text-sm text-slate-300">
-            Your Google Maps API Key was loaded, but the API request was rejected because of **HTTP Referrer Restrictions** (<code>RefererNotAllowedMapError</code>).
-          </p>
-          
-          <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-left space-y-3">
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">How to Resolve This:</p>
-            <ol className="text-xs text-slate-300 space-y-2 list-decimal pl-4">
-              <li>Open the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Google Cloud Console Credentials Page</a>.</li>
-              <li>Click on your API key to open its settings.</li>
-              <li>Under <strong>Website restrictions</strong>, either select <strong>None</strong> (recommended for easy development testing), or authorize this workspace domain:</li>
-            </ol>
-            
-            <div className="flex items-center gap-2 bg-slate-900 px-3 py-2 rounded border border-slate-800">
-              <code className="text-emerald-400 text-[11px] font-mono select-all truncate flex-1">
-                {typeof window !== 'undefined' ? window.location.origin : ''}/*
-              </code>
-              <button
-                onClick={handleCopyUrl}
-                className="px-2.5 py-1 text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded text-slate-200 transition-colors shrink-0"
+      <div className="relative w-full h-full">
+        {/* Key Input Modal */}
+        {showKeyModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-white space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="h-9 w-9 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <Key className="h-4 w-4" />
+                  </div>
+                  <h4 className="text-sm font-black">Google Maps Platform Key</h4>
+                </div>
+                <button
+                  onClick={() => setShowKeyModal(false)}
+                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Enter an active Google Maps Platform API key with Maps JavaScript API and billing enabled.
+              </p>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const trimmed = manualKeyInput.trim();
+                  if (trimmed) {
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', trimmed);
+                      (window as any).GOOGLE_MAPS_PLATFORM_KEY = trimmed;
+                    }
+                    setApiKey(trimmed);
+                    setMapAuthError(false);
+                    setUseBuiltInMap(false);
+                    setShowKeyModal(false);
+                  }
+                }}
+                className="space-y-3"
               >
-                {copied ? 'Copied! ✅' : 'Copy'}
-              </button>
+                <input
+                  type="text"
+                  value={manualKeyInput}
+                  onChange={(e) => setManualKeyInput(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Save API Key
+                  </button>
+                  {apiKey && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem('GOOGLE_MAPS_PLATFORM_KEY');
+                        setApiKey('');
+                        setMapAuthError(false);
+                        setShowKeyModal(false);
+                      }}
+                      className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </form>
             </div>
-            <p className="text-[10px] text-slate-500 leading-normal">
-              Remember to append the wildcard <code>/*</code> to the URL in Google Cloud Console. Note that Google Maps updates may take up to 5 minutes to propagate.
-            </p>
           </div>
-        </div>
+        )}
+
+        <StandaloneFleetMap
+          hqCoords={hqCoords}
+          activeBranches={activeBranches}
+          displayDeliveries={displayDeliveries}
+          displayTrucks={displayTrucks}
+          simProgress={simProgress}
+          selectedTrackTruckId={selectedTrackTruckId}
+          setSelectedTrackTruckId={setSelectedTrackTruckId}
+          isPlayingSimulation={isPlayingSimulation}
+          isWatchingGps={isWatchingGps}
+          mapTheme={mapTheme}
+          isTruckOnline={isTruckOnline}
+          setViewingDetailsTruckId={setViewingDetailsTruckId}
+          setViewingTripsTruckId={setViewingTripsTruckId}
+          viewingTrackEventsTruckId={viewingTrackEventsTruckId}
+          setViewingTrackEventsTruckId={setViewingTrackEventsTruckId}
+          onOpenKeyModal={() => setShowKeyModal(true)}
+          onSwitchToGoogleMaps={apiKey ? () => {
+            if (typeof window !== 'undefined') {
+              (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
+              try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
+            }
+            setMapAuthError(false);
+            setUseBuiltInMap(false);
+          } : undefined}
+          mapAuthError={mapAuthError && !dismissBanner}
+          onDismissAuthError={() => setDismissBanner(true)}
+          isDevelopmentMode={isDevelopmentMode}
+          onRecheckBilling={recheckBilling}
+          isCheckingBilling={isCheckingBilling}
+          billingMessage={billingMessage}
+        />
       </div>
     );
   }
@@ -368,6 +592,153 @@ export default function GoogleMapContainer({
   return (
     <APIProvider apiKey={apiKey} version="weekly">
       <div className="relative w-full h-full">
+        {/* Top Billing / Referrer Error Notification Banner in Google Maps View */}
+        {mapAuthError && !dismissBanner && (
+          <div className="absolute top-3 inset-x-3 z-30 bg-amber-950/95 backdrop-blur-md border border-amber-500/70 text-amber-100 text-xs p-3.5 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in select-text">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-white text-sm">Google Maps Billing Not Enabled</span>
+                  <span className="px-2 py-0.5 rounded-md bg-amber-900/90 text-amber-300 font-mono text-[10.5px] font-bold border border-amber-700/60">
+                    BillingNotEnabledMapError
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono text-[10px]">
+                    Key from Supabase
+                  </span>
+                </div>
+                <p className="text-amber-200/90 text-xs mt-1 leading-relaxed">
+                  Your Google Maps API key from Supabase is active, but Google Cloud requires a billing account linked to this project ($200 free credit monthly). You can enable billing, or switch to the Built-In Fleet Canvas to operate without interruption.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+              <a
+                href="https://console.cloud.google.com/project/_/billing/enable"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <span>Enable Billing ↗</span>
+              </a>
+              <button
+                type="button"
+                onClick={recheckBilling}
+                disabled={isCheckingBilling}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs transition-colors border border-slate-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3 w-3 ${isCheckingBilling ? 'animate-spin text-blue-400' : ''}`} />
+                <span>{isCheckingBilling ? 'Checking...' : 'Recheck Status'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseBuiltInMap(true)}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+              >
+                Switch to Built-In Map
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowKeyModal(true)}
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition-colors border border-slate-700 cursor-pointer"
+              >
+                Change Key
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissBanner(true)}
+                className="p-1.5 text-amber-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                title="Dismiss notice"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Key Configuration Modal in Google Maps Mode */}
+        {showKeyModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-white space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="h-9 w-9 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <Key className="h-4 w-4" />
+                  </div>
+                  <h4 className="text-sm font-black">Google Maps Platform Key</h4>
+                </div>
+                <button
+                  onClick={() => setShowKeyModal(false)}
+                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Save an active Google Maps Platform API key with Maps JavaScript API enabled.
+              </p>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const trimmed = manualKeyInput.trim();
+                  if (trimmed) {
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', trimmed);
+                      (window as any).GOOGLE_MAPS_PLATFORM_KEY = trimmed;
+                    }
+                    setApiKey(trimmed);
+                    setMapAuthError(false);
+                    setShowKeyModal(false);
+                  }
+                }}
+                className="space-y-3"
+              >
+                <input
+                  type="text"
+                  value={manualKeyInput}
+                  onChange={(e) => setManualKeyInput(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Save API Key
+                  </button>
+                  {apiKey && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem('GOOGLE_MAPS_PLATFORM_KEY');
+                        setApiKey('');
+                        setMapAuthError(false);
+                        setShowKeyModal(false);
+                      }}
+                      className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Floating Switch to Built-In Map Button */}
+        <button
+          onClick={() => setUseBuiltInMap(true)}
+          className="absolute bottom-16 right-3 z-10 px-3 py-1.5 text-xs font-bold bg-slate-900/95 border border-slate-700 hover:bg-slate-800 rounded-xl text-slate-200 hover:text-white transition-all cursor-pointer shadow-xl flex items-center gap-1.5"
+          title="Switch to Built-In High-Precision Fleet Canvas"
+        >
+          <Layers className="w-3.5 h-3.5 text-blue-400" />
+          <span>Built-In Canvas</span>
+        </button>
+
         {/* Floating Reset Key Button if key is from localStorage */}
         {typeof window !== 'undefined' && localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY') && (
           <button

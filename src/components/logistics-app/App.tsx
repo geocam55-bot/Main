@@ -2081,10 +2081,32 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         }
       }
     };
-    loadTenants();
-  }, []);
+        loadTenants();
+      }, []);
 
-  const handleAddTenant = async (newTenant: Tenant) => {
+      // Synchronize Google Maps API key from tenant defaults
+      useEffect(() => {
+        const syncTenantGoogleMapsKey = async () => {
+          try {
+            const activeTenantId = currentTenant?.id || 'rona_atlantic';
+            const res = await customFetch(`/api/maps-key?tenantId=${encodeURIComponent(activeTenantId)}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.key && typeof data.key === 'string' && data.key.trim().length > 5) {
+                const cleanKey = data.key.trim();
+                localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+                (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
+                console.info(`[ProSpaces Logistics] Synced Google Maps API key from tenant defaults (${data.source || 'tenant'})`);
+              }
+            }
+          } catch (e) {
+            console.warn("[ProSpaces Logistics] Notice syncing tenant Google Maps key:", e);
+          }
+        };
+        syncTenantGoogleMapsKey();
+      }, [currentTenant?.id]);
+
+      const handleAddTenant = async (newTenant: Tenant) => {
     let savedTenant = newTenant;
     try {
       const res = await customFetch("/api/tenants", {

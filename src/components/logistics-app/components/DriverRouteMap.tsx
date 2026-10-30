@@ -694,32 +694,44 @@ export default function DriverRouteMap({
   truckLocation: truckLocationProp,
 }: DriverRouteMapProps) {
   const [apiKey, setApiKey] = useState<string>(() => {
-    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
-      return API_KEY_STATIC;
-    }
     if (typeof window !== 'undefined') {
+      const winKey = (window as any).GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+      if (winKey && winKey !== 'YOUR_API_KEY') return winKey;
       const stored = localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY');
       if (stored && stored !== 'YOUR_API_KEY') {
         return stored;
       }
     }
+    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
+      return API_KEY_STATIC;
+    }
     return '';
   });
 
   const [isLoadingKey, setIsLoadingKey] = useState<boolean>(() => {
-    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
-      return false;
-    }
     if (typeof window !== 'undefined') {
+      const winKey = (window as any).GOOGLE_MAPS_PLATFORM_KEY || (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY;
+      if (winKey && winKey !== 'YOUR_API_KEY') return false;
       const stored = localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY');
       if (stored && stored !== 'YOUR_API_KEY') {
         return false;
       }
     }
+    if (API_KEY_STATIC && API_KEY_STATIC !== 'YOUR_API_KEY') {
+      return false;
+    }
     return true;
   });
 
-  const [mapAuthError, setMapAuthError] = useState<boolean>(false);
+  const [mapAuthError, setMapAuthError] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      if ((window as any).GOOGLE_MAPS_BILLING_ERROR) return true;
+      try {
+        if (sessionStorage.getItem('gmp_billing_error') === 'true') return true;
+      } catch (e) {}
+    }
+    return false;
+  });
   const [mapTypeId, setMapTypeId] = useState<string>('roadmap');
   const [manualKeyInput, setManualKeyInput] = useState<string>('');
   const [showKeyInputModal, setShowKeyInputModal] = useState<boolean>(false);
@@ -733,14 +745,23 @@ export default function DriverRouteMap({
     }
   }, [isLiveGpsActive]);
 
-  // Fallback key discovery & API endpoint lookup
+  // Fallback key discovery & API endpoint lookup from tenant defaults
   useEffect(() => {
     if (!apiKey) {
-      fetch('/api/maps-key')
+      const activeTenant = typeof window !== 'undefined' ? localStorage.getItem('prospaces_active_tenant') : null;
+      const tenantId = activeTenant ? (JSON.parse(activeTenant).id || '') : '';
+      const url = tenantId ? `/api/maps-key?tenantId=${encodeURIComponent(tenantId)}` : '/api/maps-key';
+
+      fetch(url)
         .then(res => res.json())
         .then(data => {
-          if (data?.key && data.key !== 'YOUR_API_KEY' && data.key.trim().length > 10) {
-            setApiKey(data.key.trim());
+          if (data?.key && data.key !== 'YOUR_API_KEY' && data.key.trim().length > 5) {
+            const cleanKey = data.key.trim();
+            setApiKey(cleanKey);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', cleanKey);
+              (window as any).GOOGLE_MAPS_PLATFORM_KEY = cleanKey;
+            }
           }
         })
         .catch(err => {
@@ -758,6 +779,10 @@ export default function DriverRouteMap({
   useEffect(() => {
     const originalAuthFailure = (window as any).gm_authFailure;
     (window as any).gm_authFailure = () => {
+      if (typeof window !== 'undefined') {
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = true;
+        try { sessionStorage.setItem('gmp_billing_error', 'true'); } catch (e) {}
+      }
       setMapAuthError(true);
       if (originalAuthFailure) {
         originalAuthFailure();
@@ -774,6 +799,9 @@ export default function DriverRouteMap({
     if (trimmed) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', trimmed);
+        (window as any).GOOGLE_MAPS_PLATFORM_KEY = trimmed;
+        (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
+        try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
       }
       setApiKey(trimmed);
       setMapAuthError(false);
@@ -784,6 +812,8 @@ export default function DriverRouteMap({
   const handleClearKey = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('GOOGLE_MAPS_PLATFORM_KEY');
+      (window as any).GOOGLE_MAPS_BILLING_ERROR = false;
+      try { sessionStorage.removeItem('gmp_billing_error'); } catch (e) {}
     }
     setApiKey('');
     setMapAuthError(false);
@@ -866,6 +896,35 @@ export default function DriverRouteMap({
                 )}
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Top Billing / Referrer Error Notification Banner */}
+      {mapAuthError && (
+        <div className="absolute top-14 inset-x-3 z-30 bg-amber-950/95 backdrop-blur-md border border-amber-500/70 text-amber-100 text-xs p-3 rounded-xl shadow-xl flex items-center justify-between gap-3 animate-in fade-in select-text">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+            <span className="text-[11px] leading-tight">
+              Google Maps billing is not active on this project (<code className="text-amber-300 font-mono text-[10px]">BillingNotEnabledMapError</code>). Running Built-in Navigator.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="https://console.cloud.google.com/project/_/billing/enable"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-[10px] transition-colors"
+            >
+              Enable Billing ↗
+            </a>
+            <button
+              type="button"
+              onClick={() => setMapAuthError(false)}
+              className="p-1 text-amber-400 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       )}
