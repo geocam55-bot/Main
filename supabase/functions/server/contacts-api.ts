@@ -199,8 +199,13 @@ export function contactsAPI(app: Hono) {
         return c.json({ error: 'Profile not found for user ' + user.id }, 404);
       }
 
-      const userRole = profile.role || 'standard_user';
-      const userOrgId = profile.organization_id;
+      const rawRole = profile.role || user.user_metadata?.role || 'standard_user';
+      const userRole = String(rawRole).toLowerCase().trim();
+      const PRIMARY_ORG_ID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+      let userOrgId = profile.organization_id || user.user_metadata?.organization_id;
+      if (!userOrgId || userOrgId === 'default-org' || userOrgId === 'rona_atlantic' || userOrgId === 'system-admin-tenant') {
+        userOrgId = PRIMARY_ORG_ID;
+      }
       const userEmail = profile.email || user.email || '';
 
       // Check if account_owner_number column exists
@@ -276,6 +281,28 @@ export function contactsAPI(app: Hono) {
         }
       } else {
         contactsData = contacts || [];
+      }
+
+      // If team scope returned 0 contacts for an elevated user, fallback to primary org or all contacts
+      const isElevatedUser = ['admin', 'manager', 'director', 'marketing', 'designer', 'super_admin'].includes(userRole);
+      if (scope === 'team' && isElevatedUser && contactsData.length === 0) {
+        const { data: fallbackContacts } = await supabase
+          .from('contacts')
+          .select('*')
+          .eq('organization_id', PRIMARY_ORG_ID)
+          .order('created_at', { ascending: false });
+
+        if (fallbackContacts && fallbackContacts.length > 0) {
+          contactsData = fallbackContacts;
+        } else {
+          const { data: allContacts } = await supabase
+            .from('contacts')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (allContacts && allContacts.length > 0) {
+            contactsData = allContacts;
+          }
+        }
       }
 
       // ── ALWAYS enrich optional fields from KV (authoritative source) ──

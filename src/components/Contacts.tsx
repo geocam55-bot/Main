@@ -19,7 +19,7 @@ import { createClient } from '../utils/supabase/client';
 import { getServerHeaders } from '../utils/server-headers';
 import type { User } from '../App';
 import { PermissionGate, PermissionButton } from './PermissionGate';
-import { canAdd, canChange, canDelete } from '../utils/permissions';
+import { canAdd, canChange, canDelete, getNormalizedRole } from '../utils/permissions';
 import { ContactDetail } from './ContactDetail';
 // import ImportExport from './ImportExport';
 import { useDebounce } from '../utils/useDebounce';
@@ -29,6 +29,9 @@ import { TagSelector } from './TagSelector';
 import { CustomFieldsRenderer } from './CustomFieldsRenderer';
 import { toast } from 'sonner';
 import { CustomerModuleHelp } from './CustomerModuleHelp';
+import { AttioSidePeekDrawer } from './attio/AttioSidePeekDrawer';
+import { AttioPipelineBoard } from './attio/AttioPipelineBoard';
+import { Columns3, LayoutGrid, Kanban, Sparkles, SlidersHorizontal } from 'lucide-react';
 
 interface Contact {
   id: string;
@@ -86,6 +89,11 @@ export function Contacts({ user }: ContactsProps) {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showContactDetail, setShowContactDetail] = useState(false);
   const [showImportExportWindow, setShowImportExportWindow] = useState(false);
+
+  // 🎯 Attio CRM UI States: Side Peek Drawer & View Mode (Table vs Pipeline)
+  const [viewLayout, setViewLayout] = useState<'table' | 'pipeline'>('table');
+  const [sidePeekContact, setSidePeekContact] = useState<Contact | null>(null);
+  const [isSidePeekOpen, setIsSidePeekOpen] = useState(false);
   
   // ⚡ Performance: Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -100,8 +108,10 @@ export function Contacts({ user }: ContactsProps) {
   const [ownershipFixResult, setOwnershipFixResult] = useState<string | null>(null);
 
   // Scope state – default to 'team' if user is elevated, else 'personal'
+  const normalizedUserRole = getNormalizedRole(user?.role, user?.email);
+  const isElevatedUser = ['admin', 'manager', 'director', 'marketing', 'designer', 'super_admin'].includes(normalizedUserRole);
   const [currentScope, setCurrentScope] = useState<'personal' | 'team'>(
-    ['admin', 'manager', 'director', 'marketing', 'designer', 'super_admin'].includes(user.role) ? 'team' : 'personal'
+    isElevatedUser ? 'team' : 'personal'
   );
   
   // Tags state
@@ -149,17 +159,28 @@ export function Contacts({ user }: ContactsProps) {
   });
   
   useEffect(() => {
-    loadContacts();
-  }, []);
+    const role = getNormalizedRole(user?.role, user?.email);
+    const elevated = ['admin', 'manager', 'director', 'marketing', 'designer', 'super_admin'].includes(role);
+    const initialScope = elevated ? 'team' : 'personal';
+    setCurrentScope(initialScope);
+    loadContacts(initialScope);
+  }, [user?.role, user?.email]);
 
-  const loadContacts = async (scopeToUse?: 'personal' | 'team') => {
+  const loadContacts = async (scopeToUse?: any) => {
     try {
       setIsLoading(true);
-      const activeScope = scopeToUse || currentScope;
+      const activeScope: 'personal' | 'team' =
+        scopeToUse === 'team' || scopeToUse === 'personal'
+          ? scopeToUse
+          : (currentScope === 'team' ? 'team' : 'personal');
+
       const [{ contacts: loadedContacts }, bidsResult, quotesResult] = await Promise.all([
-        contactsAPI.getAll(activeScope),
-        bidsAPI.getAll(activeScope),
-        quotesAPI.getAll(activeScope),
+        contactsAPI.getAll(activeScope).catch(err => {
+          console.warn('contactsAPI.getAll error:', err);
+          return { contacts: [] };
+        }),
+        bidsAPI.getAll(activeScope).catch(() => ({ bids: [] })),
+        quotesAPI.getAll(activeScope).catch(() => ({ quotes: [] })),
       ]);
 
       const validContacts = (loadedContacts || []).filter(Boolean);
@@ -291,6 +312,34 @@ export function Contacts({ user }: ContactsProps) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // 🎯 Attio Side Peek Drawer Opener
+  const openSidePeek = (contact: Contact) => {
+    setSidePeekContact(contact);
+    setIsSidePeekOpen(true);
+  };
+
+  // 🎯 Attio Quick Status Change (Stage updater)
+  const handleQuickStatusChange = async (contactId: string, newStatus: string) => {
+    try {
+      const existing = contacts.find(c => c.id === contactId);
+      if (!existing) return;
+
+      // Optimistic update
+      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, status: newStatus } : c));
+      if (sidePeekContact && sidePeekContact.id === contactId) {
+        setSidePeekContact(prev => prev ? { ...prev, status: newStatus } : null);
+      }
+
+      const { contact } = await contactsAPI.update(contactId, { ...existing, status: newStatus });
+      if (contact) {
+        toast.success(`Updated "${existing.name}" to ${newStatus}`);
+      }
+    } catch (err: any) {
+      toast.error(`Failed to update status: ${err?.message || 'Error'}`);
+      loadContacts();
+    }
+  };
+
   const openEditContact = (contact: Partial<Contact> | null) => {
     if (!contact) return;
     setEditingContact(contact as Contact);
@@ -416,7 +465,17 @@ export function Contacts({ user }: ContactsProps) {
       
       // Filter by tag or status
       if (selectedTagFilter && selectedTagFilter !== 'all') {
-        if (selectedTagFilter.startsWith('status:')) {
+        if (selectedTagFilter === 'vip') {
+          filtered = filtered.filter(contact => {
+            const notes = (contact?.notes || '').toLowerCase();
+            const tags = (contact?.tags || []).map((t: string) => t.toLowerCase());
+            const salesValue = Number(contact?.ytdSales ?? contact?.ptdSales ?? 0);
+            const dealVal = dealValueByContactId[contact.id] || 0;
+            return notes.includes('vip') || tags.some((t: string) => t.includes('vip')) || salesValue >= 25000 || dealVal >= 10000;
+          });
+        } else if (selectedTagFilter === 'trades') {
+          filtered = filtered.filter(contact => Boolean(contact?.trade && contact.trade.trim() !== ''));
+        } else if (selectedTagFilter.startsWith('status:')) {
           const status = selectedTagFilter.replace('status:', '');
           const searchStatus = status === 'Prospects' ? 'Prospect' : status;
           filtered = filtered.filter(contact => 
@@ -1457,7 +1516,7 @@ export function Contacts({ user }: ContactsProps) {
                 {isFixingOwnership ? 'Diagnosing & Fixing...' : 'Diagnose & Fix My Contacts'}
               </Button>
 
-              <Button onClick={loadContacts} variant="outline" className="flex items-center gap-2">
+              <Button onClick={() => loadContacts()} variant="outline" className="flex items-center gap-2">
                 <Search className="h-4 w-4" />
                 Reload Contacts
               </Button>
@@ -1547,9 +1606,12 @@ export function Contacts({ user }: ContactsProps) {
   }
 
   const contactsHeading = (() => {
+    if (viewLayout === 'pipeline') return 'Sales Pipeline Board';
+    if (selectedTagFilter === 'vip') return 'VIP Accounts';
+    if (selectedTagFilter === 'trades') return 'Contractors & Trades';
     if (selectedTagFilter === 'status:Active') return 'Active Contacts';
     if (selectedTagFilter === 'status:Inactive') return 'Inactive Contacts';
-    if (selectedTagFilter === 'status:Prospect') return 'Prospects';
+    if (selectedTagFilter === 'status:Prospect') return 'Prospects & Warm Leads';
     if (selectedTagFilter.startsWith('tag:')) return `${selectedTagFilter.replace('tag:', '')} Contacts`;
     return 'All Contacts';
   })();
@@ -1649,8 +1711,139 @@ export function Contacts({ user }: ContactsProps) {
                   }}
                   onOpenAddContact={() => setIsAddDialogOpen(true)}
                 />
+              </div>
+            </div>
 
+            {/* 🎯 Attio CRM View Ribbon: Quick View Presets & Mode Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 mt-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                <button
+                  type="button"
+                  onClick={() => { setSelectedTagFilter('all'); setViewLayout('table'); }}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    selectedTagFilter === 'all' && viewLayout === 'table'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  All Records
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
+                    selectedTagFilter === 'all' && viewLayout === 'table' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {contacts.length}
+                  </span>
+                </button>
 
+                <button
+                  type="button"
+                  onClick={() => setViewLayout('pipeline')}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    viewLayout === 'pipeline'
+                      ? 'bg-emerald-700 text-white shadow-sm font-semibold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Kanban className="w-3.5 h-3.5" />
+                  Pipeline Board
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
+                    viewLayout === 'pipeline' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    5 stages
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSelectedTagFilter('status:Active'); setViewLayout('table'); }}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    selectedTagFilter === 'status:Active' && viewLayout === 'table'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Active Accounts
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
+                    selectedTagFilter === 'status:Active' && viewLayout === 'table' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {contacts.filter(c => c.status === 'Active').length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSelectedTagFilter('status:Prospect'); setViewLayout('table'); }}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    selectedTagFilter === 'status:Prospect' && viewLayout === 'table'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  Warm Leads
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
+                    selectedTagFilter === 'status:Prospect' && viewLayout === 'table' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {contacts.filter(c => c.status === 'Prospect').length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSelectedTagFilter('vip'); setViewLayout('table'); }}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    selectedTagFilter === 'vip' && viewLayout === 'table'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  VIP High-Value
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSelectedTagFilter('trades'); setViewLayout('table'); }}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    selectedTagFilter === 'trades' && viewLayout === 'table'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Wrench className="w-3.5 h-3.5 text-indigo-500" />
+                  Contractors & Trades
+                </button>
+              </div>
+
+              {/* View layout mode toggle */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setViewLayout('table')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    viewLayout === 'table'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80 font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Spreadsheet Table View"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 text-slate-500" />
+                  Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewLayout('pipeline')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    viewLayout === 'pipeline'
+                      ? 'bg-white text-emerald-800 shadow-sm border border-slate-200/80 font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Kanban Pipeline Board"
+                >
+                  <Kanban className="w-3.5 h-3.5 text-emerald-600" />
+                  Pipeline Board
+                </button>
               </div>
             </div>
           </div>
@@ -1718,36 +1911,6 @@ export function Contacts({ user }: ContactsProps) {
                   </Button>
 
                   <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
-
-                          <Dialog open={showImportExportWindow} onOpenChange={setShowImportExportWindow}>
-                            <DialogContent className="fixed right-0 left-auto top-0 bottom-0 h-screen w-full sm:w-[700px] !max-w-[100vw] sm:!max-w-[700px] !translate-x-0 !translate-y-0 !m-0 !rounded-none sm:border-l shadow-2xl p-0 flex flex-col overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
-                              <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2 border-b bg-background sticky top-0 z-10">
-                                <div className="flex items-center justify-between gap-3">
-                                  <DialogTitle>Import and Export</DialogTitle>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setShowImportExportWindow(false)}
-                                    className="flex items-center gap-2"
-                                  >
-                                    <ArrowLeft className="h-4 w-4" />
-                                    Back
-                                  </Button>
-                                </div>
-                                <DialogDescription className="sr-only">
-                                  Import and export customers without leaving the Customer module.
-                                </DialogDescription>
-                              </DialogHeader>
-                              <div className="flex-1 overflow-y-auto">
-                                <button
-                                  className="px-4 py-2 bg-cyan-600 text-white rounded-lg mt-4"
-                                  onClick={() => window.open('/?view=project-wizards&module=import-export', '_blank')}
-                                >
-                                  Open Import/Export Module
-                                </button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
                     <SelectTrigger className="h-11 w-full border-slate-200 bg-white sm:w-[190px]">
                       <SelectValue placeholder="Filter..." />
                     </SelectTrigger>
@@ -1802,7 +1965,21 @@ export function Contacts({ user }: ContactsProps) {
             )}
           </div>
 
-          <div data-tour="contacts-list" className="border-l-4 border-emerald-600 bg-white">
+          {viewLayout === 'pipeline' ? (
+            <div className="p-4 sm:p-6 bg-slate-50/60 min-h-[500px]">
+              <AttioPipelineBoard
+                contacts={filteredContacts}
+                dealValueByContactId={dealValueByContactId}
+                onSelectContact={(c) => openSidePeek(c)}
+                onOpenAddContactWithStatus={(st) => {
+                  setNewContact(prev => ({ ...prev, status: st }));
+                  setIsAddDialogOpen(true);
+                }}
+                onUpdateStatus={handleQuickStatusChange}
+              />
+            </div>
+          ) : (
+            <div data-tour="contacts-list" className="border-l-4 border-emerald-600 bg-white">
             <div
               className="overflow-x-auto [scrollbar-width:thin] [&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar]:w-3 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400"
               style={{ scrollbarGutter: 'stable' }}
@@ -1844,7 +2021,7 @@ export function Contacts({ user }: ContactsProps) {
                       <tr
                         key={contact.id}
                         className="cursor-pointer bg-white align-middle transition-colors hover:bg-sky-50/60"
-                        onClick={() => openContactDetail(contact)}
+                        onClick={() => openSidePeek(contact)}
                       >
                         <td className="border-b border-slate-200 px-2.5 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" className="h-4 w-4 rounded border-slate-300" />
@@ -1857,11 +2034,15 @@ export function Contacts({ user }: ContactsProps) {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
+                              <DropdownMenuItem onClick={() => openSidePeek(contact)}>
+                                <Sparkles className="mr-2 h-4 w-4 text-cyan-600" />
+                                Side Peek (Attio View)
+                              </DropdownMenuItem>
                               {canChange('contacts', user.role) && (
                                 <>
                                   <DropdownMenuItem onClick={() => openContactDetail(contact)}>
                                     <Eye className="mr-2 h-4 w-4" />
-                                    View Details & Project Managers
+                                    Full Workspace & PMs
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => {
@@ -2016,10 +2197,64 @@ export function Contacts({ user }: ContactsProps) {
               </div>
             )}
           </div>
+        )}
         </div>
       </div>
 
+      {/* 🎯 Attio Side Peek Drawer */}
+      <AttioSidePeekDrawer
+        contact={sidePeekContact}
+        isOpen={isSidePeekOpen}
+        onClose={() => setIsSidePeekOpen(false)}
+        onOpenFullDetail={(c) => {
+          setIsSidePeekOpen(false);
+          openContactDetail(c);
+        }}
+        onUpdateContact={(updated) => {
+          setContacts(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c));
+          setSidePeekContact(prev => prev ? { ...prev, ...updated } : null);
+        }}
+        user={user}
+      />
+
       {renderEditContactDialog()}
+
+      {/* Import / Export Drawer Dialog */}
+      <Dialog open={showImportExportWindow} onOpenChange={setShowImportExportWindow}>
+        <DialogContent className="fixed right-0 left-auto top-0 bottom-0 h-screen w-full sm:w-[700px] !max-w-[100vw] sm:!max-w-[700px] !translate-x-0 !translate-y-0 !m-0 !rounded-none sm:border-l shadow-2xl p-0 flex flex-col overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
+          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2 border-b bg-background sticky top-0 z-10">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle>Import and Export</DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowImportExportWindow(false)}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+            </div>
+            <DialogDescription className="sr-only">
+              Import and export customers without leaving the Customer module.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6">
+            <p className="text-sm text-muted-foreground mb-4">
+              Export and import contacts in CSV format with automatic field mapping and data verification.
+            </p>
+            <button
+              className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-medium rounded-xl text-sm transition-colors"
+              onClick={() => {
+                setShowImportExportWindow(false);
+                window.location.href = '/?view=import-export';
+              }}
+            >
+              Open Full Import/Export Center
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Project Manager Dialog */}
       <Dialog open={isAddPMDialogOpen} onOpenChange={setIsAddPMDialogOpen}>

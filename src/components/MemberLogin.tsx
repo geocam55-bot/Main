@@ -152,12 +152,12 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
 
           if (isSuper && isValidPass) {
             const superUser: User = {
-              id: 'USR-SUPER-ADMIN-01',
+              id: 'a76eaaca-602f-4ffd-b4c0-642ea4516c22',
               email: normEmail,
-              role: 'SUPER_ADMIN' as UserRole,
+              role: 'super_admin' as UserRole,
               full_name: 'George Campbell',
-              organization_id: 'system-admin-tenant',
-              organizationId: 'system-admin-tenant',
+              organization_id: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
+              organizationId: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
             };
             localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
             sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
@@ -169,13 +169,14 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
           }
 
           if (isGeorge && isValidPass) {
+            const georgeId = normEmail.includes('geocam') ? '390862a8-08e5-44d5-b214-32cafdf10296' : (normEmail.includes('ronadartmouth') ? 'f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b' : '390862a8-08e5-44d5-b214-32cafdf10296');
             const georgeUser: User = {
-              id: 'USR-10524',
+              id: georgeId,
               email: email.trim(),
-              role: 'Admin' as UserRole,
+              role: 'admin' as UserRole,
               full_name: 'George Campbell',
-              organization_id: 'rona_atlantic',
-              organizationId: 'rona_atlantic',
+              organization_id: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
+              organizationId: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
             };
             localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
             sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
@@ -261,9 +262,9 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
       if (!profile) {
         const normEmail = (activeSignIn.user.email || email).toLowerCase();
         const defaultRole = (normEmail === 'george.campbell@prospaces.com' || normEmail === 'superadmin@prospaces.com')
-          ? 'SUPER_ADMIN'
+          ? 'super_admin'
           : (normEmail.includes('george') || normEmail.includes('geocam'))
-          ? 'Admin'
+          ? 'admin'
           : (activeSignIn.user.user_metadata?.role || 'standard_user');
 
         profile = {
@@ -271,7 +272,7 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
           email: activeSignIn.user.email || email,
           name: activeSignIn.user.user_metadata?.name || activeSignIn.user.user_metadata?.full_name || email.split('@')[0],
           role: defaultRole,
-          organization_id: activeSignIn.user.user_metadata?.organization_id || 'org_001',
+          organization_id: activeSignIn.user.user_metadata?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a',
         };
       }
 

@@ -32,7 +32,10 @@ import {
   ArrowLeft,
   Globe,
   HelpCircle,
+  Search,
+  Command
 } from 'lucide-react';
+import { AttioCommandPalette } from './attio/AttioCommandPalette';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,6 +84,7 @@ export function Navigation({
   const { taskCount } = useTaskNotifications(user);
   const { appointmentCount } = useAppointmentNotifications(user);
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   // Load subscription plan to gate enterprise features
   useEffect(() => {
@@ -95,6 +99,18 @@ export function Navigation({
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Attio-style universal Cmd+K / Ctrl+K keyboard shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const normalizedRole = getNormalizedRole(user?.role, user?.email);
@@ -444,6 +460,20 @@ export function Navigation({
 
         {/* Right Side: Trialcountdown & Account Profile menu */}
         <div className="flex items-center gap-2 shrink-0 self-end md:self-auto pb-2 md:pb-0">
+          {/* Attio-Style Quick Command Palette Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-800 text-xs text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 shadow-2xs transition-all cursor-pointer"
+            title="Search or Quick Actions (⌘K)"
+          >
+            <Search className="h-3.5 w-3.5 text-slate-400" />
+            <span className="hidden sm:inline text-[11.5px] font-medium">Search</span>
+            <kbd className="px-1.5 py-0.5 text-[9.5px] font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400">
+              ⌘K
+            </kbd>
+          </button>
+
           {/* Trial countdown (visible on wider screens) */}
           <div className="hidden xl:block">
             <TrialCountdown variant="badge" className="mr-1" />
@@ -728,6 +758,15 @@ export function Navigation({
           </div>
         </div>
       )}
+
+      {/* Attio Universal Command Palette (⌘K) */}
+      <AttioCommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigate={onNavigate}
+        user={user}
+        onOpenAddContact={() => onNavigate('contacts')}
+      />
     </>
   );
 }
