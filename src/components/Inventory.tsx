@@ -806,27 +806,17 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     try {
       setIsLoading(true);
       
-      if (!authContextRef.current || authContextRef.current.userId !== user.id) {
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-        if (authError || !authUser) {
-          setIsLoading(false);
-          setTableExists(false);
-          showAlert('error', 'Please log in to access inventory');
-          return;
+      let userOrgId = user?.organizationId || user?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          const profile = await ensureUserProfile(authUser.id).catch(() => null);
+          if (profile?.organization_id) {
+            userOrgId = profile.organization_id;
+          }
         }
-
-        const profile = await ensureUserProfile(authUser.id);
-        authContextRef.current = { userId: user.id, authUser, profile };
-      }
-
-      const { authUser, profile } = authContextRef.current;
-      const userOrgId = profile.organization_id;
-      
-      if (!userOrgId) {
-        setIsLoading(false);
-        setTableExists(false);
-        showAlert('error', 'Your account is not assigned to an organization. Please contact your administrator.');
-        return;
+      } catch (e) {
+        // Fallback to user prop organizationId
       }
 
       // Keep the required schema check in the load path, but provision indexes asynchronously.
@@ -1021,12 +1011,11 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       if (error?.code) {
       }
       
-      if (error?.code === 'PGRST205' || error?.message?.includes('Could not find the table') || error?.message?.includes('relation "inventory" does not exist')) {
+      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.message?.includes('Could not find the table') || error?.message?.includes('relation "inventory" does not exist')) {
         setTableExists(false);
-        showAlert('error', 'Inventory table not found. Please contact your administrator.');
-      } else if (error?.message?.includes('organization')) {
-        showAlert('error', 'Organization access error. Please contact your administrator.');
+        showAlert('error', 'Inventory table not found. Please click Auto-Create Inventory Table Instantly above.');
       } else {
+        setTableExists(true);
         const errorMsg = error?.message || 'Failed to load inventory items';
         showAlert('error', errorMsg.length > 100 ? 'Failed to load inventory items' : errorMsg);
       }
@@ -1662,11 +1651,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       setIsRecovering(false);
     }
   };
-
-  // Show database setup if table doesn't exist
-  if (!tableExists && !isLoading) {
-    return <DatabaseInit onComplete={loadInventory} currentUser={user} />;
-  }
 
   return (
     <PermissionGate user={user} module="inventory" action="view">

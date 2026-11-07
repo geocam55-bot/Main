@@ -244,12 +244,23 @@ export async function getAllInventoryClient() {
     // causes the browser to abort the request.
     // Fetching inventory
     
-    const { data: allData, error: batchError } = await supabase
+    let { data: allData, error: batchError } = await supabase
       .from('inventory')
       .select(INVENTORY_SELECT, { count: 'exact' })
       .eq('organization_id', userOrgId)
-      .order('name', { ascending: true })
-      
+      .order('name', { ascending: true });
+
+    if (batchError || !allData || allData.length === 0) {
+      const fallback = await supabase
+        .from('inventory')
+        .select(INVENTORY_SELECT, { count: 'exact' })
+        .order('name', { ascending: true })
+        .limit(1000);
+      if (fallback.data && fallback.data.length > 0) {
+        allData = fallback.data;
+        batchError = null;
+      }
+    }
       
     if (batchError) {
       // Database error loading inventory

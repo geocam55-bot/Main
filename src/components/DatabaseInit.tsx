@@ -122,6 +122,35 @@ AND tablename = 'inventory';`;
     }
   };
 
+  const [isCreating, setIsCreating] = useState(false);
+
+  const autoCreateTable = async () => {
+    setIsCreating(true);
+    const toastId = toast.loading('Automatically creating inventory table...');
+    try {
+      const sql = generateInventorySQL();
+      const { error } = await supabase.rpc('exec_sql', { sql });
+      if (error) {
+        console.warn('RPC exec_sql warning:', error);
+      }
+      const res = await fetch('/api/inventory/init-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to auto-create table');
+      }
+      toast.success('🎉 Inventory table created successfully!', { id: toastId });
+      setTimeout(() => onComplete(), 1500);
+    } catch (err: any) {
+      toast.error('Auto-create failed: ' + (err.message || err), { id: toastId });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Alert className="border-yellow-400 bg-yellow-50">
@@ -136,12 +165,19 @@ AND tablename = 'inventory';`;
           <div className="text-center mb-6">
             <Database className="h-12 w-12 text-blue-600 mx-auto mb-3" />
             <h2 className="text-2xl font-bold text-foreground mb-2">Create Inventory Table</h2>
-            <p className="text-muted-foreground">
-              Run this SQL script once to create the inventory table
+            <p className="text-muted-foreground mb-4">
+              Click below to automatically create the inventory table instantly, or use the manual SQL script.
             </p>
+            <Button
+              onClick={autoCreateTable}
+              disabled={isCreating}
+              className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base shadow-lg"
+            >
+              {isCreating ? 'Creating Table...' : '🚀 Auto-Create Inventory Table Instantly'}
+            </Button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 border-t pt-6">
             <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">

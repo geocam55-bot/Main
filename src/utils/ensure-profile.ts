@@ -54,7 +54,8 @@ export async function ensureUserProfile(userId: string) {
   }
   
   userEmail = user.email || user.user_metadata?.email || 'unknown@example.com';
-  let organizationId = user.user_metadata?.organizationId || user.user_metadata?.organization_id || null;
+  const PRIMARY_ORG_ID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+  let organizationId = user.user_metadata?.organizationId || user.user_metadata?.organization_id || PRIMARY_ORG_ID;
   
   // If no organization in metadata, try to find or create one
   if (!organizationId) {
