@@ -120,24 +120,21 @@ export function Navigation({
   const isManagerOrDirector = normalizedRole === 'manager' || normalizedRole === 'director';
 
   // Base navigation items
-  const baseNavItems =
-    !isSuperAdmin
-      ? [
-          { id: 'main-panels', label: 'Home', icon: LayoutDashboard },
-          { id: 'dashboard', label: 'Dashboard', icon: Gauge },
-          ...(organization?.ai_suggestions_enabled
-            ? [{ id: 'ai-suggestions', label: 'AI Suggestions', icon: Sparkles, count: suggestions.length }]
-            : []),
-          { id: 'contacts', label: 'Contacts', icon: Users },
-          { id: 'bids', label: 'Deals', icon: FileText, count: unreadBidsCount },
-          { id: 'messages', label: 'Message Space', icon: MessageSquare },
-          { id: 'notes', label: 'Notes', icon: StickyNote },
-          { id: 'knowledge-base', label: 'Help', icon: HelpCircle },
-        ]
-      : [];
+  const baseNavItems = [
+    { id: 'main-panels', label: 'Home', icon: LayoutDashboard },
+    { id: 'dashboard', label: 'Dashboard', icon: Gauge },
+    ...(organization?.ai_suggestions_enabled
+      ? [{ id: 'ai-suggestions', label: 'AI Suggestions', icon: Sparkles, count: suggestions.length }]
+      : []),
+    { id: 'contacts', label: 'Contacts', icon: Users },
+    { id: 'bids', label: 'Deals', icon: FileText, count: unreadBidsCount },
+    { id: 'messages', label: 'Message Space', icon: MessageSquare },
+    { id: 'notes', label: 'Notes', icon: StickyNote },
+    { id: 'knowledge-base', label: 'Help', icon: HelpCircle },
+  ];
 
   const managerNavItems =
-    (isManagerOrDirector || isAdmin) && !isSuperAdmin
+    (isManagerOrDirector || isAdmin || isSuperAdmin)
       ? [{ id: 'team-dashboard', label: 'Team Dashboard', icon: UsersRound }]
       : [];
 
@@ -296,74 +293,72 @@ export function Navigation({
           })}
 
           {/* Email Dropdown (Contains Email Inbox, Tasks, Appointments) */}
-          {!isSuperAdmin && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium focus:outline-none ${
-                  isEmailActive ? 'shadow-sm border border-current/10 font-semibold text-blue-600' : ''
-                }`}
-                style={{
-                  backgroundColor: isEmailActive ? theme.colors.navActive : 'transparent',
-                  color: isEmailActive ? undefined : theme.colors.navText,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isEmailActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
-                }}
-                onMouseLeave={(e) => {
-                  if (!isEmailActive) e.currentTarget.style.backgroundColor = 'transparent';
-                }}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium focus:outline-none ${
+                isEmailActive ? 'shadow-sm border border-current/10 font-semibold text-blue-600' : ''
+              }`}
+              style={{
+                backgroundColor: isEmailActive ? theme.colors.navActive : 'transparent',
+                color: isEmailActive ? undefined : theme.colors.navText,
+              }}
+              onMouseEnter={(e) => {
+                if (!isEmailActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+              }}
+              onMouseLeave={(e) => {
+                if (!isEmailActive) e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <Mail className="h-3.5 w-3.5" />
+              <span>Email</span>
+              {(unreadCount > 0 || taskCount > 0 || appointmentCount > 0) && (
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-ping absolute top-1 right-2" />
+              )}
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuLabel>Email Channels</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => handleNavClick('email')}
+                className={currentView === 'email' ? 'bg-accent font-semibold' : ''}
               >
-                <Mail className="h-3.5 w-3.5" />
-                <span>Email</span>
-                {(unreadCount > 0 || taskCount > 0 || appointmentCount > 0) && (
-                  <span className="h-2 w-2 rounded-full bg-red-500 animate-ping absolute top-1 right-2" />
+                <Mail className="mr-2 h-4 w-4" />
+                Email Inbox
+                {unreadCount > 0 && (
+                  <span className="ml-auto text-[10px] font-bold bg-blue-500 text-white rounded-full px-1.5 py-0.5">
+                    {unreadCount}
+                  </span>
                 )}
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuLabel>Email Channels</DropdownMenuLabel>
-                <DropdownMenuSeparator />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleNavClick('tasks')}
+                className={currentView === 'tasks' ? 'bg-accent font-semibold' : ''}
+              >
+                <CheckSquare className="mr-2 h-4 w-4" />
+                Tasks
+                {taskCount > 0 && (
+                  <span className="ml-auto text-[10px] font-bold bg-green-500 text-white rounded-full px-1.5 py-0.5">
+                    {taskCount}
+                  </span>
+                )}
+              </DropdownMenuItem>
+              {organization?.appointments_enabled !== false && canView('appointments', user.role) && (
                 <DropdownMenuItem
-                  onClick={() => handleNavClick('email')}
-                  className={currentView === 'email' ? 'bg-accent font-semibold' : ''}
+                  onClick={() => handleNavClick('appointments')}
+                  className={currentView === 'appointments' ? 'bg-accent font-semibold' : ''}
                 >
-                  <Mail className="mr-2 h-4 w-4" />
-                  Email Inbox
-                  {unreadCount > 0 && (
-                    <span className="ml-auto text-[10px] font-bold bg-blue-500 text-white rounded-full px-1.5 py-0.5">
-                      {unreadCount}
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Appointments
+                  {appointmentCount > 0 && (
+                    <span className="ml-auto text-[10px] font-bold bg-purple-500 text-white rounded-full px-1.5 py-0.5">
+                      {appointmentCount}
                     </span>
                   )}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleNavClick('tasks')}
-                  className={currentView === 'tasks' ? 'bg-accent font-semibold' : ''}
-                >
-                  <CheckSquare className="mr-2 h-4 w-4" />
-                  Tasks
-                  {taskCount > 0 && (
-                    <span className="ml-auto text-[10px] font-bold bg-green-500 text-white rounded-full px-1.5 py-0.5">
-                      {taskCount}
-                    </span>
-                  )}
-                </DropdownMenuItem>
-                {organization?.appointments_enabled !== false && canView('appointments', user.role) && (
-                  <DropdownMenuItem
-                    onClick={() => handleNavClick('appointments')}
-                    className={currentView === 'appointments' ? 'bg-accent font-semibold' : ''}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Appointments
-                    {appointmentCount > 0 && (
-                      <span className="ml-auto text-[10px] font-bold bg-purple-500 text-white rounded-full px-1.5 py-0.5">
-                        {appointmentCount}
-                      </span>
-                    )}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Documents Tab */}
           {organization?.documents_enabled !== false && canView('documents', user.role) && (
