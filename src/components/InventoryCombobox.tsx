@@ -1,9 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronsUpDown, Search, Sparkles, Zap } from 'lucide-react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { ScrollArea } from './ui/scroll-area';
+import { Badge } from './ui/badge';
 import { createClient } from '../utils/supabase/client';
-
-const supabase = createClient();
 import { useDebounce } from '../utils/useDebounce';
 import { advancedSearch } from '../utils/advanced-search';
+
+const supabase = createClient();
 
 function cleanDescription(desc: string | undefined): string {
   if (!desc) return '';
