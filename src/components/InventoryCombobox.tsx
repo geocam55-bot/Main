@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronsUpDown, Search, Sparkles, Zap } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { ScrollArea } from './ui/scroll-area';
-import { Badge } from './ui/badge';
+import { createClient } from '../utils/supabase/client';
+
+const supabase = createClient();
 import { useDebounce } from '../utils/useDebounce';
 import { advancedSearch } from '../utils/advanced-search';
 
@@ -51,6 +48,7 @@ export function InventoryCombobox({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [useAdvancedSearch, setUseAdvancedSearch] = useState(true);
+  const [fetchedItem, setFetchedItem] = useState<InventoryItem | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const focusSearchInput = () => {
@@ -68,6 +66,38 @@ export function InventoryCombobox({
 
   // Debounce search query for better performance
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Fetch missing selected item by ID if not present in items list
+  useEffect(() => {
+    if (!value || value === 'none') {
+      setFetchedItem(null);
+      return;
+    }
+    if (items.some(item => item.id === value)) {
+      return;
+    }
+
+    let isMounted = true;
+    async function fetchMissingItem() {
+      try {
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('id, name, sku, category, description, cost, priceTier1, status')
+          .eq('id', value)
+          .maybeSingle();
+        if (isMounted && !error && data) {
+          setFetchedItem(data);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch missing inventory item by id:', err);
+      }
+    }
+    fetchMissingItem();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [value]);
 
   // AI-Powered search with advanced-search.ts engine
   const filteredItems = useMemo(() => {
@@ -142,7 +172,7 @@ export function InventoryCombobox({
   }, [debouncedSearch, items, useAdvancedSearch]);
 
   // Find the selected item
-  const selectedItem = items.find((item) => item.id === value);
+  const selectedItem = items.find((item) => item.id === value) || fetchedItem;
   
   return (
     <Popover open={open} onOpenChange={setOpen}>
