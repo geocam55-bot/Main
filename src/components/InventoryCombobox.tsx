@@ -5,11 +5,9 @@ import { Input } from './ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
-import { createClient } from '../utils/supabase/client';
 import { useDebounce } from '../utils/useDebounce';
 import { advancedSearch } from '../utils/advanced-search';
-
-const supabase = createClient();
+import { getCachedInventoryItem } from '../utils/inventory-cache';
 
 function cleanDescription(desc: string | undefined): string {
   if (!desc) return '';
@@ -73,32 +71,23 @@ export function InventoryCombobox({
   // Debounce search query for better performance
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // Fetch missing selected item by ID if not present in items list
+  // Fetch missing selected item by ID using cached utility to prevent rate limit (429) errors
   useEffect(() => {
     if (!value || value === 'none') {
       setFetchedItem(null);
       return;
     }
     if (items.some(item => item.id === value)) {
+      setFetchedItem(null);
       return;
     }
 
     let isMounted = true;
-    async function fetchMissingItem() {
-      try {
-        const { data, error } = await supabase
-          .from('inventory')
-          .select('id, name, sku, category, description, cost, priceTier1, status')
-          .eq('id', value)
-          .maybeSingle();
-        if (isMounted && !error && data) {
-          setFetchedItem(data);
-        }
-      } catch (err) {
-        console.warn('Failed to fetch missing inventory item by id:', err);
+    getCachedInventoryItem(value).then(item => {
+      if (isMounted && item) {
+        setFetchedItem(item);
       }
-    }
-    fetchMissingItem();
+    });
 
     return () => {
       isMounted = false;
