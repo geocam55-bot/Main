@@ -109,5 +109,12 @@
       watch: {
         ignored: ['**/pricing-agent-status.json', '**/pricing-agent-diagnostic.log', '**/*.log'],
       },
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3000',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
     },
   });
