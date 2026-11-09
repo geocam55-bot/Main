@@ -251,16 +251,17 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     updateIcon("link[rel*='icon']", '/logistics-favicon.jpg');
     updateIcon("link[rel='apple-touch-icon']", '/logistics-logo.png');
 
+    const origin = window.location.origin || 'https://www.prospacescrm.com';
     const manifestObj = {
       name: isDriver ? 'ProSpaces Driver Portal' : 'ProSpaces Logistics & Fleet',
       short_name: isDriver ? 'Driver' : 'Logistics',
-      start_url: isDriver ? '/driver' : '/logistics',
+      start_url: origin + (isDriver ? '/driver' : '/logistics'),
       display: 'standalone',
       background_color: '#0f172a',
       theme_color: '#2563eb',
       icons: [
         {
-          src: '/logistics-logo.png',
+          src: origin + '/logistics-logo.png',
           sizes: '192x192 512x512',
           type: 'image/png',
           purpose: 'any maskable'

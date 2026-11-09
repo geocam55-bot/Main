@@ -73,13 +73,13 @@
           "y": 248,
           "page": 1,
           "label": "SKU BOX",
-          "value": "PARSED SKU BOX"
+          "value": ""
         },
         "Ship To": {
-          "h": 81,
-          "w": 144,
-          "x": 210,
-          "y": 161,
+          "h": 10,
+          "w": 10,
+          "x": 621,
+          "y": 176,
           "page": 1,
           "label": "Ship To Destination",
           "value": ""
