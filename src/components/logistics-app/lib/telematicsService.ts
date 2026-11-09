@@ -133,12 +133,26 @@ export function useTelematics({
 
           const fuelLevel = typeof tel.fuelPercent === 'number' ? tel.fuelPercent : (typeof tel.fuelLevel === 'number' ? tel.fuelLevel : 75);
 
-          const rawDriverName = typeof v.driver === 'string' ? v.driver : (v.driver?.name || v.driverName || v.activeRoute?.driverName);
-          const driverInfo = rawDriverName ? {
-            id: typeof v.driver === 'object' && v.driver?.id ? v.driver.id : `DRV-${index + 101}`,
-            name: rawDriverName,
-            phone: typeof v.driver === 'object' ? v.driver?.phone : undefined
-          } : undefined;
+          let rawDriverName = 'Unassigned';
+          if (typeof v.driver === 'string') {
+            rawDriverName = v.driver;
+          } else if (v.driver && typeof v.driver === 'object') {
+            if (typeof v.driver.name === 'string') {
+              rawDriverName = v.driver.name;
+            } else if (typeof (v.driver as any).driver_name === 'string') {
+              rawDriverName = (v.driver as any).driver_name;
+            }
+          } else if (typeof v.driverName === 'string') {
+            rawDriverName = v.driverName;
+          } else if (typeof v.activeRoute?.driverName === 'string') {
+            rawDriverName = v.activeRoute.driverName;
+          }
+
+          const driverInfo = {
+            id: typeof v.driver === 'object' && v.driver?.id ? String(v.driver.id) : `DRV-${index + 101}`,
+            name: typeof rawDriverName === 'string' ? rawDriverName : 'Unassigned',
+            phone: typeof v.driver === 'object' && typeof v.driver?.phone === 'string' ? v.driver.phone : undefined
+          };
 
           const stopsList = Array.isArray(v.activeRoute?.stops) ? v.activeRoute.stops : [];
           const completedStopsCount = stopsList.filter((s: any) => s.status === 'COMPLETED').length;

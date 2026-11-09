@@ -6621,8 +6621,9 @@ async function getFleetId(token: string): Promise<string | null> {
           (v.truckName && v.truckName.toLowerCase().includes(search)) ||
           (v.licensePlate && v.licensePlate.toLowerCase().includes(search)) ||
           (v.vin && v.vin.toLowerCase().includes(search)) ||
-          (v.driver?.name && v.driver.name.toLowerCase().includes(search)) ||
-          (v.activeRoute?.driverName && v.activeRoute.driverName.toLowerCase().includes(search))
+          (typeof v.driver === 'string' && v.driver.toLowerCase().includes(search)) ||
+          (v.driver?.name && typeof v.driver.name === 'string' && v.driver.name.toLowerCase().includes(search)) ||
+          (v.activeRoute?.driverName && typeof v.activeRoute.driverName === 'string' && v.activeRoute.driverName.toLowerCase().includes(search))
         );
       }
 

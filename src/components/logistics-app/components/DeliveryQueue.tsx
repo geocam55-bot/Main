@@ -2766,6 +2766,18 @@ export default function DeliveryQueue({
         />
       )}
 
+      {/* Cargo Manifest / SKU Box Modal */}
+      {previewManifestDelivery && (
+        <CargoManifestModal 
+          delivery={previewManifestDelivery} 
+          onClose={() => setPreviewManifestDelivery(null)}
+          onOpenPdf={(del) => {
+            setPreviewManifestDelivery(null);
+            setPreviewDocDelivery(del);
+          }}
+        />
+      )}
+
       {/* Bottom Screen Sticky Email Dispatch Status & Reason Banner */}
       {emailStatusBanner && (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 max-w-xl w-full mx-4 px-4 py-3.5 rounded-xl shadow-2xl border flex items-center justify-between gap-3 transition-all bg-slate-900 text-white border-slate-700 animate-in fade-in slide-in-from-bottom-4">

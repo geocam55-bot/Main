@@ -187,9 +187,20 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
                         (tPlate ? fcByPlate.get(tPlate) : null);
 
       if (liveMatch) {
-        const driverName = (t.driver && !['no driver', 'unassigned', ''].includes(String(t.driver).trim().toLowerCase()))
+        const rawTDriver = typeof t.driver === 'string'
           ? t.driver
-          : (typeof liveMatch.driver === 'string' ? liveMatch.driver : (liveMatch.driver?.name || 'Unassigned'));
+          : (t.driver && typeof t.driver === 'object' && typeof (t.driver as any).name === 'string'
+              ? (t.driver as any).name
+              : '');
+        const rawLiveDriver = typeof liveMatch.driver === 'string'
+          ? liveMatch.driver
+          : (liveMatch.driver && typeof liveMatch.driver === 'object' && typeof (liveMatch.driver as any).name === 'string'
+              ? (liveMatch.driver as any).name
+              : '');
+
+        const driverName = (rawTDriver && !['no driver', 'unassigned', ''].includes(rawTDriver.trim().toLowerCase()))
+          ? rawTDriver.trim()
+          : (rawLiveDriver ? rawLiveDriver.trim() : 'Unassigned');
 
         const matchLat = typeof liveMatch.lat === 'number' && !isNaN(liveMatch.lat)
           ? liveMatch.lat
@@ -206,8 +217,8 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
           name: t.name || liveMatch.name,
           truckNumber: (t as any).truck_number || t.truckNumber || tUnit || extractUnitNumber(t.name) || extractUnitNumber(t.id) || t.id,
           driver: {
-            id: (t as any).driverId || liveMatch.driver?.id || `DRV-${idx + 101}`,
-            name: driverName
+            id: String((t as any).driverId || liveMatch.driver?.id || `DRV-${idx + 101}`),
+            name: typeof driverName === 'string' ? driverName : 'Unassigned'
           },
           vin: t.vin || liveMatch.vin,
           licensePlate: t.licensePlate || liveMatch.licensePlate,
@@ -252,9 +263,15 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
         heading: 0,
         status,
         motionStatus: status,
-        timestamp: new Date().toISOString(),
         ignitionStatus: 'OFF',
-        driver: { id: (t as any).driverId || `DRV-${idx + 101}`, name: t.driver || 'Unassigned' },
+        driver: { 
+          id: String((t as any).driverId || `DRV-${idx + 101}`), 
+          name: typeof t.driver === 'string' 
+            ? t.driver 
+            : (t.driver && typeof t.driver === 'object' && typeof (t.driver as any).name === 'string'
+                ? (t.driver as any).name
+                : 'Unassigned') 
+        },
         telematics: {
           latitude: lat,
           longitude: lng,
@@ -303,15 +320,22 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      list = list.filter(v => 
-        (v.truckName && v.truckName.toLowerCase().includes(q)) ||
-        (v.vehicleId && v.vehicleId.toLowerCase().includes(q)) ||
-        ((v as any).truckNumber && String((v as any).truckNumber).toLowerCase().includes(q)) ||
-        (v.driver?.name && v.driver.name.toLowerCase().includes(q)) ||
-        (v.vin && v.vin.toLowerCase().includes(q)) ||
-        (v.licensePlate && v.licensePlate.toLowerCase().includes(q)) ||
-        (v.model && v.model.toLowerCase().includes(q))
-      );
+      list = list.filter(v => {
+        const dName = typeof v.driver === 'string' 
+          ? v.driver 
+          : (typeof v.driver?.name === 'string' ? v.driver.name : '');
+        const rName = typeof v.activeRoute?.driverName === 'string' ? v.activeRoute.driverName : '';
+        return (
+          (v.truckName && v.truckName.toLowerCase().includes(q)) ||
+          (v.vehicleId && v.vehicleId.toLowerCase().includes(q)) ||
+          ((v as any).truckNumber && String((v as any).truckNumber).toLowerCase().includes(q)) ||
+          (dName && dName.toLowerCase().includes(q)) ||
+          (rName && rName.toLowerCase().includes(q)) ||
+          (v.vin && v.vin.toLowerCase().includes(q)) ||
+          (v.licensePlate && v.licensePlate.toLowerCase().includes(q)) ||
+          (v.model && v.model.toLowerCase().includes(q))
+        );
+      });
     }
     return list;
   }, [vehicles, statusFilter, searchQuery]);
@@ -342,19 +366,35 @@ export default function TelematicsDashboard({ trucks, branches }: TelematicsDash
     if (!v) return 'Unassigned';
     
     // Normalize and check the main driver field
-    if (v.driver?.name) {
-       const normName = v.driver.name.trim().toLowerCase();
-       if (!['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(normName)) {
-           return v.driver.name.trim();
-       }
+    const d = v.driver;
+    let mainName = '';
+    if (typeof d === 'string') {
+      mainName = d.trim();
+    } else if (d && typeof d === 'object') {
+      if (typeof d.name === 'string') {
+        mainName = d.name.trim();
+      } else if (d.name && typeof d.name === 'object') {
+        const nObj: any = d.name;
+        mainName = `${nObj.firstName || nObj.first || ''} ${nObj.lastName || nObj.last || ''}`.trim() || String(nObj.name || '').trim();
+      } else if (typeof (d as any).driver_name === 'string') {
+        mainName = (d as any).driver_name.trim();
+      }
+    }
+
+    if (mainName) {
+      const normName = mainName.toLowerCase();
+      if (!['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(normName)) {
+        return mainName;
+      }
     }
     
     // Normalize and check the active route driver field
-    if (v.activeRoute?.driverName) {
-       const normRouteName = v.activeRoute.driverName.trim().toLowerCase();
-       if (!['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(normRouteName)) {
-           return v.activeRoute.driverName.trim();
-       }
+    const rDriver = v.activeRoute?.driverName;
+    if (typeof rDriver === 'string') {
+      const normRouteName = rDriver.trim().toLowerCase();
+      if (!['no driver', 'unassigned', 'driver', 'assigned driver', ''].includes(normRouteName)) {
+        return rDriver.trim();
+      }
     }
     
     return 'Unassigned';
