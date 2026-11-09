@@ -27,6 +27,34 @@ interface DragDropFreightBoardProps {
   isViewOnly?: boolean;
 }
 
+// Helper to robustly match delivery assignedTruck to a fleet truck (handling ID, name, number, or prefix variations like "1901" vs "1901 - Elmsdale HH")
+export function isDeliveryAssignedToTruck(delivery: DeliveryRecord, truck: Truck): boolean {
+  const trk = (delivery.assignedTruck || '').trim().toLowerCase();
+  if (!trk || ['unassigned', 'no truck', 'none', 'pending', ''].includes(trk)) return false;
+  const tId = (truck.id || '').trim().toLowerCase();
+  const tName = (truck.name || '').trim().toLowerCase();
+  const tNum = (truck.truckNumber || '').trim().toLowerCase();
+
+  const trkNum = trk.replace(/[^0-9]/g, '');
+  const tIdNum = tId.replace(/[^0-9]/g, '');
+  const tNameNum = tName.replace(/[^0-9]/g, '');
+  const tNumNum = tNum ? tNum.replace(/[^0-9]/g, '') : '';
+
+  if (trkNum && (trkNum === tIdNum || trkNum === tNameNum || (tNumNum && trkNum === tNumNum))) {
+    return true;
+  }
+
+  return (
+    tId === trk ||
+    tName === trk ||
+    tNum === trk ||
+    tId.includes(trk) ||
+    trk.includes(tId) ||
+    tName.includes(trk) ||
+    trk.includes(tName)
+  );
+}
+
 // Helper to estimate or parse weight in lbs from string
 export function parseDeliveryWeightLbs(delivery: DeliveryRecord): number {
   if (delivery.weight) {
@@ -606,12 +634,8 @@ export default function DragDropFreightBoard({
         if (selectedShiftFilter === 'PM' && slot !== 'PM' && slot !== 'AFTERNOON') return;
       }
 
-      // Match by truck ID or truck Name
-      const matchedTruck = activeTrucks.find(t => 
-        t.id.toLowerCase().trim() === trk ||
-        t.name.toLowerCase().trim() === trk ||
-        (t.truckNumber && t.truckNumber.toLowerCase().trim() === trk)
-      );
+      // Match by truck ID or truck Name using robust helper
+      const matchedTruck = activeTrucks.find(t => isDeliveryAssignedToTruck(d, t));
 
       if (matchedTruck) {
         map[matchedTruck.id] = map[matchedTruck.id] || [];
@@ -1198,10 +1222,19 @@ export default function DragDropFreightBoard({
             });
 
             const unassignedForDay = dayDeliveries.filter(d => !d.assignedTruck || d.assignedTruck === 'UNASSIGNED' || d.assignedTruck === 'NONE');
-            const assignedForDay = dayDeliveries.filter(d => d.assignedTruck && d.assignedTruck !== 'UNASSIGNED' && d.assignedTruck !== 'NONE');
+            const assignedForDay = dayDeliveries.filter(d => {
+              const trk = (d.assignedTruck || '').trim().toLowerCase();
+              if (!trk || ['unassigned', 'no truck', 'none', 'pending', ''].includes(trk)) return false;
+              return trucks.some(t => isDeliveryAssignedToTruck(d, t));
+            });
 
             // Unique trucks loaded on this day
-            const trucksForDay = Array.from(new Set(assignedForDay.map(d => d.assignedTruck)));
+            const trucksForDay = Array.from(new Set(
+              assignedForDay.map(d => {
+                const matched = trucks.find(t => isDeliveryAssignedToTruck(d, t));
+                return matched ? matched.id : d.assignedTruck;
+              })
+            ));
 
             return (
               <div 
@@ -1254,7 +1287,10 @@ export default function DragDropFreightBoard({
                       {trucksForDay.map(truckId => {
                         const truckObj = trucks.find(t => t.id === truckId);
                         const truckName = truckObj ? truckObj.name : truckId;
-                        const truckDelivs = assignedForDay.filter(d => d.assignedTruck === truckId);
+                        const truckDelivs = assignedForDay.filter(d => {
+                          const matched = trucks.find(t => isDeliveryAssignedToTruck(d, t));
+                          return matched && matched.id === truckId;
+                        });
                         const totalWeight = truckDelivs.reduce((sum, d) => sum + parseDeliveryWeightLbs(d), 0);
 
                         return (
@@ -1360,7 +1396,7 @@ export default function DragDropFreightBoard({
                         if (!isMatchingWeekStore(deliv)) return false;
                         if (!isMatchingWeekShift(deliv)) return false;
                         const delivDate = deliv.scheduledDate ? deliv.scheduledDate.split('T')[0] : (deliv.registeredAt ? deliv.registeredAt.split('T')[0] : '');
-                        return deliv.assignedTruck === truck.id && delivDate === dateStr;
+                        return isDeliveryAssignedToTruck(deliv, truck) && delivDate === dateStr;
                       });
 
                       const totalWeight = truckDayDelivs.reduce((sum, deliv) => sum + parseDeliveryWeightLbs(deliv), 0);

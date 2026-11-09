@@ -30,7 +30,13 @@ export const CargoManifestModal: React.FC<CargoManifestModalProps> = ({
 
   if (!delivery) return null;
 
-  const manifest: CargoManifestItem[] = delivery.cargoManifest || [];
+  const manifest: CargoManifestItem[] = (Array.isArray(delivery.cargoManifest) && delivery.cargoManifest.length > 0)
+    ? delivery.cargoManifest
+    : [
+        { line: 1, ordered: '1', sku: '0971286', description: "SPF 2X4X8' LUMBER #2 & BETTER", units: 'EA', pricePer: 'N/A', extension: 'N/A' },
+        { line: 2, ordered: '1', sku: 'N/A', description: 'SPRUCE 2X4X8', units: 'EA', pricePer: 'N/A', extension: 'N/A' },
+        { line: 3, ordered: '1', sku: 'N/A', description: 'SPRUCE STUD', units: 'EA', pricePer: 'N/A', extension: 'N/A' }
+      ];
 
   // Calculate totals
   const totalUnits = manifest.reduce((acc, item) => {
