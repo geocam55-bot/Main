@@ -2641,6 +2641,134 @@ async function startServer() {
     }
   });
 
+  // OCR Coordinate Templates Persistence Endpoints (supports multi-device & Live Build syncing)
+  const OCR_TEMPLATES_FILE = path.join(DATA_DIR, 'ocr_coordinate_templates.json');
+  let inMemoryOcrTemplatesCache: any = null;
+
+  app.get('/api/ocr-templates', async (req, res) => {
+    try {
+      // 1. In-memory server cache
+      if (inMemoryOcrTemplatesCache && inMemoryOcrTemplatesCache.templates) {
+        return res.json({
+          success: true,
+          ...inMemoryOcrTemplatesCache,
+          source: 'server_cache'
+        });
+      }
+
+      // 2. Fetch from Supabase kv_store_8405be07 table
+      try {
+        const { data, error } = await supabase
+          .from('kv_store_8405be07')
+          .select('key, value')
+          .in('key', ['prospaces_ocr_coordinate_templates', 'prospaces_ocr_mapped_fields', 'prospaces_ocr_strict_coordinates']);
+
+        if (!error && data && data.length > 0) {
+          const templatesRow = data.find((r: any) => r.key === 'prospaces_ocr_coordinate_templates');
+          const mappedRow = data.find((r: any) => r.key === 'prospaces_ocr_mapped_fields');
+          const strictRow = data.find((r: any) => r.key === 'prospaces_ocr_strict_coordinates');
+
+          if (templatesRow && templatesRow.value && typeof templatesRow.value === 'object') {
+            inMemoryOcrTemplatesCache = {
+              templates: templatesRow.value,
+              mappedFields: mappedRow?.value || null,
+              strictCoordinates: strictRow ? strictRow.value : true
+            };
+
+            // Also ensure disk backup is written
+            try {
+              fs.writeFileSync(OCR_TEMPLATES_FILE, JSON.stringify(inMemoryOcrTemplatesCache, null, 2), 'utf8');
+            } catch (fErr) {}
+
+            return res.json({
+              success: true,
+              ...inMemoryOcrTemplatesCache,
+              source: 'supabase_kv'
+            });
+          }
+        }
+      } catch (dbErr: any) {
+        console.warn('[Server] Supabase kv_store_8405be07 lookup note for ocr-templates:', dbErr?.message || dbErr);
+      }
+
+      // 3. Disk file fallback
+      if (fs.existsSync(OCR_TEMPLATES_FILE)) {
+        try {
+          const fileContent = JSON.parse(fs.readFileSync(OCR_TEMPLATES_FILE, 'utf8'));
+          if (fileContent && fileContent.templates) {
+            inMemoryOcrTemplatesCache = fileContent;
+            return res.json({
+              success: true,
+              ...fileContent,
+              source: 'file_storage'
+            });
+          }
+        } catch (fErr) {}
+      }
+
+      return res.json({
+        success: true,
+        templates: null,
+        mappedFields: null,
+        strictCoordinates: true,
+        source: 'defaults'
+      });
+    } catch (err: any) {
+      console.error('[Server] /api/ocr-templates GET error:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
+  app.post('/api/ocr-templates', async (req, res) => {
+    try {
+      const { templates, mappedFields, strictCoordinates } = req.body;
+      if (!templates || typeof templates !== 'object') {
+        return res.status(400).json({ success: false, error: 'Valid templates object is required' });
+      }
+
+      inMemoryOcrTemplatesCache = {
+        templates,
+        mappedFields: mappedFields || null,
+        strictCoordinates: strictCoordinates !== undefined ? strictCoordinates : true,
+        updatedAt: new Date().toISOString()
+      };
+
+      // 1. Write to local JSON disk backup
+      try {
+        fs.writeFileSync(OCR_TEMPLATES_FILE, JSON.stringify(inMemoryOcrTemplatesCache, null, 2), 'utf8');
+      } catch (fErr) {
+        console.warn('[Server] Could not write OCR_TEMPLATES_FILE:', fErr);
+      }
+
+      // 2. Persist to Supabase kv_store_8405be07
+      try {
+        const records = [
+          { key: 'prospaces_ocr_coordinate_templates', value: templates },
+          ...(mappedFields ? [{ key: 'prospaces_ocr_mapped_fields', value: mappedFields }] : []),
+          ...(strictCoordinates !== undefined ? [{ key: 'prospaces_ocr_strict_coordinates', value: strictCoordinates }] : [])
+        ];
+
+        const { error: upsertErr } = await supabase
+          .from('kv_store_8405be07')
+          .upsert(records);
+
+        if (upsertErr) {
+          console.warn('[Server] Supabase upsert note for ocr-templates:', upsertErr.message);
+        }
+      } catch (dbErr: any) {
+        console.warn('[Server] Exception upserting ocr-templates to Supabase:', dbErr?.message || dbErr);
+      }
+
+      return res.json({
+        success: true,
+        message: 'OCR coordinate templates successfully saved and synced across environments'
+      });
+    } catch (err: any) {
+      console.error('[Server] /api/ocr-templates POST error:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
   app.post('/api/import-export/upload', upload.single('file'), (req, res) => {
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });

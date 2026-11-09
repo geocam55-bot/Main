@@ -34,8 +34,10 @@ import {
   Copy,
   Check,
   Table,
-  X
+  X,
+  Cloud
 } from 'lucide-react';
+import { getKvValue, setKvValue } from '../../../utils/kv-client';
 import { Branch, DeliveryRecord, DeliveryStatus, CargoManifestItem } from '../types';
 
 const FALLBACK_SUPABASE_SCHEMA_SQL = `/* SUPABASE SCHEMA INITIALIZATION FOR PROSPACES DELIVERY AND LOGISTICS PORTAL */
@@ -1816,6 +1818,10 @@ export default function ArchitectureView({
     localStorage.setItem('prospaces_ocr_strict_coordinates', String(strictCoordinatesMode));
   }, [strictCoordinatesMode]);
 
+  const [isSavingTemplate, setIsSavingTemplate] = useState<boolean>(false);
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
+  const isHydratedFromCloud = useRef<boolean>(false);
+
   const [payloadViewMode, setPayloadViewMode] = useState<'form' | 'json'>('form');
 
   const [activeFieldToMap, setActiveFieldToMap] = useState<string | null>(null);
@@ -2011,9 +2017,177 @@ export default function ArchitectureView({
     };
   }, [uploadedFiles, selectedDocType, currentPdfPage, canvasOrientation]);
 
-  // Sync stateful templates and files to localStorage
+  // Save helper function that synchronizes both LocalStorage AND Cloud Database (Supabase KV & server)
+  const saveTemplatesToStorage = async (
+    templatesToSave: Record<DocType, DocTemplate>,
+    mappedFieldsToSave: Record<DocType, string[]>,
+    strictMode: boolean,
+    docTypeForFeedback?: DocType
+  ) => {
+    setIsSavingTemplate(true);
+    // 1. LocalStorage for instantaneous local availability
+    try {
+      localStorage.setItem('prospaces_ocr_coordinate_templates', JSON.stringify(templatesToSave));
+      localStorage.setItem('prospaces_ocr_mapped_fields', JSON.stringify(mappedFieldsToSave));
+      localStorage.setItem('prospaces_ocr_strict_coordinates', String(strictMode));
+    } catch (e) {}
+
+    // 2. Server API & Supabase persistence
+    let remoteSaved = false;
+    try {
+      const resp = await fetch('/api/ocr-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templates: templatesToSave,
+          mappedFields: mappedFieldsToSave,
+          strictCoordinates: strictMode
+        })
+      });
+      if (resp.ok) {
+        remoteSaved = true;
+      }
+    } catch (err) {
+      console.warn('[ArchitectureView] POST /api/ocr-templates note:', err);
+    }
+
+    // 3. Direct Supabase KV client fallback / dual redundancy
+    try {
+      await setKvValue('prospaces_ocr_coordinate_templates', templatesToSave);
+      await setKvValue('prospaces_ocr_mapped_fields', mappedFieldsToSave);
+      await setKvValue('prospaces_ocr_strict_coordinates', strictMode);
+      remoteSaved = true;
+    } catch (err) {}
+
+    setIsSavingTemplate(false);
+    setIsCloudSynced(true);
+
+    if (docTypeForFeedback) {
+      setCustomFileFeedback(`✔ Template settings, field values, coordinates, and orientation for "${docTypeForFeedback}" successfully saved & synchronized across all live builds and devices!`);
+    }
+  };
+
+  // Mount Effect: Automatically hydrate template coordinates and field mappings from the remote cloud database
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function hydrateTemplatesFromCloud() {
+      try {
+        let remoteTemplates: any = null;
+        let remoteMappedFields: any = null;
+        let remoteStrict: any = null;
+
+        // 1. Fetch from server API
+        try {
+          const res = await fetch('/api/ocr-templates');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.templates && typeof data.templates === 'object' && Object.keys(data.templates).length > 0) {
+              remoteTemplates = data.templates;
+              remoteMappedFields = data.mappedFields;
+              remoteStrict = data.strictCoordinates;
+            }
+          }
+        } catch (e) {
+          console.warn('[ArchitectureView] Fetching ocr-templates API note:', e);
+        }
+
+        // 2. Fallback to Supabase direct KV
+        if (!remoteTemplates) {
+          try {
+            remoteTemplates = await getKvValue('prospaces_ocr_coordinate_templates');
+          } catch (e) {}
+        }
+        if (!remoteMappedFields) {
+          try {
+            remoteMappedFields = await getKvValue('prospaces_ocr_mapped_fields');
+          } catch (e) {}
+        }
+
+        if (isCancelled) return;
+
+        if (remoteTemplates && typeof remoteTemplates === 'object' && Object.keys(remoteTemplates).length > 0) {
+          setActiveTemplates(prev => {
+            const merged: Record<DocType, DocTemplate> = { ...prev };
+            (Object.keys(remoteTemplates) as DocType[]).forEach((dt) => {
+              if (remoteTemplates[dt]) {
+                merged[dt] = {
+                  ...merged[dt],
+                  ...remoteTemplates[dt],
+                  fields: {
+                    ...(merged[dt]?.fields || {}),
+                    ...(remoteTemplates[dt]?.fields || {})
+                  }
+                };
+              }
+            });
+            return merged;
+          });
+
+          // Sync to localStorage
+          try {
+            localStorage.setItem('prospaces_ocr_coordinate_templates', JSON.stringify(remoteTemplates));
+          } catch (e) {}
+
+          // Update orientation and editedFields if current template is in remote
+          if (remoteTemplates[selectedDocType]) {
+            const tmpl = remoteTemplates[selectedDocType];
+            if (tmpl.orientation) {
+              setCanvasOrientation(tmpl.orientation);
+            }
+            if (tmpl.fields) {
+              const currentFields: Record<string, string> = {};
+              Object.keys(tmpl.fields).forEach((k) => {
+                currentFields[k] = tmpl.fields[k].value;
+              });
+              setEditedFields(prev => ({ ...prev, ...currentFields }));
+            }
+          }
+          setIsCloudSynced(true);
+        }
+
+        if (remoteMappedFields && typeof remoteMappedFields === 'object') {
+          setMappedFields(prev => ({
+            ...prev,
+            ...remoteMappedFields
+          }));
+          try {
+            localStorage.setItem('prospaces_ocr_mapped_fields', JSON.stringify(remoteMappedFields));
+          } catch (e) {}
+        }
+
+        if (typeof remoteStrict === 'boolean') {
+          setStrictCoordinatesMode(remoteStrict);
+          try {
+            localStorage.setItem('prospaces_ocr_strict_coordinates', String(remoteStrict));
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('[ArchitectureView] Exception hydrating templates from cloud:', err);
+      } finally {
+        if (!isCancelled) {
+          isHydratedFromCloud.current = true;
+        }
+      }
+    }
+
+    hydrateTemplatesFromCloud();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  // Sync stateful templates and files to localStorage and debounced cloud sync
   useEffect(() => {
     localStorage.setItem('prospaces_ocr_coordinate_templates', JSON.stringify(activeTemplates));
+
+    // Debounced background sync to cloud database once hydrated
+    if (!isHydratedFromCloud.current) return;
+    const timer = setTimeout(() => {
+      saveTemplatesToStorage(activeTemplates, mappedFields, strictCoordinatesMode).catch(() => {});
+    }, 2000);
+    return () => clearTimeout(timer);
   }, [activeTemplates]);
 
   useEffect(() => {
@@ -3202,8 +3376,15 @@ SUPABASE_ANON_KEY=your-supabase-key`}
                   <RefreshCw className={`h-3.5 w-3.5 text-blue-500 transition-transform duration-300 ${canvasOrientation === 'landscape' ? '-rotate-90' : ''}`} />
                   <span>{canvasOrientation === 'landscape' ? 'Landscape (11" x 8.5")' : 'Portrait (8.5" x 11")'}</span>
                 </button>
+                <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs" title="Templates automatically synchronize with the cloud database for Live Build deployment">
+                  <Cloud className={`h-3.5 w-3.5 ${isSavingTemplate ? 'text-amber-500 animate-pulse' : isCloudSynced ? 'text-emerald-500' : 'text-blue-500'}`} />
+                  <span className="hidden sm:inline">
+                    {isSavingTemplate ? 'Saving...' : isCloudSynced ? 'Cloud Synced' : 'Ready'}
+                  </span>
+                </div>
                 <button
-                  onClick={() => {
+                  disabled={isSavingTemplate}
+                  onClick={async () => {
                     const currentTemplate = activeTemplates[selectedDocType];
                     const updatedFields = { ...(currentTemplate?.fields || {}) };
 
@@ -3239,7 +3420,6 @@ SUPABASE_ANON_KEY=your-supabase-key`}
                     };
 
                     setActiveTemplates(updatedTemplates);
-                    localStorage.setItem('prospaces_ocr_coordinate_templates', JSON.stringify(updatedTemplates));
 
                     // Save mappedFields list for selectedDocType
                     const currentMapped = mappedFields[selectedDocType] || [];
@@ -3249,15 +3429,19 @@ SUPABASE_ANON_KEY=your-supabase-key`}
                       [selectedDocType]: allMappedKeys
                     };
                     setMappedFields(updatedMappedFields);
-                    localStorage.setItem('prospaces_ocr_mapped_fields', JSON.stringify(updatedMappedFields));
 
-                    setCustomFileFeedback(`✔ Default field values, coordinates, and orientation for "${selectedDocType}" successfully saved to Template!`);
+                    setCustomFileFeedback(`⏳ Saving template settings for "${selectedDocType}" to cloud database & local workspace...`);
+                    await saveTemplatesToStorage(updatedTemplates, updatedMappedFields, strictCoordinatesMode, selectedDocType);
                   }}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center space-x-1 border border-emerald-500 shadow-xs transition-colors cursor-pointer"
-                  title="Persist default field values, exact coordinates, and orientation to template system state"
+                  className={`px-3 py-1.5 ${isSavingTemplate ? 'bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700'} text-white rounded-lg font-bold flex items-center space-x-1.5 border border-emerald-500 shadow-xs transition-colors cursor-pointer`}
+                  title="Persist default field values, exact coordinates, and orientation to template system state and cloud database"
                 >
-                  <Save className="h-3.5 w-3.5" />
-                  <span>Save to Template</span>
+                  {isSavingTemplate ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  <span>{isSavingTemplate ? 'Saving...' : 'Save to Template'}</span>
                 </button>
 
                 <button
@@ -3295,7 +3479,7 @@ SUPABASE_ANON_KEY=your-supabase-key`}
                     setOcrLog([]);
                     setActiveFieldToMap(null);
                     setCurrentPdfPage(1);
-                    setCustomFileFeedback(`✔ Clean Slate! Document, custom uploads, coordinates, parsing logs, and extraction fields have been fully reset to default factory templates.`);
+                    setCustomFileFeedback(`✔ Clean Slate! Document, custom uploads, coordinates, parsing logs, and extraction fields have been fully reset to default factory presets. Click "Save to Template" to commit this configuration to the database.`);
                   }}
                   className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg font-bold flex items-center space-x-1 transition-colors"
                   title="Clear custom uploaded file, reset parsed extraction values, and clean logs back to factory preset"

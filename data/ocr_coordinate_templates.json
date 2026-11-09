@@ -1,0 +1,288 @@
+{
+  "templates": {
+    "RMA": {
+      "title": "PROSPACES VENDOR RETURN MERCHANDISE AUTHORIZATION",
+      "fields": {
+        "Date": {
+          "h": 22,
+          "w": 125,
+          "x": 500,
+          "y": 65,
+          "label": "Issue Date",
+          "value": "June 08, 2026"
+        },
+        "RMA #": {
+          "h": 25,
+          "w": 125,
+          "x": 500,
+          "y": 30,
+          "label": "RMA #",
+          "value": "RMA-774812-C"
+        },
+        "Manufacturer": {
+          "h": 22,
+          "w": 220,
+          "x": 40,
+          "y": 115,
+          "label": "Manufacturer Returnee",
+          "value": "Dewalt Tool Corp Depot Atlantic"
+        },
+        "Status Defect Code": {
+          "h": 35,
+          "w": 250,
+          "x": 40,
+          "y": 145,
+          "label": "Defect Code",
+          "value": "FAULTY TRIGGER CONTACTOR BLOCKS"
+        }
+      },
+      "subtitle": "MANUFACTURER RMA WARRANTY DEFECT CLASSIFICATION",
+      "sampleItems": [
+        {
+          "qty": "20",
+          "desc": "Dewalt Brushless Cordless Compact Impact Driver",
+          "price": "Warranty Return"
+        }
+      ]
+    },
+    "Order": {
+      "title": "PROSPACES SALES ORDER & DISPATCH INVOICE",
+      "fields": {
+        "Date": {
+          "h": 15,
+          "w": 63,
+          "x": 520,
+          "y": 122,
+          "page": 1,
+          "label": "Order Date",
+          "value": ""
+        },
+        "Order #": {
+          "h": 25,
+          "w": 125,
+          "x": 494,
+          "y": 216,
+          "page": 1,
+          "label": "Order Number",
+          "value": ""
+        },
+        "SKU BOX": {
+          "h": 385,
+          "w": 615,
+          "x": 18,
+          "y": 248,
+          "page": 1,
+          "label": "SKU BOX",
+          "value": "PARSED SKU BOX"
+        },
+        "Ship To": {
+          "h": 81,
+          "w": 144,
+          "x": 210,
+          "y": 161,
+          "page": 1,
+          "label": "Ship To Destination",
+          "value": ""
+        },
+        "Subtotal": {
+          "h": 25,
+          "w": 160,
+          "x": 440,
+          "y": 615,
+          "page": 2,
+          "label": "Order Subtotals",
+          "value": ""
+        },
+        "Gross Weight": {
+          "h": 25,
+          "w": 160,
+          "x": 440,
+          "y": 660,
+          "page": 2,
+          "label": "Gross Weight",
+          "value": ""
+        },
+        "Customer Name": {
+          "h": 70,
+          "w": 153,
+          "x": 35,
+          "y": 159,
+          "page": 1,
+          "label": "Customer Name",
+          "value": ""
+        }
+      },
+      "subtitle": "RETAIL ORDER ENTRY DIRECT DEPOSIT",
+      "orientation": "portrait",
+      "sampleItems": [
+        {
+          "qty": "40",
+          "desc": "Shoring Lumber 2x6x12 Pressure Treated Spruce",
+          "price": "$858.00"
+        },
+        {
+          "qty": "12",
+          "desc": "Portland Cement Type GU 40kg Bags",
+          "price": "$215.40"
+        },
+        {
+          "qty": "2",
+          "desc": "Galvanized Framing Nails 3-1/4\" Box (3000ct)",
+          "price": "$153.90"
+        }
+      ]
+    },
+    "Credit": {
+      "title": "PROSPACES CASHIER CREDIT & ADJUSTMENT MEMO",
+      "fields": {
+        "Date": {
+          "h": 22,
+          "w": 125,
+          "x": 500,
+          "y": 65,
+          "page": 1,
+          "label": "Adjustment Date",
+          "value": "June 10, 2026"
+        },
+        "Total Credit": {
+          "h": 25,
+          "w": 160,
+          "x": 440,
+          "y": 615,
+          "page": 2,
+          "label": "Total Credit Refund",
+          "value": "$1,904.00"
+        },
+        "Credit Note #": {
+          "h": 25,
+          "w": 125,
+          "x": 500,
+          "y": 30,
+          "page": 1,
+          "label": "Credit Note #",
+          "value": "CR-88273-04"
+        },
+        "Customer Name": {
+          "h": 22,
+          "w": 220,
+          "x": 40,
+          "y": 115,
+          "page": 1,
+          "label": "Refund Recipient",
+          "value": "Atlantic Deck Builders Co."
+        },
+        "Return Reason": {
+          "h": 35,
+          "w": 250,
+          "x": 40,
+          "y": 145,
+          "page": 1,
+          "label": "Return Reason",
+          "value": "Cabinetry dimensions mismatch on-site"
+        }
+      },
+      "subtitle": "CUSTOMER MERCHANDISE RETURN RECEIPT",
+      "sampleItems": [
+        {
+          "qty": "-6",
+          "desc": "Deco Custom Oak Cabinets 15\" x 30\" Upper",
+          "price": "- $1,860.00"
+        },
+        {
+          "qty": "-2",
+          "desc": "Classic Matte Black Cabinet Handle Packs",
+          "price": "- $44.00"
+        }
+      ]
+    },
+    "Supplier Pickup": {
+      "title": "PROSPACES REGIONAL SUPPLY PICKUP DISPATCH AUTHORIZATION",
+      "fields": {
+        "Date": {
+          "h": 22,
+          "w": 125,
+          "x": 500,
+          "y": 80,
+          "label": "Pickup Date (pickup Date)",
+          "value": "June 09, 2026"
+        },
+        "Ship To": {
+          "h": 35,
+          "w": 250,
+          "x": 40,
+          "y": 145,
+          "label": "Deliver Address (Shipto address)",
+          "value": "3680 RONA Tantallon, Hammonds Inc. Tantallon NS B3Z 1H3"
+        },
+        "Supplier Code": {
+          "h": 22,
+          "w": 125,
+          "x": 500,
+          "y": 55,
+          "label": "Supplier Code",
+          "value": "VND-MILWAUKEE-99"
+        },
+        "Supplier Name": {
+          "h": 22,
+          "w": 230,
+          "x": 40,
+          "y": 115,
+          "label": "Supplier Name & Address (Supplier)",
+          "value": "Milwaukee Central Logistics Hub - 1042 Vendor Way"
+        },
+        "Purchase Order #": {
+          "h": 25,
+          "w": 125,
+          "x": 500,
+          "y": 25,
+          "label": "Purchase Order # (PO#)",
+          "value": "1032"
+        }
+      },
+      "subtitle": "WAREHOUSE LOGISTICS VENDOR FREIGHT CLAIMS",
+      "sampleItems": [
+        {
+          "qty": "15",
+          "desc": "M18 Fuel Lithium Brushless 1/2\" Hammer Drill Kits",
+          "price": "Consigned freight"
+        },
+        {
+          "qty": "8",
+          "desc": "M18 Cordless Sawzall Reciprocating Saw Tools Only",
+          "price": "Consigned freight"
+        }
+      ]
+    }
+  },
+  "mappedFields": {
+    "RMA": [
+      "RMA #",
+      "Date",
+      "Manufacturer",
+      "Status Defect Code"
+    ],
+    "Order": [
+      "Order #",
+      "Date",
+      "Customer Name",
+      "Ship To",
+      "Subtotal",
+      "Gross Weight",
+      "SKU BOX"
+    ],
+    "Credit": [
+      "Credit Note #",
+      "Date",
+      "Customer Name",
+      "Return Reason",
+      "Total Credit"
+    ],
+    "Supplier Pickup": [
+      "Supplier Code",
+      "Date",
+      "Warehouse Location",
+      "Item Specifications"
+    ]
+  },
+  "strictCoordinates": true
+}
