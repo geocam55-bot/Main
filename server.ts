@@ -2476,38 +2476,165 @@ Return structured results in required JSON format.`;
         }
       }
 
-      // 2. Precise extraction matching the uploaded RONA Tantallon Order 300908
-      const extractedData: Record<string, string> = {};
-      const ronaManifest = [
-        { line: 1, ordered: "1", sku: "0971286", description: "SPF 2X4X8' LUMBER #2 & BETTER", units: "EA", pricePer: "N/A", extension: "N/A" },
-        { line: 2, ordered: "1", sku: "N/A", description: "SPRUCE 2X4X8", units: "EA", pricePer: "N/A", extension: "N/A" },
-        { line: 3, ordered: "1", sku: "N/A", description: "SPRUCE STUD", units: "EA", pricePer: "N/A", extension: "N/A" }
-      ];
+      // 2. Real dynamic PDF text & items extraction
+      const parts = fileData.match(/^data:(.*);base64,(.*)$/);
+      if (parts) {
+        const mimeType = (parts[1] || '').toLowerCase();
+        const base64Data = parts[2];
+        if (mimeType.includes("pdf") || base64Data.startsWith("JVBER")) {
+          try {
+            const buffer = Buffer.from(base64Data, 'base64');
+            const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+            const doc = await pdfjsLib.getDocument({
+              data: new Uint8Array(buffer),
+              isEvalSupported: false,
+              useSystemFonts: true
+            }).promise;
 
-      Object.keys(fieldsToExtract || {}).forEach((fieldKey) => {
-        const lower = fieldKey.toLowerCase();
-        if (lower.includes("sku box") || lower.includes("manifest") || lower.includes("items")) {
-          extractedData[fieldKey] = JSON.stringify(ronaManifest);
-        } else if (lower.includes("order") || lower.includes("invoice")) {
-          extractedData[fieldKey] = "300908";
-        } else if (lower.includes("date")) {
-          extractedData[fieldKey] = "7/29/26";
-        } else if (lower.includes("customer")) {
-          extractedData[fieldKey] = "GEORGE CAMPBELL";
-        } else if (lower.includes("ship") || lower.includes("address")) {
-          extractedData[fieldKey] = "17 SPARROW LANE HUBLEY NS B3Z 1A3";
-        } else if (lower.includes("weight") || lower.includes("subtotal")) {
-          extractedData[fieldKey] = "1,190 lbs";
-        } else {
-          extractedData[fieldKey] = "N/A";
+            let fullRawText = '';
+            const allItems: any[] = [];
+            for (let p = 1; p <= doc.numPages; p++) {
+              const page = await doc.getPage(p);
+              const content = await page.getTextContent();
+              content.items.forEach((it: any) => {
+                if (it.str && it.str.trim()) {
+                  allItems.push({
+                    str: it.str.trim(),
+                    x: it.transform ? it.transform[4] : 0,
+                    y: it.transform ? it.transform[5] : 0
+                  });
+                }
+              });
+              const pageStr = content.items.map((it: any) => it.str).join(' ');
+              fullRawText += (fullRawText ? '\n' : '') + pageStr;
+            }
+
+            if (fullRawText.trim().length > 10) {
+              let headerY = -1;
+              allItems.forEach(it => {
+                if (/LINE/i.test(it.str) || /DESCRIPTION/i.test(it.str) || /ORDERED/i.test(it.str)) {
+                  if (headerY === -1 || it.y > headerY) headerY = it.y;
+                }
+              });
+
+              const manifestItems: any[] = [];
+              if (headerY > 0) {
+                const rowsByY = new Map<number, any[]>();
+                allItems.forEach(it => {
+                  if (it.y >= headerY - 4 || it.y < 70) return;
+                  const bucketY = Math.round(it.y / 4) * 4;
+                  if (!rowsByY.has(bucketY)) rowsByY.set(bucketY, []);
+                  rowsByY.get(bucketY)!.push(it);
+                });
+
+                const sortedYs = Array.from(rowsByY.keys()).sort((a, b) => b - a);
+                for (const y of sortedYs) {
+                  const row = rowsByY.get(y)!.sort((a, b) => a.x - b.x);
+                  const rowText = row.map(r => r.str).join(' ');
+                  if (rowText.toLowerCase().includes('ship via') || rowText.toLowerCase().includes('received by')) continue;
+
+                  const lineMatch = rowText.match(/^(\d{1,3})\s+(.*)$/);
+                  if (lineMatch) {
+                    const lineNum = parseInt(lineMatch[1]);
+                    const rest = lineMatch[2];
+                    const qtyMatch = rest.match(/^(\d+)\s+(?:([A-Z]{2,4})\s+)?(?:([0-9A-Z]{5,12})\s+)?(.+?)(?:\s+YARD|\s+\$|\s*$)/i);
+                    manifestItems.push({
+                      line: lineNum,
+                      ordered: qtyMatch ? (qtyMatch[1] || '1') : '1',
+                      units: qtyMatch ? (qtyMatch[2] || 'EA') : 'EA',
+                      sku: qtyMatch ? (qtyMatch[3] || 'N/A') : 'N/A',
+                      description: (qtyMatch ? (qtyMatch[4] || rest) : rest).replace(/\s+(YARD|AISLE|STORE)\s*.*$/i, '').trim(),
+                      pricePer: 'N/A',
+                      extension: 'N/A'
+                    });
+                  }
+                }
+              }
+
+              const extractedData: Record<string, string> = {};
+              
+              let detectedOrder = '';
+              const orderNumCandidates = allItems.filter((it: any) => 
+                it.y >= 500 && /^\d{5,8}$/.test(it.str)
+              );
+              if (orderNumCandidates.length > 0) {
+                detectedOrder = orderNumCandidates[orderNumCandidates.length - 1].str;
+              } else {
+                const orderMatch = fullRawText.match(/\b(?:SO#?|Sales\s*Order|REQUEST:?)\s*[:#\.-]?\s*([A-Za-z0-9-]{4,12})\b/i);
+                if (orderMatch) detectedOrder = orderMatch[1];
+                else {
+                  const digitMatch = fullRawText.match(/\b(\d{5,8})\b/);
+                  if (digitMatch) detectedOrder = digitMatch[1];
+                }
+              }
+
+              let detectedDate = '';
+              const dateMatch = fullRawText.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/) || fullRawText.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+              if (dateMatch) detectedDate = dateMatch[1];
+
+              let detectedCustomer = '';
+              let detectedAddress = '';
+
+              const shipToLabel = allItems.find((it: any) => /SHIP\s*TO/i.test(it.str));
+              if (shipToLabel) {
+                const shipToItems = allItems.filter((it: any) => 
+                  it.x >= shipToLabel.x - 10 && 
+                  it.x <= shipToLabel.x + 130 && 
+                  it.y < shipToLabel.y - 2 && 
+                  it.y >= shipToLabel.y - 50
+                );
+                shipToItems.sort((a: any, b: any) => (Math.abs(a.y - b.y) > 3 ? b.y - a.y : a.x - b.x));
+                if (shipToItems.length > 0) {
+                  detectedCustomer = shipToItems[0].str;
+                  detectedAddress = shipToItems.slice(1).map((s: any) => s.str).join(' ');
+                }
+              }
+
+              if (!detectedCustomer) {
+                const custMatch = fullRawText.match(/(?:Customer|Sold\s*To|Deliver\s*To|Client)\s*[:\-]?\s*([A-Za-z0-9\s.,&'-]+)/i);
+                if (custMatch) detectedCustomer = custMatch[1].split('\n')[0].trim();
+              }
+
+              if (!detectedAddress) {
+                const addrMatch = fullRawText.match(/(?:^|[\s,;])(\d{1,5}\s+[A-Za-z]+(?:\s+[A-Za-z0-9]+)*\s+(?:Lane|St|Street|Rd|Road|Ave|Avenue|Hwy|Highway|Dr|Drive|Way|Blvd|Court|Ct|Pl)\b[A-Za-z0-9\s.,#-]*[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d?)/i);
+                if (addrMatch) detectedAddress = addrMatch[1].replace(/\s+(?:TAX|REQUEST|DEL|DATE|TERMS|HST).*$/i, '').trim();
+              }
+
+              Object.keys(fieldsToExtract || {}).forEach((fieldKey) => {
+                const lower = fieldKey.toLowerCase();
+                if (lower.includes("sku box") || lower.includes("manifest") || lower.includes("items")) {
+                  extractedData[fieldKey] = JSON.stringify(manifestItems);
+                } else if (lower.includes('order') || lower.includes('invoice') || lower.includes('so#')) {
+                  extractedData[fieldKey] = detectedOrder || 'N/A';
+                } else if (lower.includes('date')) {
+                  extractedData[fieldKey] = detectedDate || 'N/A';
+                } else if (lower.includes('customer') || lower.includes('name')) {
+                  extractedData[fieldKey] = detectedCustomer || 'N/A';
+                } else if (lower.includes('ship') || lower.includes('address')) {
+                  extractedData[fieldKey] = detectedAddress || 'N/A';
+                } else {
+                  extractedData[fieldKey] = 'N/A';
+                }
+              });
+
+              return res.json({
+                success: true,
+                data: extractedData,
+                cargoManifest: manifestItems.length > 0 ? manifestItems : undefined,
+                source: 'server_pdf_extraction'
+              });
+            }
+          } catch (pdfErr) {
+            console.warn("[Server OCR] Real PDF extraction exception:", pdfErr);
+          }
         }
-      });
+      }
 
+      // Signal client to perform direct in-browser OCR
       return res.json({
-        success: true,
-        data: extractedData,
-        cargoManifest: ronaManifest,
-        source: 'rona_document_parser'
+        success: false,
+        fallbackToBrowserOcr: true,
+        message: "Server AI OCR unconfigured. Performing client-side OCR extraction directly in browser."
       });
     } catch (err: any) {
       console.error("Top-level OCR API Error:", err);

@@ -1368,9 +1368,9 @@ const mapExtractedFieldsToTemplateKeys = (
 ): Record<string, string> => {
   const result: Record<string, string> = {};
   
-  // Initialize fields with template default values so they never stay blank
+  // Initialize fields with template default values only in demo preview mode; for real OCR, default to empty/N/A
   Object.keys(templateFields).forEach(key => {
-    result[key] = templateFields[key].value || '';
+    result[key] = useDemoFallback ? (templateFields[key].value || '') : 'N/A';
   });
 
   // Helper to normalize keys for comparison (remove spaces, symbols, lowercase)
@@ -2290,7 +2290,7 @@ export default function ArchitectureView({
         const contentType = response.headers.get('content-type') || '';
         if (response.ok && contentType.includes('application/json')) {
           const resData = await response.json();
-          if (resData.success && resData.data) {
+          if (resData.success && resData.data && !resData.fallbackToBrowserOcr) {
             extracted = resData.data;
             cargoManifest = resData.cargoManifest;
             extractionSource = resData.source || 'server_ocr';
@@ -2300,39 +2300,221 @@ export default function ArchitectureView({
         // Server endpoint not reachable or status 405 on static CDN host
       }
 
-      // 2. If server extraction was not available or returned 405, execute client-side parser
+      // 2. Real in-browser document OCR extraction engine (Never fixed mock data)
       if (!extracted) {
-        setOcrLog(prev => [...prev, '⚡ Server endpoint returned 405/offline. Running high-precision browser document OCR engine...']);
+        setOcrLog(prev => [...prev, '⚡ Executing client-side real document OCR engine on uploaded file...']);
 
+        let fullRawText = '';
+        const allPdfItems: { str: string; x: number; y: number }[] = [];
+        const isPdf = fileUri.startsWith('data:application/pdf') || fileUri.includes('application/pdf');
+
+        if (isPdf) {
+          setOcrLog(prev => [...prev, '📄 Reading digital PDF vector text streams...']);
+          try {
+            const pdfjs = await ensurePdfJsLoaded();
+            if (pdfjs) {
+              const base64 = fileUri.split(',')[1] || '';
+              const binary = atob(base64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              const doc = await pdfjs.getDocument({ data: bytes }).promise;
+
+              for (let p = 1; p <= doc.numPages; p++) {
+                const page = await doc.getPage(p);
+                const content = await page.getTextContent();
+                content.items.forEach((it: any) => {
+                  if (it.str && it.str.trim()) {
+                    allPdfItems.push({
+                      str: it.str.trim(),
+                      x: it.transform ? it.transform[4] : 0,
+                      y: it.transform ? it.transform[5] : 0
+                    });
+                  }
+                });
+                fullRawText += (fullRawText ? '\n' : '') + content.items.map((it: any) => it.str).join(' ');
+              }
+            }
+          } catch (pdfErr) {
+            console.warn('Browser PDF text extraction error:', pdfErr);
+          }
+        }
+
+        // If not PDF or text is short/empty, run Tesseract OCR on canvas/image
+        if (!fullRawText || fullRawText.trim().length < 15) {
+          setOcrLog(prev => [...prev, '🔍 Optical Character Recognition: Scanning image pixels with Tesseract.js...']);
+          try {
+            const target = canvasRef.current || fileUri;
+            const tessResult = await Tesseract.recognize(target, 'eng');
+            fullRawText = tessResult.data.text || '';
+          } catch (tessErr) {
+            console.warn('Browser Tesseract OCR error:', tessErr);
+          }
+        }
+
+        setOcrLog(prev => [...prev, `📝 Document text captured (${fullRawText.length} characters). Parsing fields and SKU Box manifest...`]);
+
+        // Dynamic extraction from captured text and items
+        const parsedManifest: any[] = [];
+
+        // 1. Cargo Manifest / SKU Box Items extraction
+        if (allPdfItems.length > 0) {
+          let headerY = -1;
+          allPdfItems.forEach(it => {
+            if (/LINE/i.test(it.str) || /DESCRIPTION/i.test(it.str) || /ORDERED/i.test(it.str)) {
+              if (headerY === -1 || it.y > headerY) headerY = it.y;
+            }
+          });
+
+          if (headerY > 0) {
+            const rowsByY = new Map<number, any[]>();
+            allPdfItems.forEach(it => {
+              if (it.y >= headerY - 4 || it.y < 70) return;
+              const bucketY = Math.round(it.y / 4) * 4;
+              if (!rowsByY.has(bucketY)) rowsByY.set(bucketY, []);
+              rowsByY.get(bucketY)!.push(it);
+            });
+
+            const sortedYs = Array.from(rowsByY.keys()).sort((a, b) => b - a);
+            for (const y of sortedYs) {
+              const row = rowsByY.get(y)!.sort((a, b) => a.x - b.x);
+              const rowText = row.map(r => r.str).join(' ');
+              if (rowText.toLowerCase().includes('ship via') || rowText.toLowerCase().includes('received by')) continue;
+
+              const lineMatch = rowText.match(/^(\d{1,3})\s+(.*)$/);
+              if (lineMatch) {
+                const lineNum = parseInt(lineMatch[1]);
+                const rest = lineMatch[2];
+                const qtyMatch = rest.match(/^(\d+)\s+(?:([A-Z]{2,4})\s+)?(?:([0-9A-Z]{5,12})\s+)?(.+?)(?:\s+YARD|\s+\$|\s*$)/i);
+                parsedManifest.push({
+                  line: lineNum,
+                  ordered: qtyMatch ? (qtyMatch[1] || '1') : '1',
+                  units: qtyMatch ? (qtyMatch[2] || 'EA') : 'EA',
+                  sku: qtyMatch ? (qtyMatch[3] || 'N/A') : 'N/A',
+                  description: (qtyMatch ? (qtyMatch[4] || rest) : rest).replace(/\s+(YARD|AISLE|STORE)\s*.*$/i, '').trim(),
+                  pricePer: 'N/A',
+                  extension: 'N/A'
+                });
+              }
+            }
+          }
+        }
+
+        // If manifest still empty, parse line-by-line from fullRawText
+        if (parsedManifest.length === 0) {
+          const rawLines = fullRawText.split('\n').map(l => l.trim()).filter(Boolean);
+          let afterHeader = false;
+          let lineCounter = 1;
+          for (const line of rawLines) {
+            if (/LINE\s+/i.test(line) || /DESCRIPTION/i.test(line) || /ORDERED/i.test(line)) {
+              afterHeader = true;
+              continue;
+            }
+            if (afterHeader) {
+              if (/SUBTOTAL|TOTAL|RECEIVED\s+BY|TERMS|DATE/i.test(line)) break;
+              const itemMatch = line.match(/^(\d{1,3})?\s*(\d+)\s+([A-Z]{2,4})?\s*([A-Za-z0-9-]{4,12})?\s+(.+)$/i);
+              if (itemMatch) {
+                parsedManifest.push({
+                  line: itemMatch[1] ? parseInt(itemMatch[1]) : lineCounter++,
+                  ordered: itemMatch[2] || '1',
+                  units: itemMatch[3] || 'EA',
+                  sku: itemMatch[4] || 'N/A',
+                  description: itemMatch[5].trim(),
+                  pricePer: 'N/A',
+                  extension: 'N/A'
+                });
+              }
+            }
+          }
+        }
+
+        // 2. Order #
+        let detectedOrder = '';
+        const orderNumCandidates = allPdfItems.filter((it) => 
+          it.y >= 500 && /^\d{5,8}$/.test(it.str)
+        );
+        if (orderNumCandidates.length > 0) {
+          detectedOrder = orderNumCandidates[orderNumCandidates.length - 1].str;
+        } else {
+          const orderMatch = fullRawText.match(/\b(?:SO#?|Sales\s*Order|REQUEST:?)\s*[:#\.-]?\s*([A-Za-z0-9-]{4,12})\b/i);
+          if (orderMatch) {
+            detectedOrder = orderMatch[1];
+          } else {
+            const digitMatch = fullRawText.match(/\b(\d{5,8})\b/);
+            if (digitMatch) detectedOrder = digitMatch[1];
+          }
+        }
+
+        // 3. Date
+        let detectedDate = '';
+        const dateMatch = fullRawText.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/) || fullRawText.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+        if (dateMatch) detectedDate = dateMatch[1];
+
+        // 4. Customer Name & Address
+        let detectedCustomer = '';
+        let detectedAddress = '';
+
+        const shipToLabel = allPdfItems.find(it => /SHIP\s*TO/i.test(it.str));
+        if (shipToLabel) {
+          const shipToItems = allPdfItems.filter(it => 
+            it.x >= shipToLabel.x - 10 && 
+            it.x <= shipToLabel.x + 130 && 
+            it.y < shipToLabel.y - 2 && 
+            it.y >= shipToLabel.y - 50
+          );
+          shipToItems.sort((a, b) => (Math.abs(a.y - b.y) > 3 ? b.y - a.y : a.x - b.x));
+          if (shipToItems.length > 0) {
+            detectedCustomer = shipToItems[0].str;
+            detectedAddress = shipToItems.slice(1).map(s => s.str).join(' ');
+          }
+        }
+
+        if (!detectedCustomer) {
+          const custMatch = fullRawText.match(/(?:Customer|Sold\s*To|Deliver\s*To|Client)\s*[:\-]?\s*([A-Za-z0-9\s.,&'-]+)/i);
+          if (custMatch) detectedCustomer = custMatch[1].split('\n')[0].trim();
+        }
+
+        if (!detectedAddress) {
+          const addrMatch = fullRawText.match(/(?:^|[\s,;])(\d{1,5}\s+[A-Za-z]+(?:\s+[A-Za-z0-9]+)*\s+(?:Lane|St|Street|Rd|Road|Ave|Avenue|Hwy|Highway|Dr|Drive|Way|Blvd|Court|Ct|Pl)\b[A-Za-z0-9\s.,#-]*[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d?)/i);
+          if (addrMatch) detectedAddress = addrMatch[1].replace(/\s+(?:TAX|REQUEST|DEL|DATE|TERMS|HST).*$/i, '').trim();
+        }
+
+        // 5. Weight & Subtotal
+        let detectedWeight = '';
+        const weightMatch = fullRawText.match(/(\d[\d,]*\s*(?:lbs|lb|kg|tons?))\b/i);
+        if (weightMatch) detectedWeight = weightMatch[1];
+
+        let detectedSubtotal = '';
+        const priceMatch = fullRawText.match(/\$\s*(\d[\d,]*(?:\.\d{2})?)/);
+        if (priceMatch) detectedSubtotal = '$' + priceMatch[1];
+
+        // Populate active list of fields dynamically
+        const realExtracted: Record<string, string> = {};
         const activeList = mappedFields[selectedDocType] || Object.keys(activeTemplate?.fields || {});
-        const fallbackExtracted: Record<string, string> = {};
-        let fallbackManifest: any[] = [];
 
         activeList.forEach(field => {
           const lower = field.toLowerCase();
           if (lower.includes('sku') || lower.includes('box') || lower.includes('manifest') || lower.includes('items')) {
-            fallbackManifest = [
-              { line: 1, ordered: "25", sku: "LUM-2X4-10", description: "2x4x10 SPF Lumber", units: "PC", pricePer: "$8.50", extension: "$212.50" },
-              { line: 2, ordered: "10", sku: "PLY-34-CDX", description: "3/4 CDX Plywood Sheet", units: "SHT", pricePer: "$42.00", extension: "$420.00" },
-              { line: 3, ordered: "100", sku: "FAST-3IN-SC", description: "3 Inch Deck Screws 5lb Box", units: "BOX", pricePer: "$24.99", extension: "$24.99" }
-            ];
-            fallbackExtracted[field] = JSON.stringify(fallbackManifest);
+            realExtracted[field] = JSON.stringify(parsedManifest);
+          } else if (lower.includes('order') || lower.includes('invoice') || lower.includes('so#')) {
+            realExtracted[field] = detectedOrder || 'N/A';
           } else if (lower.includes('date')) {
-            fallbackExtracted[field] = new Date().toISOString().split('T')[0];
-          } else if (lower.includes('order') || lower.includes('invoice')) {
-            fallbackExtracted[field] = 'ORD-94827-26';
+            realExtracted[field] = detectedDate || 'N/A';
           } else if (lower.includes('customer') || lower.includes('name')) {
-            fallbackExtracted[field] = 'Highland Construction Ltd.';
+            realExtracted[field] = detectedCustomer || 'N/A';
           } else if (lower.includes('ship') || lower.includes('address')) {
-            fallbackExtracted[field] = '104 Bedford Hwy, Halifax, NS B2M 1G4';
+            realExtracted[field] = detectedAddress || 'N/A';
+          } else if (lower.includes('weight')) {
+            realExtracted[field] = detectedWeight || 'N/A';
+          } else if (lower.includes('subtotal') || lower.includes('total')) {
+            realExtracted[field] = detectedSubtotal || 'N/A';
           } else {
-            fallbackExtracted[field] = activeTemplate?.fields?.[field]?.value || 'PRO-ORD-2026-001';
+            realExtracted[field] = 'N/A';
           }
         });
 
-        extracted = fallbackExtracted;
-        cargoManifest = fallbackManifest;
-        extractionSource = 'browser_ocr_engine';
+        extracted = realExtracted;
+        cargoManifest = parsedManifest;
+        extractionSource = isPdf && allPdfItems.length > 0 ? 'browser_pdf_engine' : 'browser_tesseract_ocr';
       }
 
       const normalized = mapExtractedFieldsToTemplateKeys(extracted, activeTemplate?.fields || {}, false);

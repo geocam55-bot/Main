@@ -4985,8 +4985,8 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         const TesseractModule = await import("tesseract.js");
         const Tesseract = TesseractModule.default || TesseractModule;
         
-        const tesseractPromise = Tesseract.recognize(buffer, "eng").then(res => (res.data as any).text || "");
-        const timeoutPromise = new Promise<string>((resolve) => setTimeout(() => resolve(""), 2500));
+        const tesseractPromise = Tesseract.recognize(buffer, "eng").then((res: any) => (res.data as any).text || "");
+        const timeoutPromise = new Promise<string>((resolve) => setTimeout(() => resolve(""), 12000));
         
         rawText = await Promise.race([tesseractPromise, timeoutPromise]);
       } catch (tessErr) {
@@ -5581,40 +5581,12 @@ Return the structured results in the required JSON format.`;
         source: 'tesseract_real_ocr'
       });
     } catch (err: any) {
-      console.warn("OCR Extraction Error caught, generating smart fallback extraction:", err);
-      try {
-        const fallbackData: Record<string, string> = {};
-        let fallbackManifest: any[] = [];
-        Object.keys(fieldsToExtract || {}).forEach((fieldKey) => {
-          const defaultVal = fieldsToExtract[fieldKey]?.value || '';
-          if (fieldKey.toLowerCase().includes("sku box") || (fieldsToExtract[fieldKey]?.label || "").toLowerCase().includes("sku box")) {
-            fallbackManifest = [
-              { line: 1, ordered: "25", sku: "LUM-2X4-10", description: "2x4x10 SPF Lumber", units: "PC", pricePer: "$8.50", extension: "$212.50" },
-              { line: 2, ordered: "10", sku: "PLY-34-CDX", description: "3/4 CDX Plywood Sheet", units: "SHT", pricePer: "$42.00", extension: "$420.00" },
-              { line: 3, ordered: "100", sku: "FAST-3IN-SC", description: "3 Inch Deck Screws 5lb Box", units: "BOX", pricePer: "$24.99", extension: "$24.99" }
-            ];
-            fallbackData[fieldKey] = JSON.stringify(fallbackManifest);
-          } else {
-            fallbackData[fieldKey] = (defaultVal && defaultVal !== "MOCK_VALUE") ? defaultVal : "PRO-ORD-2026-001";
-          }
-        });
-
-        const savedImage = saveBase64ScanImage(fileData, "ocr_doc", {
-          docType: docType || 'document'
-        });
-
-        return res.json({
-          success: true,
-          data: fallbackData,
-          cargoManifest: fallbackManifest.length > 0 ? fallbackManifest : undefined,
-          savedImage,
-          fileUrl: savedImage?.fileUrl,
-          source: 'smart_fallback'
-        });
-      } catch (fallbackErr) {
-        console.error("Critical fallback OCR error:", fallbackErr);
-        res.status(500).json({ error: err.message || "An exception occurred during real-time document parsing." });
-      }
+      console.warn("OCR Extraction Error caught on server, returning fallbackToBrowserOcr:", err);
+      return res.json({
+        success: false,
+        fallbackToBrowserOcr: true,
+        message: err.message || "Server OCR exception. Triggering in-browser document OCR."
+      });
     }
   });
 

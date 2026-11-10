@@ -131,41 +131,170 @@ Return the structured results in the required JSON format.`;
       }
     }
 
-    // Intelligent Fallback parser analyzing document text or structure
-    const fallbackData = {};
-    const fallbackManifest = [
-      { line: 1, ordered: "120", sku: "R-709", description: "2x4x8 SPF Premium Lumber", units: "PC", pricePer: "$7.45", extension: "$894.00" },
-      { line: 2, ordered: "30", sku: "PLY-34-TNG", description: "3/4\" Tongue & Groove Subfloor Plywood", units: "SHT", pricePer: "$42.50", extension: "$1,275.00" },
-      { line: 3, ordered: "4", sku: "ADH-SUB-28", description: "Heavy Duty Subfloor Construction Adhesive 28oz", units: "TUBE", pricePer: "$12.99", extension: "$51.96" }
-    ];
+    // Real PDF text extraction fallback if Gemini is not configured or failed
+    if (mimeType.includes("pdf") || base64Data.startsWith("JVBER")) {
+      try {
+        const buffer = Buffer.from(base64Data, 'base64');
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const doc = await pdfjsLib.getDocument({
+          data: new Uint8Array(buffer),
+          isEvalSupported: false,
+          useSystemFonts: true
+        }).promise;
 
-    Object.keys(fieldsToExtract || {}).forEach((fieldKey) => {
-      const lower = fieldKey.toLowerCase();
-      const defaultVal = fieldsToExtract[fieldKey]?.value || '';
-      if (lower.includes("sku box") || lower.includes("manifest") || lower.includes("items")) {
-        fallbackData[fieldKey] = JSON.stringify(fallbackManifest);
-      } else if (defaultVal && defaultVal !== 'MOCK_VALUE' && defaultVal !== 'N/A') {
-        fallbackData[fieldKey] = defaultVal;
-      } else if (lower.includes('order') || lower.includes('invoice')) {
-        fallbackData[fieldKey] = '300908';
-      } else if (lower.includes('date')) {
-        fallbackData[fieldKey] = 'August 17, 2026';
-      } else if (lower.includes('customer')) {
-        fallbackData[fieldKey] = 'GEORGE CAMPBELL';
-      } else if (lower.includes('ship') || lower.includes('address')) {
-        fallbackData[fieldKey] = '17 SPARROW LANE HUBLEY NS B3Z 1A3';
-      } else {
-        fallbackData[fieldKey] = 'N/A';
+        let fullRawText = '';
+        const allItems = [];
+        for (let p = 1; p <= doc.numPages; p++) {
+          const page = await doc.getPage(p);
+          const content = await page.getTextContent();
+          content.items.forEach(it => {
+            if (it.str && it.str.trim()) {
+              allItems.push({
+                str: it.str.trim(),
+                x: it.transform ? it.transform[4] : 0,
+                y: it.transform ? it.transform[5] : 0
+              });
+            }
+          });
+          const pageStr = content.items.map(it => it.str).join(' ');
+          fullRawText += (fullRawText ? '\n' : '') + pageStr;
+        }
+
+        if (fullRawText.trim().length > 10) {
+          // Find Header Y for items table
+          let headerY = -1;
+          allItems.forEach(it => {
+            if (/LINE/i.test(it.str) || /DESCRIPTION/i.test(it.str) || /ORDERED/i.test(it.str)) {
+              if (headerY === -1 || it.y > headerY) headerY = it.y;
+            }
+          });
+
+          // Group table items below header
+          const manifestItems = [];
+          if (headerY > 0) {
+            const rowsByY = new Map();
+            allItems.forEach(it => {
+              if (it.y >= headerY - 4 || it.y < 70) return;
+              const bucketY = Math.round(it.y / 4) * 4;
+              if (!rowsByY.has(bucketY)) rowsByY.set(bucketY, []);
+              rowsByY.get(bucketY).push(it);
+            });
+
+            const sortedYs = Array.from(rowsByY.keys()).sort((a, b) => b - a);
+            for (const y of sortedYs) {
+              const row = rowsByY.get(y).sort((a, b) => a.x - b.x);
+              const rowText = row.map(r => r.str).join(' ');
+              if (rowText.toLowerCase().includes('ship via') || rowText.toLowerCase().includes('received by')) continue;
+
+              const lineMatch = rowText.match(/^(\d{1,3})\s+(.*)$/);
+              if (lineMatch) {
+                const lineNum = parseInt(lineMatch[1]);
+                const rest = lineMatch[2];
+                const qtyMatch = rest.match(/^(\d+)\s+(?:([A-Z]{2,4})\s+)?(?:([0-9A-Z]{5,12})\s+)?(.+?)(?:\s+YARD|\s+\$|\s*$)/i);
+                manifestItems.push({
+                  line: lineNum,
+                  ordered: qtyMatch ? (qtyMatch[1] || '1') : '1',
+                  units: qtyMatch ? (qtyMatch[2] || 'EA') : 'EA',
+                  sku: qtyMatch ? (qtyMatch[3] || 'N/A') : 'N/A',
+                  description: (qtyMatch ? (qtyMatch[4] || rest) : rest).replace(/\s+(YARD|AISLE|STORE)\s*.*$/i, '').trim(),
+                  pricePer: 'N/A',
+                  extension: 'N/A'
+                });
+              }
+            }
+          }
+
+          // Semantic extraction of fields
+          const extractedData = {};
+          
+          // Order #
+          let detectedOrder = '';
+          const orderNumCandidates = allItems.filter((it) => 
+            it.y >= 500 && /^\d{5,8}$/.test(it.str)
+          );
+          if (orderNumCandidates.length > 0) {
+            detectedOrder = orderNumCandidates[orderNumCandidates.length - 1].str;
+          } else {
+            const orderMatch = fullRawText.match(/\b(?:SO#?|Sales\s*Order|REQUEST:?)\s*[:#\.-]?\s*([A-Za-z0-9-]{4,12})\b/i);
+            if (orderMatch) detectedOrder = orderMatch[1];
+            else {
+              const digitMatch = fullRawText.match(/\b(\d{5,8})\b/);
+              if (digitMatch) detectedOrder = digitMatch[1];
+            }
+          }
+
+          // Date
+          let detectedDate = '';
+          const dateMatch = fullRawText.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/) || fullRawText.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+          if (dateMatch) detectedDate = dateMatch[1];
+
+          // Customer and Ship To
+          let detectedCustomer = '';
+          let detectedAddress = '';
+
+          // Look for SHIP TO section
+          const shipToLabel = allItems.find(it => /SHIP\s*TO/i.test(it.str));
+          if (shipToLabel) {
+            const shipToItems = allItems.filter(it => 
+              it.x >= shipToLabel.x - 10 && 
+              it.x <= shipToLabel.x + 130 && 
+              it.y < shipToLabel.y - 2 && 
+              it.y >= shipToLabel.y - 50
+            );
+            shipToItems.sort((a, b) => (Math.abs(a.y - b.y) > 3 ? b.y - a.y : a.x - b.x));
+            if (shipToItems.length > 0) {
+              detectedCustomer = shipToItems[0].str;
+              detectedAddress = shipToItems.slice(1).map(s => s.str).join(' ');
+            }
+          }
+
+          if (!detectedCustomer) {
+            const custMatch = fullRawText.match(/(?:Customer|Sold\s*To|Deliver\s*To|Client)\s*[:\-]?\s*([A-Za-z0-9\s.,&'-]+)/i);
+            if (custMatch) detectedCustomer = custMatch[1].split('\n')[0].trim();
+          }
+
+          if (!detectedAddress) {
+            const addrMatch = fullRawText.match(/(?:^|[\s,;])(\d{1,5}\s+[A-Za-z]+(?:\s+[A-Za-z0-9]+)*\s+(?:Lane|St|Street|Rd|Road|Ave|Avenue|Hwy|Highway|Dr|Drive|Way|Blvd|Court|Ct|Pl)\b[A-Za-z0-9\s.,#-]*[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d?)/i);
+            if (addrMatch) detectedAddress = addrMatch[1].replace(/\s+(?:TAX|REQUEST|DEL|DATE|TERMS|HST).*$/i, '').trim();
+          }
+
+          // Populate requested fields
+          Object.keys(fieldsToExtract || {}).forEach((fieldKey) => {
+            const lower = fieldKey.toLowerCase();
+            if (lower.includes("sku box") || lower.includes("manifest") || lower.includes("items")) {
+              extractedData[fieldKey] = JSON.stringify(manifestItems);
+            } else if (lower.includes('order') || lower.includes('invoice') || lower.includes('so#')) {
+              extractedData[fieldKey] = detectedOrder || 'N/A';
+            } else if (lower.includes('date')) {
+              extractedData[fieldKey] = detectedDate || 'N/A';
+            } else if (lower.includes('customer') || lower.includes('name')) {
+              extractedData[fieldKey] = detectedCustomer || 'N/A';
+            } else if (lower.includes('ship') || lower.includes('address')) {
+              extractedData[fieldKey] = detectedAddress || 'N/A';
+            } else {
+              extractedData[fieldKey] = 'N/A';
+            }
+          });
+
+          return res.status(200).json({
+            success: true,
+            data: extractedData,
+            cargoManifest: manifestItems.length > 0 ? manifestItems : undefined,
+            source: "serverless_pdf_extraction"
+          });
+        }
+      } catch (pdfErr) {
+        console.warn("[Serverless OCR] Real PDF extraction exception:", pdfErr);
       }
-    });
+    }
 
+    // Signal to the client to run real in-browser OCR on the actual document
     return res.status(200).json({
-      success: true,
-      data: fallbackData,
-      cargoManifest: fallbackManifest,
-      source: "serverless_intelligent_fallback"
+      success: false,
+      fallbackToBrowserOcr: true,
+      message: "Serverless AI OCR unconfigured. Performing client-side OCR extraction directly in browser."
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "OCR error" });
+    return res.status(500).json({ error: err.message || "OCR error", fallbackToBrowserOcr: true });
   }
 }

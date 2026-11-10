@@ -619,10 +619,15 @@ export default function DragDropFreightBoard({
       if (!trk || trk === 'unassigned' || trk === 'no truck' || trk === 'none') return;
       if (d.status === DeliveryStatus.DELIVERED || d.status === DeliveryStatus.RETURNED) return;
 
+      // Match by truck ID or truck Name using robust helper
+      const matchedTruck = activeTrucks.find(t => isDeliveryAssignedToTruck(d, t));
+      if (!matchedTruck) return;
+
       // 1. Date filter (unless showAllDates is toggled)
       if (!showAllDates && selectedDate) {
-        const dDate = d.scheduledDate || (d.registeredAt ? d.registeredAt.split('T')[0] : '');
-        if (dDate && dDate !== selectedDate) {
+        // If delivery has an explicit scheduledDate, compare against selectedDate.
+        // If scheduledDate is not set, allow it to remain visible on the active planning board date
+        if (d.scheduledDate && d.scheduledDate !== selectedDate) {
           return;
         }
       }
@@ -634,9 +639,26 @@ export default function DragDropFreightBoard({
         if (selectedShiftFilter === 'PM' && slot !== 'PM' && slot !== 'AFTERNOON') return;
       }
 
-      // Match by truck ID or truck Name using robust helper
-      const matchedTruck = activeTrucks.find(t => isDeliveryAssignedToTruck(d, t));
+      map[matchedTruck.id] = map[matchedTruck.id] || [];
+      map[matchedTruck.id].push(d);
+    });
 
+    return map;
+  }, [deliveries, activeTrucks, selectedDate, showAllDates, selectedShiftFilter]);
+
+  // All active assigned deliveries per truck across all dates and shifts
+  const allAssignedDeliveriesByTruck = useMemo(() => {
+    const map: Record<string, DeliveryRecord[]> = {};
+    activeTrucks.forEach(t => {
+      map[t.id] = [];
+    });
+
+    deliveries.forEach(d => {
+      const trk = (d.assignedTruck || '').trim().toLowerCase();
+      if (!trk || trk === 'unassigned' || trk === 'no truck' || trk === 'none') return;
+      if (d.status === DeliveryStatus.DELIVERED || d.status === DeliveryStatus.RETURNED) return;
+
+      const matchedTruck = activeTrucks.find(t => isDeliveryAssignedToTruck(d, t));
       if (matchedTruck) {
         map[matchedTruck.id] = map[matchedTruck.id] || [];
         map[matchedTruck.id].push(d);
@@ -644,7 +666,7 @@ export default function DragDropFreightBoard({
     });
 
     return map;
-  }, [deliveries, activeTrucks, selectedDate, showAllDates, selectedShiftFilter]);
+  }, [deliveries, activeTrucks]);
 
   // Group unassigned deliveries by Shift (AM / PM)
   const amDeliveries = useMemo(() => {
@@ -2001,19 +2023,47 @@ export default function DragDropFreightBoard({
                         <span>{expandedTruckId === truck.id ? 'Hide Manifest' : `View Cargo (${loadedDeliveries.length})`}</span>
                         {expandedTruckId === truck.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                       </button>
+                    ) : (allAssignedDeliveriesByTruck[truck.id]?.length || 0) > 0 ? (
+                      <div className="flex items-center space-x-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedTruckId(expandedTruckId === truck.id ? null : truck.id)}
+                          className="text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded flex items-center space-x-1 font-mono cursor-pointer"
+                          title="View all freight tickets allocated to this truck"
+                        >
+                          <span>{allAssignedDeliveriesByTruck[truck.id].length} Freight Allocated</span>
+                          {expandedTruckId === truck.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAllDates(true);
+                            setSelectedShiftFilter('ALL');
+                          }}
+                          className="text-[10px] text-blue-600 hover:text-blue-800 underline font-mono cursor-pointer"
+                          title="Show All Shifts & Dates"
+                        >
+                          (View All)
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-[10px] text-slate-400 font-mono italic">No freight loaded yet</span>
                     )}
                   </div>
 
                   {/* Expanded Cargo List for this Truck */}
-                  {expandedTruckId === truck.id && loadedDeliveries.length > 0 && (
+                  {expandedTruckId === truck.id && (loadedDeliveries.length > 0 || (allAssignedDeliveriesByTruck[truck.id]?.length || 0) > 0) && (
                     <div className="mt-3 border-t border-slate-200 pt-3 space-y-2 animate-fade-in bg-slate-50/80 p-3 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase font-mono tracking-wider">
-                        Loaded Freight Manifest Items:
+                      <p className="text-[10px] font-bold text-slate-500 uppercase font-mono tracking-wider flex items-center justify-between">
+                        <span>Loaded Freight Manifest Items:</span>
+                        {loadedDeliveries.length === 0 && (
+                          <span className="text-indigo-600 font-normal text-[9px] bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                            Showing allocated items from other shifts/dates
+                          </span>
+                        )}
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {loadedDeliveries.map(item => (
+                        {(loadedDeliveries.length > 0 ? loadedDeliveries : (allAssignedDeliveriesByTruck[truck.id] || [])).map(item => (
                           <div 
                             key={item.id} 
                             draggable={!isViewOnly}
