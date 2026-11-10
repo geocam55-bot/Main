@@ -2247,14 +2247,14 @@ app.use((req, res, next) => {
           status: "Active"
         },
         "george.campbell@prospaces.com": {
-          id: "USR-SUPER-ADMIN-01",
-          tenantId: "system-admin-tenant",
+          id: "USR-10524",
+          tenantId: "rona_atlantic",
           name: "George Campbell",
           email: "george.campbell@prospaces.com",
-          role: "SUPER_ADMIN",
+          role: "Admin",
           associatedStoreId: "RONA-03510",
           phone: "(902) 476-8800",
-          password: "tV3p&HP#",
+          password: "Password123!",
           status: "Active"
         },
         "bob.rafters@ronadartmouth.ca": {
@@ -2332,11 +2332,13 @@ app.use((req, res, next) => {
       }
 
       if (foundUser) {
-        // Enforce proper Admin / SUPER_ADMIN role for George Campbell
-        if (normEmail === "george.campbell@prospaces.com" || normEmail === "superadmin@prospaces.com") {
+        // Enforce proper Admin role for George Campbell
+        if (normEmail === "superadmin@prospaces.com") {
           foundUser.role = "SUPER_ADMIN";
-        } else if (normEmail.includes("geocam") || normEmail.includes("george") || normEmail.includes("campbell")) {
+        } else if (normEmail.includes("geocam") || normEmail.includes("george") || normEmail.includes("campbell") || normEmail === "george.campbell@prospaces.com") {
           foundUser.role = "Admin";
+          foundUser.id = "USR-10524";
+          foundUser.tenantId = "rona_atlantic";
         }
 
         // Validate Status

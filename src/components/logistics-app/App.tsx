@@ -1092,7 +1092,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'ERROR'>('IDLE');
   const lastMutationTimeRef = useRef<number>(0);
-  const recentlyDeletedIdsRef = useRef<Set<string>>(new Set());
+  const recentlyDeletedIdsRef = useRef<Set<string>>(new Set(['USR-21607']));
   const syncStatusRef = useRef<string>('IDLE');
   const isFirstLoadRef = useRef<boolean>(true);
   const isStateHydratedRef = useRef<boolean>(false);
@@ -2471,6 +2471,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     if (!currentTenant) return;
     const updated = users.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u);
     setUsers(updated);
+    localStorage.setItem(`prospaces_users_tenant_${currentTenant.id}`, JSON.stringify(updated));
     await syncStateToSupabase(currentTenant.id, deliveries, trucks, branches, updated);
   };
 

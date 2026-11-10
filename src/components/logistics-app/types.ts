@@ -244,11 +244,35 @@ export interface ApiConnection {
 
 export type UserRole = 'Driver' | 'Picker' | 'Dispatcher' | 'User' | 'Admin' | 'SUPER_ADMIN';
 
+export const ROLE_HIERARCHY: Record<UserRole, number> = {
+  SUPER_ADMIN: 100,
+  Admin: 80,
+  Dispatcher: 60,
+  Driver: 40,
+  Picker: 30,
+  User: 10
+};
+
+export function getHighestRole(roles?: UserRole[] | null): UserRole {
+  if (!roles || roles.length === 0) return 'User';
+  let highest: UserRole = roles[0];
+  let maxRank = ROLE_HIERARCHY[highest] || 10;
+  for (const r of roles) {
+    const rank = ROLE_HIERARCHY[r] || 10;
+    if (rank > maxRank) {
+      maxRank = rank;
+      highest = r;
+    }
+  }
+  return highest;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  roles?: UserRole[];
   phone?: string;
   associatedStoreId?: string; // Links user to a dynamic store/branch
   password?: string;

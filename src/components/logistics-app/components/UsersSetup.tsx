@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatPhoneNumber } from '../lib/formatters';
-import { User, UserRole, Branch } from '../types';
+import { User, UserRole, Branch, getHighestRole } from '../types';
 import { Users, UserPlus, Edit2, Trash2, Shield, Info, CheckCircle, Mail, Phone, Building, AlertTriangle, Calendar } from 'lucide-react';
 
 interface UsersSetupProps {
@@ -27,7 +27,7 @@ export default function UsersSetup({
   const [userId, setUserId] = useState('');
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
-  const [userRole, setUserRole] = useState<UserRole>('User');
+  const [userRoles, setUserRoles] = useState<UserRole[]>(['User']);
   const [userPhone, setUserPhone] = useState('');
   const [driverLicenseExpire, setDriverLicenseExpire] = useState('');
   const [associatedStoreId, setAssociatedStoreId] = useState('');
@@ -70,7 +70,7 @@ export default function UsersSetup({
     setUserId(`USR-${Math.floor(1000 + Math.random() * 9000)}`);
     setUserName('');
     setUserEmail('');
-    setUserRole('User');
+    setUserRoles(['User']);
     setUserPhone('');
     setDriverLicenseExpire('');
     setAssociatedStoreId(branches[0]?.id || '');
@@ -94,7 +94,7 @@ export default function UsersSetup({
     setUserId(user.id);
     setUserName(user.name);
     setUserEmail(user.email);
-    setUserRole(user.role);
+    setUserRoles(user.roles && user.roles.length > 0 ? user.roles : (user.role ? [user.role] : ['User']));
     setUserPhone(user.phone || '');
     setDriverLicenseExpire(user.driverLicenseExpire || '');
     setAssociatedStoreId(user.associatedStoreId || '');
@@ -124,11 +124,14 @@ export default function UsersSetup({
       return;
     }
 
+    const computedRole = getHighestRole(userRoles);
+
     const payload: User = {
       id: userId,
       name: userName.trim(),
       email: userEmail.trim(),
-      role: userRole,
+      role: computedRole,
+      roles: userRoles,
       phone: userPhone.trim() || undefined,
       driverLicenseExpire: driverLicenseExpire || undefined,
       associatedStoreId: associatedStoreId || undefined,
@@ -297,29 +300,53 @@ export default function UsersSetup({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 block mb-1">Access Role</label>
-                    <select
-                      value={userRole}
-                      onChange={(e) => setUserRole(e.target.value as UserRole)}
-                      className="w-full border bg-white border-slate-200 px-2.5 py-1.5 rounded text-xs text-gray-800"
-                    >
-                      {ROLES.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                    </select>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1.5">Access Roles (Multiple Selection)</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {ROLES.map(role => {
+                      const isSelected = userRoles.includes(role);
+                      return (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              if (userRoles.length > 1) {
+                                setUserRoles(userRoles.filter(r => r !== role));
+                              }
+                            } else {
+                              setUserRoles([...userRoles, role]);
+                            }
+                          }}
+                          className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{role}</span>
+                          <span className={`h-4 w-4 rounded flex items-center justify-center text-[10px] ${isSelected ? 'bg-white/20 text-white' : 'border border-slate-300'}`}>
+                            {isSelected ? '✓' : ''}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    User will inherit access permissions for all selected roles (highest role dictates primary access tier).
+                  </span>
+                </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 block mb-1">Contact Phone</label>
-                    <input
-                      type="text"
-                      placeholder="(902) 555-xxxx"
-                      value={userPhone}
-                      onChange={(e) => setUserPhone(formatPhoneNumber(e.target.value))}
-                      className="w-full border bg-white border-slate-200 px-2.5 py-1.5 rounded text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Contact Phone</label>
+                  <input
+                    type="text"
+                    placeholder="(902) 555-xxxx"
+                    value={userPhone}
+                    onChange={(e) => setUserPhone(formatPhoneNumber(e.target.value))}
+                    className="w-full border bg-white border-slate-200 px-2.5 py-1.5 rounded text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
                 </div>
 
                 <div>
@@ -568,9 +595,13 @@ export default function UsersSetup({
                             ID: {user.id}
                           </span>
                         </div>
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${getRoleBadgeStyle(user.role)}`}>
-                          {user.role}
-                        </span>
+                        <div className="flex flex-wrap gap-1 max-w-[150px] justify-end">
+                          {(user.roles && user.roles.length > 0 ? user.roles : [user.role]).map(r => (
+                            <span key={r} className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${getRoleBadgeStyle(r)}`}>
+                              {r}
+                            </span>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="border-t border-slate-100/60 pt-2.5 space-y-1 text-xs text-gray-500">

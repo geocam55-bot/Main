@@ -201,7 +201,7 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
       // Fast fallback for known accounts if server response is unavailable or rejected
       const normEmail = email.toLowerCase().trim();
       const normPass = password.trim();
-      const isSuperAdmin = normEmail === 'superadmin@prospaces.com' || normEmail === 'george.campbell@prospaces.com' || normEmail === 'geocam55@gmail.com';
+      const isSuperAdmin = normEmail === 'superadmin@prospaces.com';
       const isGeorge = normEmail.includes('geocam') || normEmail.includes('george.campbell') || normEmail.includes('george');
       const isValidPass = normPass === 'tV3p&HP#' || normPass === 'ProSpaces2026!' || normPass === 'Password123!' || normPass === 'George2026!' || normPass === 'SuperAdmin2026!' || normPass.length >= 6;
 
