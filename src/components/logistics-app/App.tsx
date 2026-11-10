@@ -3860,6 +3860,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               branches={branches}
               users={users}
               currentUser={currentUser}
+              currentTenant={currentTenant}
               selectedTruckId={driverAssignedTruck?.id || (currentUser ? localStorage.getItem(`prospaces_driver_selected_truck_${currentUser.id}`) : null)}
               onSelectTruck={handleConfirmTruckAssignment}
               onAddOrUpdateDelivery={handleAddOrUpdateDelivery}

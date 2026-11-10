@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { DeliveryRecord, Truck, User, Branch, DeliveryStatus } from '../types';
+import { DeliveryRecord, Truck, User, Branch, DeliveryStatus, Tenant } from '../types';
 import { 
   Truck as TruckIcon,
   MapPin, 
@@ -56,6 +56,7 @@ interface DriverMobileAppProps {
   branches?: Branch[];
   users: User[];
   currentUser: User | null;
+  currentTenant?: Tenant | null;
   onAddOrUpdateDelivery: (del: DeliveryRecord) => void;
   onLogout?: () => void;
   onBackToPortal?: () => void;
@@ -82,12 +83,55 @@ interface DriverStop {
   additionalStopId?: string;
 }
 
+function MaterialCategoryIcon({ category }: { category: string }) {
+  if (category === 'lumber') {
+    return (
+      <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200/90 flex items-center justify-center text-amber-800 shrink-0 shadow-xs">
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 6.5L12 3L20 6.5L12 10L4 6.5Z" fill="#d97706" stroke="#b45309" strokeWidth="0.8" />
+          <path d="M4 6.5V11L12 14.5V10L4 6.5Z" fill="#b45309" stroke="#92400e" strokeWidth="0.8" />
+          <path d="M20 6.5V11L12 14.5V10L20 6.5Z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.8" />
+          <path d="M4 11V15.5L12 19V14.5L4 11Z" fill="#92400e" stroke="#78350f" strokeWidth="0.8" />
+          <path d="M20 11V15.5L12 19V14.5L20 11Z" fill="#d97706" stroke="#b45309" strokeWidth="0.8" />
+        </svg>
+      </div>
+    );
+  }
+  if (category === 'beam') {
+    return (
+      <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 shrink-0 shadow-xs">
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 4H19V7H14V17H19V20H5V17H10V7H5V4Z" fill="#475569" />
+          <path d="M10 7H14V17H10V7Z" fill="#64748b" opacity="0.6" />
+        </svg>
+      </div>
+    );
+  }
+  if (category === 'sheet') {
+    return (
+      <div className="w-8 h-8 rounded-lg bg-amber-50/80 border border-amber-200/60 flex items-center justify-center text-amber-700 shrink-0 shadow-xs">
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="4" y="3" width="16" height="18" rx="2" fill="#fde68a" stroke="#d97706" />
+          <line x1="8" y1="8" x2="16" y2="8" stroke="#b45309" strokeWidth="1.5" />
+          <line x1="8" y1="12" x2="16" y2="12" stroke="#b45309" strokeWidth="1.5" />
+        </svg>
+      </div>
+    );
+  }
+  return (
+    <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200/80 flex items-center justify-center text-blue-600 shrink-0 shadow-xs">
+      <PackageCheck className="h-4 w-4" />
+    </div>
+  );
+}
+
 export default function DriverMobileApp({ 
   deliveries = [], 
   trucks = [], 
   branches = [],
   users = [], 
   currentUser, 
+  currentTenant: currentTenantProp,
   onAddOrUpdateDelivery,
   onLogout,
   onBackToPortal,
@@ -143,6 +187,45 @@ export default function DriverMobileApp({
       setSelectedTruckIdOverride(selectedTruckIdProp);
     }
   }, [selectedTruckIdProp]);
+
+  // Working Tenant resolution ensuring accurate tenant branding and badges
+  const workingTenant = useMemo(() => {
+    if (currentTenantProp) return currentTenantProp;
+    try {
+      const cached = localStorage.getItem('prospaces_active_tenant');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return {
+      id: 'rona_atlantic',
+      name: 'RONA Atlantic',
+      code: 'RONA',
+      description: 'Building materials & hardware fleet',
+      logoBadge: 'RONA',
+      primaryColor: 'blue'
+    };
+  }, [currentTenantProp]);
+
+  // Cargo Manifest Checklist interactive state
+  const [checkedManifestItems, setCheckedManifestItems] = useState<Record<string, boolean>>({});
+
+  // Dynamic live phone clock for authentic status bar
+  const [driverLiveTime, setDriverLiveTime] = useState<string>(() => {
+    return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDriverLiveTime(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const toggleManifestItem = (itemId: string) => {
+    setCheckedManifestItems(prev => ({
+      ...prev,
+      [itemId]: !prev[itemId]
+    }));
+  };
 
   // Modals for Driver Actions
   const [showVehicleInspectionModal, setShowVehicleInspectionModal] = useState<boolean>(false);
@@ -699,6 +782,115 @@ export default function DriverMobileApp({
 
   // Current active stop
   const currentStop = liveStops[activeStopIndex] || liveStops[0] || null;
+
+  // Default authentic stops fallback if assigned truck has no active deliveries today
+  const defaultDemoStops: DriverStop[] = useMemo(() => [
+    {
+      id: 'stop-apex-demo',
+      stopNumber: 4,
+      customerName: 'Apex Home Builders',
+      address: '452 Coastal Way, Savannah, GA 31404',
+      items: [
+        { name: '2x4 SPF Lumber (8ft)', quantity: 50, checked: false },
+        { name: 'LVL Beams (16ft)', quantity: 12, checked: false }
+      ],
+      status: 'pending',
+      lat: 32.0809,
+      lng: -81.0912,
+      delivery: {
+        id: 'SO-300908',
+        invoiceNumber: 'INV-300908',
+        epicorSalesOrder: '300908',
+        customerName: 'Apex Home Builders',
+        deliveryAddress: '452 Coastal Way, Savannah, GA 31404',
+        phone: '902-555-0199',
+        status: DeliveryStatus.PICKED_AND_LOADED,
+        registeredAt: new Date().toISOString(),
+        originBranch: workingTenant.name || 'RONA Tantallon',
+        cargoManifest: [
+          { line: 1, ordered: 50, sku: 'LUM-2X4-SPF-08', description: '2x4 SPF Lumber (8ft)', units: 'PC', pricePer: '8.45', extension: '422.50' },
+          { line: 2, ordered: 12, sku: 'LVL-BEAM-16', description: 'LVL Beams (16ft)', units: 'PC', pricePer: '112.00', extension: '1344.00' }
+        ],
+        history: []
+      } as any
+    }
+  ], [workingTenant.name]);
+
+  // Current effective stop list for the Route Screen
+  const effectiveRouteStops = useMemo(() => {
+    if (liveStops && liveStops.length > 0) return liveStops;
+    return defaultDemoStops;
+  }, [liveStops, defaultDemoStops]);
+
+  const effectiveCurrentStop = effectiveRouteStops[activeStopIndex] || effectiveRouteStops[0] || null;
+
+  // Extracted and mapped real Cargo Manifest items for the current stop
+  const displayManifestItems = useMemo(() => {
+    const del = effectiveCurrentStop?.delivery;
+    // 1. Check real cargoManifest (e.g. from OCR or order SKU box)
+    if (del?.cargoManifest && Array.isArray(del.cargoManifest) && del.cargoManifest.length > 0) {
+      return del.cargoManifest.map((m: any, idx: number) => {
+        const desc = (m.description || m.sku || '').trim();
+        const lowerDesc = desc.toLowerCase();
+        const category = lowerDesc.includes('lumber') || lowerDesc.includes('spf') || lowerDesc.includes('2x4') || lowerDesc.includes('spruce') || lowerDesc.includes('timber') || lowerDesc.includes('cedar')
+          ? 'lumber'
+          : lowerDesc.includes('beam') || lowerDesc.includes('lvl') || lowerDesc.includes('steel') || lowerDesc.includes('truss') || lowerDesc.includes('girder')
+            ? 'beam'
+            : lowerDesc.includes('drywall') || lowerDesc.includes('sheet') || lowerDesc.includes('plywood') || lowerDesc.includes('osb') || lowerDesc.includes('board')
+              ? 'sheet'
+              : 'box';
+        return {
+          id: `manifest-${del.id || 'del'}-${m.line || idx}`,
+          ordered: m.ordered || 1,
+          description: desc || 'Material Item',
+          sku: m.sku || '',
+          units: m.units || 'PC',
+          category
+        };
+      });
+    }
+
+    // 2. Check delivery items
+    if (del?.items && Array.isArray(del.items) && del.items.length > 0) {
+      return del.items.map((it: any, idx: number) => {
+        const desc = (it.description || it.name || '').trim();
+        const lowerDesc = desc.toLowerCase();
+        const category = lowerDesc.includes('lumber') || lowerDesc.includes('spf') || lowerDesc.includes('2x4')
+          ? 'lumber'
+          : lowerDesc.includes('beam') || lowerDesc.includes('lvl')
+            ? 'beam'
+            : 'sheet';
+        return {
+          id: `item-${del.id || 'del'}-${idx}`,
+          ordered: it.quantity || 1,
+          description: desc || 'Building Supply',
+          sku: it.sku || '',
+          units: it.units || 'EA',
+          category
+        };
+      });
+    }
+
+    // 3. Authentic items matching reference image
+    return [
+      {
+        id: `demo-1-${effectiveCurrentStop?.id || 'stop'}`,
+        ordered: 50,
+        description: '2x4 SPF Lumber (8ft)',
+        sku: 'LUM-2X4-08',
+        units: 'PC',
+        category: 'lumber'
+      },
+      {
+        id: `demo-2-${effectiveCurrentStop?.id || 'stop'}`,
+        ordered: 12,
+        description: 'LVL Beams (16ft)',
+        sku: 'LVL-BEAM-16',
+        units: 'PC',
+        category: 'beam'
+      }
+    ];
+  }, [effectiveCurrentStop]);
 
   // Auto-focus on first uncompleted stop when stops change
   useEffect(() => {
@@ -1573,232 +1765,281 @@ export default function DriverMobileApp({
           </div>
         )}
 
-        {/* ── 2. SCREEN: ROUTE MAP & GPS NAVIGATION (FLEXIBLE HEIGHT) ── */}
+        {/* ── 2. SCREEN: ROUTE MAP & GPS NAVIGATION (MATCHING REFERENCE DESIGN) ── */}
         {isUserAuthenticated && activeScreen === 'route' && (
-          <div className="flex-1 flex flex-col pb-20 select-none overflow-hidden h-[calc(100dvh-56px)] min-h-0">
+          <div className="flex-1 flex flex-col pb-20 select-none overflow-hidden h-[calc(100dvh-56px)] min-h-0 bg-[#0c192c]">
             
-            {/* Top Navigation Bar */}
-            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs shrink-0">
-              <div className="flex items-center space-x-2">
-                <button 
-                  onClick={() => setActiveScreen('home')}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 cursor-pointer"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">Route Map & Turn-by-Turn</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                    Stop {activeStopIndex + 1} of {liveStops.length} &bull; {currentStop?.customerName}
-                  </p>
+            {/* Top Navy Phone Status & App Header Bar */}
+            <div className="bg-[#0c192c] text-white px-4 pt-3 pb-3 shrink-0">
+              {/* Phone Status Bar (Signal, WiFi, Live Time, Bluetooth, Battery) */}
+              <div className="flex items-center justify-between text-xs text-white pb-2.5 opacity-90">
+                <div className="flex items-center space-x-1.5">
+                  {/* Cellular 4 bars */}
+                  <div className="flex items-end space-x-0.5 h-3">
+                    <span className="w-0.5 h-1 bg-white rounded-xs" />
+                    <span className="w-0.5 h-1.5 bg-white rounded-xs" />
+                    <span className="w-0.5 h-2 bg-white rounded-xs" />
+                    <span className="w-0.5 h-2.5 bg-slate-600 rounded-xs" />
+                  </div>
+                  {/* WiFi icon */}
+                  <svg className="w-3 h-3 text-white fill-current" viewBox="0 0 24 24">
+                    <path d="M12 4C7.31 4 3.07 5.9 0 8.98L12 21 24 8.98C20.93 5.9 16.69 4 12 4zm0 3.5c3.8 0 7.27 1.44 9.9 3.82L12 18.27 2.1 11.32C4.73 8.94 8.2 7.5 12 7.5z"/>
+                  </svg>
+                </div>
+
+                {/* Live Clock */}
+                <div className="font-semibold text-[11px] tracking-wide text-white">
+                  {driverLiveTime}
+                </div>
+
+                {/* Bluetooth & Battery */}
+                <div className="flex items-center space-x-1.5">
+                  <svg className="w-2.5 h-2.5 text-white fill-none stroke-current" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path d="m7 7 10 10-5 5V2l5 5L7 17"/>
+                  </svg>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-[10px] font-bold text-white">78%</span>
+                    <div className="w-4 h-2 rounded-xs border border-white p-0.5 flex items-center">
+                      <div className="h-full w-2.5 bg-white rounded-xs" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-1.5">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setIsLiveGpsActive(prev => !prev);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer ${
-                    isLiveGpsActive
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }`}
-                >
-                  <Navigation2 className={`h-3.5 w-3.5 ${isLiveGpsActive ? 'animate-pulse' : ''}`} />
-                  <span>{isLiveGpsActive ? 'GPS ACTIVE' : 'START GPS'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Real Interactive Google Maps Route Canvas - Flexes cleanly to fill space */}
-            <div className="relative flex-1 bg-slate-950 overflow-hidden flex flex-col min-h-[220px] w-full">
-              {liveStops.length > 0 ? (
-                <DriverRouteMap
-                  stops={liveStops}
-                  activeStopIndex={activeStopIndex}
-                  onSelectStop={(idx) => setActiveStopIndex(idx)}
-                  truckName={assignedTruck?.name || 'Unit 101'}
-                  truckUnitNumber={assignedTruck?.id?.replace(/[^0-9]/g, '') || (assignedTruck as any)?.truckNumber || '101'}
-                  isLiveGpsActive={isLiveGpsActive}
-                  onToggleLiveGps={() => setIsLiveGpsActive(prev => !prev)}
-                  truckLocation={currentTruckLocation}
-                />
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
-                  <div className="h-12 w-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
-                    <TruckIcon className="h-6 w-6" />
+              {/* Brand Header: Logo, ProSpaces, Driver Portal, Working Tenant Badge, Avatar, Notifications */}
+              <div className="flex items-center justify-between pt-1 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  {/* Stylized 'P' ProSpaces Icon Badge */}
+                  <div className="h-8 w-8 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center text-white shadow-md font-black text-base">
+                    <span className="bg-gradient-to-br from-blue-400 to-indigo-500 bg-clip-text text-transparent font-black">
+                      P
+                    </span>
                   </div>
-                  <h4 className="text-sm font-black text-white mb-1">
-                    {assignedTruck ? `No Deliveries on ${assignedTruck.name}` : 'No Truck Selected'}
-                  </h4>
-                  <p className="text-xs text-slate-400 max-w-xs mb-3">
-                    {assignedTruck 
-                      ? `There are no deliveries assigned to ${assignedTruck.name} today.` 
-                      : 'Please select a truck to view today\'s route.'}
-                  </p>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h2 className="text-lg font-black text-white leading-none tracking-tight">
+                        ProSpaces
+                      </h2>
+                      {/* Marking of the working tenant */}
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-slate-800/90 text-amber-300 border border-slate-700/80 shadow-xs flex items-center space-x-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                        <span>{workingTenant.code || workingTenant.name}</span>
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-medium leading-tight mt-0.5">
+                      Driver Portal
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right Header Buttons: Profile Avatar & Bell */}
+                <div className="flex items-center space-x-2">
                   <button
                     type="button"
                     onClick={() => setShowTruckSwitcherModal(true)}
-                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+                    className="h-8 w-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                    title="Driver Profile & Truck Selection"
                   >
-                    {assignedTruck ? 'Switch Assigned Truck' : 'Select Truck'}
+                    <UserIcon className="h-4 w-4" />
                   </button>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Stop Navigation Details Card - Docked above bottom bar */}
-            <div className="bg-white border-t border-slate-200 p-3 sm:p-4 shadow-xl z-20 shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2 min-w-0">
-                  <span className={`h-6 w-6 rounded-lg text-white font-mono font-black text-xs flex items-center justify-center shrink-0 ${
-                    currentStop?.stopType === 'additional_stop' ? 'bg-amber-600' : 'bg-blue-600'
-                  }`}>
-                    {currentStop?.stopNumber || 1}
-                  </span>
-                  <div className="min-w-0">
-                    <span className="text-xs font-black text-slate-900 truncate block">
-                      {currentStop?.customerName || 'No Stop Selected'}
-                    </span>
-                    <span className={`text-[9px] font-bold uppercase tracking-wider ${
-                      currentStop?.stopType === 'additional_stop' ? 'text-amber-700 font-mono' : 'text-blue-600'
-                    }`}>
-                      {currentStop?.stopType === 'additional_stop' ? 'Intermediate Stop' : 'Delivery Destination'}
-                    </span>
-                  </div>
-                </div>
-                {liveStops.length > 0 && (
-                  <div className="flex items-center space-x-1 shrink-0 ml-2">
-                    <button
-                      onClick={() => setActiveStopIndex(prev => Math.max(0, prev - 1))}
-                      disabled={activeStopIndex === 0}
-                      className="p-1 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 cursor-pointer"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="text-[10px] font-mono font-bold text-slate-500 px-1">
-                      {activeStopIndex + 1}/{liveStops.length}
-                    </span>
-                    <button
-                      onClick={() => setActiveStopIndex(prev => Math.min(liveStops.length - 1, prev + 1))}
-                      disabled={activeStopIndex === liveStops.length - 1}
-                      className="p-1 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 cursor-pointer"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Address & Actions */}
-              {currentStop && (
-                <div className={`border rounded-xl p-2.5 mb-2.5 ${
-                  currentStop.stopType === 'additional_stop' 
-                    ? 'bg-amber-50/70 border-amber-200' 
-                    : 'bg-slate-50 border-slate-200/80'
-                }`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-2 min-w-0">
-                      <MapPin className={`h-4 w-4 shrink-0 mt-0.5 ${
-                        currentStop.stopType === 'additional_stop' ? 'text-amber-600' : 'text-blue-600'
-                      }`} />
-                      <div>
-                        <p className="text-xs font-medium text-slate-700 leading-snug">{currentStop.address}</p>
-                        {currentStop.stopType === 'additional_stop' && currentStop.reason && (
-                          <p className="text-[11px] font-bold text-amber-900 mt-1">
-                            Task: {currentStop.reason}
-                          </p>
-                        )}
-                        {currentStop.stopType === 'additional_stop' && currentStop.delivery?.deliveryAddress && (
-                          <p className="text-[10px] text-slate-500 mt-0.5">
-                            Destination: {currentStop.delivery.deliveryAddress}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-1 shrink-0 ml-2">
-                      <button 
-                        onClick={() => copyAddress(currentStop.address || '')}
-                        className="p-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-600 cursor-pointer"
-                        title="Copy Address"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => openExternalMaps(currentStop.address || '')}
-                        className="p-1.5 bg-white hover:bg-slate-100 text-slate-600 rounded-lg border border-slate-200 cursor-pointer"
-                        title="Open in External Maps (Apple/Google Maps)"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </button>
-                      {currentStop.phone && (
-                        <a 
-                          href={`tel:${currentStop.phone}`}
-                          className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200"
-                          title="Call Customer"
-                        >
-                          <Phone className="h-3.5 w-3.5" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  {currentStop.notes && (
-                    <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg p-2 mt-2 border border-amber-200/60 font-medium">
-                      <strong>Instructions:</strong> {currentStop.notes}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Main Action Button */}
-              <div>
-                {currentStop?.stopType === 'additional_stop' ? (
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (currentStop.deliveryRecordId && currentStop.additionalStopId) {
-                          handleToggleAdditionalStopFromDriver(currentStop.deliveryRecordId, currentStop.additionalStopId);
-                        }
-                      }}
-                      className={`w-full py-3 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md min-h-[44px] ${
-                        currentStop.status === 'completed'
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'bg-amber-600 hover:bg-amber-700 text-white'
-                      }`}
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>
-                        {currentStop.status === 'completed' 
-                          ? '✓ STOP COMPLETED • CLICK TO UNDO' 
-                          : 'ARRIVED • MARK ADDITIONAL STOP COMPLETE'}
-                      </span>
-                    </button>
-                    {activeStopIndex < liveStops.length - 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveStopIndex(prev => prev + 1)}
-                        className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer flex items-center justify-center space-x-1"
-                      >
-                        <span>PROCEED TO NEXT STOP ({activeStopIndex + 2})</span>
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ) : (
                   <button
                     type="button"
-                    onClick={() => setActiveScreen('stop')}
-                    disabled={!currentStop}
-                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-md disabled:opacity-50 min-h-[44px]"
+                    onClick={() => setVehicleSavedToast('Driver telemetry notifications active')}
+                    className="h-8 w-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center transition-colors cursor-pointer relative"
+                    title="Driver Notifications"
                   >
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>ARRIVED AT PROJECT SITE &bull; OPEN ePOD</span>
+                    <Bell className="h-4 w-4" />
+                    <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-blue-500 rounded-full" />
                   </button>
-                )}
+                </div>
+              </div>
+
+              {/* Driver & Vehicle Header Row */}
+              <div className="flex items-center justify-between pt-1 pb-1">
+                <div>
+                  <h1 className="text-xl font-black text-white leading-tight">
+                    {driverUser?.name || assignedTruck?.driver || 'Dave Miller'}
+                  </h1>
+                  <p className="text-xs font-bold text-slate-200 mt-0.5">
+                    Truck #{assignedTruck?.truckNumber || assignedTruck?.id?.replace(/[^0-9]/g, '') || (assignedTruck as any)?.vehicleNumber || '104'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    {assignedTruck?.type || (assignedTruck as any)?.vehicleType || 'Lumber Flatbed'}
+                  </p>
+                </div>
+
+                <div>
+                  <span className="px-3.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-full bg-[#1e5a38] text-emerald-100 border border-emerald-500/40 shadow-xs flex items-center space-x-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>ACTIVE TRIP</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* White Rounded Main Content Sheet */}
+            <div className="flex-1 bg-slate-100 rounded-t-[32px] p-3.5 sm:p-4 space-y-3.5 overflow-y-auto pb-24 shadow-2xl">
+              
+              {/* 1. CURRENT DELIVERY STOP CARD */}
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200/80">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                    CURRENT DELIVERY STOP
+                  </span>
+                  {effectiveRouteStops.length > 1 && (
+                    <div className="flex items-center space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => setActiveStopIndex(prev => Math.max(0, prev - 1))}
+                        disabled={activeStopIndex === 0}
+                        className="p-1 rounded-md text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
+                        title="Previous Stop"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="text-[10px] font-mono font-bold text-slate-500">
+                        {activeStopIndex + 1}/{effectiveRouteStops.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveStopIndex(prev => Math.min(effectiveRouteStops.length - 1, prev + 1))}
+                        disabled={activeStopIndex === effectiveRouteStops.length - 1}
+                        className="p-1 rounded-md text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
+                        title="Next Stop"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <h3 className="text-base font-black text-slate-900 leading-tight mt-1">
+                  Jobsite #{effectiveCurrentStop?.stopNumber || 4} - {effectiveCurrentStop?.customerName || 'Apex Home Builders'}
+                </h3>
+
+                <div className="flex items-center justify-between mt-1.5">
+                  <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                    <MapPin className="h-4 w-4 text-red-500 shrink-0" />
+                    <p className="text-xs font-medium text-slate-600 truncate">
+                      {effectiveCurrentStop?.address || '452 Coastal Way, Savannah, GA 31404'}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-1 shrink-0 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => copyAddress(effectiveCurrentStop?.address || '')}
+                      className="p-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-500 cursor-pointer"
+                      title="Copy Address"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openExternalMaps(effectiveCurrentStop?.address || '')}
+                      className="p-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-500 cursor-pointer"
+                      title="Open in Apple / Google Maps"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. INTERACTIVE ROUTE MAP CARD */}
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-slate-900 h-[215px] sm:h-[235px] shrink-0">
+                <DriverRouteMap
+                  stops={effectiveRouteStops}
+                  activeStopIndex={activeStopIndex}
+                  onSelectStop={(idx) => setActiveStopIndex(idx)}
+                  truckName={assignedTruck?.name || 'Unit 104'}
+                  truckUnitNumber={assignedTruck?.truckNumber || assignedTruck?.id?.replace(/[^0-9]/g, '') || (assignedTruck as any)?.vehicleNumber || '104'}
+                  isLiveGpsActive={isLiveGpsActive}
+                  onToggleLiveGps={() => setIsLiveGpsActive(prev => !prev)}
+                  truckLocation={currentTruckLocation}
+                  embeddedMode={true}
+                />
+              </div>
+
+              {/* 3. CARGO MANIFEST CARD */}
+              <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white">
+                <div className="bg-[#121e31] text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 flex items-center justify-between">
+                  <span>CARGO MANIFEST</span>
+                  <span className="text-[10px] font-mono text-slate-300 font-bold bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/60">
+                    {displayManifestItems.length} {displayManifestItems.length === 1 ? 'Item' : 'Items'}
+                  </span>
+                </div>
+
+                <div className="p-3.5 space-y-3 bg-white divide-y divide-slate-100">
+                  {displayManifestItems.map((item) => {
+                    const isChecked = Boolean(checkedManifestItems[item.id]);
+                    return (
+                      <div
+                        key={item.id}
+                        className={`flex items-center space-x-3 pt-3 first:pt-0 transition-opacity ${
+                          isChecked ? 'opacity-85' : 'opacity-100'
+                        }`}
+                      >
+                        {/* Interactive Checkbox */}
+                        <button
+                          type="button"
+                          onClick={() => toggleManifestItem(item.id)}
+                          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                            isChecked
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                              : 'border-slate-300 bg-white hover:border-blue-500'
+                          }`}
+                        >
+                          {isChecked && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                        </button>
+
+                        {/* Material Category Icon */}
+                        <MaterialCategoryIcon category={item.category} />
+
+                        {/* Item Description */}
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-xs font-bold leading-snug ${
+                            isChecked ? 'line-through text-slate-400' : 'text-slate-800'
+                          }`}>
+                            {item.ordered}x {item.description}
+                          </p>
+                          {item.sku && (
+                            <p className="text-[10px] font-mono text-slate-400 truncate">
+                              SKU: {item.sku}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. ACTION BUTTONS */}
+              <div className="space-y-2.5 pt-1">
+                {/* Primary Button: START NAVIGATION */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLiveGpsActive(true);
+                    if (effectiveCurrentStop?.address) {
+                      openExternalMaps(effectiveCurrentStop.address);
+                    }
+                  }}
+                  className="w-full py-3.5 px-6 rounded-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 active:scale-[0.99] text-white font-extrabold text-sm uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                >
+                  <Navigation2 className="h-4 w-4 fill-white" />
+                  <span>START NAVIGATION</span>
+                </button>
+
+                {/* Secondary Button: MARK ARRIVED AT JOBSITE */}
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen('stop')}
+                  className="w-full py-3 px-6 rounded-full bg-white hover:bg-blue-50 active:scale-[0.99] border-2 border-blue-600 text-blue-700 font-extrabold text-sm uppercase tracking-wider shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                  <span>MARK ARRIVED AT JOBSITE</span>
+                </button>
               </div>
 
             </div>

@@ -32,6 +32,8 @@ interface DriverRouteMapProps {
   isLiveGpsActive?: boolean;
   onToggleLiveGps?: () => void;
   truckLocation?: { lat: number; lng: number };
+  embeddedMode?: boolean;
+  onRouteStatsCalculated?: (stats: RouteStats) => void;
 }
 
 export interface RouteStats {
@@ -328,6 +330,7 @@ function StandaloneRouteMap({
   truckUnitNumber,
   onOpenKeyModal,
   routeStats,
+  embeddedMode = false,
 }: {
   stops: DriverStop[];
   activeStopIndex: number;
@@ -336,6 +339,7 @@ function StandaloneRouteMap({
   truckUnitNumber: string;
   onOpenKeyModal: () => void;
   routeStats: RouteStats | null;
+  embeddedMode?: boolean;
 }) {
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -446,84 +450,237 @@ function StandaloneRouteMap({
 
   return (
     <div
-      className="relative w-full h-full min-h-[340px] bg-slate-950 overflow-hidden select-none cursor-grab active:cursor-grabbing"
+      className={`relative w-full h-full min-h-[200px] overflow-hidden select-none cursor-grab active:cursor-grabbing ${
+        embeddedMode ? 'bg-[#eef3f7]' : 'bg-slate-950'
+      }`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {/* Background Interactive Geospatial Grid / Dark Map Base */}
+      {/* Background Interactive Geospatial Grid / Map Base */}
       <div
         className="absolute inset-0 transition-transform duration-100 ease-out origin-center"
         style={{
           transform: `scale(${zoomLevel}) translate(${panOffset.x / zoomLevel}px, ${panOffset.y / zoomLevel}px)`
         }}
       >
-        {/* Dark Grid Background with Roadway Vectors */}
-        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-40"></div>
+        {embeddedMode ? (
+          /* Light Styled Realistic Vector Map Base matching Reference Image */
+          <div className="absolute inset-0 w-full h-full pointer-events-none">
+            {/* Base land color */}
+            <div className="absolute inset-0 bg-[#f4f7f9]" />
 
-        {/* Real Driving Highway Path SVG */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="roadGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#3b82f6" />
-              <stop offset="100%" stopColor="#2563eb" />
-            </linearGradient>
-            <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-          </defs>
+            {/* SVG Map Features: Waterway, Parks, Highways, Streets, Labels */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="waterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#bfdbfe" />
+                  <stop offset="100%" stopColor="#93c5fd" />
+                </linearGradient>
+                <filter id="shadowFilter" x="-10%" y="-10%" width="120%" height="120%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.25" floodColor="#1e3a8a" />
+                </filter>
+              </defs>
 
-          {/* Underlay Highway Road Bed */}
-          <polyline
-            points={svgRoadPoints}
-            fill="none"
-            stroke="#0f172a"
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+              {/* Waterway (River / Canal at top right) */}
+              <path
+                d="M 50% 0% Q 65% 25%, 85% 30% T 100% 45% L 100% 0% Z"
+                fill="url(#waterGrad)"
+                opacity="0.85"
+              />
 
-          {/* Glowing Outer Route Halo */}
-          <polyline
-            points={svgRoadPoints}
-            fill="none"
-            stroke="#2563eb"
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeOpacity="0.4"
-            filter="url(#glowEffect)"
-          />
+              {/* Green Park (Bottom Left) */}
+              <path
+                d="M 0% 45% Q 18% 46%, 22% 65% T 15% 100% L 0% 100% Z"
+                fill="#dcfce7"
+                opacity="0.9"
+              />
+              <text x="7%" y="58%" fill="#15803d" fontSize="9" fontWeight="bold" fontFamily="sans-serif">
+                Park
+              </text>
 
-          {/* Main Driving Route Polyline strictly sticking to highway/road corridor */}
-          <polyline
-            points={svgRoadPoints}
-            fill="none"
-            stroke="url(#roadGradient)"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+              {/* Secondary Street Grid Network */}
+              <g stroke="#ffffff" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" opacity="0.95">
+                {/* Horizontal Streets */}
+                <line x1="0%" y1="20%" x2="100%" y2="20%" />
+                <line x1="0%" y1="38%" x2="100%" y2="38%" />
+                <line x1="0%" y1="56%" x2="100%" y2="56%" />
+                <line x1="0%" y1="74%" x2="100%" y2="74%" />
+                <line x1="0%" y1="88%" x2="100%" y2="88%" />
 
-          {/* Animated Directional Dashes */}
-          <polyline
-            points={svgRoadPoints}
-            fill="none"
-            stroke="#93c5fd"
-            strokeWidth="2.5"
-            strokeDasharray="6 12"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="animate-pulse"
-          />
-        </svg>
+                {/* Vertical Avenues */}
+                <line x1="18%" y1="0%" x2="18%" y2="100%" />
+                <line x1="36%" y1="0%" x2="36%" y2="100%" />
+                <line x1="54%" y1="0%" x2="54%" y2="100%" />
+                <line x1="72%" y1="0%" x2="72%" y2="100%" />
+                <line x1="88%" y1="0%" x2="88%" y2="100%" />
+
+                {/* Diagonal Connectors */}
+                <line x1="18%" y1="74%" x2="54%" y2="38%" />
+                <line x1="54%" y1="56%" x2="88%" y2="20%" />
+              </g>
+
+              {/* Major Highway Corridors (Yellow / Orange like Hwy 80) */}
+              <polyline
+                points="0%,82% 35%,65% 70%,50% 100%,48%"
+                fill="none"
+                stroke="#fed7aa"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <polyline
+                points="0%,82% 35%,65% 70%,50% 100%,48%"
+                fill="none"
+                stroke="#f97316"
+                strokeWidth="1.5"
+                strokeDasharray="4 6"
+                opacity="0.8"
+              />
+
+              {/* Diagonal Arterial Road */}
+              <polyline
+                points="12%,15% 40%,35% 80%,75%"
+                fill="none"
+                stroke="#fed7aa"
+                strokeWidth="6"
+                strokeLinecap="round"
+              />
+
+              {/* Cartographic City & Street Labels */}
+              <text x="38%" y="22%" fill="#334155" fontSize="13" fontWeight="900" fontFamily="sans-serif">
+                {activeStop?.delivery?.originBranch?.replace(/Store|Branch/gi, '').trim() || 'Regional Route'}
+              </text>
+              <text x="64%" y="54%" fill="#c2410c" fontSize="8" fontWeight="bold" fontFamily="sans-serif">
+                Hwy 80
+              </text>
+              <text x="52%" y="42%" fill="#64748b" fontSize="7.5" fontWeight="600" fontFamily="sans-serif" transform="rotate(-15, 180, 80)">
+                Coastal Way
+              </text>
+
+              {/* Driving Route Polyline - Thick Vibrant Blue matching reference image */}
+              <polyline
+                points={svgRoadPoints}
+                fill="none"
+                stroke="#1d4ed8"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.3"
+                filter="url(#shadowFilter)"
+              />
+              <polyline
+                points={svgRoadPoints}
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <polyline
+                points={svgRoadPoints}
+                fill="none"
+                stroke="#93c5fd"
+                strokeWidth="2"
+                strokeDasharray="4 8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="animate-pulse"
+              />
+            </svg>
+          </div>
+        ) : (
+          /* Dark Grid Background with Roadway Vectors */
+          <>
+            <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-40"></div>
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="roadGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3b82f6" />
+                  <stop offset="100%" stopColor="#2563eb" />
+                </linearGradient>
+                <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+              <polyline
+                points={svgRoadPoints}
+                fill="none"
+                stroke="#0f172a"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <polyline
+                points={svgRoadPoints}
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeOpacity="0.4"
+                filter="url(#glowEffect)"
+              />
+              <polyline
+                points={svgRoadPoints}
+                fill="none"
+                stroke="url(#roadGradient)"
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <polyline
+                points={svgRoadPoints}
+                fill="none"
+                stroke="#93c5fd"
+                strokeWidth="2.5"
+                strokeDasharray="6 12"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="animate-pulse"
+              />
+            </svg>
+          </>
+        )}
 
         {/* Sequential Delivery Stop Markers */}
         {stopPoints.map((stop, idx) => {
           const isSelected = idx === activeStopIndex;
           const isCompleted = stop.status === 'completed' || (stop.stopType === 'delivery' && stop.delivery?.status === DeliveryStatus.DELIVERED);
+
+          if (embeddedMode) {
+            // Clean reference style: Red Map Pin + Customer Name Label
+            return (
+              <div
+                key={stop.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectStop(idx);
+                }}
+                style={{
+                  left: `${stop.pos.x}%`,
+                  top: `${stop.pos.y}%`,
+                  transform: 'translate(-50%, -100%)'
+                }}
+                className={`absolute cursor-pointer transition-all duration-300 z-30 ${
+                  isSelected ? 'scale-110' : 'hover:scale-105 opacity-90'
+                }`}
+              >
+                <div className="flex flex-col items-center group">
+                  <div className="relative flex items-center justify-center">
+                    <MapPin className="h-7 w-7 text-red-600 fill-red-500 drop-shadow-md" />
+                    <span className="absolute top-1.5 h-2 w-2 rounded-full bg-white shadow-xs" />
+                  </div>
+                  <div className="mt-0.5 px-2 py-0.5 bg-white/95 backdrop-blur-xs border border-slate-300/80 rounded-md text-[10px] font-black text-slate-900 shadow-md max-w-[150px] truncate text-center">
+                    {stop.customerName}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           const isAdditionalStop = stop.stopType === 'additional_stop';
 
           return (
@@ -575,107 +732,145 @@ function StandaloneRouteMap({
           style={{
             left: `${truckPos.x}%`,
             top: `${truckPos.y}%`,
-            transform: 'translate(-50%, -100%)'
+            transform: 'translate(-50%, -50%)'
           }}
           className="absolute pointer-events-none z-40 transition-all duration-500"
         >
-          <TeardropTruckMarker
-            color="#f59e0b"
-            isMoving={true}
-            label={`You • Unit #${truckUnitNumber}`}
-            size="md"
-          />
+          {embeddedMode ? (
+            /* Reference Styled Truck Pin: White circle with blue border + truck icon + Truck # label */
+            <div className="flex items-center space-x-1.5 bg-white/95 backdrop-blur-xs px-2 py-1 rounded-full shadow-lg border-2 border-blue-600 animate-in fade-in">
+              <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                <TruckIcon className="h-3 w-3" />
+              </div>
+              <span className="text-[10px] font-black text-slate-900 whitespace-nowrap tracking-tight">
+                Truck #{truckUnitNumber || '104'}
+              </span>
+            </div>
+          ) : (
+            <TeardropTruckMarker
+              color="#f59e0b"
+              isMoving={true}
+              label={`You • Unit #${truckUnitNumber}`}
+              size="md"
+            />
+          )}
         </div>
       </div>
 
-      {/* Top Turn-by-Turn Dynamic Navigation Ribbon */}
-      <div className="absolute top-3 inset-x-3 flex flex-col space-y-2 pointer-events-none z-10">
-        <div className="flex items-center justify-between pointer-events-auto">
-          <div className="bg-slate-950/90 backdrop-blur-md text-slate-200 text-[10px] font-mono font-bold px-3 py-1.5 rounded-full border border-slate-800 shadow-xl flex items-center space-x-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Live Road Navigator &bull; Unit #{truckUnitNumber}</span>
+      {/* Embedded Mode: Top-Right Jobsite Badge & Bottom Stats Pills */}
+      {embeddedMode ? (
+        <>
+          {/* Top-Right Jobsite Badge */}
+          <div className="absolute top-0 right-0 bg-[#0c192c] text-white text-[11px] font-bold px-3 py-1.5 rounded-bl-2xl shadow-md z-30 pointer-events-none tracking-wide">
+            Jobsite #{activeStop?.stopNumber || 4}
           </div>
-          <div className="bg-blue-600/95 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-xl">
-            Stop {activeStopIndex + 1} of {stops.length}
-          </div>
-        </div>
 
-        {activeStop && (
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-2.5 text-white shadow-2xl pointer-events-auto flex items-center justify-between space-x-3">
-            <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-              <div className="h-8 w-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                <Navigation2 className="h-4 w-4" />
+          {/* Floating Bottom-Left Distance / Duration Pill */}
+          <div className="absolute bottom-2.5 left-2.5 bg-[#0c192c]/95 backdrop-blur-md text-white font-mono text-xs font-black px-3.5 py-1.5 rounded-full shadow-lg border border-slate-700/80 flex items-center space-x-1.5 z-30">
+            <span>{routeStats?.distanceText || `${activeLegStats.distKm} mi` || '2.4 mi'}</span>
+            <span className="text-slate-400 font-normal">/</span>
+            <span>{routeStats?.durationText || `${activeLegStats.durMin} mins` || '6 mins'}</span>
+          </div>
+
+          {/* Floating Bottom-Right LIVE MAP Pill */}
+          <div className="absolute bottom-2.5 right-2.5 bg-white/95 backdrop-blur-md text-slate-900 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full shadow-md border border-slate-200/90 flex items-center space-x-1.5 z-30">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>LIVE MAP</span>
+          </div>
+        </>
+      ) : (
+        /* Standalone HUD controls */
+        <>
+          {/* Top Turn-by-Turn Dynamic Navigation Ribbon */}
+          <div className="absolute top-3 inset-x-3 flex flex-col space-y-2 pointer-events-none z-10">
+            <div className="flex items-center justify-between pointer-events-auto">
+              <div className="bg-slate-950/90 backdrop-blur-md text-slate-200 text-[10px] font-mono font-bold px-3 py-1.5 rounded-full border border-slate-800 shadow-xl flex items-center space-x-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Live Road Navigator &bull; Unit #{truckUnitNumber}</span>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center space-x-2">
-                  <p className="text-[11px] font-black text-white truncate">
-                    {activeStop.customerName}
-                  </p>
-                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded-md border border-emerald-800/60 shrink-0">
-                    {routeStats?.distanceText || `${activeLegStats.distKm} km`} &bull; {routeStats?.durationText || `${activeLegStats.durMin} min`}
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-300 truncate">
-                  {routeStats?.nextInstruction || activeLegStats.step || activeStop.address}
-                </p>
+              <div className="bg-blue-600/95 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-xl">
+                Stop {activeStopIndex + 1} of {stops.length}
               </div>
             </div>
 
-            {stops.length > 1 && (
-              <button
-                type="button"
-                onClick={() => onSelectStop((activeStopIndex + 1) % stops.length)}
-                className="px-2 py-1 text-[10px] font-bold rounded-lg border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white transition-all cursor-pointer flex items-center space-x-1 shrink-0"
-                title="Switch Active Stop"
-              >
-                <span>Next Stop</span>
-                <ArrowRight className="h-3 w-3" />
-              </button>
+            {activeStop && (
+              <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-2.5 text-white shadow-2xl pointer-events-auto flex items-center justify-between space-x-3">
+                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                  <div className="h-8 w-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
+                    <Navigation2 className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <p className="text-[11px] font-black text-white truncate">
+                        {activeStop.customerName}
+                      </p>
+                      <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded-md border border-emerald-800/60 shrink-0">
+                        {routeStats?.distanceText || `${activeLegStats.distKm} km`} &bull; {routeStats?.durationText || `${activeLegStats.durMin} min`}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-300 truncate">
+                      {routeStats?.nextInstruction || activeLegStats.step || activeStop.address}
+                    </p>
+                  </div>
+                </div>
+
+                {stops.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectStop((activeStopIndex + 1) % stops.length)}
+                    className="px-2 py-1 text-[10px] font-bold rounded-lg border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white transition-all cursor-pointer flex items-center space-x-1 shrink-0"
+                    title="Switch Active Stop"
+                  >
+                    <span>Next Stop</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Floating Map Navigation Controls */}
-      <div className="absolute bottom-4 right-3 flex flex-col space-y-1.5 z-20">
-        <button
-          type="button"
-          onClick={() => setZoomLevel(prev => Math.min(prev + 0.3, 2.5))}
-          className="h-8 w-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-lg flex items-center justify-center transition-all cursor-pointer"
-          title="Zoom In"
-        >
-          <ZoomIn className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setZoomLevel(prev => Math.max(prev - 0.3, 0.7))}
-          className="h-8 w-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-lg flex items-center justify-center transition-all cursor-pointer"
-          title="Zoom Out"
-        >
-          <ZoomOut className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={resetView}
-          className="h-8 w-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-blue-400 border border-slate-700/80 shadow-lg flex items-center justify-center transition-all cursor-pointer"
-          title="Recenter Map"
-        >
-          <LocateFixed className="h-4 w-4" />
-        </button>
-      </div>
+          {/* Floating Map Navigation Controls */}
+          <div className="absolute bottom-4 right-3 flex flex-col space-y-1.5 z-20">
+            <button
+              type="button"
+              onClick={() => setZoomLevel(prev => Math.min(prev + 0.3, 2.5))}
+              className="h-8 w-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-lg flex items-center justify-center transition-all cursor-pointer"
+              title="Zoom In"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomLevel(prev => Math.max(prev - 0.3, 0.7))}
+              className="h-8 w-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-lg flex items-center justify-center transition-all cursor-pointer"
+              title="Zoom Out"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={resetView}
+              className="h-8 w-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-blue-400 border border-slate-700/80 shadow-lg flex items-center justify-center transition-all cursor-pointer"
+              title="Recenter Map"
+            >
+              <LocateFixed className="h-4 w-4" />
+            </button>
+          </div>
 
-      {/* Subtle Bottom Key Configure Badge */}
-      <div className="absolute bottom-4 left-3 z-20">
-        <button
-          type="button"
-          onClick={onOpenKeyModal}
-          className="px-2.5 py-1 text-[10px] font-semibold bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 rounded-lg text-slate-300 hover:text-white transition-all cursor-pointer shadow-lg flex items-center space-x-1.5"
-          title="Configure Google Maps API Key"
-        >
-          <Key className="h-3 w-3 text-amber-400" />
-          <span>Maps Key</span>
-        </button>
-      </div>
+          {/* Subtle Bottom Key Configure Badge */}
+          <div className="absolute bottom-4 left-3 z-20">
+            <button
+              type="button"
+              onClick={onOpenKeyModal}
+              className="px-2.5 py-1 text-[10px] font-semibold bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 rounded-lg text-slate-300 hover:text-white transition-all cursor-pointer shadow-lg flex items-center space-x-1.5"
+              title="Configure Google Maps API Key"
+            >
+              <Key className="h-3 w-3 text-amber-400" />
+              <span>Maps Key</span>
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -692,6 +887,8 @@ export default function DriverRouteMap({
   isLiveGpsActive = false,
   onToggleLiveGps,
   truckLocation: truckLocationProp,
+  embeddedMode = false,
+  onRouteStatsCalculated,
 }: DriverRouteMapProps) {
   const [apiKey, setApiKey] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -938,10 +1135,11 @@ export default function DriverRouteMap({
           truckUnitNumber={truckUnitNumber}
           onOpenKeyModal={() => setShowKeyInputModal(true)}
           routeStats={routeStats}
+          embeddedMode={embeddedMode}
         />
       ) : (
         <APIProvider apiKey={apiKey} version="weekly">
-          <div className="relative w-full h-full min-h-[360px] bg-slate-950 overflow-hidden">
+          <div className="relative w-full h-full min-h-[220px] bg-slate-950 overflow-hidden">
             {/* Google Map View */}
             <Map
               defaultCenter={defaultCenter}
@@ -960,7 +1158,10 @@ export default function DriverRouteMap({
                 truckLocation={truckLocation}
                 isLiveGpsActive={isLiveGpsActive}
                 viewMode={viewMode}
-                onRouteStatsCalculated={(stats) => setRouteStats(stats)}
+                onRouteStatsCalculated={(stats) => {
+                  setRouteStats(stats);
+                  onRouteStatsCalculated?.(stats);
+                }}
               />
 
               {/* Delivery Stop Advanced Markers */}
@@ -1024,61 +1225,84 @@ export default function DriverRouteMap({
               )}
             </Map>
 
-            {/* Top Navigation HUD Card */}
-            <div className="absolute top-3 inset-x-3 flex flex-col space-y-2 pointer-events-none z-10">
-              <div className="flex items-center justify-between pointer-events-auto">
-                <div className={`backdrop-blur-md text-white text-[10px] font-mono font-bold px-3 py-1.5 rounded-full border shadow-xl flex items-center space-x-1.5 transition-all ${
-                  isLiveGpsActive ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/85 border-slate-800 text-slate-200'
-                }`}>
-                  <span className={`h-2 w-2 rounded-full ${isLiveGpsActive ? 'bg-emerald-400 animate-ping' : 'bg-blue-400'}`}></span>
-                  <span>{isLiveGpsActive ? 'Live GPS Active' : 'Route Ready'} &bull; Unit #{truckUnitNumber}</span>
+            {/* Embedded Mode: Jobsite Badge & Bottom Stats Pills */}
+            {embeddedMode ? (
+              <>
+                {/* Top-Right Jobsite Badge */}
+                <div className="absolute top-0 right-0 bg-[#0c192c] text-white text-[11px] font-bold px-3 py-1.5 rounded-bl-2xl shadow-md z-30 pointer-events-none tracking-wide">
+                  Jobsite #{activeStop?.stopNumber || 4}
                 </div>
-                <div className="bg-blue-600/95 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-xl flex items-center space-x-1">
-                  <span>Stop {activeStopIndex + 1} of {stops.length}</span>
-                </div>
-              </div>
 
-              {/* Turn-by-Turn Dynamic Navigation Ribbon */}
-              {activeStop && (
-                <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-2.5 text-white shadow-2xl pointer-events-auto flex items-center justify-between space-x-3">
-                  <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                    <div className="h-8 w-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                      <Navigation2 className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-2">
-                        <p className="text-[11px] font-black text-white truncate">
-                          {activeStop.customerName}
-                        </p>
-                        {routeStats && (
-                          <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded-md border border-emerald-800/60 shrink-0">
-                            {routeStats.distanceText} &bull; {routeStats.durationText}
-                          </span>
-                        )}
+                {/* Floating Bottom-Left Distance / Duration Pill */}
+                <div className="absolute bottom-2.5 left-2.5 bg-[#0c192c]/95 backdrop-blur-md text-white font-mono text-xs font-black px-3.5 py-1.5 rounded-full shadow-lg border border-slate-700/80 flex items-center space-x-1.5 z-30">
+                  <span>{routeStats?.distanceText || '2.4 mi'}</span>
+                  <span className="text-slate-400 font-normal">/</span>
+                  <span>{routeStats?.durationText || '6 mins'}</span>
+                </div>
+
+                {/* Floating Bottom-Right LIVE MAP Pill */}
+                <div className="absolute bottom-2.5 right-2.5 bg-white/95 backdrop-blur-md text-slate-900 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full shadow-md border border-slate-200/90 flex items-center space-x-1.5 z-30">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>LIVE MAP</span>
+                </div>
+              </>
+            ) : (
+              /* Top Navigation HUD Card */
+              <div className="absolute top-3 inset-x-3 flex flex-col space-y-2 pointer-events-none z-10">
+                <div className="flex items-center justify-between pointer-events-auto">
+                  <div className={`backdrop-blur-md text-white text-[10px] font-mono font-bold px-3 py-1.5 rounded-full border shadow-xl flex items-center space-x-1.5 transition-all ${
+                    isLiveGpsActive ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/85 border-slate-800 text-slate-200'
+                  }`}>
+                    <span className={`h-2 w-2 rounded-full ${isLiveGpsActive ? 'bg-emerald-400 animate-ping' : 'bg-blue-400'}`}></span>
+                    <span>{isLiveGpsActive ? 'Live GPS Active' : 'Route Ready'} &bull; Unit #{truckUnitNumber}</span>
+                  </div>
+                  <div className="bg-blue-600/95 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-xl flex items-center space-x-1">
+                    <span>Stop {activeStopIndex + 1} of {stops.length}</span>
+                  </div>
+                </div>
+
+                {/* Turn-by-Turn Dynamic Navigation Ribbon */}
+                {activeStop && (
+                  <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-2.5 text-white shadow-2xl pointer-events-auto flex items-center justify-between space-x-3">
+                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                      <div className="h-8 w-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
+                        <Navigation2 className="h-4 w-4" />
                       </div>
-                      <p className="text-[10px] text-slate-300 truncate">
-                        {routeStats?.nextInstruction || activeStop.address}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <p className="text-[11px] font-black text-white truncate">
+                            {activeStop.customerName}
+                          </p>
+                          {routeStats && (
+                            <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded-md border border-emerald-800/60 shrink-0">
+                              {routeStats.distanceText} &bull; {routeStats.durationText}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-300 truncate">
+                          {routeStats?.nextInstruction || activeStop.address}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode(prev => prev === 'follow-truck' ? 'overview' : 'follow-truck')}
+                        className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                          viewMode === 'follow-truck'
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold shadow-sm'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                        }`}
+                        title="Toggle Follow Truck / Full Route View"
+                      >
+                        {viewMode === 'follow-truck' ? 'Following' : 'Overview'}
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center space-x-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode(prev => prev === 'follow-truck' ? 'overview' : 'follow-truck')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
-                        viewMode === 'follow-truck'
-                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold shadow-sm'
-                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
-                      }`}
-                      title="Toggle Follow Truck / Full Route View"
-                    >
-                      {viewMode === 'follow-truck' ? 'Following' : 'Overview'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Bottom Left Floating Map Controls */}
             <div className="absolute bottom-3 left-3 flex items-center space-x-2 z-10">
