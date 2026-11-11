@@ -6,10 +6,12 @@ import {
   Copy, 
   Check, 
   Database, 
-  ExternalLink, 
   FileText,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Plus,
+  Trash2,
+  Save
 } from 'lucide-react';
 import { DeliveryRecord, CargoManifestItem } from '../types';
 
@@ -17,41 +19,98 @@ interface CargoManifestModalProps {
   delivery: DeliveryRecord | null;
   onClose: () => void;
   onOpenPdf?: (delivery: DeliveryRecord) => void;
+  onUpdateDelivery?: (delivery: DeliveryRecord) => void;
 }
 
 export const CargoManifestModal: React.FC<CargoManifestModalProps> = ({
   delivery,
   onClose,
-  onOpenPdf
+  onOpenPdf,
+  onUpdateDelivery
 }) => {
   const [copied, setCopied] = useState(false);
   const [showSql, setShowSql] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const [manifestItems, setManifestItems] = useState<CargoManifestItem[]>(() => {
+    if (!delivery) return [];
+    if (Array.isArray(delivery.cargoManifest) && delivery.cargoManifest.length > 0) {
+      return JSON.parse(JSON.stringify(delivery.cargoManifest));
+    }
+    return [
+      { line: 1, ordered: '1', sku: '0971286', description: "SPF 2X4X8' LUMBER #2 & BETTER", units: 'EA', pricePer: '$12.50', extension: '$12.50' },
+      { line: 2, ordered: '1', sku: 'N/A', description: 'SPRUCE 2X4X8', units: 'EA', pricePer: '$14.00', extension: '$14.00' },
+      { line: 3, ordered: '1', sku: 'N/A', description: 'SPRUCE STUD', units: 'EA', pricePer: '$9.50', extension: '$9.50' }
+    ];
+  });
 
   if (!delivery) return null;
 
-  const manifest: CargoManifestItem[] = (Array.isArray(delivery.cargoManifest) && delivery.cargoManifest.length > 0)
-    ? delivery.cargoManifest
-    : [
-        { line: 1, ordered: '1', sku: '0971286', description: "SPF 2X4X8' LUMBER #2 & BETTER", units: 'EA', pricePer: 'N/A', extension: 'N/A' },
-        { line: 2, ordered: '1', sku: 'N/A', description: 'SPRUCE 2X4X8', units: 'EA', pricePer: 'N/A', extension: 'N/A' },
-        { line: 3, ordered: '1', sku: 'N/A', description: 'SPRUCE STUD', units: 'EA', pricePer: 'N/A', extension: 'N/A' }
-      ];
-
   // Calculate totals
-  const totalUnits = manifest.reduce((acc, item) => {
+  const totalUnits = manifestItems.reduce((acc, item) => {
     const qty = parseFloat(String(item.ordered).replace(/[^0-9.]/g, ''));
     return acc + (isNaN(qty) ? 0 : qty);
   }, 0);
 
-  const totalExtension = manifest.reduce((acc, item) => {
+  const totalExtension = manifestItems.reduce((acc, item) => {
     const ext = parseFloat(String(item.extension).replace(/[^0-9.]/g, ''));
     return acc + (isNaN(ext) ? 0 : ext);
   }, 0);
 
+  const handleItemChange = (index: number, field: keyof CargoManifestItem, value: string) => {
+    const updated = [...manifestItems];
+    updated[index] = { ...updated[index], [field]: value };
+
+    if (field === 'ordered' || field === 'pricePer') {
+      const qtyStr = field === 'ordered' ? value : updated[index].ordered;
+      const priceStr = field === 'pricePer' ? value : updated[index].pricePer;
+      const qty = parseFloat(String(qtyStr).replace(/[^0-9.]/g, '')) || 0;
+      const price = parseFloat(String(priceStr).replace(/[^0-9.]/g, '')) || 0;
+      const ext = qty * price;
+      updated[index].extension = `$${ext.toFixed(2)}`;
+    }
+
+    setManifestItems(updated);
+  };
+
+  const handleAddLine = () => {
+    const newLineNum = manifestItems.length + 1;
+    setManifestItems([
+      ...manifestItems,
+      { line: newLineNum, ordered: '1', sku: 'SKU-NEW', description: 'New Building Material Item', units: 'EA', pricePer: '$10.00', extension: '$10.00' }
+    ]);
+  };
+
+  const handleDeleteLine = (index: number) => {
+    const updated = manifestItems.filter((_, i) => i !== index).map((item, i) => ({ ...item, line: i + 1 }));
+    setManifestItems(updated);
+  };
+
+  const handleSaveManifest = () => {
+    const newTotalExt = manifestItems.reduce((acc, item) => {
+      const ext = parseFloat(String(item.extension).replace(/[^0-9.]/g, ''));
+      return acc + (isNaN(ext) ? 0 : ext);
+    }, 0);
+
+    const updatedDelivery: DeliveryRecord = {
+      ...delivery,
+      cargoManifest: manifestItems,
+      orderTotal: `$${newTotalExt.toFixed(2)}`
+    };
+
+    if (onUpdateDelivery) {
+      onUpdateDelivery(updatedDelivery);
+    }
+    setSuccessMsg('Manifest quantities and prices updated successfully!');
+    setTimeout(() => {
+      setSuccessMsg(null);
+    }, 2500);
+  };
+
   const handleCopyTsv = () => {
     const headers = ['LINE', 'ORDERED', 'SKU', 'DESCRIPTION', 'UNITS', 'PRICE/ PER', 'EXTENSION'];
-    const rows = manifest.map(item => [
+    const rows = manifestItems.map(item => [
       item.line,
       item.ordered,
       item.sku,
@@ -155,7 +214,7 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
               </tr>
             </thead>
             <tbody>
-              ${manifest.map(item => `
+              ${manifestItems.map(item => `
                 <tr>
                   <td class="text-center font-mono">${item.line}</td>
                   <td class="text-right font-mono" style="font-weight: bold;">${item.ordered}</td>
@@ -170,13 +229,13 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
                 <td colspan="4" style="text-align: right; padding-right: 12px;">TOTALS:</td>
                 <td class="text-center font-mono">${totalUnits > 0 ? totalUnits : ''}</td>
                 <td></td>
-                <td class="text-right font-mono" style="color: #047857; font-size: 12px;">$${totalExtension > 0 ? totalExtension.toFixed(2) : (delivery.orderTotal || '0.00').replace(/[^0-9.]/g, '')}</td>
+                <td class="text-right font-mono" style="color: #047857; font-size: 12px;">$${totalExtension > 0 ? totalExtension.toFixed(2) : '0.00'}</td>
               </tr>
             </tbody>
           </table>
 
           <div class="footer">
-            <span>PROSPACES LOGISTICS OCR PARSED CARGO MANIFEST</span>
+            <span>PROSPACES LOGISTICS CARGO MANIFEST</span>
             <span>Generated: ${new Date().toLocaleString()}</span>
           </div>
         </body>
@@ -202,13 +261,13 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
             <div className="min-w-0">
               <div className="flex items-center space-x-2 flex-wrap">
                 <h3 className="font-sans font-extrabold text-white text-base tracking-tight truncate">
-                  Cargo Manifest &bull; SKU BOX
+                  Cargo Manifest &bull; SKU BOX (Editable)
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   {delivery.id}
                 </span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                  {manifest.length} Item{manifest.length !== 1 ? 's' : ''}
+                  {manifestItems.length} Item{manifestItems.length !== 1 ? 's' : ''}
                 </span>
               </div>
               <p className="text-xs text-slate-300 truncate mt-0.5">
@@ -217,41 +276,58 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer ml-3 shrink-0"
-            title="Close Manifest"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleSaveManifest}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+              title="Save changes to quantities and prices"
+            >
+              <Save className="h-4 w-4" />
+              <span>Save Manifest</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer shrink-0"
+              title="Close Manifest"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Success Banner */}
+        {successMsg && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2 text-emerald-800 text-xs font-bold flex items-center justify-between">
+            <span>✅ {successMsg}</span>
+          </div>
+        )}
 
         {/* Toolbar & Mapped Columns Banner */}
         <div className="bg-slate-50 border-b border-slate-200/80 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center space-x-1.5 flex-wrap text-[11px] font-mono text-slate-600">
-            <span className="font-bold text-slate-900 font-sans uppercase tracking-wider text-[10px]">Mapped Columns:</span>
-            <span className="px-1.5 py-0.5 bg-slate-200 rounded font-bold text-slate-800">LINE</span>
+            <span className="font-bold text-slate-900 font-sans uppercase tracking-wider text-[10px]">Editable Columns:</span>
+            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-900 rounded font-bold">QTY (ORDERED)</span>
             <ArrowRight className="h-3 w-3 text-slate-400" />
-            <span className="px-1.5 py-0.5 bg-slate-200 rounded font-bold text-slate-800">ORDERED</span>
-            <ArrowRight className="h-3 w-3 text-slate-400" />
-            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-900 rounded font-bold">SKU</span>
-            <ArrowRight className="h-3 w-3 text-slate-400" />
-            <span className="px-1.5 py-0.5 bg-slate-200 rounded font-bold text-slate-800">DESCRIPTION</span>
-            <ArrowRight className="h-3 w-3 text-slate-400" />
-            <span className="px-1.5 py-0.5 bg-slate-200 rounded font-bold text-slate-800">UNITS</span>
-            <ArrowRight className="h-3 w-3 text-slate-400" />
-            <span className="px-1.5 py-0.5 bg-slate-200 rounded font-bold text-slate-800">PRICE/ PER</span>
-            <ArrowRight className="h-3 w-3 text-slate-400" />
-            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-900 rounded font-bold">EXTENSION</span>
+            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-900 rounded font-bold">PRICE / PER</span>
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
             <button
               type="button"
+              onClick={handleAddLine}
+              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center space-x-1 transition-all shadow-2xs cursor-pointer text-xs"
+              title="Add new manifest line item"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Line</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCopyTsv}
               className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-bold flex items-center space-x-1 transition-all shadow-2xs cursor-pointer"
-              title="Copy manifest data to clipboard as spreadsheet TSV"
             >
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
               <span>{copied ? 'Copied TSV!' : 'Copy TSV'}</span>
@@ -261,7 +337,6 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
               type="button"
               onClick={handlePrint}
               className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-bold flex items-center space-x-1 transition-all shadow-2xs cursor-pointer"
-              title="Print Cargo Manifest Packing Slip"
             >
               <Printer className="h-3.5 w-3.5 text-slate-500" />
               <span>Print Slip</span>
@@ -275,7 +350,6 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
                   ? 'bg-purple-50 text-purple-700 border-purple-300' 
                   : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700'
               }`}
-              title="View Supabase Table Schema & SQL"
             >
               <Database className="h-3.5 w-3.5 text-purple-600" />
               <span>Supabase SQL</span>
@@ -286,7 +360,6 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
                 type="button"
                 onClick={() => onOpenPdf(delivery)}
                 className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-indigo-700 font-bold flex items-center space-x-1 transition-all shadow-2xs cursor-pointer"
-                title="View physical scanned document"
               >
                 <FileText className="h-3.5 w-3.5 text-indigo-600" />
                 <span>View Invoice</span>
@@ -318,32 +391,37 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
           </div>
         )}
 
-        {/* Manifest Table Content */}
+        {/* Manifest Table Content (Editable) */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {manifest.length === 0 ? (
+          {manifestItems.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
               <Package className="h-10 w-10 text-slate-300 mx-auto" />
               <p className="text-sm font-bold text-slate-700">No SKU Box Cargo Manifest items found</p>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Scan or import a Sales Order Invoice through the <strong>Mapping & Live OCR Parser</strong> with the <strong>SKU BOX</strong> extraction field enabled to parse items automatically into this manifest.
-              </p>
+              <button
+                type="button"
+                onClick={handleAddLine}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs shadow-sm hover:bg-blue-700 transition-colors"
+              >
+                + Add First Line Item
+              </button>
             </div>
           ) : (
-            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-slate-100 text-slate-700 font-mono text-[10px] uppercase border-b border-slate-200 tracking-wider">
                   <tr>
-                    <th className="p-3 text-center w-14 font-extrabold">LINE</th>
-                    <th className="p-3 text-right w-24 font-extrabold">ORDERED</th>
-                    <th className="p-3 w-36 font-extrabold text-blue-900">SKU</th>
+                    <th className="p-3 text-center w-12 font-extrabold">LINE</th>
+                    <th className="p-3 text-right w-24 font-extrabold text-blue-900">QTY / ORDERED</th>
+                    <th className="p-3 w-32 font-extrabold">SKU</th>
                     <th className="p-3 font-extrabold">DESCRIPTION</th>
-                    <th className="p-3 text-center w-20 font-extrabold">UNITS</th>
-                    <th className="p-3 text-right w-28 font-extrabold">PRICE/ PER</th>
-                    <th className="p-3 text-right w-32 font-extrabold text-emerald-900">EXTENSION</th>
+                    <th className="p-3 text-center w-20 font-extrabold">UOM</th>
+                    <th className="p-3 text-right w-28 font-extrabold text-emerald-900">PRICE / PER</th>
+                    <th className="p-3 text-right w-32 font-extrabold">EXTENSION</th>
+                    <th className="p-3 text-center w-12 font-extrabold">ACTION</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
-                  {manifest.map((item, idx) => (
+                  {manifestItems.map((item, idx) => (
                     <tr 
                       key={idx} 
                       className={`hover:bg-blue-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
@@ -351,77 +429,106 @@ CREATE POLICY "Enable all operations for order_cargo_manifests"
                       <td className="p-3 text-center font-mono font-bold text-slate-500">
                         {item.line || (idx + 1)}
                       </td>
-                      <td className="p-3 text-right font-mono font-extrabold text-slate-900 text-sm">
-                        {item.ordered}
+                      <td className="p-3 text-right font-mono">
+                        <input
+                          type="text"
+                          value={item.ordered}
+                          onChange={(e) => handleItemChange(idx, 'ordered', e.target.value)}
+                          className="w-20 bg-blue-50/70 border border-blue-200 rounded px-2 py-1 text-right font-mono font-extrabold text-blue-900 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                          placeholder="1"
+                        />
                       </td>
-                      <td className="p-3 font-mono font-bold text-blue-700 select-all">
-                        <span className="px-1.5 py-0.5 bg-blue-50 border border-blue-200/60 rounded">
-                          {item.sku}
-                        </span>
+                      <td className="p-3 font-mono font-bold text-slate-800">
+                        <input
+                          type="text"
+                          value={item.sku}
+                          onChange={(e) => handleItemChange(idx, 'sku', e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                        />
                       </td>
-                      <td className="p-3 font-semibold text-slate-800 leading-snug">
-                        {item.description}
+                      <td className="p-3">
+                        <input
+                          type="text"
+                          value={item.description}
+                          onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 font-sans font-medium text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                        />
                       </td>
                       <td className="p-3 text-center font-mono">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                          {item.units || 'EA'}
-                        </span>
+                        <input
+                          type="text"
+                          value={item.units || 'EA'}
+                          onChange={(e) => handleItemChange(idx, 'units', e.target.value)}
+                          className="w-16 text-center bg-slate-50 border border-slate-200 rounded px-1 py-1 font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                        />
                       </td>
-                      <td className="p-3 text-right font-mono text-slate-600">
-                        {item.pricePer || '—'}
+                      <td className="p-3 text-right font-mono">
+                        <input
+                          type="text"
+                          value={item.pricePer}
+                          onChange={(e) => handleItemChange(idx, 'pricePer', e.target.value)}
+                          className="w-24 bg-emerald-50/70 border border-emerald-200 rounded px-2 py-1 text-right font-mono font-bold text-emerald-900 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                          placeholder="$0.00"
+                        />
                       </td>
                       <td className="p-3 text-right font-mono font-extrabold text-emerald-700 text-sm">
-                        {item.extension || '—'}
+                        {item.extension || '$0.00'}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLine(idx)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                          title="Delete line item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-mono text-xs font-bold text-slate-800">
                   <tr>
-                    <td className="p-3 text-center text-slate-500">{manifest.length} Lines</td>
+                    <td className="p-3 text-center text-slate-500">{manifestItems.length} Lines</td>
                     <td className="p-3 text-right text-slate-950 font-extrabold text-sm">{totalUnits > 0 ? totalUnits : ''}</td>
                     <td colSpan={4} className="p-3 text-right font-sans uppercase tracking-wider text-[11px] text-slate-600">
                       Total Manifest Value:
                     </td>
                     <td className="p-3 text-right text-emerald-800 font-black text-sm">
-                      ${totalExtension > 0 ? totalExtension.toFixed(2) : (delivery.orderTotal || '0.00').replace(/[^0-9.]/g, '')}
+                      ${totalExtension > 0 ? totalExtension.toFixed(2) : '0.00'}
                     </td>
+                    <td></td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           )}
-
-          {/* Verification & Routing Footer Summary */}
-          <div className="bg-slate-50 border border-slate-200/70 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="space-y-0.5">
-              <span className="font-bold text-slate-900 font-mono uppercase text-[10px] block">Dispatch Route & Freight Verification</span>
-              <p className="text-slate-600 text-[11px]">
-                Order <strong className="font-mono text-slate-800">{delivery.id}</strong> &bull; Origin Depot: <strong className="text-slate-800">{delivery.originBranch || 'Central Hub'}</strong> &bull; Weight: <strong className="text-slate-800">{delivery.weight || 'Standard LTL'}</strong>
-              </p>
-            </div>
-            <div className="flex items-center space-x-2 shrink-0">
-              <span className="px-2.5 py-1 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider bg-slate-200 text-slate-800">
-                Status: {delivery.status}
-              </span>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
         <div className="px-5 py-3 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
           <div className="text-[11px] text-slate-500 font-mono flex items-center space-x-1.5">
             <Layers className="h-3.5 w-3.5 text-blue-500" />
-            <span>ProSpaces Logistics High-Fidelity OCR Extraction</span>
+            <span>Edit quantities &amp; prices inline &bull; Click Save Manifest to commit changes</span>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs shadow-xs transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleSaveManifest}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-sm transition-colors cursor-pointer flex items-center space-x-1.5"
+            >
+              <Save className="h-4 w-4" />
+              <span>Save Manifest Changes</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs shadow-xs transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
       </div>

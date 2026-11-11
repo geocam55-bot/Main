@@ -2802,6 +2802,10 @@ export default function DeliveryQueue({
         <CargoManifestModal 
           delivery={previewManifestDelivery} 
           onClose={() => setPreviewManifestDelivery(null)}
+          onUpdateDelivery={(updatedDel) => {
+            onAddOrUpdateDelivery(updatedDel);
+            setPreviewManifestDelivery(updatedDel);
+          }}
           onOpenPdf={(del) => {
             setPreviewManifestDelivery(null);
             setPreviewDocDelivery(del);
