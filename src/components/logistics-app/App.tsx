@@ -397,8 +397,11 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       if (cached) {
         const u = JSON.parse(cached);
         if (u && (u.email || u.id)) {
-          if (u.email === 'superadmin@prospaces.com' || u.email === 'george.campbell@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin', 'super_admin'].includes(String(u.role).toLowerCase())) {
+          if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
             u.role = 'SUPER_ADMIN';
+          }
+          if (u.email === 'george.campbell@prospaces.com' && u.role === 'SUPER_ADMIN') {
+            u.role = 'Admin';
           }
           if (!u.name) {
             u.name = u.full_name || (u.email ? u.email.split('@')[0] : "User");
@@ -411,9 +414,9 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       if (crmUserStr) {
         const crmUser = JSON.parse(crmUserStr);
         if (crmUser && (crmUser.email || crmUser.id)) {
-          const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com' || crmUser.email === 'george.campbell@prospaces.com')
+          const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
             ? "SUPER_ADMIN"
-            : ((crmUser.role === 'admin' || crmUser.role === 'Admin') ? "Admin" : (crmUser.role || "Admin"));
+            : ((crmUser.role === 'admin' || crmUser.role === 'Admin' || crmUser.email === 'george.campbell@prospaces.com') ? "Admin" : (crmUser.role || "Admin"));
           const autoUser: User = {
             id: crmUser.id || "USR-57008",
             name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
@@ -446,8 +449,11 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           const u = JSON.parse(activeUserStr);
           const t = JSON.parse(activeTenantStr);
           if (u) {
-            if (u.email === 'superadmin@prospaces.com' || u.email === 'george.campbell@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
+            if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
               u.role = 'SUPER_ADMIN';
+            }
+            if (u.email === 'george.campbell@prospaces.com' && u.role === 'SUPER_ADMIN') {
+              u.role = 'Admin';
             }
             if (!currentUser || currentUser.email !== u.email || currentUser.id !== u.id || currentUser.role !== u.role) {
               setCurrentUser(u);

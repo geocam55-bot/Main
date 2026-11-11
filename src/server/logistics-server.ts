@@ -252,6 +252,7 @@ function deserializeFromPhone(user: any): any {
     cleanPhone = cleanPhone.replace(/\|\|avatar:[^|]+/, "");
   }
 
+  const roles = user.roles && Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : (user.role ? [user.role] : ['User']);
   return {
     ...user,
     phone: cleanPhone.trim(),
@@ -260,7 +261,9 @@ function deserializeFromPhone(user: any): any {
     driverLicenseExpire,
     lastActive,
     resetRequest,
-    avatarUrl
+    avatarUrl,
+    roles,
+    role: user.role || roles[0]
   };
 }
 
@@ -3715,6 +3718,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
               name: u.name,
               email: u.email,
               role: u.role,
+              roles: u.roles || [u.role],
               phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl),
               associatedStoreId: u.associatedStoreId || null
             };
