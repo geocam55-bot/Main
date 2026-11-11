@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GoogleMapContainer from './GoogleMapContainer';
 import { TeardropTruckMarker } from './TeardropTruckMarker';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck as TruckType, User as UserType } from '../types';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck as TruckType, User as UserType, userHasRole } from '../types';
 import { renderUserAvatarHelper } from './UserProfileModal';
 import { getTruckSpecs } from '../truckSpecs';
 import { getTruckImage } from '../lib/truckImages';
@@ -221,7 +221,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
   const activeBranches = branches || [];
   const activeUsers = users || [];
 
-  const isDriver = currentUser?.role === 'Driver';
+  const isDriver = currentUser ? (userHasRole(currentUser, 'Driver') && !userHasRole(currentUser, 'Admin') && !userHasRole(currentUser, 'Dispatcher') && !userHasRole(currentUser, 'SUPER_ADMIN')) : false;
   const driverName = currentUser?.name || '';
   
   // Resolve the driver's picked truck from localStorage or assigned truck
@@ -886,7 +886,7 @@ export default function Dashboard({ deliveries, onSelectTab, trucks, branches, o
               </div>
 
               {/* TomTom Map Engine Settings Popup overlay */}
-              {showEngineSettings && mapEngine === 'tomtom' && ['Admin', 'SUPER_ADMIN', 'Dispatcher'].includes(currentUser?.role || '') && (
+              {showEngineSettings && mapEngine === 'tomtom' && (userHasRole(currentUser, 'Admin') || userHasRole(currentUser, 'SUPER_ADMIN') || userHasRole(currentUser, 'Dispatcher')) && (
                 <div className="absolute top-14 right-3 w-72 bg-slate-900/95 backdrop-blur-md text-white rounded-xl border border-slate-800 p-4 shadow-xl z-20 animate-fade-in font-sans space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-amber-400">

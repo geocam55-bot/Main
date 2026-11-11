@@ -1,7 +1,7 @@
 import { formatPhoneNumber } from '../lib/formatters';
 import { useState, FormEvent } from 'react';
 import { toast } from 'sonner';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, Tenant, getDeliveryPhotos, AdditionalDeliveryStop, generateTrackingNumber } from '../types';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, Tenant, getDeliveryPhotos, AdditionalDeliveryStop, generateTrackingNumber, userHasRole } from '../types';
 import { 
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
@@ -2564,7 +2564,7 @@ export default function DeliveryQueue({
                       className="w-full bg-white border border-slate-200 p-2 text-xs rounded-lg font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="">-- Select Registered Picker (Required) --</option>
-                      {users.filter(u => u.role === 'Picker').map(u => (
+                      {users.filter(u => userHasRole(u, 'Picker')).map(u => (
                         <option key={u.id} value={u.id}>
                           👤 {u.name} ({u.email})
                         </option>
@@ -2572,7 +2572,7 @@ export default function DeliveryQueue({
                       <option value="Picked up at Supplier">📦 Picked up at Supplier</option>
                       <option value="Picked up at Store">🏪 Picked up at Store</option>
                     </select>
-                    {users.filter(u => u.role === 'Picker').length === 0 && (
+                    {users.filter(u => userHasRole(u, 'Picker')).length === 0 && (
                       <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1 font-sans leading-relaxed">
                         ⚠️ No users with <strong>Picker</strong> role are currently registered in the database. Setup an operational Picker profile in <strong>Fleet Setup &gt; Users Setup</strong> or via login screen registration.
                       </div>
@@ -2752,7 +2752,7 @@ export default function DeliveryQueue({
                   className="w-full bg-white border border-slate-200 p-2.5 text-xs rounded-lg font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="">-- Choose Picker (Required) --</option>
-                  {users.filter(u => u.role === 'Picker').map(u => (
+                  {users.filter(u => userHasRole(u, 'Picker')).map(u => (
                     <option key={u.id} value={u.id}>
                       👤 {u.name} ({u.email})
                     </option>
@@ -2760,7 +2760,7 @@ export default function DeliveryQueue({
                   <option value="Picked up at Supplier">📦 Picked up at Supplier</option>
                   <option value="Picked up at Store">🏪 Picked up at Store</option>
                 </select>
-                {users.filter(u => u.role === 'Picker').length === 0 && (
+                {users.filter(u => userHasRole(u, 'Picker')).length === 0 && (
                   <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 mt-2 font-sans leading-relaxed">
                     ⚠️ No users with the <strong>Picker</strong> role are registered. Please create a Picker in <strong>Fleet Setup &gt; Users Setup</strong> first, or register one in the portal registration.
                   </div>

@@ -147,6 +147,7 @@ create table if not exists users (
   name text not null,
   email text not null,
   role text not null, -- 'Admin', 'Dispatcher', 'Driver', 'User', 'SUPER_ADMIN'
+  roles text[], -- Array of assigned roles e.g. ARRAY['Driver', 'Picker']
   phone text,
   "associatedStoreId" text,
   password text,
@@ -1135,6 +1136,7 @@ ALTER TABLE trucks ADD COLUMN IF NOT EXISTS maintenance_status varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS safety_inspection_status varchar;
 
 -- Upgrade Users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS roles text[];
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_number varchar;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name varchar;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name varchar;

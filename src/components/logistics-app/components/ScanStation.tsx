@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { formatPhoneNumber } from '../lib/formatters';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
-import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, generateTrackingNumber } from '../types';
+import { DeliveryRecord, DeliveryStatus, Branch, Truck, User as AppUser, generateTrackingNumber, userHasRole } from '../types';
 import { 
   Scan, 
   Truck as TruckIcon, 
@@ -160,7 +160,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
           barcodeText: barcodeText || null,
           source,
           orderId: orderId || scannedRecord?.id || null,
-          driverName: users.find(u => u.role === 'DRIVER')?.name || 'Scan Station Operator'
+          driverName: users.find(u => userHasRole(u, 'Driver'))?.name || 'Scan Station Operator'
         })
       });
     } catch (err) {
@@ -1684,7 +1684,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
                       <label className="text-xs font-semibold text-slate-700 block mb-1">Assign Loading Yard Picker *</label>
                       <select required value={selectedPicker} onChange={(e) => setSelectedPicker(e.target.value)} className="w-full border border-slate-200 px-3 py-2 rounded-lg text-xs bg-white text-slate-850">
                         <option value="">-- Select Yard Picker (Required) --</option>
-                        {users.filter(u => u.role === 'Picker').map(u => (
+                        {users.filter(u => userHasRole(u, 'Picker')).map(u => (
                           <option key={u.id} value={u.id}>👤 {u.name} ({u.email})</option>
                         ))}
                       </select>
@@ -2213,7 +2213,7 @@ export default function ScanStation({ deliveries, onAddOrUpdateDelivery, onDelet
                     <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase">Warehouse Loader / Picker *</label>
                     <select required value={selectedPicker} onChange={(e) => setSelectedPicker(e.target.value)} className="w-full border border-slate-200 px-3 py-2.5 rounded-xl text-xs bg-white">
                       <option value="">-- Choose Picker (Required) --</option>
-                      {users.filter(u => u.role === 'Picker').map(u => (
+                      {users.filter(u => userHasRole(u, 'Picker')).map(u => (
                         <option key={u.id} value={u.id}>👤 {u.name}</option>
                       ))}
                     </select>

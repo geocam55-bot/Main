@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { DeliveryRecord, Truck, Branch, User, Tenant } from './types';
+import { DeliveryRecord, Truck, Branch, User, Tenant, userHasRole } from './types';
 import { TENANTS, DEFAULT_BRANCHES, DEFAULT_TRUCKS, DEFAULT_USERS, DEFAULT_DELIVERIES } from './data';
 import { 
   getFrontendSupabase, 
@@ -130,10 +130,12 @@ function deduplicateUsers(usersList: User[]): User[] {
   const seenIds = new Set<string>();
   const deduped: User[] = [];
   
-  for (const u of usersList) {
-    if (!u || !u.id) continue;
-    const cleanId = u.id.trim();
-    const cleanEmail = (u.email || '').trim().toLowerCase();
+  for (const rawUser of usersList) {
+    if (!rawUser || !rawUser.id) continue;
+    const cleanId = rawUser.id.trim();
+    if (cleanId === 'USR-21607') continue; // User USR-21607 was deleted and should not exist in the tenant
+
+    const cleanEmail = (rawUser.email || '').trim().toLowerCase();
     
     if (seenIds.has(cleanId)) continue;
     if (cleanEmail && seenEmails.has(cleanEmail)) {
@@ -142,6 +144,22 @@ function deduplicateUsers(usersList: User[]): User[] {
     
     seenIds.add(cleanId);
     if (cleanEmail) seenEmails.add(cleanEmail);
+
+    const u = { ...rawUser };
+    const isGeorge = cleanId === 'USR-10524' || cleanEmail.includes('george.campbell');
+    if (isGeorge) {
+      if (u.role === 'SUPER_ADMIN') {
+        u.role = 'Admin';
+      }
+    }
+    // Filter out SUPER_ADMIN from tenant user list roles so it remains developer/owner only
+    if (Array.isArray(u.roles)) {
+      u.roles = u.roles.filter(r => String(r).toUpperCase() !== 'SUPER_ADMIN');
+    }
+    if (u.role === 'SUPER_ADMIN' && cleanEmail !== 'superadmin@prospaces.com') {
+      u.role = 'Admin';
+    }
+
     deduped.push(u);
   }
   return deduped;
@@ -397,11 +415,15 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       if (cached) {
         const u = JSON.parse(cached);
         if (u && (u.email || u.id)) {
-          if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
+          const isGeorge = u.id === 'USR-10524' || (u.email && u.email.toLowerCase().includes('george.campbell'));
+          if (!isGeorge && (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase()))) {
             u.role = 'SUPER_ADMIN';
           }
-          if (u.email === 'george.campbell@prospaces.com' && u.role === 'SUPER_ADMIN') {
+          if (isGeorge) {
             u.role = 'Admin';
+            if (Array.isArray(u.roles)) {
+              u.roles = u.roles.filter((r: any) => String(r).toUpperCase() !== 'SUPER_ADMIN');
+            }
           }
           if (!u.name) {
             u.name = u.full_name || (u.email ? u.email.split('@')[0] : "User");
@@ -414,9 +436,10 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       if (crmUserStr) {
         const crmUser = JSON.parse(crmUserStr);
         if (crmUser && (crmUser.email || crmUser.id)) {
-          const autoUserRole = (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
+          const isCrmGeorge = crmUser.id === 'USR-10524' || (crmUser.email && crmUser.email.toLowerCase().includes('george.campbell'));
+          const autoUserRole = !isCrmGeorge && (crmUser.role === 'SUPER_ADMIN' || crmUser.role === 'Super_Admin' || crmUser.role === 'super_admin' || crmUser.email === 'superadmin@prospaces.com')
             ? "SUPER_ADMIN"
-            : ((crmUser.role === 'admin' || crmUser.role === 'Admin' || crmUser.email === 'george.campbell@prospaces.com') ? "Admin" : (crmUser.role || "Admin"));
+            : ((crmUser.role === 'admin' || crmUser.role === 'Admin' || isCrmGeorge) ? "Admin" : (crmUser.role || "Admin"));
           const autoUser: User = {
             id: crmUser.id || "USR-57008",
             name: crmUser.full_name || crmUser.name || (crmUser.email ? crmUser.email.split('@')[0] : "George Campbell"),
@@ -449,11 +472,15 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
           const u = JSON.parse(activeUserStr);
           const t = JSON.parse(activeTenantStr);
           if (u) {
-            if (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase())) {
+            const isGeorge = u.id === 'USR-10524' || (u.email && u.email.toLowerCase().includes('george.campbell'));
+            if (!isGeorge && (u.email === 'superadmin@prospaces.com' || u.id === 'USR-SUPER-ADMIN-01' || ['super_admin', 'superadmin'].includes(String(u.role).toLowerCase()))) {
               u.role = 'SUPER_ADMIN';
             }
-            if (u.email === 'george.campbell@prospaces.com' && u.role === 'SUPER_ADMIN') {
+            if (isGeorge) {
               u.role = 'Admin';
+              if (Array.isArray(u.roles)) {
+                u.roles = u.roles.filter((r: any) => String(r).toUpperCase() !== 'SUPER_ADMIN');
+              }
             }
             if (!currentUser || currentUser.email !== u.email || currentUser.id !== u.id || currentUser.role !== u.role) {
               setCurrentUser(u);
@@ -589,24 +616,29 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   // Fallback state redirect for restricted role views
   useEffect(() => {
     if (!currentUser) return;
-    const roleNorm = (currentUser.role || '').trim().toLowerCase();
-    const isAdmin = ['admin', 'super_admin'].includes(roleNorm);
-    const isDispatcher = roleNorm === 'dispatcher';
-    const isDriver = roleNorm === 'driver';
-    const isPicker = roleNorm === 'picker';
+    const isAdmin = userHasRole(currentUser, 'Admin') || userHasRole(currentUser, 'SUPER_ADMIN');
+    const isDispatcher = userHasRole(currentUser, 'Dispatcher');
+    const isDriver = userHasRole(currentUser, 'Driver');
+    const isPicker = userHasRole(currentUser, 'Picker');
     const isUser = !isAdmin && !isDispatcher && !isDriver && !isPicker;
 
-    if (isDriver) {
-      if (!['driver', 'driver-app', 'driver-mobile', 'epod', 'inspections', 'fuel', 'scanner'].includes(activeTab)) {
-        setActiveTab('driver');
-      }
-    } else if (isPicker) {
-      if (activeTab !== 'scanner') {
-        setActiveTab('scanner');
-      }
-    } else if (isUser) {
-      if (!['dashboard', 'queue', 'driver', 'driver-app', 'driver-mobile', 'epod'].includes(activeTab)) {
-        setActiveTab('dashboard');
+    if (!isAdmin && !isDispatcher) {
+      if (isDriver && !isPicker) {
+        if (!['driver', 'driver-app', 'driver-mobile', 'epod', 'inspections', 'fuel', 'scanner'].includes(activeTab)) {
+          setActiveTab('driver');
+        }
+      } else if (isPicker && !isDriver) {
+        if (activeTab !== 'scanner') {
+          setActiveTab('scanner');
+        }
+      } else if (isDriver && isPicker) {
+        if (!['driver', 'driver-app', 'driver-mobile', 'epod', 'inspections', 'fuel', 'scanner'].includes(activeTab)) {
+          setActiveTab('driver');
+        }
+      } else if (isUser) {
+        if (!['dashboard', 'queue', 'driver', 'driver-app', 'driver-mobile', 'epod'].includes(activeTab)) {
+          setActiveTab('dashboard');
+        }
       }
     }
   }, [currentUser, activeTab]);
@@ -614,7 +646,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   // Driver Live GPS Geolocation Sync to database with strict driver/tenant validation
   useEffect(() => {
     // Strictly restrict GPS position tracking ONLY to active, assigned company drivers
-    if (!currentUser || currentUser.role !== 'Driver') return;
+    if (!currentUser || !userHasRole(currentUser, 'Driver')) return;
 
     // Reject inactive/suspended driver accounts immediately
     if (currentUser.status && ['Suspended', 'Terminated', 'Inactive'].includes(currentUser.status)) {
@@ -637,8 +669,8 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
       }
 
       // 2. Strict Role & Active Status Re-Verification
-      if (currentUser.role !== 'Driver') {
-        console.warn(`GPS update rejected: Current user ${currentUser.name} has role ${currentUser.role}, not Driver.`);
+      if (!userHasRole(currentUser, 'Driver')) {
+        console.warn(`GPS update rejected: Current user ${currentUser.name} does not have the Driver role.`);
         return;
       }
 
@@ -781,9 +813,9 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     });
   }, [trucks, currentUser]);
 
-  // Auto-prompt Driver for Truck Selection on session login if user role is Driver
+  // Auto-prompt Driver for Truck Selection on session login if user has Driver role
   useEffect(() => {
-    if (currentUser && (currentUser.role || '').trim().toLowerCase() === 'driver') {
+    if (currentUser && userHasRole(currentUser, 'Driver')) {
       const todayKey = new Date().toISOString().split('T')[0];
       const promptedKey = `driver_truck_modal_prompted_${currentUser.id}_${todayKey}`;
       if (!sessionStorage.getItem(promptedKey)) {
@@ -791,7 +823,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         sessionStorage.setItem(promptedKey, 'true');
       }
     }
-  }, [currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentUser?.role, currentUser?.roles]);
 
   // Trigger login session handlers
   const handleLoginSuccess = (tenant: Tenant, user: User) => {
@@ -823,8 +855,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     localStorage.setItem('prospaces_active_tenant', JSON.stringify(tenant));
     localStorage.setItem('prospaces_active_user', JSON.stringify(user));
 
-    const roleNorm = (user.role || '').trim().toLowerCase();
-    if (roleNorm === 'driver') {
+    if (userHasRole(user, 'Driver')) {
       setShowDriverTruckModal(true);
     }
   };
@@ -2006,7 +2037,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         phone: currentUser.phone || " ||pw:ProSpaces2026! ||status:Active",
         status: "Active",
         associatedStoreId: currentUser.associatedStoreId || "DC-WINAMILL",
-        driverLicenseExpire: currentUser.driverLicenseExpire || (currentUser.role === 'Driver' ? "2027-01-22" : undefined),
+        driverLicenseExpire: currentUser.driverLicenseExpire || (userHasRole(currentUser, 'Driver') ? "2027-01-22" : undefined),
         lastActive: new Date().toISOString()
       };
       newUsers.push(newUserRecord);
@@ -2934,10 +2965,10 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   const theme = getThemeClasses(currentTenant.primaryColor);
 
   const userRoleNormalized = (currentUser?.role || '').trim().toLowerCase();
-  const isNavAdmin = ['admin', 'super_admin'].includes(userRoleNormalized);
-  const isNavDispatcher = userRoleNormalized === 'dispatcher';
-  const isNavDriver = userRoleNormalized === 'driver';
-  const isNavPicker = userRoleNormalized === 'picker';
+  const isNavAdmin = ['admin', 'super_admin'].includes(userRoleNormalized) || userHasRole(currentUser, 'Admin') || userHasRole(currentUser, 'SUPER_ADMIN');
+  const isNavDispatcher = userRoleNormalized === 'dispatcher' || userHasRole(currentUser, 'Dispatcher');
+  const isNavDriver = userRoleNormalized === 'driver' || userHasRole(currentUser, 'Driver');
+  const isNavPicker = userRoleNormalized === 'picker' || userHasRole(currentUser, 'Picker');
   const isNavUser = !isNavAdmin && !isNavDispatcher && !isNavDriver && !isNavPicker;
 
   // Combined checks for view space accessibility
@@ -2950,7 +2981,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans text-gray-800 dark:text-slate-100 antialiased selection:bg-blue-600 selection:text-white w-full max-w-full overflow-x-hidden" id="main-app-container">
       
       {/* Super Admin Top Controller Banner when in App Workspace Mode (Hidden in driver mobile app) */}
-      {currentUser.role === 'SUPER_ADMIN' && !['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
+      {(currentUser.role === 'SUPER_ADMIN' || userHasRole(currentUser, 'SUPER_ADMIN')) && !['epod', 'driver', 'driver-app', 'driver-mobile'].includes(activeTab) && (
         <div className="bg-slate-950 text-amber-300 px-4 py-2 flex flex-wrap items-center justify-between text-xs border-b border-amber-500/30 shadow-md gap-2 z-50">
           <div className="flex items-center space-x-2.5">
             <span className="bg-amber-500 text-slate-950 text-[10px] uppercase font-mono px-2 py-0.5 rounded font-black tracking-wider shadow-xs">
@@ -3792,7 +3823,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               <MapIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               <span>Map</span>
             </button>
-            {currentUser?.role === 'Admin' && (
+            {(userHasRole(currentUser, 'Admin') || userHasRole(currentUser, 'SUPER_ADMIN')) && (
               <button
                 onClick={() => setActiveTab('gps')}
                 className={`flex-1 py-1.5 px-3.5 text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition-all shrink-0 whitespace-nowrap ${
@@ -3908,7 +3939,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 acc[b.id] = trucks.filter(t => isTruckAssignedToBranch(t, b)).length;
                 return acc;
               }, {} as Record<string, number>)}
-              readOnly={currentUser?.role === 'Dispatcher'}
+              readOnly={userHasRole(currentUser, 'Dispatcher') && !userHasRole(currentUser, 'Admin') && !userHasRole(currentUser, 'SUPER_ADMIN')}
             />
           )}
           {activeTab === 'trucks' && (
@@ -3919,7 +3950,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               onAddTruck={handleAddTruck} 
               onUpdateTruck={handleUpdateTruck} 
               onDeleteTruck={handleDeleteTruck} 
-              readOnly={currentUser?.role === 'Dispatcher'}
+              readOnly={userHasRole(currentUser, 'Dispatcher') && !userHasRole(currentUser, 'Admin') && !userHasRole(currentUser, 'SUPER_ADMIN')}
             />
           )}
           {activeTab === 'gps' && (
@@ -3938,7 +3969,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               onAddUser={handleAddUser}
               onUpdateUser={handleUpdateUser}
               onDeleteUser={handleDeleteUser}
-              readOnly={currentUser?.role === 'Dispatcher'}
+              readOnly={userHasRole(currentUser, 'Dispatcher') && !userHasRole(currentUser, 'Admin') && !userHasRole(currentUser, 'SUPER_ADMIN')}
             />
           )}
           {activeTab === 'document-import' && (

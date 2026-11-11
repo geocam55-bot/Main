@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { DeliveryRecord, Truck, Branch, User as AppUser, Tenant } from '../types';
-import { DeliveryStatus, getDeliveryPhotos } from '../types';
+import { DeliveryStatus, getDeliveryPhotos, userHasRole } from '../types';
 import { 
   Truck as TruckIcon, Package, Search, Filter, CheckCircle2, 
   AlertTriangle, Lock, Unlock, ArrowRight, RotateCcw, Plus, X, 
@@ -2523,9 +2523,16 @@ export default function DragDropFreightBoard({
                     className="w-full bg-white border border-slate-200 px-3 py-2 text-xs rounded-xl font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs mb-2"
                   >
                     <option value="">-- Select Picker from Staff List --</option>
-                    {users.map(u => (
+                    {/* Registered Pickers flagged with Picker role (including multi-role accounts) */}
+                    {users.filter(u => userHasRole(u, 'Picker')).map(u => (
                       <option key={u.id} value={u.name}>
-                        {u.name} ({u.role || 'Warehouse'})
+                        ⭐ {u.name} (Picker{u.roles && u.roles.length > 1 ? ` · ${u.roles.join(', ')}` : ''})
+                      </option>
+                    ))}
+                    {/* Other staff members */}
+                    {users.filter(u => !userHasRole(u, 'Picker')).map(u => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} ({u.roles && u.roles.length > 0 ? u.roles.join(', ') : (u.role || 'Warehouse')})
                       </option>
                     ))}
                   </select>

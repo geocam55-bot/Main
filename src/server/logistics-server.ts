@@ -186,7 +186,7 @@ function formatDatabaseError(err: any): string {
   return msg;
 }
 
-function serializeToPhone(phone: string | undefined, password: string | undefined, status: string | undefined, driverLicenseExpire?: string | undefined, lastActive?: string | undefined, resetRequest?: string | undefined, avatarUrl?: string | undefined): string {
+function serializeToPhone(phone: string | undefined, password: string | undefined, status: string | undefined, driverLicenseExpire?: string | undefined, lastActive?: string | undefined, resetRequest?: string | undefined, avatarUrl?: string | undefined, roles?: string[] | undefined): string {
   const basePhone = (phone || "").trim();
   let res = basePhone;
   if (password) {
@@ -207,6 +207,9 @@ function serializeToPhone(phone: string | undefined, password: string | undefine
   if (avatarUrl) {
     res += ` ||avatar:${avatarUrl}`;
   }
+  if (roles && Array.isArray(roles) && roles.length > 0) {
+    res += ` ||roles:${roles.join(',')}`;
+  }
   return res;
 }
 
@@ -220,6 +223,7 @@ function deserializeFromPhone(user: any): any {
   let lastActive = "";
   let resetRequest = "";
   let avatarUrl = "";
+  let encodedRoles: string[] | null = null;
 
   const pwMatch = phone.match(/\|\|pw:([^|]+)/);
   if (pwMatch) {
@@ -251,8 +255,21 @@ function deserializeFromPhone(user: any): any {
     avatarUrl = avatarMatch[1];
     cleanPhone = cleanPhone.replace(/\|\|avatar:[^|]+/, "");
   }
+  const rolesMatch = phone.match(/\|\|roles:([^|]+)/);
+  if (rolesMatch) {
+    encodedRoles = rolesMatch[1].split(',').map((r: string) => r.trim()).filter(Boolean);
+    cleanPhone = cleanPhone.replace(/\|\|roles:[^|]+/, "");
+  }
 
-  const roles = user.roles && Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : (user.role ? [user.role] : ['User']);
+  const rawRoles = user.roles && Array.isArray(user.roles) && user.roles.length > 0 
+    ? user.roles 
+    : (encodedRoles && encodedRoles.length > 0 
+      ? encodedRoles 
+      : (user.role ? [user.role] : ['User']));
+  
+  // Filter out SUPER_ADMIN for tenant users
+  const roles = rawRoles.filter((r: string) => String(r).toUpperCase() !== 'SUPER_ADMIN');
+
   return {
     ...user,
     phone: cleanPhone.trim(),
@@ -263,7 +280,7 @@ function deserializeFromPhone(user: any): any {
     resetRequest,
     avatarUrl,
     roles,
-    role: user.role || roles[0]
+    role: user.role && user.role !== 'SUPER_ADMIN' ? user.role : (roles[0] || 'User')
   };
 }
 
@@ -735,6 +752,7 @@ create table if not exists users (
   name text not null,
   email text not null,
   role text not null, -- 'Admin', 'Dispatcher', 'Driver', 'User', 'SUPER_ADMIN'
+  roles text[], -- Array of assigned roles e.g. ARRAY['Driver', 'Picker']
   phone text,
   "associatedStoreId" text,
   password text,
@@ -1174,6 +1192,7 @@ ALTER TABLE trucks ADD COLUMN IF NOT EXISTS user_field_2 varchar;
 ALTER TABLE trucks ADD COLUMN IF NOT EXISTS image_url text;
 
 -- Upgrade Users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS roles text[];
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_number varchar;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name varchar;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name varchar;
@@ -2552,7 +2571,7 @@ app.use((req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        phone: serializeToPhone(user.phone, tempPassword, user.status, user.driverLicenseExpire, user.lastActive, user.resetRequest, user.avatarUrl),
+        phone: serializeToPhone(user.phone, tempPassword, user.status, user.driverLicenseExpire, user.lastActive, user.resetRequest, user.avatarUrl, user.roles),
         associatedStoreId: user.associatedStoreId || null,
         tenantId: user.tenantId
       };
@@ -3300,7 +3319,8 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         user.driverLicenseExpire,
         timestamp,
         user.resetRequest,
-        user.avatarUrl
+        user.avatarUrl,
+        user.roles
       );
 
       const { error: updateErr } = await supabase
@@ -3719,7 +3739,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
               email: u.email,
               role: u.role,
               roles: u.roles || [u.role],
-              phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl),
+              phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl, u.roles),
               associatedStoreId: u.associatedStoreId || null
             };
           });

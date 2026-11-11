@@ -95,7 +95,7 @@ export default function SuperAdminTenantsView({
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userFullName, setUserFullName] = useState('');
-  const [userRole, setUserRole] = useState<'User' | 'Driver' | 'Dispatcher' | 'Admin'>('User');
+  const [userRole, setUserRole] = useState<'User' | 'Driver' | 'Picker' | 'Dispatcher' | 'Admin'>('User');
   const [userStatus, setUserStatus] = useState<'Active' | 'Inactive'>('Active');
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
@@ -1058,6 +1058,7 @@ export default function SuperAdminTenantsView({
                   >
                     <option value="User">User</option>
                     <option value="Driver">Driver</option>
+                    <option value="Picker">Picker</option>
                     <option value="Dispatcher">Dispatcher</option>
                     <option value="Admin">Admin</option>
                   </select>
@@ -1146,11 +1147,15 @@ export default function SuperAdminTenantsView({
                   {tenantUsers.map((u) => {
                     const isUserInactive = u.status === 'Inactive';
                     
-                    const roleBadgeColor = 
-                      u.role === 'Admin' ? 'bg-indigo-950 text-indigo-300 border-indigo-900/60' :
-                      u.role === 'Dispatcher' ? 'bg-amber-950 text-amber-300 border-amber-900/60' :
-                      u.role === 'Driver' ? 'bg-blue-950 text-blue-300 border-blue-900/60' :
-                      'bg-slate-900 text-slate-350 border-slate-850';
+                    const getRoleBadgeClass = (r: string) => {
+                      switch (r) {
+                        case 'Admin': return 'bg-indigo-950 text-indigo-300 border-indigo-900/60';
+                        case 'Dispatcher': return 'bg-amber-950 text-amber-300 border-amber-900/60';
+                        case 'Driver': return 'bg-blue-950 text-blue-300 border-blue-900/60';
+                        case 'Picker': return 'bg-emerald-950 text-emerald-300 border-emerald-900/60';
+                        default: return 'bg-slate-900 text-slate-350 border-slate-850';
+                      }
+                    };
 
                     return (
                       <div 
@@ -1166,13 +1171,17 @@ export default function SuperAdminTenantsView({
                             <Users className="h-4.5 w-4.5" />
                           </div>
                           <div className="space-y-1">
-                            <div className="flex items-center flex-wrap gap-2">
+                            <div className="flex items-center flex-wrap gap-1.5">
                               <h4 className="font-sans font-bold text-[13px] text-slate-100 leading-none">
                                 {u.name}
                               </h4>
-                              <span className={`text-[9px] font-mono uppercase font-black px-1.5 py-0.5 rounded border ${roleBadgeColor}`}>
-                                {u.role || 'User'}
-                              </span>
+                              {(u.roles && u.roles.length > 0 ? u.roles : [u.role || 'User'])
+                                .filter(r => String(r).toUpperCase() !== 'SUPER_ADMIN')
+                                .map(r => (
+                                  <span key={r} className={`text-[9px] font-mono uppercase font-black px-1.5 py-0.5 rounded border ${getRoleBadgeClass(r)}`}>
+                                    {r}
+                                  </span>
+                                ))}
                               
                               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
                                 isUserInactive 

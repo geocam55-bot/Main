@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Truck, Branch, User } from '../types';
+import { Truck, Branch, User, userHasRole } from '../types';
 import { Truck as TruckIcon, Plus, Trash2, Edit2, Shield, Info, ChevronRight, FileCheck, AlertTriangle, Calendar, Upload, Image as ImageIcon, Camera, Check, X, Database } from 'lucide-react';
 import { isTruckAssignedToBranch } from '../lib/mapHelpers';
 import { TRUCK_IMAGE_PRESETS, getTruckImage } from '../lib/truckImages';
@@ -94,8 +94,8 @@ export default function FleetSetup({
     ? trucks
     : trucks.filter(t => selectedBranch ? isTruckAssignedToBranch(t, selectedBranch) : t.branchId === selectedBranchId);
 
-  // Filter registered users with Driver role
-  const driversList = (users || []).filter(u => u.role?.toLowerCase() === 'driver');
+  // Filter registered users flagged with Driver role (including multi-role accounts)
+  const driversList = (users || []).filter(u => userHasRole(u, 'Driver'));
 
   // Pre-configured truck models for easy selection
   const TRUCK_TYPES = [
@@ -471,7 +471,7 @@ export default function FleetSetup({
                       <option value="">-- Select a Driver --</option>
                       {driversList.map(u => (
                         <option key={u.id} value={u.name}>
-                          {u.name} ({u.email || 'No email'})
+                          👤 {u.name} ({u.roles && u.roles.length > 0 ? u.roles.join(', ') : u.role}) &bull; {u.email || 'No email'}
                         </option>
                       ))}
                       {driversList.length === 0 && (

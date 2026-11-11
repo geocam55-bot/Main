@@ -3,7 +3,7 @@ import { extractVehicleNumber, sanitizeGpsCoordinates, getBranchCoordinates } fr
 import { DEFAULT_BRANCHES } from "../data";
 
 // Serialization and Deserialization helpers matching the backend implementation
-export function serializeToPhone(phone: string | undefined, password: string | undefined, status: string | undefined, driverLicenseExpire?: string | undefined, lastActive?: string | undefined, resetRequest?: string | undefined, avatarUrl?: string | undefined): string {
+export function serializeToPhone(phone: string | undefined, password: string | undefined, status: string | undefined, driverLicenseExpire?: string | undefined, lastActive?: string | undefined, resetRequest?: string | undefined, avatarUrl?: string | undefined, roles?: string[] | undefined): string {
   const basePhone = (phone || "").trim();
   let res = basePhone;
   if (password) {
@@ -24,6 +24,9 @@ export function serializeToPhone(phone: string | undefined, password: string | u
   if (avatarUrl) {
     res += ` ||avatar:${avatarUrl}`;
   }
+  if (roles && Array.isArray(roles) && roles.length > 0) {
+    res += ` ||roles:${roles.join(',')}`;
+  }
   return res;
 }
 
@@ -37,6 +40,7 @@ export function deserializeFromPhone(user: any): any {
   let lastActive = "";
   let resetRequest = "";
   let avatarUrl = "";
+  let encodedRoles: string[] | null = null;
 
   const pwMatch = phone.match(/\|\|pw:([^|]+)/);
   if (pwMatch) {
@@ -68,8 +72,21 @@ export function deserializeFromPhone(user: any): any {
     avatarUrl = avatarMatch[1];
     cleanPhone = cleanPhone.replace(/\|\|avatar:[^|]+/, "");
   }
+  const rolesMatch = phone.match(/\|\|roles:([^|]+)/);
+  if (rolesMatch) {
+    encodedRoles = rolesMatch[1].split(',').map((r: string) => r.trim()).filter(Boolean);
+    cleanPhone = cleanPhone.replace(/\|\|roles:[^|]+/, "");
+  }
 
-  const roles = user.roles && Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : (user.role ? [user.role] : ['User']);
+  const rawRoles = user.roles && Array.isArray(user.roles) && user.roles.length > 0 
+    ? user.roles 
+    : (encodedRoles && encodedRoles.length > 0 
+      ? encodedRoles 
+      : (user.role ? [user.role] : ['User']));
+  
+  // Filter out SUPER_ADMIN for tenant users
+  const roles = rawRoles.filter((r: string) => String(r).toUpperCase() !== 'SUPER_ADMIN');
+
   return {
     ...user,
     phone: cleanPhone.trim(),
@@ -80,7 +97,7 @@ export function deserializeFromPhone(user: any): any {
     resetRequest,
     avatarUrl,
     roles,
-    role: user.role || roles[0]
+    role: user.role && user.role !== 'SUPER_ADMIN' ? user.role : (roles[0] || 'User')
   };
 }
 
@@ -404,7 +421,8 @@ export async function saveUserHeartbeatDirect(tenantId: string, userId: string, 
       user.driverLicenseExpire,
       lastActive,
       user.resetRequest,
-      user.avatarUrl
+      user.avatarUrl,
+      user.roles
     );
 
     const { error: updateErr } = await supabase
@@ -893,7 +911,7 @@ export async function saveTenantStateDirect(
     email: u.email,
     role: u.role,
     roles: u.roles || [u.role],
-    phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl),
+    phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl, u.roles),
     associatedStoreId: u.associatedStoreId
   }));
 

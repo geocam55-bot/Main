@@ -8,7 +8,7 @@ import {
   Activity, Award, RefreshCw, Trash2, HelpCircle, Navigation, Info, Clock, PlayCircle,
   Camera, Truck as TruckIcon
 } from 'lucide-react';
-import { Branch, Truck, User, DeliveryRecord } from '../types';
+import { Branch, Truck, User, DeliveryRecord, userHasRole } from '../types';
 import { getFrontendSupabase } from '../lib/supabaseClient';
 
 interface EnterpriseHubProps {
@@ -1293,7 +1293,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
     (o.customerNameStr || '').toLowerCase().includes(orderSearch.toLowerCase())
   );
 
-  const isDriver = currentUser?.role === 'Driver';
+  const isDriver = currentUser ? (userHasRole(currentUser, 'Driver') && !userHasRole(currentUser, 'Admin') && !userHasRole(currentUser, 'Dispatcher') && !userHasRole(currentUser, 'SUPER_ADMIN')) : false;
 
   return (
     <div className="bg-slate-50 border border-slate-200/70 rounded-2xl shadow-xs overflow-hidden w-full p-4 md:p-6" id="enterprise-logistics-hub">
@@ -2017,7 +2017,7 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
         <div className="space-y-6 animate-fade-in">
           {/* Driver Safety Header Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {users.filter(u => u.role === 'Driver').map(driver => {
+            {users.filter(u => userHasRole(u, 'Driver')).map(driver => {
               const score = getDriverSafetyScore(driver.id);
               const events = safetyLogs.filter(log => log.driverID === driver.id);
               return (
@@ -2441,8 +2441,8 @@ export default function EnterpriseHub({ deliveries, branches, trucks, users, cur
                   <label className="block text-[10px] font-bold text-slate-500 mb-1">Link to Driver (Optional)</label>
                   <select value={newDoc.driverID || ''} onChange={e => setNewDoc({...newDoc, driverID: e.target.value || undefined})} className="p-2 w-full text-xs rounded border border-slate-200 focus:outline-blue-500">
                     <option value="">-- None --</option>
-                    {users.filter(u => u.role === 'Driver').map(d => (
-                      <option key={d.id} value={d.id}>{d.name} ({d.id})</option>
+                    {users.filter(u => userHasRole(u, 'Driver')).map(d => (
+                      <option key={d.id} value={d.id}>{d.name} ({d.roles && d.roles.length > 0 ? d.roles.join(', ') : d.role})</option>
                     ))}
                   </select>
                 </div>

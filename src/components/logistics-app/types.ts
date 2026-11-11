@@ -267,6 +267,20 @@ export function getHighestRole(roles?: UserRole[] | null): UserRole {
   return highest;
 }
 
+export function userHasRole(user: User | null | undefined, targetRole: UserRole | string): boolean {
+  if (!user) return false;
+  const target = String(targetRole).toLowerCase().trim();
+  if (user.roles && Array.isArray(user.roles)) {
+    if (user.roles.some(r => String(r).toLowerCase().trim() === target)) {
+      return true;
+    }
+  }
+  if (user.role && String(user.role).toLowerCase().trim() === target) {
+    return true;
+  }
+  return false;
+}
+
 export interface User {
   id: string;
   name: string;
