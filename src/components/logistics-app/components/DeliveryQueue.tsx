@@ -1719,18 +1719,45 @@ export default function DeliveryQueue({
 
                         <div>
                           <h5 className="font-bold text-gray-900 mb-1 uppercase tracking-wider font-mono text-[10px]">
-                            {isSupplierPickup ? 'Supplier Pickup Instructions' : isCreditDoc ? 'Credit Memo Processing Details' : isRmaDoc ? 'RMA Return Dispatch Details' : 'Recipient Delivery Instructions'}
+                            {isSupplierPickup ? 'Supplier Pickup Instructions' : isCreditDoc ? 'Credit Memo Processing Details' : isRmaDoc ? 'RMA Return Dispatch Details' : 'Recipient Delivery & Dispatch Details'}
                           </h5>
-                          <div className="bg-white border border-slate-100 rounded-xl p-3 space-y-2 shadow-sm">
-                            <p><span className="text-slate-500 font-semibold">{isSupplierPickup ? 'Purchase Order # (PO#):' : isCreditDoc ? 'Credit Note #:' : isRmaDoc ? 'RMA #:' : 'Sales Order # (SO#):'}</span> <strong className="font-mono text-blue-700">{delivery.epicorSalesOrder || delivery.invoiceNumber || delivery.id}</strong></p>
-                            <p><span className="text-slate-500 font-semibold">{isSupplierPickup ? 'Supplier Name & Address (Supplier):' : isCreditDoc ? 'Customer Name:' : isRmaDoc ? 'Manufacturer:' : 'Customer Name:'}</span> <strong className="text-slate-900">{delivery.customerName}</strong></p>
-                            <p><span className="text-slate-500 font-semibold">{isSupplierPickup ? 'Deliver Address (Shipto address):' : 'Delivery Address:'}</span> <strong className="text-slate-900">{delivery.deliveryAddress}</strong></p>
-                            <p><span className="text-slate-500 font-semibold">{isSupplierPickup ? 'Pickup Date (pickup Date):' : 'Date Registered:'}</span> <strong className="font-mono text-slate-800">{formatLocalDate(delivery.registeredAt)}</strong></p>
-                            <p><span className="text-slate-500 font-semibold">Phone Contact:</span> <strong className="font-mono">{delivery.phone}</strong></p>
+                          <div className="bg-white border border-slate-100 rounded-xl p-3.5 space-y-2.5 shadow-sm text-xs">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <p><span className="text-slate-500 font-semibold">Ticket ID / Barcode:</span> <strong className="font-mono text-slate-800">{delivery.id}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Sales Order Ref:</span> <strong className="font-mono text-blue-700">{delivery.epicorSalesOrder || delivery.id}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Invoice Number:</span> <strong className="font-mono text-slate-800">{delivery.invoiceNumber || 'N/A'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Origin Depot Station:</span> <strong className="text-slate-900">{delivery.originBranch || 'RONA Tantallon'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Customer Recipient:</span> <strong className="text-slate-900">{delivery.customerName}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Delivery Address:</span> <strong className="text-slate-900">{delivery.deliveryAddress}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Contact Phone:</span> <strong className="font-mono">{delivery.phone || 'N/A'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Customer Email:</span> <strong className="font-mono text-sky-700">{delivery.customerEmail || 'N/A'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Tracking Number:</span> <strong className="font-mono text-emerald-700">{delivery.trackingNumber || 'N/A'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Allocated Truck:</span> <strong className="text-slate-800">{delivery.assignedTruck || 'Unassigned'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Lifecycle Stage:</span> <strong className="font-mono text-indigo-700">{delivery.status}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Delivery Category:</span> <strong className="text-slate-800">{delivery.deliveryCategory || 'Retail'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Registration Date:</span> <strong className="font-mono">{formatLocalDate(delivery.registeredAt)}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Scheduled Date & Slot:</span> <strong className="font-mono text-blue-800">{delivery.scheduledDate ? `${delivery.scheduledDate} (${delivery.scheduledSlot || 'AM'})` : 'Unscheduled'}</strong></p>
+                              <p><span className="text-slate-500 font-semibold">Warehouse Picker:</span> <strong className="text-slate-800">{delivery.picker || delivery.pickerName || 'Unassigned'}</strong></p>
+                              {delivery.returnReason && (
+                                <p><span className="text-red-600 font-semibold">Exception Reason:</span> <strong className="text-red-800">{delivery.returnReason}</strong></p>
+                              )}
+                              {delivery.deliveredAt && (
+                                <p><span className="text-green-600 font-semibold">Delivered At:</span> <strong className="font-mono text-green-800">{delivery.deliveredAt}</strong></p>
+                              )}
+                              {delivery.signature && (
+                                <p><span className="text-indigo-600 font-semibold">Signature:</span> <strong className="text-slate-800">{delivery.signature}</strong></p>
+                              )}
+                              {delivery.deliveryPhoto && (
+                                <p><span className="text-indigo-600 font-semibold">Proof Photo URL:</span> <a href={delivery.deliveryPhoto} target="_blank" rel="noreferrer" className="text-blue-600 underline truncate block">{delivery.deliveryPhoto}</a></p>
+                              )}
+                              {delivery.pdfUrl && (
+                                <p><span className="text-indigo-600 font-semibold">Archived PDF/Image:</span> <a href={delivery.pdfUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline truncate block">{delivery.pdfUrl}</a></p>
+                              )}
+                            </div>
                             {delivery.destinationNotes && (
-                              <p className="mt-1 pt-1.5 border-t border-slate-100 text-slate-600 italic">
-                                &ldquo;{delivery.destinationNotes}&rdquo;
-                              </p>
+                              <div className="mt-2 pt-2 border-t border-slate-100 text-slate-600 italic">
+                                <span className="font-semibold text-slate-700 not-italic">Driver Notes / Instructions:</span> &ldquo;{delivery.destinationNotes}&rdquo;
+                              </div>
                             )}
                           </div>
                         </div>
