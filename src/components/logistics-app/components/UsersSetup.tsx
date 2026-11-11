@@ -94,7 +94,7 @@ export default function UsersSetup({
     setUserId(user.id);
     setUserName(user.name);
     setUserEmail(user.email);
-    setUserRoles(user.roles && user.roles.length > 0 ? user.roles : (user.role ? [user.role] : ['User']));
+    setUserRoles((user.roles && user.roles.length > 0 ? user.roles : (user.role ? [user.role] : ['User'])).filter(r => String(r).toUpperCase() !== 'SUPER_ADMIN'));
     setUserPhone(user.phone || '');
     setDriverLicenseExpire(user.driverLicenseExpire || '');
     setAssociatedStoreId(user.associatedStoreId || '');
@@ -596,11 +596,13 @@ export default function UsersSetup({
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1 max-w-[150px] justify-end">
-                          {(user.roles && user.roles.length > 0 ? user.roles : [user.role]).map(r => (
-                            <span key={r} className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${getRoleBadgeStyle(r)}`}>
-                              {r}
-                            </span>
-                          ))}
+                          {(user.roles && user.roles.length > 0 ? user.roles : [user.role])
+                            .filter(r => String(r).toUpperCase() !== 'SUPER_ADMIN')
+                            .map(r => (
+                              <span key={r} className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${getRoleBadgeStyle(r)}`}>
+                                {r}
+                              </span>
+                            ))}
                         </div>
                       </div>
 
