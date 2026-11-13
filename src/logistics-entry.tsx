@@ -30,11 +30,11 @@ function syncLogisticsUserSession(userObj: any) {
 
     const email = userObj.email || "george.campbell@ronaatlantic.ca";
     const name = userObj.full_name || userObj.name || (email ? email.split('@')[0] : "George Campbell");
+    const id = userObj.id || "USR-57008";
     const isGeorge = email.toLowerCase().includes('george.campbell') || id === 'USR-10524';
     const role = (userObj.role === 'SUPER_ADMIN' || userObj.role === 'Super_Admin' || userObj.role === 'super_admin' || email === 'superadmin@prospaces.com') && !isGeorge
       ? "SUPER_ADMIN"
       : ((userObj.role === 'admin' || userObj.role === 'Admin' || isGeorge) ? "Admin" : (userObj.role || "Admin"));
-    const id = userObj.id || "USR-57008";
 
     if (!currentActive || currentActive.email !== email || currentActive.id !== id) {
       localStorage.setItem('prospaces_active_user', JSON.stringify({

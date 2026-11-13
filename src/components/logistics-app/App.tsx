@@ -41,6 +41,7 @@ import EnterpriseHub from './components/EnterpriseHub';
 import TelematicsDashboard from './components/TelematicsDashboard';
 import DriverMobileApp from './components/DriverMobileApp';
 import DriverTruckSelectModal from './components/DriverTruckSelectModal';
+import { CargoManifestReport } from './components/CargoManifestReport';
 import { FLEET_COMPLETE_TRUCKS } from './truckSpecs';
 import { rolloverUncompletedDeliveries } from './lib/schedulingUtils';
 import { extractVehicleNumber } from './lib/mapHelpers';
@@ -49,7 +50,7 @@ import {
   ChevronDown, Trash2, Truck as TruckIcon, LogOut, Landmark, UserCheck, Key,
   Database, RefreshCw, FileDown, AlertTriangle, ShieldAlert, Camera, Sliders, User as UserIcon,
   Compass, Sparkles, Activity, Menu, X, Settings, Calendar as CalendarIcon, Building2, Radio,
-  Sun, Moon, Monitor, Palette, ExternalLink, Package
+  Sun, Moon, Monitor, Palette, ExternalLink, Package, FileText
 } from 'lucide-react';
 import CustomerTrackingPortal from '../CustomerTrackingPortal';
 import { useTheme, type ThemeMode } from '../ThemeProvider';
@@ -3080,7 +3081,7 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                 <button 
                   onClick={() => setActiveNavDropdown(prev => prev === 'dispatcher' ? null : 'dispatcher')}
                   className={`flex items-center space-x-1.5 px-2.5 xl:px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    ['telematics', 'dashboard', 'live-dashboard', 'queue', 'document-import'].includes(activeTab)
+                    ['telematics', 'dashboard', 'live-dashboard', 'queue', 'document-import', 'cargo-manifest-report'].includes(activeTab)
                       ? 'bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800'
                       : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
@@ -3134,6 +3135,18 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                         <span>Doc Import</span>
                       </button>
                     )}
+
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
+                    <div className="px-3 py-1 text-[9px] font-black tracking-wider uppercase text-slate-400 font-sans">Reports</div>
+                    <button
+                      onClick={() => { setActiveTab('cargo-manifest-report'); setActiveNavDropdown(null); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center space-x-2.5 transition-all cursor-pointer ${
+                        activeTab === 'cargo-manifest-report' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <FileText className="h-4 w-4 text-amber-500" />
+                      <span>Cargo Manifest</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3597,6 +3610,22 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
                               <span>Doc Import</span>
                             </button>
                           )}
+
+                          <div className="text-[9px] font-black tracking-wider uppercase text-slate-400 font-sans mt-3 mb-1 px-2 border-b border-slate-100 pb-1">Reports</div>
+                          <button
+                            onClick={() => {
+                              setActiveTab('cargo-manifest-report');
+                              setIsMobileNavOpen(false);
+                            }}
+                            className={`w-full py-2 px-3 text-xs font-bold rounded-xl flex items-center space-x-2.5 transition-all cursor-pointer ${
+                              activeTab === 'cargo-manifest-report'
+                                ? 'bg-blue-800 text-white shadow-sm'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <FileText className="h-4 w-4 text-amber-500" />
+                            <span>Cargo Manifest</span>
+                          </button>
                         </>
                       )}
 
@@ -3970,6 +3999,17 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
               onUpdateUser={handleUpdateUser}
               onDeleteUser={handleDeleteUser}
               readOnly={userHasRole(currentUser, 'Dispatcher') && !userHasRole(currentUser, 'Admin') && !userHasRole(currentUser, 'SUPER_ADMIN')}
+            />
+          )}
+          {activeTab === 'cargo-manifest-report' && (
+            <CargoManifestReport 
+              deliveries={deliveries}
+              trucks={trucks}
+              branches={branches}
+              users={users}
+              currentUser={currentUser}
+              onUpdateDelivery={handleAddOrUpdateDelivery}
+              onSelectTab={setActiveTab}
             />
           )}
           {activeTab === 'document-import' && (
