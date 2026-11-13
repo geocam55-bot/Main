@@ -12,7 +12,8 @@ import {
   Save,
   Clock,
   AlertCircle,
-  Download
+  Download,
+  UserCheck
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -31,6 +32,7 @@ interface CargoManifestReportProps {
 export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
   deliveries,
   trucks,
+  users,
   onUpdateDelivery,
   onSelectTab
 }) => {
@@ -174,6 +176,13 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
 
   const selectedTruckObj = trucks.find(t => t.id === selectedTruckId);
 
+  const getOrderPickerName = (delivery: DeliveryRecord): string => {
+    const rawPicker = (delivery.assignedPicker || (delivery as any).pickerName || (delivery as any).picker || '').trim();
+    if (!rawPicker) return 'Unassigned';
+    const matchedUser = users.find(u => u.id === rawPicker || u.name === rawPicker);
+    return matchedUser ? matchedUser.name : rawPicker;
+  };
+
   const generatePdfForDeliveries = (targetDeliveries: DeliveryRecord[], filename: string) => {
     if (targetDeliveries.length === 0) return;
 
@@ -247,6 +256,12 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
       doc.text('Driver:', 330, y);
       doc.setFont('helvetica', 'normal');
       doc.text(String(selectedTruckObj?.driver || 'Unassigned'), 415, y);
+
+      y += 16;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Picker:', 36, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(getOrderPickerName(delivery), 105, y);
 
       autoTable(doc, {
         startY: y + 18,
@@ -372,6 +387,7 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
           <div class="meta-item"><strong>Scheduled Slot:</strong> ${delivery.scheduledSlot || 'Morning Dispatch'}</div>
           <div class="meta-item"><strong>Assigned Truck:</strong> ${selectedTruckObj?.name || selectedTruckId}</div>
           <div class="meta-item"><strong>Assigned Driver:</strong> ${selectedTruckObj?.driver || 'Unassigned'}</div>
+          <div class="meta-item"><strong>Assigned Picker:</strong> ${getOrderPickerName(delivery)}</div>
         </div>
 
         <table>
@@ -654,6 +670,14 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
                       <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1">
                         <Clock className="h-3 w-3 text-blue-500" />
                         <span>{delivery.scheduledSlot || 'Morning Dispatch'} ({delivery.scheduledDate || selectedDate})</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs space-y-0.5">
+                      <div className="text-[10px] text-slate-400 uppercase font-mono">Assigned Picker</div>
+                      <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1">
+                        <UserCheck className="h-3 w-3 text-emerald-500" />
+                        <span>{getOrderPickerName(delivery)}</span>
                       </div>
                     </div>
 
