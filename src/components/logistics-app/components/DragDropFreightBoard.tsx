@@ -55,27 +55,25 @@ export function isDeliveryAssignedToTruck(delivery: DeliveryRecord, truck: Truck
   );
 }
 
-// Helper to estimate or parse weight in lbs from string
+// Helper to parse weight in lbs from delivery record (returns 0 if missing or 0, no fallbacks)
 export function parseDeliveryWeightLbs(delivery: DeliveryRecord): number {
-  if (delivery.weight) {
-    const numericStr = delivery.weight.replace(/[^0-9.]/g, '');
-    const val = parseFloat(numericStr);
-    if (!isNaN(val) && val > 0) {
-      if (delivery.weight.toLowerCase().includes('ton')) {
-        return Math.round(val * 2000);
+  if (delivery.weight !== undefined && delivery.weight !== null) {
+    const weightStr = String(delivery.weight).trim();
+    if (weightStr !== '') {
+      const numericStr = weightStr.replace(/[^0-9.]/g, '');
+      const val = parseFloat(numericStr);
+      if (!isNaN(val) && val >= 0) {
+        if (weightStr.toLowerCase().includes('ton')) {
+          return Math.round(val * 2000);
+        }
+        if (weightStr.toLowerCase().includes('kg')) {
+          return Math.round(val * 2.20462);
+        }
+        return Math.round(val);
       }
-      if (delivery.weight.toLowerCase().includes('kg')) {
-        return Math.round(val * 2.20462);
-      }
-      return Math.round(val);
     }
   }
-  // Deterministic fallback weight based on ticket ID
-  let hash = 0;
-  for (let i = 0; i < delivery.id.length; i++) {
-    hash = (hash * 31 + delivery.id.charCodeAt(i)) & 0x7fffffff;
-  }
-  return 900 + (hash % 1600); // 900 lbs to 2,500 lbs
+  return 0;
 }
 
 // Helper to determine truck max weight capacity in lbs
@@ -1735,7 +1733,7 @@ export default function DragDropFreightBoard({
               const loadedDeliveries = deliveriesByTruck[truck.id] || [];
               const loadedWeight = loadedDeliveries.reduce((sum, d) => sum + parseDeliveryWeightLbs(d), 0);
               const maxCapacity = getTruckMaxCapacityLbs(truck);
-              const fillPct = Math.min(100, Math.round((loadedWeight / maxCapacity) * 100));
+              const fillPct = maxCapacity > 0 ? Math.min(100, Math.round((loadedWeight / maxCapacity) * 100)) : 0;
 
               const isManualFull = isTruckManuallyFull(truck.id);
               const isFull = isManualFull || fillPct >= 100;
@@ -1966,9 +1964,12 @@ export default function DragDropFreightBoard({
 
                       {/* Weight progress capacity */}
                       <div className="flex items-center justify-between pt-1 font-mono text-xs">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                           <span className="font-bold text-slate-700">
                             {loadedWeight.toLocaleString()} / {maxCapacity.toLocaleString()} lbs
+                          </span>
+                          <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                            {loadedDeliveries.length} {loadedDeliveries.length === 1 ? 'Order' : 'Orders'}
                           </span>
                           {truck.capacityVolumeM3 && truck.capacityVolumeM3 > 0 && (
                             <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">
@@ -2377,7 +2378,7 @@ export default function DragDropFreightBoard({
                     </div>
                     <div className="text-right font-mono">
                       <span className="text-[11px] font-bold text-slate-700 block">
-                        {loadedWeight.toLocaleString()} / {maxCapacity.toLocaleString()} lbs
+                        {loadedWeight.toLocaleString()} / {maxCapacity.toLocaleString()} lbs · {loadedDeliveries.length} {loadedDeliveries.length === 1 ? 'Order' : 'Orders'}
                       </span>
                       <span className="text-[9px] text-blue-600 font-bold">Configure & Load →</span>
                     </div>

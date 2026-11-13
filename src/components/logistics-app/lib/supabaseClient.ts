@@ -700,7 +700,7 @@ export async function fetchTenantStateDirect(rawTenantId: string) {
     const deliveryPhotos = d.deliveryPhotos || meta.deliveryPhotos || (deliveryPhoto ? [deliveryPhoto] : undefined);
     const pdfUrl = d.pdfUrl || meta.pdfUrl;
     const documentType = d.documentType || meta.documentType;
-    const weight = d.weight || meta.weight;
+    const weight = (d.weight !== undefined && d.weight !== null && String(d.weight).trim() !== '') ? d.weight : meta.weight;
     const orderTotal = d.orderTotal || meta.orderTotal;
     const scheduledDate = d.scheduledDate || meta.scheduledDate || d.scheduled_date;
     const scheduledSlot = d.scheduledSlot || meta.scheduledSlot || d.scheduled_slot;
