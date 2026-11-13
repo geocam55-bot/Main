@@ -175,6 +175,110 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
 
   const selectedTruckObj = trucks.find(t => t.id === selectedTruckId);
 
+  const handlePrintManifest = (delivery: DeliveryRecord) => {
+    const items = getManifestItemsForDelivery(delivery);
+    const totalUnits = items.reduce((acc, item) => {
+      const qty = parseFloat(String(item.ordered).replace(/[^0-9.]/g, ''));
+      return acc + (isNaN(qty) ? 0 : qty);
+    }, 0);
+    const totalExtension = items.reduce((acc, item) => {
+      const ext = parseFloat(String(item.extension).replace(/[^0-9.]/g, ''));
+      return acc + (isNaN(ext) ? 0 : ext);
+    }, 0);
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Cargo Manifest Report - ${delivery.id}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #0f172a; }
+            .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
+            .title { font-size: 20px; font-weight: bold; margin: 0; }
+            .subtitle { font-size: 12px; color: #64748b; margin-top: 4px; font-family: monospace; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; font-size: 12px; }
+            .meta-item strong { display: inline-block; width: 140px; color: #475569; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+            th { background: #f1f5f9; padding: 8px 6px; text-align: left; font-family: monospace; border: 1px solid #cbd5e1; font-weight: bold; }
+            td { padding: 8px 6px; border: 1px solid #e2e8f0; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .font-mono { font-family: monospace; }
+            .total-row { font-weight: bold; background: #f8fafc; }
+            .footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid #cbd5e1; font-size: 10px; color: #64748b; display: flex; justify-content: space-between; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="title">PROSPACES LOGISTICS - CARGO MANIFEST REPORT</h1>
+            <div class="subtitle">FLEET TRUCK: ${selectedTruckObj?.name || selectedTruckId} &bull; DATE: ${selectedDate} &bull; ORDER ID: ${delivery.id}</div>
+          </div>
+
+          <div class="meta-grid">
+            <div class="meta-item"><strong>Customer Name:</strong> ${delivery.customerName || delivery.customer || 'N/A'}</div>
+            <div class="meta-item"><strong>Manifest Date:</strong> ${selectedDate}</div>
+            <div class="meta-item"><strong>Delivery Address:</strong> ${delivery.deliveryAddress || delivery.destination || 'N/A'}</div>
+            <div class="meta-item"><strong>Scheduled Slot:</strong> ${delivery.scheduledSlot || 'Morning Dispatch'}</div>
+            <div class="meta-item"><strong>Assigned Truck:</strong> ${selectedTruckObj?.name || selectedTruckId}</div>
+            <div class="meta-item"><strong>Assigned Driver:</strong> ${selectedTruckObj?.driver || 'Unassigned'}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th class="text-center" style="width: 45px;">LINE</th>
+                <th class="text-right" style="width: 65px;">ORDERED</th>
+                <th style="width: 110px;">SKU</th>
+                <th>DESCRIPTION</th>
+                <th class="text-center" style="width: 60px;">UNITS</th>
+                <th class="text-right" style="width: 85px;">PRICE/ PER</th>
+                <th class="text-right" style="width: 95px;">EXTENSION</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(item => `
+                <tr>
+                  <td class="text-center font-mono">${item.line}</td>
+                  <td class="text-right font-mono" style="font-weight: bold;">${item.ordered}</td>
+                  <td class="font-mono" style="font-weight: bold; color: #1e40af;">${item.sku}</td>
+                  <td>${item.description}</td>
+                  <td class="text-center font-mono">${item.units}</td>
+                  <td class="text-right font-mono">${item.pricePer}</td>
+                  <td class="text-right font-mono" style="font-weight: bold; color: #047857;">${item.extension}</td>
+                </tr>
+              `).join('')}
+              <tr class="total-row">
+                <td colspan="4" style="text-align: right; padding-right: 12px;">TOTALS:</td>
+                <td class="text-center font-mono">${totalUnits > 0 ? totalUnits : ''}</td>
+                <td></td>
+                <td class="text-right font-mono" style="color: #047857; font-size: 12px;">$${totalExtension > 0 ? totalExtension.toFixed(2) : '0.00'}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <span>PROSPACES LOGISTICS CARGO MANIFEST REPORT</span>
+            <span>Generated: ${new Date().toLocaleString()}</span>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
+  };
+
+  const handlePrintAll = () => {
+    if (matchingDeliveries.length === 0) return;
+    // Print the first or combine them. We can print the active filtered list sequentially or print the first matching delivery.
+    handlePrintManifest(matchingDeliveries[0]);
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6 font-sans">
       
@@ -257,20 +361,33 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-4 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 text-xs">
-          <div>
-            <span className="text-slate-300 block text-[10px] uppercase">Matching Orders</span>
-            <strong className="text-white text-base font-mono">{matchingDeliveries.length}</strong>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 text-xs">
+            <div>
+              <span className="text-slate-300 block text-[10px] uppercase">Matching Orders</span>
+              <strong className="text-white text-base font-mono">{matchingDeliveries.length}</strong>
+            </div>
+            <div className="border-l border-white/20 pl-4">
+              <span className="text-slate-300 block text-[10px] uppercase">Total Cargo Value</span>
+              <strong className="text-emerald-300 text-base font-mono">
+                ${matchingDeliveries.reduce((sum, d) => {
+                  const val = parseFloat(String(d.orderTotal || '0').replace(/[^0-9.]/g, ''));
+                  return sum + (isNaN(val) ? 0 : val);
+                }, 0).toFixed(2)}
+              </strong>
+            </div>
           </div>
-          <div className="border-l border-white/20 pl-4">
-            <span className="text-slate-300 block text-[10px] uppercase">Total Cargo Value</span>
-            <strong className="text-emerald-300 text-base font-mono">
-              ${matchingDeliveries.reduce((sum, d) => {
-                const val = parseFloat(String(d.orderTotal || '0').replace(/[^0-9.]/g, ''));
-                return sum + (isNaN(val) ? 0 : val);
-              }, 0).toFixed(2)}
-            </strong>
-          </div>
+
+          {matchingDeliveries.length > 0 && (
+            <button
+              onClick={handlePrintAll}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-3 rounded-xl text-xs flex items-center space-x-2 transition shadow-md cursor-pointer"
+              title="Print or Save PDF of Cargo Manifest Report"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Print / Save PDF</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -339,6 +456,15 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
                         <span>{delivery.scheduledSlot || 'Morning Dispatch'} ({delivery.scheduledDate || selectedDate})</span>
                       </div>
                     </div>
+
+                    <button
+                      onClick={() => handlePrintManifest(delivery)}
+                      className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
+                      title="Print or Save PDF of this order manifest"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      <span>Print / PDF</span>
+                    </button>
 
                     <button
                       onClick={() => handleSaveManifest(delivery)}
@@ -461,7 +587,7 @@ export const CargoManifestReport: React.FC<CargoManifestReportProps> = ({
                     </div>
                     <div className="text-right">
                       <span className="mr-2">Order Extension Total:</span>
-                      <strong className="text-sm font-mono text-slate-900 dark:text-white">${totalExt.toFixed(2)}</strong>
+                      <strong className="text-sm font-mono text-slate-900 dark:text-white">${totalExtension.toFixed(2)}</strong>
                     </div>
                   </div>
                 </div>
