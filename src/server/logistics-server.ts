@@ -4846,13 +4846,9 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       // 1. Order / PO / Invoice / Reference Number
       if (key.includes("order") || key.includes("invoice") || key.includes("po") || key.includes("so") || key.includes("rma") || key.includes("reference") || key.includes("code") || key.includes("#") || label.includes("order") || label.includes("invoice")) {
         const docNumRegex = /\b((?:ORD|INV|PO|SO|CR|RMA|REC|VND|WO)[-#\s]?[A-Z0-9]{3,12})\b/i;
-        const match = rawText.match(docNumRegex);
-        if (match) extractedValue = match[1].trim();
-        else {
-          const numberRegex = /(?:order|invoice|po|so|rma|credit|no|num|#)\s*[:#\.-]?\s*([a-zA-Z0-9-]+)/i;
-          const match2 = rawText.match(numberRegex);
-          if (match2 && match2[1] && match2[1].length >= 3) extractedValue = match2[1].trim();
-        }
+        const explicitOrderRegex = /\b(?:order|sales\s*order|invoice|so|po|rma|credit\s*note)\s*(?:no|num|number|#)?\s*[:#.-]+\s*([A-Z0-9-]*\d[A-Z0-9-]{2,12})\b/i;
+        const match = rawText.match(docNumRegex) || rawText.match(explicitOrderRegex);
+        if (match && match[1]) extractedValue = match[1].trim();
       }
 
       // 2. Dates
@@ -4868,13 +4864,14 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
       // 3. Customer / Vendor / Recipient Name
       if (!extractedValue && (key.includes("customer") || key.includes("name") || key.includes("recipient") || key.includes("vendor") || key.includes("supplier") || label.includes("customer") || label.includes("recipient"))) {
         const isStoreRoutingHeader = (s: string) => /\b(?:PRO\s+DARTMOUTH|RONA|PROSPACES|DEPOT|DISTRIBUTION|STORE|TO\s+TANTALLON|\d{3}-\d{3}-\d{4})\b/i.test(s);
-        
-        // Check for explicit Ship To / Deliver To / Recipient contact first
-        const shipToLabelRegex = /(?:Ship To|Deliver To|Job Site|Customer|Recipient|Client)\s*[:\-]?\s*([A-Za-z0-9\s.,&'-]+)/i;
-        const matchShipTo = rawText.match(shipToLabelRegex);
-        if (matchShipTo && matchShipTo[1]) {
-          const candidate = matchShipTo[1].split("\n")[0].trim();
-          if (candidate.length > 2 && candidate.length < 60 && !isStoreRoutingHeader(candidate)) {
+        const isStreetLine = (s: string) => /^\d+\s+[A-Za-z]+\s+.*\b(?:Lane|St|Street|Rd|Road|Ave|Avenue|Cres|Crescent|Cr|Hwy|Highway|Dr|Drive|Way|Blvd|Court|Ct|Pl)\b/i.test(s);
+
+        // Prioritize explicit Sold To / Bill To / Customer / Recipient over Ship To street addresses
+        const custLabelRegex = /(?:Sold\s*To|Bill\s*To|Customer(?:\s*Name)?|Recipient|Client)\s*[:\-]?\s*([A-Za-z0-9\s.,&'-]+)/i;
+        const matchCust = rawText.match(custLabelRegex);
+        if (matchCust && matchCust[1]) {
+          const candidate = matchCust[1].split("\n")[0].split(/\s{2,}|\bSHIP\s*TO\b/i)[0].trim();
+          if (candidate.length > 2 && candidate.length < 60 && !isStoreRoutingHeader(candidate) && !isStreetLine(candidate)) {
             extractedValue = candidate;
           }
         }
@@ -4888,17 +4885,6 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
                 extractedValue = matchName[1].trim();
                 break;
               }
-            }
-          }
-        }
-
-        if (!extractedValue) {
-          const custLabelRegex = /(?:Sold To|Bill To)\s*[:\-]?\s*([A-Za-z0-9\s.,&'-]+)/i;
-          const matchCust = rawText.match(custLabelRegex);
-          if (matchCust && matchCust[1]) {
-            const candidate = matchCust[1].split("\n")[0].trim();
-            if (candidate.length > 2 && candidate.length < 50 && !isStoreRoutingHeader(candidate)) {
-              extractedValue = candidate;
             }
           }
         }
