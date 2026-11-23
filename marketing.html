@@ -1,8 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        try {
+          var migrated = localStorage.getItem('prospace-theme-midnight-v1') === '1';
+          var mode = localStorage.getItem('prospace-theme-mode');
+          var storedTheme = localStorage.getItem('prospace-theme');
+          var isLight = (mode === 'light') || (mode === 'system' && window.matchMedia && !window.matchMedia('(prefers-color-scheme: dark)').matches) || (!mode && migrated && storedTheme === 'light');
+          if (isLight) {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.backgroundColor = '#F8FAFC';
+          } else {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.backgroundColor = '#0A0F1D';
+          }
+        } catch (e) {}
+      })();
+    </script>
     <title>ProSpaces — Marketing Space</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" href="/favicon.png" />

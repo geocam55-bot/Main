@@ -328,7 +328,7 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex light">
+    <div className="min-h-screen flex bg-[#0A0F1D]">
       {/* Left Panel - Branding / Image */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         <ImageWithFallback
@@ -367,7 +367,7 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-center bg-muted px-6 py-12 sm:px-12">
+      <div className="flex-1 flex items-center justify-center bg-[#0A0F1D] text-slate-100 px-6 py-12 sm:px-12">
         <div className="w-full max-w-md space-y-8">
           {/* Header */}
           <div className="text-center">
@@ -375,7 +375,7 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
               <div className="flex justify-center mb-6">
                 <button
                   onClick={onBack}
-                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+                  className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors group"
                 >
                   <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
                   Back to home
@@ -388,10 +388,10 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
               <Logo size="md" />
             </div>
 
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">
+            <h1 className="text-3xl font-bold text-white tracking-tight">
               Members Sign In
             </h1>
-            <p className="mt-2 text-muted-foreground">
+            <p className="mt-2 text-slate-400">
               Enter your credentials to access your workspace.
             </p>
           </div>
@@ -399,17 +399,17 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
           {/* Form */}
           <form onSubmit={handleSignIn} className="space-y-5">
             {successMessage && (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
-                <p className="text-sm text-emerald-800">{successMessage}</p>
+              <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3">
+                <p className="text-sm text-emerald-300">{successMessage}</p>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="member-email" className="text-sm font-medium text-foreground">
+              <Label htmlFor="member-email" className="text-sm font-medium text-slate-300">
                 Email address
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   id="member-email"
                   type="email"
@@ -421,27 +421,27 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
                     setSuccessMessage('');
                   }}
                   required
-                  className="pl-10 h-12 rounded-xl border-border bg-background focus:border-blue-500 focus:ring-blue-500/20 text-base"
+                  className="pl-10 h-12 rounded-xl border-slate-700 bg-slate-900 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 text-base"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="member-password" className="text-sm font-medium text-foreground">
+                <Label htmlFor="member-password" className="text-sm font-medium text-slate-300">
                   Password
                 </Label>
                 <button
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={isResetLoading}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50"
+                  className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
                 >
                   {isResetLoading ? 'Sending...' : 'Forgot password?'}
                 </button>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   id="member-password"
                   type={showPassword ? 'text' : 'password'}
@@ -452,12 +452,12 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
                     setError('');
                   }}
                   required
-                  className="pl-10 pr-12 h-12 rounded-xl border-border bg-background focus:border-blue-500 focus:ring-blue-500/20 text-base"
+                  className="pl-10 pr-12 h-12 rounded-xl border-slate-700 bg-slate-900 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 text-base"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -466,28 +466,28 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <label htmlFor="member-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-foreground select-none">
+              <label htmlFor="member-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 select-none">
                 <input
                   id="member-keep-logged-in"
                   type="checkbox"
                   checked={keepLoggedIn}
                   onChange={(e) => setKeepLoggedIn(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-blue-500 focus:ring-blue-500 cursor-pointer"
                 />
                 <span className="font-medium text-xs sm:text-sm">Keep me logged in</span>
               </label>
             </div>
 
             {error && (
-              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-                <p className="text-sm text-red-700">{error}</p>
+              <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3">
+                <p className="text-sm text-red-300">{error}</p>
               </div>
             )}
 
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium text-base shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all duration-200"
+              className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-base shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all duration-200"
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
@@ -502,30 +502,30 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
 
           {/* Footer Links */}
           <div className="pt-4 text-center space-y-3">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-slate-400">
               Need desktop design tools?{' '}
-              <a href="/project-wizards.html" className="font-medium text-blue-600 hover:text-blue-800 transition-colors">
+              <a href="/project-wizards.html" className="font-medium text-blue-400 hover:text-blue-300 transition-colors">
                 Open Project Wizards
               </a>
               {' · '}
-              <a href="/marketing.html" className="font-medium text-rose-600 hover:text-rose-800 transition-colors">
+              <a href="/marketing.html" className="font-medium text-rose-400 hover:text-rose-300 transition-colors">
                 Open Marketing Space
               </a>
               {' · '}
-              <a href="/insights.html" className="font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
+              <a href="/insights.html" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors">
                 Open Insights Space
               </a>
             </p>
-            <div className="flex items-center gap-4 justify-center text-xs text-muted-foreground">
-              <a href="?view=privacy-policy" className="hover:text-muted-foreground transition-colors">
+            <div className="flex items-center gap-4 justify-center text-xs text-slate-400">
+              <a href="?view=privacy-policy" className="hover:text-slate-200 transition-colors">
                 Privacy Policy
               </a>
-              <span className="text-slate-300">|</span>
-              <a href="?view=terms-of-service" className="hover:text-muted-foreground transition-colors">
+              <span className="text-slate-700">|</span>
+              <a href="?view=terms-of-service" className="hover:text-slate-200 transition-colors">
                 Terms of Service
               </a>
             </div>
-            <p className="text-xs text-muted-foreground lg:hidden">
+            <p className="text-xs text-slate-500 lg:hidden">
               &copy; {new Date().getFullYear()} ProSpaces CRM
             </p>
           </div>

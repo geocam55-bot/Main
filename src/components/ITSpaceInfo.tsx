@@ -42,10 +42,10 @@ const IT_KPIS = [
 export function ITSpaceInfo({ onBack, onEnterSpace }: ITSpaceInfoProps) {
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen bg-[#0A0F1D] text-slate-100"
       style={{
         background:
-          'radial-gradient(circle at 14% 12%, rgba(124,58,237,0.16) 0%, transparent 38%), radial-gradient(circle at 86% 86%, rgba(167,139,250,0.18) 0%, transparent 42%), linear-gradient(180deg, #F7F3FF 0%, #F8FAFC 70%)',
+          'radial-gradient(circle at 14% 12%, rgba(124,58,237,0.16) 0%, transparent 38%), radial-gradient(circle at 86% 86%, rgba(167,139,250,0.12) 0%, transparent 42%), linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
       }}
     >
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-10">

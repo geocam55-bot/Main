@@ -87,16 +87,16 @@ export function PWAInstallPrompt() {
 
   return (
     <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:w-96 animate-slide-up">
-      <Card className="shadow-lg border-2 border-blue-500">
+      <Card className="shadow-2xl border border-blue-500/40 bg-slate-900/95 text-slate-100 backdrop-blur-md">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               {isIOSDevice || isAndroidDevice ? (
-                <Smartphone className="h-6 w-6 text-blue-600" />
+                <Smartphone className="h-6 w-6 text-blue-400" />
               ) : (
-                <Monitor className="h-6 w-6 text-blue-600" />
+                <Monitor className="h-6 w-6 text-blue-400" />
               )}
-              <CardTitle className="text-lg">Install ProSpaces CRM</CardTitle>
+              <CardTitle className="text-lg text-white">Install ProSpaces CRM</CardTitle>
             </div>
             <Button
               variant="ghost"
@@ -109,34 +109,34 @@ export function PWAInstallPrompt() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-400">
             Install ProSpaces CRM on your {isIOSDevice ? 'iPhone' : isAndroidDevice ? 'Android device' : 'computer'} for:
           </p>
           
-          <ul className="space-y-2 text-sm text-foreground">
+          <ul className="space-y-2 text-sm text-slate-200">
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 mt-0.5">✓</span>
+              <span className="text-blue-400 mt-0.5">✓</span>
               <span>Quick access from your home screen</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 mt-0.5">✓</span>
+              <span className="text-blue-400 mt-0.5">✓</span>
               <span>Works offline with cached data</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 mt-0.5">✓</span>
+              <span className="text-blue-400 mt-0.5">✓</span>
               <span>Full-screen experience without browser UI</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600 mt-0.5">✓</span>
+              <span className="text-blue-400 mt-0.5">✓</span>
               <span>Push notifications for important updates</span>
             </li>
           </ul>
 
           {isIOSDevice ? (
             // iOS manual instructions
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-              <p className="text-sm font-medium text-blue-900">To install:</p>
-              <ol className="space-y-1 text-xs text-blue-800 list-decimal list-inside">
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium text-blue-200">To install:</p>
+              <ol className="space-y-1 text-xs text-blue-300 list-decimal list-inside">
                 {instructions.map((instruction, index) => (
                   <li key={index}>{instruction}</li>
                 ))}

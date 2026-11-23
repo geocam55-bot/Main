@@ -673,8 +673,12 @@ export function Login({ onLogin, onBack }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 px-4 py-8 light">
-      <div className="absolute inset-0 bg-black/10"></div>
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-8 relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}
+    >
+      <div className="pointer-events-none absolute -top-40 left-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-[120px]" />
+      <div className="pointer-events-none absolute -bottom-40 right-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-[120px]" />
       
       {/* Back Button */}
       {onBack && (
@@ -693,24 +697,24 @@ export function Login({ onLogin, onBack }: LoginProps) {
         {/* Logo and Title */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <Logo size="xl" />
+            <Logo size="xl" variant="dark" />
           </div>
           <p className="text-base sm:text-lg text-white/95 px-2 mt-4">
             Complete solution for sales, marketing, and project management. Designed from the ground up for the Home Renovations Industry.
           </p>
         </div>
         
-        <Card className="w-full max-w-md mx-auto border-0 shadow-2xl">
+        <Card className="w-full max-w-md mx-auto border border-slate-800 bg-slate-900/95 text-slate-100 shadow-2xl">
           <CardContent className="pt-6">
-            <Alert className="bg-gradient-to-br from-blue-50 to-purple-50 border-purple-200 mb-6">
-              <Info className="h-4 w-4 text-purple-600" />
-              <AlertDescription className="text-xs text-foreground">
+            <Alert className="bg-indigo-500/10 border-indigo-500/30 mb-6">
+              <Info className="h-4 w-4 text-indigo-400" />
+              <AlertDescription className="text-xs text-slate-200">
                 <strong>Sign Up:</strong> New user registration requires an invitation code. Contact your organization administrator to receive an invitation, or contact {FREE_ACCOUNT_BILLING_SUPPORT_EMAIL} for account setup and billing assistance.
               </AlertDescription>
             </Alert>
             
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-2 bg-slate-950 border border-slate-800">
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
@@ -718,7 +722,7 @@ export function Login({ onLogin, onBack }: LoginProps) {
               <TabsContent value="signin">
                 <form onSubmit={handleSignIn} className="space-y-4">
                   {successMessage && (
-                    <Alert className="bg-green-50 border-green-200 text-green-800">
+                    <Alert className="bg-emerald-500/15 border-emerald-500/30 text-emerald-300">
                       <AlertDescription>{successMessage}</AlertDescription>
                     </Alert>
                   )}
@@ -751,13 +755,13 @@ export function Login({ onLogin, onBack }: LoginProps) {
                     />
                   </div>
                   <div className="flex items-center justify-between pt-1">
-                    <label htmlFor="signin-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-slate-200 select-none">
+                    <label htmlFor="signin-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 select-none">
                       <input
                         id="signin-keep-logged-in"
                         type="checkbox"
                         checked={keepLoggedIn}
                         onChange={(e) => setKeepLoggedIn(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-purple-500 focus:ring-purple-500 cursor-pointer"
                       />
                       <span className="font-medium text-xs sm:text-sm">Keep me logged in</span>
                     </label>
@@ -792,7 +796,7 @@ export function Login({ onLogin, onBack }: LoginProps) {
                     <Button 
                       type="button"
                       variant="link"
-                      className="text-sm text-purple-600 hover:text-purple-700"
+                      className="text-sm text-purple-400 hover:text-purple-300"
                       onClick={handleForgotPassword}
                       disabled={isResetLoading || !email}
                     >
@@ -889,9 +893,9 @@ export function Login({ onLogin, onBack }: LoginProps) {
                   </Button>
                 </form>
 
-                <Alert className="mt-4 bg-gradient-to-br from-blue-50 to-purple-50 border-purple-200">
-                  <Info className="h-4 w-4 text-purple-600" />
-                  <AlertDescription className="text-xs text-foreground">
+                <Alert className="mt-4 bg-indigo-500/10 border-indigo-500/30">
+                  <Info className="h-4 w-4 text-indigo-400" />
+                  <AlertDescription className="text-xs text-slate-200">
                     <strong>Note:</strong> If you see a rate limiting error, please wait 30 seconds before trying again. If you get an "email already registered" error, use the Sign In tab instead.
                   </AlertDescription>
                 </Alert>

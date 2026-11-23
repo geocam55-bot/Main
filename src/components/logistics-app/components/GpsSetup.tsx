@@ -427,7 +427,7 @@ export default function GpsSetup({ trucks, branches, onUpdateTruck, onRefreshDat
       )}
 
       {/* Fleet Complete Telematics Cloud Sync Card */}
-      <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
+      <div className="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
           <div className="flex items-center space-x-2.5">
             <div className="p-2 bg-blue-100 rounded-xl text-blue-600">

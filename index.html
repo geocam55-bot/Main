@@ -1,8 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        try {
+          var hasCachedUser = !!localStorage.getItem('prospaces_cached_user');
+          var mode = localStorage.getItem('prospace-theme-mode');
+          var storedTheme = localStorage.getItem('prospace-theme');
+          var isLightPref = (mode === 'light') || (mode === 'system' && window.matchMedia && !window.matchMedia('(prefers-color-scheme: dark)').matches) || (!mode && storedTheme === 'light');
+          if (hasCachedUser && isLightPref) {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.backgroundColor = '#F8FAFC';
+          } else {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.backgroundColor = '#0A0F1D';
+          }
+        } catch (e) {}
+      })();
+    </script>
     <title>ProSpaces CRM </title>
     <meta name="description" content="Comprehensive ProSpaces CRM application featuring inventory management, shopping list planning, and backend-driven competitor pricing intelligence." />
     <meta property="og:title" content="ProSpaces CRM" />

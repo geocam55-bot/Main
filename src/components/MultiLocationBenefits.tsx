@@ -84,10 +84,10 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
 
   return (
     <div
-      className="min-h-screen bg-[#F4FAF8]"
+      className="min-h-screen bg-[#0A0F1D] text-slate-100"
       style={{
         background:
-          'radial-gradient(circle at 10% 10%, rgba(16,185,129,0.08) 0%, transparent 40%), radial-gradient(circle at 90% 90%, rgba(20,184,166,0.06) 0%, transparent 40%), #F4FAF8',
+          'radial-gradient(circle at 10% 10%, rgba(16,185,129,0.14) 0%, transparent 40%), radial-gradient(circle at 90% 90%, rgba(20,184,166,0.10) 0%, transparent 40%), linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
         fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif'
       }}
     >
@@ -109,7 +109,7 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
               <div className="inline-flex items-center gap-2 rounded-full bg-teal-50 border border-teal-150 px-3 py-1 font-bold text-xs uppercase tracking-wider text-teal-700">
                 <MapPin className="h-3.5 w-3.5 text-teal-600" /> Enterprise Logistics & Supply Chain
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-[#002f5d] md:text-4xl leading-tight">
+              <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl leading-tight">
                 Multi-Location Operations
               </h1>
               <p className="text-base text-slate-600 leading-relaxed">
@@ -151,7 +151,7 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
 
         {/* Feature Value Cards */}
         <div className="mt-14 space-y-6">
-          <h2 className="text-2xl font-extrabold text-[#002f5d] tracking-tight">
+          <h2 className="text-2xl font-extrabold text-white tracking-tight">
             Advanced Regional Infrastructure Controls
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -173,7 +173,7 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
         <div className="mt-14 rounded-3xl border border-teal-100 bg-white p-6 md:p-8 shadow-sm">
           <div className="max-w-2xl">
             <span className="text-xs font-bold text-teal-600 uppercase tracking-widest">Regional Network Sandbox</span>
-            <h2 className="text-2xl font-black text-[#002f5d] tracking-tight mt-1">
+            <h2 className="text-2xl font-black text-white tracking-tight mt-1">
               Cross-Yard Stock & Dispatch Simulator
             </h2>
             <p className="text-sm text-slate-500 mt-2 leading-relaxed">
@@ -190,7 +190,7 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
                 className={`flex-1 px-4 py-3.5 rounded-xl border text-left text-xs transition-all ${
                   activeDepot === depot
                     ? 'bg-teal-600 border-teal-600 text-white shadow-md'
-                    : 'border-slate-150 hover:bg-slate-50 text-[#002f5d]'
+                    : 'border-slate-700 hover:bg-slate-800 text-slate-200'
                 }`}
               >
                 <span>{depotsGrid[depot].label}</span>
@@ -233,7 +233,7 @@ export function MultiLocationBenefits({ onBack, onGetStarted }: MultiLocationPro
             </div>
 
             {/* Active fleet status */}
-            <div className="lg:col-span-2 bg-[#F9FAFC] border border-slate-150 rounded-2xl p-5 shadow-sm space-y-4 text-xs font-semibold">
+            <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 text-xs font-semibold">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Active Fleet Allocation</span>
               
               <div className="space-y-3 border-b border-slate-100 pb-3">

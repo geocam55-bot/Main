@@ -137,7 +137,7 @@ FROM public.profiles;`;
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#0A0F1D] p-4" style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}>
       <Card className="max-w-2xl w-full shadow-2xl border-2 border-blue-500">
         <CardContent className="p-8">
           <div className="text-center mb-6">

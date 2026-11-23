@@ -36,10 +36,10 @@ const DESIGN_FEATURES = [
 export function DesignSpaceInfo({ onBack, onEnterSpace }: DesignSpaceInfoProps) {
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen bg-[#0A0F1D] text-slate-100"
       style={{
         background:
-          'radial-gradient(circle at 12% 14%, rgba(249,115,22,0.15) 0%, transparent 38%), radial-gradient(circle at 88% 86%, rgba(234,179,8,0.16) 0%, transparent 42%), #FFFBEB',
+          'radial-gradient(circle at 12% 14%, rgba(249,115,22,0.15) 0%, transparent 38%), radial-gradient(circle at 88% 86%, rgba(234,179,8,0.12) 0%, transparent 42%), linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
       }}
     >
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-10">

@@ -1768,8 +1768,8 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
             disabled={catalogAgentStatus?.isRunning}
             className={`flex-1 sm:flex-none font-medium ${
               catalogAgentStatus?.isRunning
-                ? 'bg-purple-100 text-purple-800 border-purple-300'
-                : 'bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                ? 'bg-purple-500/20 text-purple-200 border-purple-500/40'
+                : 'bg-purple-500/10 text-purple-300 border-purple-500/30 hover:bg-purple-500/20'
             }`}
             title="Run AI Catalog Enrichment Agent across entire inventory (20,543 SKUs)"
           >

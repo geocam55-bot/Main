@@ -85,7 +85,12 @@ export function ThemeSelector() {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.values(themes).map((baseTheme) => {
+          {Object.values(themes)
+            .sort((a, b) => {
+              const priority = (id: string) => (id === 'dark' ? 0 : id === 'light' ? 1 : 2);
+              return priority(a.id) - priority(b.id);
+            })
+            .map((baseTheme) => {
             const isActive = themeId === baseTheme.id;
             const isSaving = savingTheme === baseTheme.id;
             
@@ -106,8 +111,8 @@ export function ThemeSelector() {
                 }}
                 className={`relative p-4 rounded-lg border-2 transition-all text-left hover:shadow-md ${
                   isActive
-                    ? 'border-blue-500 ring-2 ring-blue-200 bg-blue-50 dark:bg-blue-950 dark:ring-blue-800'
-                    : 'border-border hover:border-border dark:border-gray-700 dark:hover:border-gray-600'
+                    ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-500/10'
+                    : 'border-border hover:border-blue-300 dark:hover:border-slate-600'
                 } ${isSaving ? 'opacity-75 cursor-wait' : ''}`}
               >
                 {isActive && !isSaving && (

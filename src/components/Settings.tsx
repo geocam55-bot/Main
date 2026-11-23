@@ -118,38 +118,72 @@ import { getNormalizedRole } from '../utils/permissions';
 function ThemeModeCard() {
   const { themeMode, setThemeMode, theme } = useTheme();
 
-  const modes: { value: ThemeMode; label: string; icon: React.ReactNode; description: string }[] = [
+  const modes: {
+    value: ThemeMode;
+    label: string;
+    subtitle: string;
+    icon: React.ReactNode;
+    description: string;
+    previewBg: string;
+    previewCard: string;
+    previewBorder: string;
+    previewAccent: string;
+    previewLine: string;
+  }[] = [
     {
       value: 'light',
-      label: 'Light',
+      label: 'ProSpaces Light',
+      subtitle: 'Crisp Daylight',
       icon: <Sun className="h-5 w-5" />,
-      description: 'Always use a light theme',
+      description: 'Clean light canvas with Royal Blue accents',
+      previewBg: '#F8FAFC',
+      previewCard: '#FFFFFF',
+      previewBorder: '#E2E8F0',
+      previewAccent: '#1E6FD9',
+      previewLine: '#0F172A',
     },
     {
       value: 'dark',
-      label: 'Dark',
+      label: 'Midnight Dark',
+      subtitle: 'Signature Dark',
       icon: <Moon className="h-5 w-5" />,
-      description: 'Always use a dark theme',
+      description: 'Deep Midnight canvas with Cobalt Blue accents',
+      previewBg: '#0A0F1D',
+      previewCard: '#0F172A',
+      previewBorder: '#1E293B',
+      previewAccent: '#3B82F6',
+      previewLine: '#F8FAFC',
     },
     {
       value: 'system',
-      label: 'System',
+      label: 'System Sync',
+      subtitle: 'Auto Follow OS',
       icon: <Monitor className="h-5 w-5" />,
-      description: 'Match your device settings',
+      description: 'Automatically match your device preference',
+      previewBg: 'linear-gradient(135deg, #F8FAFC 50%, #0A0F1D 50%)',
+      previewCard: '#FFFFFF',
+      previewBorder: '#94A3B8',
+      previewAccent: '#2563EB',
+      previewLine: '#475569',
     },
   ];
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2" style={{ color: 'var(--color-text)' }}>
-          <Palette className="h-5 w-5" />
-          Theme Mode
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Palette className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            Profile Theme Preference
+          </CardTitle>
+          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            Active: {theme.isDark ? 'Dark' : 'Light'}
+          </span>
+        </div>
       </CardHeader>
       <CardContent>
-        <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-          Choose how ProSpaces CRM looks to you. Select a single theme mode or sync with your system settings.
+        <p className="text-sm text-muted-foreground mb-4">
+          Switch between ProSpaces Light and Midnight Dark across your workspaces. Changes save automatically to your profile (the landing Hero screen always remains Dark).
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {modes.map((mode) => {
@@ -166,45 +200,62 @@ function ThemeModeCard() {
                     setThemeMode(mode.value);
                   }
                 }}
-                className={`relative flex flex-col items-center gap-2 rounded-lg border-2 p-4 cursor-pointer transition-all ${
+                className={`relative flex flex-col gap-2.5 rounded-xl border-2 p-3.5 cursor-pointer transition-all text-left ${
                   isActive
-                    ? 'border-[var(--color-primary)] shadow-md'
-                    : 'border-[var(--color-border)] hover:border-[var(--color-border-light)]'
+                    ? 'border-blue-600 dark:border-blue-500 bg-blue-50/70 dark:bg-blue-500/10 shadow-md ring-2 ring-blue-500/20'
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-blue-300 dark:hover:border-slate-700'
                 }`}
-                style={{
-                  backgroundColor: isActive ? 'var(--color-background-secondary)' : 'var(--color-background)',
-                }}
               >
+                {/* Mini Theme Preview Strip */}
                 <div
-                  className={`rounded-full p-2.5 transition-colors ${
-                    isActive ? 'text-[var(--color-primary-text)]' : ''
-                  }`}
+                  className="w-full h-14 rounded-lg border p-2 flex items-center justify-between gap-2"
                   style={{
-                    backgroundColor: isActive ? 'var(--color-primary)' : 'var(--color-background-tertiary)',
-                    color: isActive ? 'var(--color-primary-text)' : 'var(--color-text-secondary)',
+                    background: mode.previewBg,
+                    borderColor: mode.previewBorder,
                   }}
                 >
-                  {mode.icon}
-                </div>
-                <span className="font-medium text-sm" style={{ color: 'var(--color-text)' }}>
-                  {mode.label}
-                </span>
-                <span className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-                  {mode.description}
-                </span>
-                {isActive && (
-                  <div className="absolute top-2 right-2">
-                    <CheckCircle2 className="h-4 w-4" style={{ color: 'var(--color-primary)' }} />
+                  <div
+                    className="h-full flex-1 rounded border p-1.5 flex flex-col justify-between"
+                    style={{ backgroundColor: mode.previewCard, borderColor: mode.previewBorder }}
+                  >
+                    <div className="h-1.5 w-10 rounded-full" style={{ backgroundColor: mode.previewLine }} />
+                    <div className="flex items-center gap-1">
+                      <div className="h-2 w-6 rounded-sm" style={{ backgroundColor: mode.previewAccent }} />
+                      <div className="h-2 w-4 rounded-sm opacity-40" style={{ backgroundColor: mode.previewLine }} />
+                    </div>
                   </div>
-                )}
+                  <div
+                    className={`rounded-lg p-1.5 shrink-0 ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {mode.icon}
+                  </div>
+                </div>
+
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                      {mode.label}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                      {mode.description}
+                    </p>
+                  </div>
+                  {isActive && (
+                    <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
-        <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
+        <p className="text-xs text-muted-foreground mt-3">
           {themeMode === 'system'
-            ? `Currently using ${theme.isDark ? 'dark' : 'light'} mode based on your system preference.`
-            : `You can further customize your theme in the Appearance tab.`}
+            ? `Currently following your OS preference (${theme.isDark ? 'Dark' : 'Light'} mode active).`
+            : `You can also quickly toggle Light & Dark anytime from your profile menu in the top-right bar, or explore palettes in the Appearance tab.`}
         </p>
       </CardContent>
     </Card>

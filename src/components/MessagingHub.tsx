@@ -1005,14 +1005,14 @@ export function MessagingHub({ user }: MessagingHubProps) {
   }, [unifiedChats, showOnlySlaAlerts]);
 
   return (
-    <div className="flex h-[calc(100vh-80px)] min-h-0 overflow-hidden bg-slate-100 shadow-sm md:rounded-[32px] md:mx-4 md:mb-4">
+    <div className="flex h-[calc(100vh-80px)] min-h-0 overflow-hidden bg-slate-100 dark:bg-[#0A0F1D] shadow-sm md:rounded-[32px] md:mx-4 md:mb-4">
 
       {/* ── LEFT SIDEBAR ── */}
-      <div className={`relative flex w-full md:w-[300px] shrink-0 flex-col border-r border-slate-200 bg-white ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`relative flex w-full md:w-[300px] shrink-0 flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
 
         {/* Sidebar header */}
-        <div className="flex items-center justify-between border-b-2 border-slate-200 bg-white px-5 py-5">
-          <h1 className="text-2xl font-bold text-slate-900">Messages</h1>
+        <div className="flex items-center justify-between border-b-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-5">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Messages</h1>
           <div className="flex items-center gap-2">
             <MessagingModuleHelp
               userId={user.id}
@@ -1071,7 +1071,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
               value={chatSearch}
               onChange={(e) => setChatSearch(e.target.value)}
               placeholder="Search chats or people..."
-              className="rounded-full border-2 border-slate-200 bg-white pl-11 py-2 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-200"
+              className="rounded-full border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 pl-11 py-2 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-200 dark:focus-visible:ring-blue-900"
             />
           </div>
           <div className="mt-2 flex items-center gap-2">
@@ -1080,7 +1080,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
               variant="outline"
               onClick={() => setShowOnlySlaAlerts((prev) => !prev)}
               role="button"
-              className={`text-[11px] ${escalatedCustomerCount > 0 ? 'border-amber-300 bg-amber-50 text-amber-700' : ''}`}
+              className={`text-[11px] ${escalatedCustomerCount > 0 ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300' : ''}`}
             >
               {showOnlySlaAlerts ? 'Showing SLA alerts' : `${escalatedCustomerCount} SLA alerts`}
             </Badge>
@@ -1117,7 +1117,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
                   setMobileView('chat');
                 }}
                 className={`mx-2 flex w-full items-center gap-3 rounded-3xl px-3 py-2.5 text-left transition-all ${
-                  isSelected ? 'bg-blue-500 text-white shadow-md' : 'bg-slate-50 text-slate-900 hover:bg-slate-100'
+                  isSelected ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-900 hover:bg-slate-100 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <div className="relative shrink-0">
@@ -1131,7 +1131,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <p className={`truncate text-sm font-semibold ${isSelected ? 'text-white' : 'text-slate-900'}`}>{conv.title}</p>
+                    <p className={`truncate text-sm font-semibold ${isSelected ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>{conv.title}</p>
                     {conv.badge && (
                       <Badge
                         variant="outline"
@@ -1139,19 +1139,19 @@ export function MessagingHub({ user }: MessagingHubProps) {
                           isSelected
                             ? 'border-white/30 bg-white/10 text-white'
                             : conv.badge === 'Urgent'
-                              ? 'border-red-300 bg-red-50 text-red-700'
+                              ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-300'
                               : conv.badge === 'SLA'
-                                ? 'border-amber-300 bg-amber-50 text-amber-700'
+                                ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300'
                                 : ''
                         }`}
                       >
                         {conv.badge}
                       </Badge>
                     )}
-                    <p className={`shrink-0 text-[11px] ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>{formatTimeAgo(conv.updatedAt)}</p>
+                    <p className={`shrink-0 text-[11px] ${isSelected ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>{formatTimeAgo(conv.updatedAt)}</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <p className={`flex-1 truncate text-xs ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                    <p className={`flex-1 truncate text-xs ${isSelected ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
                       {conv.escalationLabel || conv.preview || 'Send a message'}
                     </p>
                     {conv.unread && <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-500'}`} />}
@@ -1172,9 +1172,9 @@ export function MessagingHub({ user }: MessagingHubProps) {
               <div className="px-4 pb-2 pt-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">People</p>
-                  <p className="text-[11px] text-slate-500">{chatTargets.length} available</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{chatTargets.length} available</p>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500">Tap a person to start a direct message.</p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Tap a person to start a direct message.</p>
               </div>
               {chatTargets.map((target) => (
                 <button
@@ -1183,7 +1183,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
                     handleStartDirectChat(target);
                     setMobileView('chat');
                   }}
-                  className="mx-2 mb-1 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left transition-all hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm"
+                  className="mx-2 mb-1 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left transition-all hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-blue-500/40 dark:hover:bg-slate-800"
                 >
                   <div className="relative shrink-0">
                     <Avatar className="h-9 w-9">
@@ -1191,19 +1191,19 @@ export function MessagingHub({ user }: MessagingHubProps) {
                       <AvatarFallback className="text-xs">{getAvatarFallback(target.name, target.email)}</AvatarFallback>
                     </Avatar>
                     {target.online && (
-                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
+                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-slate-900 bg-green-500" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <p className="truncate text-sm font-semibold text-slate-900">{target.name}</p>
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{target.name}</p>
                       <Badge variant="outline" className="h-5 rounded-full px-1.5 text-[10px]">
                         {target.kind === 'staff' ? 'Team' : 'Portal'}
                       </Badge>
                     </div>
-                    <p className="truncate text-xs text-slate-600">{target.subtitle || (target.online ? 'Online now' : 'Available to chat')}</p>
+                    <p className="truncate text-xs text-slate-600 dark:text-slate-400">{target.subtitle || (target.online ? 'Online now' : 'Available to chat')}</p>
                   </div>
-                  <p className={`shrink-0 text-[11px] font-medium ${target.online ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  <p className={`shrink-0 text-[11px] font-medium ${target.online ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                     {target.online ? 'Online' : 'Offline'}
                   </p>
                 </button>
@@ -1234,9 +1234,9 @@ export function MessagingHub({ user }: MessagingHubProps) {
         </div>
 
         {/* New Group button — pinned at bottom of left pane */}
-        <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 bg-gradient-to-t from-white to-slate-50 px-3 py-3">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-900/95 px-3 py-3">
           <Button
-            className="w-full gap-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-md"
+            className="w-full gap-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-md"
             onClick={() => { setNewChatMembers([]); setNewChatTitle(''); setNewChatMessage(''); setShowNewChat(true); }}
           >
             <Users className="h-4 w-4" />
@@ -1246,12 +1246,12 @@ export function MessagingHub({ user }: MessagingHubProps) {
       </div>
 
       {/* ── RIGHT CHAT AREA ── */}
-      <div className={`min-w-0 flex-1 flex-col bg-gradient-to-br from-slate-100 via-blue-50/50 to-indigo-100/40 p-2 sm:p-3 md:p-3 ${mobileView === 'sidebar' ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`min-w-0 flex-1 flex-col bg-slate-50 dark:bg-[#0A0F1D] p-2 sm:p-3 md:p-3 ${mobileView === 'sidebar' ? 'hidden md:flex' : 'flex'}`}>
 
         {/* Pending new DM — person selected but no existing chat */}
         {pendingDirectTarget && !selectedConversation ? (
           <>
-            <div className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-3">
+            <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/90 px-4 py-3 rounded-t-2xl">
               <Button
                 size="icon"
                 variant="ghost"
@@ -1266,26 +1266,26 @@ export function MessagingHub({ user }: MessagingHubProps) {
                   <AvatarFallback className="text-sm">{getAvatarFallback(pendingDirectTarget.name, pendingDirectTarget.email)}</AvatarFallback>
                 </Avatar>
                 {pendingDirectTarget.online && (
-                  <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500" />
                 )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="truncate text-base font-semibold text-slate-900">{pendingDirectTarget.name}</p>
+                  <p className="truncate text-base font-semibold text-slate-900 dark:text-white">{pendingDirectTarget.name}</p>
                   {pendingDirectTarget.online && (
-                    <span className="shrink-0 text-xs text-emerald-600 font-medium">Online</span>
+                    <span className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400 font-medium">Online</span>
                   )}
                 </div>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {pendingDirectTarget.online ? 'Active now' : pendingDirectTarget.subtitle}
                 </p>
               </div>
             </div>
-            <div className="flex-1 bg-muted/10" />
-            <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-4">
+            <div className="flex-1 bg-slate-50/70 dark:bg-[#0A0F1D]/70" />
+            <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/90 px-4 py-4 rounded-b-2xl">
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <div className="relative rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20">
+                  <div className="relative rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 py-3 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20">
                     <input
                       type="text"
                       placeholder={`Message ${pendingDirectTarget.name}...`}
@@ -1298,10 +1298,10 @@ export function MessagingHub({ user }: MessagingHubProps) {
                           handleSendToPendingTarget();
                         }
                       }}
-                      className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                      className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <Smile className="h-5 w-5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                      <Smile className="h-5 w-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer" />
                     </div>
                   </div>
                 </div>
@@ -1318,16 +1318,16 @@ export function MessagingHub({ user }: MessagingHubProps) {
           </>
         ) : !selectedConversation ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-            <div className="max-w-md rounded-[32px] border border-slate-200 bg-white p-10 shadow-sm">
-              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+            <div className="max-w-md rounded-[32px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-10 shadow-sm dark:shadow-xl">
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400">
                 <MessageSquare className="h-8 w-8" />
               </div>
-              <p className="text-xl font-semibold text-slate-900">Your Messages</p>
-              <p className="mt-3 text-sm leading-6 text-slate-500">
+              <p className="text-xl font-semibold text-slate-900 dark:text-white">Your Messages</p>
+              <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
                 Select a person or group from the left to start chatting. Once you choose a conversation, the new messenger-style chat view will appear here.
               </p>
-              <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-left text-sm text-slate-500">
-                <p className="font-medium text-slate-900">Try selecting one of these:</p>
+              <div className="mt-6 rounded-3xl bg-slate-50 dark:bg-slate-950/70 p-4 text-left text-sm text-slate-500 dark:text-slate-400 border border-slate-200/80 dark:border-slate-800">
+                <p className="font-medium text-slate-900 dark:text-white">Try selecting one of these:</p>
                 <ul className="mt-2 list-disc space-y-2 pl-4">
                   <li>Contact a customer</li>
                   <li>Start a direct team message</li>
@@ -1337,9 +1337,9 @@ export function MessagingHub({ user }: MessagingHubProps) {
             </div>
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_20px_60px_-25px_rgba(30,58,138,0.35)] backdrop-blur-sm">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/95 shadow-sm dark:shadow-[0_20px_60px_-25px_rgba(2,6,23,0.75)] backdrop-blur-sm">
             {/* Chat header */}
-            <div className="flex shrink-0 items-center gap-3 border-b border-slate-200/70 bg-gradient-to-r from-white via-blue-50/50 to-indigo-50/60 px-4 py-4 shadow-sm">
+            <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/90 px-4 py-4 shadow-sm">
               <Button
                 size="icon"
                 variant="ghost"
@@ -1359,28 +1359,28 @@ export function MessagingHub({ user }: MessagingHubProps) {
                   </AvatarFallback>
                 </Avatar>
                 {effectiveSelectedConversationType === 'customer' && selectedPortalUser?.online && (
-                  <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500" />
                 )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="truncate text-base font-semibold text-slate-900">
+                  <p className="truncate text-base font-semibold text-slate-900 dark:text-white">
                     {effectiveSelectedConversationType === 'customer' && selectedMessage
                       ? selectedMessage.contactName || selectedMessage.contactEmail || 'Customer'
                       : getInternalChatTitle(selectedChat) || ''}
                   </p>
                   {effectiveSelectedConversationType === 'customer' && selectedCustomerSla?.waitingForTeam && (
                     <Badge
-                      className={`border-0 text-[11px] ${selectedCustomerSla.level === 'critical' ? 'bg-red-100 text-red-700' : selectedCustomerSla.level === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}
+                      className={`border-0 text-[11px] ${selectedCustomerSla.level === 'critical' ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' : selectedCustomerSla.level === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
                     >
                       {selectedCustomerSla.label}
                     </Badge>
                   )}
                   {effectiveSelectedConversationType === 'customer' && selectedPortalUser?.online && (
-                    <span className="shrink-0 text-xs text-emerald-600 font-medium">Online</span>
+                    <span className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400 font-medium">Online</span>
                   )}
                 </div>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {effectiveSelectedConversationType === 'customer' && selectedPortalUser?.online
                     ? 'Active now'
                     : effectiveSelectedConversationType === 'customer' && selectedMessage
@@ -1435,7 +1435,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
             </div>
 
             {/* Message bubbles */}
-            <div className="chat-scroll flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(191,219,254,0.25),_rgba(255,255,255,0.92)_40%),linear-gradient(to_bottom,_#f8fafc,_#ffffff)] px-4 py-6 space-y-4">
+            <div className="chat-scroll flex-1 overflow-y-auto bg-slate-50/80 dark:bg-[#0A0F1D]/70 px-4 py-6 space-y-4">
               {effectiveSelectedConversationType === 'customer' && selectedMessage ? (
                 customerTimeline.length === 0 ? (
                   <p className="text-center text-sm text-muted-foreground py-12">No messages yet.</p>
@@ -1447,11 +1447,11 @@ export function MessagingHub({ user }: MessagingHubProps) {
                         <div
                           className={`max-w-[75%] rounded-[24px] px-4 py-3 shadow-md ${
                             isCustomer
-                              ? 'rounded-tl-sm rounded-tr-3xl rounded-br-3xl rounded-bl-3xl border border-slate-200 bg-white text-slate-900'
-                              : 'rounded-tr-sm rounded-tl-3xl rounded-br-3xl rounded-bl-3xl bg-blue-500 text-white'
+                              ? 'rounded-tl-sm rounded-tr-3xl rounded-br-3xl rounded-bl-3xl border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100'
+                              : 'rounded-tr-sm rounded-tl-3xl rounded-br-3xl rounded-bl-3xl bg-blue-600 text-white'
                           }`}
                         >
-                          <p className={`mb-0.5 text-[11px] font-medium ${isCustomer ? 'text-muted-foreground' : 'text-blue-200'}`}>
+                          <p className={`mb-0.5 text-[11px] font-medium ${isCustomer ? 'text-muted-foreground' : 'text-blue-100'}`}>
                             {isCustomer ? post.senderName || 'Customer' : post.senderName || 'Team'}
                           </p>
                           <p className="whitespace-pre-wrap text-sm leading-5">{post.body}</p>
@@ -1463,7 +1463,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
                                   href={attachment.url || '#'}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${isCustomer ? 'border-slate-200/40 text-blue-100 hover:bg-blue-400/30' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                                  className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${isCustomer ? 'border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800' : 'border-white/30 text-blue-100 hover:bg-blue-500/40'}`}
                                 >
                                   <Paperclip className="h-3.5 w-3.5" />
                                   <span className="truncate">{attachment.fileName || attachment.name || 'Attachment'}</span>
@@ -1471,7 +1471,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
                               ))}
                             </div>
                           )}
-                          <p className={`mt-1 text-right text-[11px] ${isCustomer ? 'text-muted-foreground' : 'text-blue-200'}`}>
+                          <p className={`mt-1 text-right text-[11px] ${isCustomer ? 'text-muted-foreground' : 'text-blue-100'}`}>
                             {formatDate(post.createdAt)}
                           </p>
                         </div>
@@ -1481,9 +1481,9 @@ export function MessagingHub({ user }: MessagingHubProps) {
                 )
               ) : selectedChat ? (
                 (selectedChat.messages || []).length === 0 ? (
-                  <div className="mx-auto my-12 max-w-sm rounded-2xl border border-slate-200 bg-white px-6 py-5 text-center shadow-sm">
-                    <p className="text-sm font-semibold text-slate-900">No messages yet</p>
-                    <p className="mt-1 text-sm text-slate-500">Start the conversation with a quick hello.</p>
+                  <div className="mx-auto my-12 max-w-sm rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 px-6 py-5 text-center shadow-sm">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">No messages yet</p>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Start the conversation with a quick hello.</p>
                     <Button
                       variant="outline"
                       size="sm"
@@ -1501,18 +1501,18 @@ export function MessagingHub({ user }: MessagingHubProps) {
                         <div
                           className={`max-w-[75%] rounded-[24px] px-4 py-3 shadow-md ${
                             ownMessage
-                              ? 'rounded-tr-sm rounded-tl-3xl rounded-br-3xl rounded-bl-3xl bg-blue-500 text-white'
-                              : 'rounded-tl-sm rounded-tr-3xl rounded-br-3xl rounded-bl-3xl border border-slate-200 bg-white text-slate-900'
+                              ? 'rounded-tr-sm rounded-tl-3xl rounded-br-3xl rounded-bl-3xl bg-blue-600 text-white'
+                              : 'rounded-tl-sm rounded-tr-3xl rounded-br-3xl rounded-bl-3xl border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100'
                           }`}
                         >
                           <p className={`mb-0.5 text-[11px] font-medium ${
-                            ownMessage ? 'text-slate-300' : 'text-slate-500'
+                            ownMessage ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'
                           }`}>
                             {message.senderName || 'Staff'}
                           </p>
                           <p className="whitespace-pre-wrap text-sm leading-5">{message.body}</p>
                           <p className={`mt-1 text-right text-[11px] ${
-                            ownMessage ? 'text-slate-300' : 'text-slate-400'
+                            ownMessage ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'
                           }`}>
                             {formatDate(message.createdAt)}
                           </p>
@@ -1525,12 +1525,12 @@ export function MessagingHub({ user }: MessagingHubProps) {
             </div>
 
             {/* Composer */}
-            <div className="shrink-0 border-t border-slate-200/80 bg-gradient-to-t from-white via-slate-50/90 to-blue-50/70 px-3 sm:px-4 py-3 sm:py-4 shadow-[0_-10px_30px_-20px_rgba(30,58,138,0.45)]">
+            <div className="shrink-0 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/90 px-3 sm:px-4 py-3 sm:py-4">
               {effectiveSelectedConversationType === 'customer' && selectedMessage ? (
                 <>
                   <div className="flex items-end gap-3">
                     <div className="flex-1">
-                      <div className="relative rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20">
+                      <div className="relative rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 px-4 py-3 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20">
                         <input
                           type="text"
                           placeholder="Message..."
@@ -1542,22 +1542,22 @@ export function MessagingHub({ user }: MessagingHubProps) {
                               handleSendReply();
                             }
                           }}
-                          className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                          className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                         <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <Smile className="h-5 w-5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                          <Smile className="h-5 w-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer" />
                         </div>
                       </div>
                       {replyAttachments.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {replyAttachments.map((attachment: any, idx: number) => (
-                            <span key={`${attachment.filePath || attachment.name}-${idx}`} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+                            <span key={`${attachment.filePath || attachment.name}-${idx}`} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 px-2 py-1 text-xs text-slate-600 dark:text-slate-300">
                               <Paperclip className="h-3 w-3" />
                               <span className="max-w-[180px] truncate">{attachment.fileName || attachment.name || 'Attachment'}</span>
                               <button
                                 type="button"
                                 onClick={() => setReplyAttachments((prev) => prev.filter((_: any, i: number) => i !== idx))}
-                                className="text-slate-400 hover:text-slate-700"
+                                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                               >
                                 <X className="h-3 w-3" />
                               </button>
@@ -1567,7 +1567,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
                       )}
                     </div>
                     <div className="shrink-0">
-                      <label className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+                      <label className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
                         <Paperclip className="h-4 w-4" />
                         <input
                           type="file"
@@ -1595,7 +1595,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
                       <Lock className="h-3.5 w-3.5" />
                       Private notes ({(selectedMessage.internalNotes || []).length})
                     </summary>
-                    <div className="mt-2 space-y-2 rounded-xl bg-amber-50 p-2">
+                    <div className="mt-2 space-y-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-500/20 p-2">
                       {(selectedMessage.internalNotes || []).length === 0 ? (
                         <p className="text-xs text-muted-foreground p-1">No notes yet.</p>
                       ) : (
@@ -1632,7 +1632,7 @@ export function MessagingHub({ user }: MessagingHubProps) {
               ) : selectedChat ? (
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
-                    <div className="relative rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20">
+                    <div className="relative rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 px-4 py-3 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20">
                       <input
                         type="text"
                         placeholder="Message..."
@@ -1644,10 +1644,10 @@ export function MessagingHub({ user }: MessagingHubProps) {
                             handleSendInternalChatMessage();
                           }
                         }}
-                        className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                        className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
                       />
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <Smile className="h-5 w-5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                        <Smile className="h-5 w-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer" />
                       </div>
                     </div>
                   </div>

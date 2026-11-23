@@ -108,10 +108,10 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
 
   return (
     <div
-      className="min-h-screen bg-[#F8FAFC]"
+      className="min-h-screen bg-[#0A0F1D] text-slate-100"
       style={{
         background:
-          'radial-gradient(circle at 10% 10%, rgba(30,111,217,0.1) 0%, transparent 40%), radial-gradient(circle at 90% 90%, rgba(77,163,255,0.08) 0%, transparent 40%), #F8FAFC',
+          'radial-gradient(circle at 10% 10%, rgba(30,111,217,0.16) 0%, transparent 40%), radial-gradient(circle at 90% 90%, rgba(77,163,255,0.10) 0%, transparent 40%), linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
         fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif'
       }}
     >
@@ -133,7 +133,7 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
               <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 border border-blue-100/50 px-3 py-1 font-bold text-xs uppercase tracking-wider text-blue-700">
                 <Store className="h-3.5 w-3.5" /> High-volume retail
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-[#002f5d] md:text-4xl leading-tight">
+              <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl leading-tight">
                 Home Improvement Centres
               </h1>
               <p className="text-base text-slate-600 leading-relaxed">
@@ -175,7 +175,7 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
 
         {/* Value Pillars Cards */}
         <div className="mt-14 space-y-6">
-          <h2 className="text-2xl font-extrabold text-[#002f5d] tracking-tight">
+          <h2 className="text-2xl font-extrabold text-white tracking-tight">
             Designed for Retail Estimators & Field Crews
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -197,21 +197,21 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
         <div className="mt-14 rounded-3xl border border-slate-100 bg-white p-6 md:p-8 shadow-sm">
           <div className="max-w-2xl">
             <span className="text-xs font-bold text-blue-700 uppercase tracking-widest">Interactive Sandbox Preview</span>
-            <h2 className="text-2xl font-[#002f5d] font-black tracking-tight mt-1">
+            <h2 className="text-2xl text-white font-black tracking-tight mt-1">
               Follow the Project Journey Sequentially
             </h2>
-            <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+            <p className="text-sm text-slate-400 mt-2 leading-relaxed">
               Trace how ProSpaces CRM guides kitchen, bath, and cabinet installations from showroom consultation all the way to complete project signature. Click below to experience each stage.
             </p>
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-2.5 border-b border-slate-100 pb-5">
+          <div className="mt-8 flex flex-wrap gap-2.5 border-b border-slate-800 pb-5">
             <button
               onClick={() => setActivePhase('lead')}
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
                 activePhase === 'lead'
                   ? 'bg-[#1E6FD9] text-white shadow-sm'
-                  : 'bg-slate-50 hover:bg-slate-100 text-[#002f5d]'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
               }`}
             >
               Step 1: Consultation
@@ -221,7 +221,7 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
                 activePhase === 'estimate'
                   ? 'bg-[#1E6FD9] text-white shadow-sm'
-                  : 'bg-slate-50 hover:bg-slate-100 text-[#002f5d]'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
               }`}
             >
               Step 2: CAD Pricing
@@ -231,7 +231,7 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
                 activePhase === 'vendor'
                   ? 'bg-[#1E6FD9] text-white shadow-sm'
-                  : 'bg-slate-50 hover:bg-slate-100 text-[#002f5d]'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
               }`}
             >
               Step 3: Supplier Order
@@ -241,7 +241,7 @@ export function HomeImprovementBenefits({ onBack, onGetStarted }: HomeImprovemen
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
                 activePhase === 'install'
                   ? 'bg-[#1E6FD9] text-white shadow-sm'
-                  : 'bg-slate-50 hover:bg-slate-100 text-[#002f5d]'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
               }`}
             >
               Step 4: Dispatch Install

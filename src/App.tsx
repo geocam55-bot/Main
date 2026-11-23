@@ -15,7 +15,6 @@ import ErrorBoundary, { ErrorBoundaryFallback } from './components/ErrorBoundary
 import { toast } from 'sonner';
 import { createClient, clearStaleAuthTokens, handleAuthError } from './utils/supabase/client';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
-import { getTheme } from './utils/themes';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 // ── Eagerly loaded entry & authentication views (guaranteed instant render with no chunk fetch errors) ──
@@ -405,34 +404,6 @@ export function AppContent() {
   });
   const [showChangePassword, setShowChangePassword] = useState(false);
 
-  // Landing + Enter ProSpaces should always use default light visual tokens,
-  // independent of each user's selected theme.
-  useEffect(() => {
-    const isThemeIsolatedPublicPage = (!session || !user) && (currentView === 'landing' || currentView === 'space-chooser');
-    if (!isThemeIsolatedPublicPage) return;
-
-    const light = getTheme('light');
-    const root = document.documentElement;
-    root.classList.remove('dark');
-    root.style.setProperty('--color-background', light.colors.background);
-    root.style.setProperty('--color-background-secondary', light.colors.backgroundSecondary);
-    root.style.setProperty('--color-background-tertiary', light.colors.backgroundTertiary);
-    root.style.setProperty('--color-text', light.colors.text);
-    root.style.setProperty('--color-text-secondary', light.colors.textSecondary);
-    root.style.setProperty('--color-text-muted', light.colors.textMuted);
-    root.style.setProperty('--color-primary', light.colors.primary);
-    root.style.setProperty('--color-primary-hover', light.colors.primaryHover);
-    root.style.setProperty('--color-primary-text', light.colors.primaryText);
-    root.style.setProperty('--color-border', light.colors.border);
-    root.style.setProperty('--color-card', light.colors.card);
-    root.style.setProperty('--color-nav-background', light.colors.navBackground);
-    root.style.setProperty('--color-nav-text', light.colors.navText);
-    root.style.setProperty('--color-nav-hover', light.colors.navHover);
-    root.style.setProperty('--color-nav-active', light.colors.navActive);
-    root.style.setProperty('--color-topbar-background', light.colors.topBarBackground);
-    root.style.setProperty('--color-topbar-text', light.colors.topBarText);
-  }, [session, user, currentView]);
-
   // Stable callback references to prevent unnecessary child re-renders
   const handleToggleSidebar = useCallback(() => {
     setIsSidebarCollapsed(prev => !prev);
@@ -820,8 +791,11 @@ export function AppContent() {
     return (
       <ErrorBoundary>
         <Suspense fallback={
-          <div className="min-h-screen flex items-center justify-center bg-slate-50">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div
+            className="min-h-screen flex items-center justify-center bg-[#0A0F1D]"
+            style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}
+          >
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
           </div>
         }>
           {publicRoute}
@@ -832,23 +806,54 @@ export function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
+      <ThemeProvider userId={user?.id} forceDark={!user}>
+        <div
+          className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0A0F1D] text-slate-700 dark:text-slate-200"
+        >
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-slate-600 dark:text-slate-300">Loading...</p>
+          </div>
         </div>
-      </div>
+      </ThemeProvider>
     );
   }
 
   const handleMemberLogin = async (user: User, token: string, passedSession?: Session | null) => {
-    const orgId = user.organizationId || user.organization_id;
+    const orgId = user.organizationId || user.organization_id || 'rona_atlantic';
     if (orgId) {
       localStorage.setItem('currentOrgId', orgId);
     }
 
-    localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
-    localStorage.setItem('prospaces_active_user', JSON.stringify(user));
+    const logisticsUserObj = {
+      id: user.id || 'USR-57008',
+      name: user.full_name || user.email?.split('@')[0] || 'George Campbell',
+      email: user.email || 'george.campbell@ronaatlantic.ca',
+      role: user.role || 'Admin',
+      phone: '(902) 555-0199',
+      status: 'Active',
+      associatedStoreId: 'DC-WINAMILL',
+      organization_id: orgId
+    };
+
+    try {
+      localStorage.setItem('prospaces_cached_user', JSON.stringify(logisticsUserObj));
+      localStorage.setItem('prospaces_active_user', JSON.stringify(logisticsUserObj));
+      if (!localStorage.getItem('prospaces_active_tenant')) {
+        localStorage.setItem('prospaces_active_tenant', JSON.stringify({
+          id: orgId,
+          name: 'RONA Atlantic Logistics',
+          code: 'RONA',
+          description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
+          logoBadge: '🏢',
+          regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
+          primaryColor: 'blue'
+        }));
+      }
+    } catch (e) {
+      console.error('Failed syncing logistics session on CRM login:', e);
+    }
+
     sessionStorage.setItem('prospaces_session_active', 'true');
     sessionStorage.setItem('prospaces_current_view', 'space-chooser');
 
@@ -900,61 +905,62 @@ export function AppContent() {
   if (!user) {
     return (
       <ErrorBoundary>
-        <Toaster />
-        <Suspense fallback={
-          <div className="min-h-screen flex items-center justify-center bg-slate-50">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-slate-600 font-sans">Loading...</p>
+        <ThemeProvider userId={undefined} forceDark={true}>
+          <Toaster />
+          <Suspense fallback={
+            <div
+              className="min-h-screen flex items-center justify-center bg-[#0A0F1D] text-slate-200"
+              style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}
+            >
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p className="text-slate-300 font-sans">Loading...</p>
+              </div>
             </div>
-          </div>
-        }>
-          {currentView === 'member-login' || currentView === 'space-chooser' ? (
-            <MemberLogin
-              onLogin={handleMemberLogin}
-              onBack={() => setCurrentView('landing')}
-            />
-          ) : currentView === 'login' ? (
-            <Login 
-              onBack={() => setCurrentView('landing')} 
-              onLogin={handleMemberLogin} 
-            />
-          ) : currentView === 'free-signup' ? (
-            <FreeSignup
-              onSignupSuccess={() => setCurrentView('member-login')}
-              onBack={() => setCurrentView('landing')}
-            />
-          ) : (
-            <LandingPage 
-              onGetStarted={() => setCurrentView('free-signup')} 
-              onMemberLogin={() => setCurrentView('member-login')} 
-            />
-          )}
-        </Suspense>
+          }>
+            {currentView === 'member-login' || currentView === 'space-chooser' ? (
+              <MemberLogin
+                onLogin={handleMemberLogin}
+                onBack={() => setCurrentView('landing')}
+              />
+            ) : currentView === 'login' ? (
+              <Login 
+                onBack={() => setCurrentView('landing')} 
+                onLogin={handleMemberLogin} 
+              />
+            ) : currentView === 'free-signup' ? (
+              <FreeSignup
+                onSignupSuccess={() => setCurrentView('member-login')}
+                onBack={() => setCurrentView('landing')}
+              />
+            ) : (
+              <LandingPage 
+                onGetStarted={() => setCurrentView('free-signup')} 
+                onMemberLogin={() => setCurrentView('member-login')} 
+              />
+            )}
+          </Suspense>
+        </ThemeProvider>
       </ErrorBoundary>
     );
   }
 
   const canAccessSalesSpace = canAccessSpace('sales', user.role, 'view');
 
-  if (!canAccessSalesSpace && currentView !== 'space-chooser') {
-    return (
-      <ErrorBoundary>
-        <Toaster />
+  const renderAuthenticatedContent = () => {
+    if (!canAccessSalesSpace && currentView !== 'space-chooser') {
+      return (
         <SpaceAccessNotice
           spaceName="Sales Space"
           accentColorClass="bg-blue-600"
           mode="access-denied"
           message="You are signed in, but your account does not currently have access to Sales Space. Please choose another space or contact your administrator if you need access."
         />
-      </ErrorBoundary>
-    );
-  }
+      );
+    }
 
-  if (currentView === 'plan-selection') {
-    return (
-      <ErrorBoundary>
-        <Toaster />
+    if (currentView === 'plan-selection') {
+      return (
         <PlanSelection
           onSelectPlan={async (planId) => {
             const toastId = toast.loading('Upgrading subscription to ' + planId + '...');
@@ -963,7 +969,6 @@ export function AppContent() {
               const res = await upgradeFromTrial(planId);
               if (res.success) {
                 toast.success('Your subscription has been successfully upgraded!', { id: toastId });
-                // Refresh and clear current plan selection view
                 setTimeout(() => {
                   window.location.reload();
                 }, 1000);
@@ -981,86 +986,82 @@ export function AppContent() {
           }}
           onLogout={handleLogout}
         />
-      </ErrorBoundary>
-    );
-  }
+      );
+    }
 
-  if (currentView === 'space-chooser') {
-    return (
-      <ErrorBoundary>
-        <Toaster />
-        <SpaceChooser
-          userRole={user.role}
-          onSelectSalesSpace={() => setCurrentView('main-panels')}
-          onSelectDesignSpace={() => { window.location.href = '/project-wizards'; }}
-          onSelectMarketingSpace={() => { window.location.href = '/marketing'; }}
-          onSelectInsightsSpace={() => { window.location.href = '/insights'; }}
-          onSelectInventorySpace={() => { window.location.href = '/inventory'; }}
-          onSelectITSpace={() => { window.location.href = '/it'; }}
-          onSelectMessagingSpace={() => { setCurrentView('messages'); }}
-          onSelectLogisticsSpace={() => {
-            if (user) {
-              try {
-                localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
-                const activeTenant = {
-                  id: user.organization_id || 'rona_atlantic',
-                  name: 'RONA Atlantic Logistics',
-                  code: 'RONA',
-                  description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
-                  logoBadge: '🏢',
-                  regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
-                  primaryColor: 'blue'
-                };
-                const activeUser = {
-                  id: user.id || "USR-57008",
-                  name: user.full_name || user.name || (user.email ? user.email.split('@')[0] : "George Campbell"),
-                  email: user.email || "george.campbell@ronaatlantic.ca",
-                  role: ((user.role === 'SUPER_ADMIN' || user.role === 'Super_Admin' || user.role === 'super_admin' || user.email === 'superadmin@prospaces.com') && !user.email?.toLowerCase().includes('george.campbell'))
-                    ? "SUPER_ADMIN"
-                    : ((user.role === 'admin' || user.role === 'Admin' || user.email?.toLowerCase().includes('george.campbell')) ? "Admin" : (user.role || "Admin")),
-                  phone: user.phone || "(902) 555-0199",
-                  status: "Active",
-                  associatedStoreId: "DC-WINAMILL"
-                };
-                localStorage.setItem('prospaces_active_tenant', JSON.stringify(activeTenant));
-                localStorage.setItem('prospaces_active_user', JSON.stringify(activeUser));
-                sessionStorage.setItem('accessed_from_crm', 'true');
-                sessionStorage.setItem('prospaces_session_active', 'true');
-              } catch (e) {
-                console.error('Failed setting logistics user in localStorage:', e);
+    if (currentView === 'space-chooser') {
+      return (
+        <>
+          <SpaceChooser
+            userRole={user.role}
+            onSelectSalesSpace={() => setCurrentView('main-panels')}
+            onSelectDesignSpace={() => { window.location.href = '/project-wizards'; }}
+            onSelectMarketingSpace={() => { window.location.href = '/marketing'; }}
+            onSelectInsightsSpace={() => { window.location.href = '/insights'; }}
+            onSelectInventorySpace={() => { window.location.href = '/inventory'; }}
+            onSelectITSpace={() => { window.location.href = '/it'; }}
+            onSelectMessagingSpace={() => { setCurrentView('messages'); }}
+            onSelectLogisticsSpace={() => {
+              if (user) {
+                try {
+                  localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
+                  const activeTenant = {
+                    id: user.organization_id || 'rona_atlantic',
+                    name: 'RONA Atlantic Logistics',
+                    code: 'RONA',
+                    description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',
+                    logoBadge: '🏢',
+                    regionalFocus: 'Atlantic Canada (Dartmouth, Tantallon, Halifax, PEI)',
+                    primaryColor: 'blue'
+                  };
+                  const activeUser = {
+                    id: user.id || "USR-57008",
+                    name: user.full_name || user.name || (user.email ? user.email.split('@')[0] : "George Campbell"),
+                    email: user.email || "george.campbell@ronaatlantic.ca",
+                    role: ((user.role === 'SUPER_ADMIN' || user.role === 'Super_Admin' || user.role === 'super_admin' || user.email === 'superadmin@prospaces.com') && !user.email?.toLowerCase().includes('george.campbell'))
+                      ? "SUPER_ADMIN"
+                      : ((user.role === 'admin' || user.role === 'Admin' || user.email?.toLowerCase().includes('george.campbell')) ? "Admin" : (user.role || "Admin")),
+                    phone: user.phone || "(902) 555-0199",
+                    status: "Active",
+                    associatedStoreId: "DC-WINAMILL"
+                  };
+                  localStorage.setItem('prospaces_active_tenant', JSON.stringify(activeTenant));
+                  localStorage.setItem('prospaces_active_user', JSON.stringify(activeUser));
+                  sessionStorage.setItem('accessed_from_crm', 'true');
+                  sessionStorage.setItem('prospaces_session_active', 'true');
+                } catch (e) {
+                  console.error('Failed setting logistics user in localStorage:', e);
+                }
               }
-            }
-            window.location.href = '/logistics?from=crm';
-          }}
-          onBack={async () => {
-            await handleLogout();
-          }}
-        />
-
-        {/* Enforce temp-password change before users enter any space */}
-        {showChangePassword && user && (
-          <ChangePasswordDialog
-            open={showChangePassword}
-            onClose={() => {
-              setShowChangePassword(false);
-              if (session?.user) {
-                loadUserData(session.user, false);
-              }
+              window.location.href = '/logistics?from=crm';
             }}
-            userId={user.id}
+            onBack={async () => {
+              await handleLogout();
+            }}
           />
-        )}
-      </ErrorBoundary>
-    );
-  }
 
-  return (
-    <ErrorBoundary>
-      <ThemeProvider userId={user?.id}>
-        <Toaster />
+          {/* Enforce temp-password change before users enter any space */}
+          {showChangePassword && user && (
+            <ChangePasswordDialog
+              open={showChangePassword}
+              onClose={() => {
+                setShowChangePassword(false);
+                if (session?.user) {
+                  loadUserData(session.user, false);
+                }
+              }}
+              userId={user.id}
+            />
+          )}
+        </>
+      );
+    }
+
+    return (
+      <>
         {/* Always-mounted background job processor — auto-processes pending import jobs */}
         <BackgroundJobProcessor user={user} onNavigate={setCurrentView} />
-        <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--color-background)' }}>
+        <div className="flex flex-col h-screen overflow-hidden text-foreground" style={{ background: 'var(--gradient, var(--color-background))' }}>
           <Navigation
             user={user}
             organization={organization}
@@ -1073,7 +1074,7 @@ export function AppContent() {
 
           <main 
             className="flex-1 overflow-auto transition-all duration-300"
-            style={{ background: 'var(--color-background-secondary)' }}
+            style={{ background: 'var(--gradient, var(--color-background))' }}
           >
             <OfflineIndicator />
             <PWAInstallPrompt />
@@ -1129,8 +1130,6 @@ export function AppContent() {
               open={showChangePassword}
               onClose={() => {
                 setShowChangePassword(false);
-                // Reload user data to ensure password-change flag is cleared,
-                // but do NOT reset the current view (isInitialLoad = false).
                 if (session?.user) {
                   loadUserData(session.user, false);
                 }
@@ -1148,6 +1147,15 @@ export function AppContent() {
             />
           )}
         </div>
+      </>
+    );
+  };
+
+  return (
+    <ErrorBoundary>
+      <ThemeProvider userId={user?.id} forceDark={false}>
+        <Toaster />
+        {renderAuthenticatedContent()}
       </ThemeProvider>
     </ErrorBoundary>
   );
@@ -1171,8 +1179,10 @@ function RouterErrorBoundary() {
       sessionStorage.setItem('last-chunk-reload', String(now));
       window.location.reload();
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <p className="text-sm font-medium animate-pulse">Updating application with latest version...</p>
+        <div
+          className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-[#0A0F1D] text-slate-700 dark:text-slate-200"
+        >
+          <p className="text-sm font-medium">Updating application with latest version...</p>
         </div>
       );
     }

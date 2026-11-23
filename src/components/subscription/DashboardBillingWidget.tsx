@@ -79,7 +79,7 @@ export function DashboardBillingWidget({ onNavigate }: DashboardBillingWidgetPro
   // No subscription — upgrade prompt
   if (!subscription) {
     return (
-      <Card className="border-dashed border-2 border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50">
+      <Card className="border-dashed border-2 border-blue-500/30 bg-blue-950/20">
         <CardContent className="py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

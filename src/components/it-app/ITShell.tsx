@@ -36,6 +36,7 @@ import { createClient } from '../../utils/supabase/client';
 import { canView, onPermissionsChanged, getNormalizedRole } from '../../utils/permissions';
 import type { User } from '../../App';
 import { useTheme } from '../ThemeProvider';
+import { ProfileThemeSwitch } from '../ProfileThemeSwitch';
 
 // ── Lazy-load admin sub-components ──
 const lazyNamed = <T extends Record<string, any>>(
@@ -211,48 +212,33 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
 
   return (
     <div
-      className="flex flex-col h-screen overflow-hidden"
+      className="flex flex-col h-screen overflow-hidden text-slate-900 dark:text-slate-100"
       style={{
-        background: theme.colors.backgroundSecondary,
-        color: theme.colors.text,
+        background: 'var(--gradient, var(--color-background))',
       }}
     >
       {/* ── Top Sticky Navbar ── */}
       <header
-        className="sticky top-0 z-50 w-full shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-6 py-2.5 md:py-0 md:h-16 gap-3 md:gap-4 shadow-sm"
-        style={{
-          background: theme.colors.navBackground,
-          borderColor: theme.colors.border,
-          color: theme.colors.navText,
-        }}
+        className="sticky top-0 z-50 w-full shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 bg-white/90 text-slate-900 dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-100 backdrop-blur-md px-4 md:px-6 py-2.5 md:py-0 md:h-16 gap-3 md:gap-4 shadow-sm"
       >
         {/* Brand & Left Control */}
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={handleBackToSpaces}
-            className="flex items-center justify-center p-2 rounded-xl transition-colors shrink-0"
+            className="flex items-center justify-center p-2 rounded-xl transition-colors shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 cursor-pointer"
             title="Back to Spaces"
-            style={{ color: theme.colors.textMuted }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = theme.colors.navHover;
-              e.currentTarget.style.color = theme.colors.navText;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = theme.colors.textMuted;
-            }}
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
 
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0 shadow-md">
             <Monitor className="h-5 w-5 text-white" />
           </div>
           <div className="overflow-hidden">
-            <span className="text-sm md:text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
+            <span className="text-sm md:text-base font-bold tracking-tight block truncate text-slate-900 dark:text-white">
               IT Space
             </span>
-            <span className="text-[9px] md:text-[10px] font-medium uppercase tracking-wider block" style={{ color: theme.colors.textMuted }}>
+            <span className="text-[9px] md:text-[10px] font-mono uppercase tracking-wider block text-slate-500 dark:text-slate-400">
               Administration
             </span>
           </div>
@@ -267,19 +253,11 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
               <button
                 key={item.id}
                 onClick={() => handleNavigate(item.id)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium ${
-                  isActive ? `${item.color} ${item.bgColor} shadow-sm border border-current/10 font-semibold` : ''
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 transition-all duration-150 shrink-0 text-xs font-semibold cursor-pointer ${
+                  isActive
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/20 border border-violet-500/40'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-900 border border-transparent'
                 }`}
-                style={{
-                  color: isActive ? undefined : theme.colors.navText,
-                  backgroundColor: isActive ? theme.colors.navActive : 'transparent',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-                }}
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span>{item.label}</span>
@@ -293,16 +271,9 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
           <DropdownMenu>
             <DropdownMenuTrigger className="focus:outline-none">
               <div
-                className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 transition-all text-left cursor-pointer"
-                style={{ backgroundColor: theme.colors.backgroundTertiary }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = theme.colors.navHover;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = theme.colors.backgroundTertiary;
-                }}
+                className="flex items-center gap-2 rounded-xl px-3 py-1.5 transition-all text-left cursor-pointer bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 dark:text-slate-200"
               >
-                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center shrink-0">
+                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center shrink-0 shadow-inner">
                   {currentUser.avatar_url ? (
                     <img
                       src={currentUser.avatar_url}
@@ -313,30 +284,32 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
                     <UserIcon className="h-3.5 w-3.5 text-white" />
                   )}
                 </div>
-                <span className="text-xs font-medium max-w-[100px] truncate hidden md:inline-block" style={{ color: theme.colors.text }}>
+                <span className="text-xs font-medium max-w-[100px] truncate hidden md:inline-block text-slate-900 dark:text-white">
                   {currentUser.full_name?.split(' ')[0] || currentUser.email}
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" style={{ color: theme.colors.textMuted }} />
+                <ChevronDown className="h-3.5 w-3.5 opacity-60 text-slate-500 dark:text-slate-400" />
               </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="bottom" className="w-56 mt-1">
+            <DropdownMenuContent align="end" side="bottom" className="w-60 mt-1 bg-white border-slate-200 text-slate-800 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200">
               <DropdownMenuLabel>
                 <div>
-                  <p className="font-medium text-sm">{currentUser.full_name || currentUser.email}</p>
-                  <p className="text-xs text-muted-foreground font-normal mt-0.5 truncate">{currentUser.email || 'No email'}</p>
+                  <p className="font-medium text-sm text-slate-900 dark:text-white">{currentUser.full_name || currentUser.email}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5 truncate">{currentUser.email || 'No email'}</p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleOpenProfile}>
+              <DropdownMenuSeparator className="dark:bg-slate-800" />
+              <ProfileThemeSwitch variant="menu" />
+              <DropdownMenuSeparator className="dark:bg-slate-800" />
+              <DropdownMenuItem onClick={handleOpenProfile} className="dark:focus:bg-slate-800 dark:focus:text-white cursor-pointer">
                 <UserIcon className="mr-2 h-4 w-4" />
                 Profile Settings
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleBackToSpaces}>
+              <DropdownMenuItem onClick={handleBackToSpaces} className="dark:focus:bg-slate-800 dark:focus:text-white cursor-pointer">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Spaces Main Page
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+              <DropdownMenuSeparator className="dark:bg-slate-800" />
+              <DropdownMenuItem onClick={handleLogout} className="text-rose-600 dark:text-rose-400 dark:focus:bg-rose-950/50 dark:focus:text-rose-300 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 Log Off
               </DropdownMenuItem>
@@ -346,7 +319,7 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
       </header>
 
       {/* ── Main content ── */}
-      <main className="flex-1 overflow-auto" style={{ background: theme.colors.backgroundSecondary }}>
+      <main className="flex-1 overflow-auto text-slate-900 dark:text-slate-100" style={{ background: 'var(--gradient, var(--color-background))' }}>
         {currentView === 'home' && (
           <HomeView user={currentUser} navItems={visibleNavItems} onNavigate={handleNavigate} />
         )}
@@ -380,88 +353,81 @@ function HomeView({
   navItems: NavItem[];
   onNavigate: (view: ITView) => void;
 }) {
-  const { theme } = useTheme();
-  const cardMeta: Record<string, { description: string; gradient: string; shadow: string }> = {
-    contacts:        { description: 'View and manage shared CRM contacts inside IT Space while following the current space access rules.', gradient: 'from-sky-500 to-cyan-600',       shadow: 'shadow-sky-500/20' },
-    users:           { description: 'Manage user accounts, roles, space access, and team member access across the platform.',            gradient: 'from-violet-500 to-indigo-600',  shadow: 'shadow-violet-500/20' },
-    tenants:         { description: 'Create and manage organizations, configure org-level settings, and control tenant access.',        gradient: 'from-indigo-500 to-blue-600',    shadow: 'shadow-indigo-500/20' },
-    security:        { description: 'Configure space access, security policies, two-factor authentication, session controls, and IP whitelists.', gradient: 'from-purple-500 to-violet-600',  shadow: 'shadow-purple-500/20' },
-    'audit-log':     { description: 'Review a complete audit trail of user actions, data changes, and system events.',              gradient: 'from-fuchsia-500 to-pink-600',   shadow: 'shadow-fuchsia-500/20' },
-    settings:        { description: 'Global platform settings, custom fields, workflow automation, and system configuration.',       gradient: 'from-slate-500 to-gray-600',     shadow: 'shadow-slate-500/20' },
-    'import-export': { description: 'Bulk import contacts, deals, and inventory. Export data in CSV and other formats.',            gradient: 'from-cyan-500 to-teal-600',      shadow: 'shadow-cyan-500/20' },
-    'scheduled-jobs':{ description: 'Monitor and manage background jobs, scheduled tasks, and automated system processes.',         gradient: 'from-amber-500 to-orange-600',   shadow: 'shadow-amber-500/20' },
-    billing:         { description: 'Manage subscription plans, payment methods, invoices, and billing history.',                   gradient: 'from-emerald-500 to-green-600',  shadow: 'shadow-emerald-500/20' },
-    agreement:       { description: 'View and manage your subscription agreement and service terms.',                               gradient: 'from-blue-500 to-indigo-600',    shadow: 'shadow-blue-500/20' },
-    'portal-admin':  { description: 'Manage customer portal messages, access requests, and client communications.',                 gradient: 'from-rose-500 to-pink-600',      shadow: 'shadow-rose-500/20' },
-    'fix-users':     { description: 'Diagnostic tool to fix user profile issues, sync problems, and data inconsistencies.',         gradient: 'from-orange-500 to-red-600',     shadow: 'shadow-orange-500/20' },
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+
+  const cardMeta: Record<string, { description: string; gradient: string; iconBg: string }> = {
+    contacts:        { description: 'View and manage shared CRM contacts inside IT Space while following the current space access rules.', gradient: 'from-sky-500 to-cyan-600', iconBg: 'bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20' },
+    users:           { description: 'Manage user accounts, roles, space access, and team member access across the platform.',            gradient: 'from-violet-500 to-indigo-600', iconBg: 'bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-500/10 dark:text-violet-400 dark:border-violet-500/20' },
+    tenants:         { description: 'Create and manage organizations, configure org-level settings, and control tenant access.',        gradient: 'from-indigo-500 to-blue-600', iconBg: 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20' },
+    security:        { description: 'Configure space access, security policies, two-factor authentication, session controls, and IP whitelists.', gradient: 'from-purple-500 to-violet-600', iconBg: 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20' },
+    'audit-log':     { description: 'Review a complete audit trail of user actions, data changes, and system events.',              gradient: 'from-fuchsia-500 to-pink-600', iconBg: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-200 dark:bg-fuchsia-500/10 dark:text-fuchsia-400 dark:border-fuchsia-500/20' },
+    settings:        { description: 'Global platform settings, custom fields, workflow automation, and system configuration.',       gradient: 'from-slate-500 to-gray-600', iconBg: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/10 dark:text-slate-300 dark:border-slate-500/20' },
+    'import-export': { description: 'Bulk import contacts, deals, and inventory. Export data in CSV and other formats.',            gradient: 'from-cyan-500 to-teal-600', iconBg: 'bg-cyan-50 text-cyan-600 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20' },
+    'scheduled-jobs':{ description: 'Monitor and manage background jobs, scheduled tasks, and automated system processes.',         gradient: 'from-amber-500 to-orange-600', iconBg: 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20' },
+    billing:         { description: 'Manage subscription plans, payment methods, invoices, and billing history.',                   gradient: 'from-emerald-500 to-green-600', iconBg: 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' },
+    agreement:       { description: 'View and manage your subscription agreement and service terms.',                               gradient: 'from-blue-500 to-indigo-600', iconBg: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20' },
+    'portal-admin':  { description: 'Manage customer portal messages, access requests, and client communications.',                 gradient: 'from-rose-500 to-pink-600', iconBg: 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20' },
+    'fix-users':     { description: 'Diagnostic tool to fix user profile issues, sync problems, and data inconsistencies.',         gradient: 'from-orange-500 to-red-600', iconBg: 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20' },
   };
 
   return (
-    <div className="p-8 lg:p-12 max-w-7xl mx-auto">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight" style={{ color: theme.colors.text }}>
+    <div className="p-8 lg:p-12 max-w-5xl mx-auto text-slate-900 dark:text-slate-100">
+      <div className="mb-8 text-center sm:text-left">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Welcome back, {user.full_name?.split(' ')[0] || 'Admin'}
         </h1>
-        <p className="mt-2 text-lg" style={{ color: theme.colors.textMuted }}>
-          Your IT administration center. Choose a module to get started.
+        <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+          Your IT administration center. Hover over any module for details or click to launch.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {navItems.filter(n => n.id !== 'home' as any).map((item) => {
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {navItems.filter(n => n.id !== ('home' as any)).map((item) => {
           const Icon = item.icon;
-          const meta = cardMeta[item.id] || { description: '', gradient: 'from-slate-500 to-gray-600', shadow: 'shadow-slate-500/20' };
+          const meta = cardMeta[item.id] || { description: '', gradient: 'from-slate-500 to-gray-600', iconBg: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/10 dark:text-slate-300 dark:border-slate-500/20' };
+          const isTooltipActive = activeTooltip === item.id;
+
           return (
-            <button
+            <div
               key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className={`group relative overflow-hidden rounded-2xl p-6 text-left hover:shadow-lg ${meta.shadow} transition-all duration-200`}
-              style={{
-                backgroundColor: theme.colors.card,
-                border: `1px solid ${theme.colors.border}`,
-              }}
+              className="relative group"
+              onMouseEnter={() => setActiveTooltip(item.id)}
+              onMouseLeave={() => setActiveTooltip(null)}
             >
-              <div
-                className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${meta.gradient}`}
-              />
-              <div
-                className={`inline-flex items-center justify-center h-12 w-12 rounded-xl bg-gradient-to-br ${meta.gradient} shadow-lg ${meta.shadow} mb-4`}
+              <button
+                type="button"
+                onClick={() => onNavigate(item.id)}
+                className="w-full bg-white hover:bg-slate-50/90 dark:bg-slate-900/90 dark:hover:bg-slate-800/90 border border-slate-200 hover:border-violet-400 dark:border-slate-800 dark:hover:border-violet-500/50 rounded-2xl p-5 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-lg dark:shadow-lg flex flex-col items-center text-center relative overflow-hidden group-hover:-translate-y-1"
               >
-                <Icon className="h-6 w-6 text-white" />
-              </div>
-              <h3 className="mb-1.5 text-lg font-semibold" style={{ color: theme.colors.text }}>
-                {item.label}
-              </h3>
-              <p className="text-sm leading-relaxed" style={{ color: theme.colors.textMuted }}>
-                {meta.description}
-              </p>
-              <div
-                className="mt-4 flex items-center gap-1.5 text-sm font-medium transition-all group-hover:gap-3"
-                style={{ color: theme.colors.primary }}
-              >
-                Open module
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </button>
+                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${meta.gradient} opacity-80 group-hover:opacity-100`} />
+                <div className={`w-14 h-14 rounded-2xl ${meta.iconBg} border flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm`}>
+                  <Icon className="h-7 w-7" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-violet-600 dark:text-white dark:group-hover:text-violet-300 transition-colors mb-1">
+                  {item.label}
+                </h3>
+                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Module
+                </span>
+              </button>
+
+              {isTooltipActive && (
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-64 p-3.5 bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-2xl backdrop-blur-md z-50 text-left pointer-events-none">
+                  <div className="flex items-center space-x-1.5 mb-1 text-xs font-bold text-slate-900 dark:text-white">
+                    <span>{item.label}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {meta.description}
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-violet-600 dark:text-violet-400 font-semibold">
+                    <span>Click to open module</span>
+                    <span>&rarr;</span>
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
-      </div>
-
-      <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="rounded-2xl p-6" style={{ backgroundColor: theme.colors.card, border: `1px solid ${theme.colors.border}` }}>
-          <p className="text-sm font-medium" style={{ color: theme.colors.textMuted }}>Modules</p>
-          <p className="text-3xl font-bold mt-1" style={{ color: theme.colors.text }}>{navItems.length}</p>
-        </div>
-        <div className="rounded-2xl p-6" style={{ backgroundColor: theme.colors.card, border: `1px solid ${theme.colors.border}` }}>
-          <p className="text-sm font-medium" style={{ color: theme.colors.textMuted }}>Your Role</p>
-          <p className="text-3xl font-bold mt-1 capitalize" style={{ color: theme.colors.text }}>
-            {user.role.replace('_', ' ')}
-          </p>
-        </div>
-        <div className="rounded-2xl p-6" style={{ backgroundColor: theme.colors.card, border: `1px solid ${theme.colors.border}` }}>
-          <p className="text-sm font-medium" style={{ color: theme.colors.textMuted }}>Environment</p>
-          <p className="text-3xl font-bold mt-1" style={{ color: theme.colors.text }}>Desktop</p>
-        </div>
       </div>
     </div>
   );

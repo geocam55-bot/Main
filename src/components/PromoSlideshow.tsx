@@ -477,7 +477,7 @@ const LoginScreen = () => (
         <div className="p-16 flex flex-col items-center border-b border-border bg-slate-900 text-white relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20"></div>
           <div className="mb-8 relative z-10">
-            <Logo size="xl" className="h-20 w-auto" />
+            <Logo size="xl" variant="dark" className="h-20 w-auto" />
           </div>
           <h2 className="text-5xl font-bold mb-4 relative z-10">ProSpaces Identity</h2>
           <p className="text-2xl text-blue-200 relative z-10">Enterprise Secure Access</p>

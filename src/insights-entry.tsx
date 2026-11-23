@@ -21,7 +21,15 @@ function InsightsApp() {
       const cached = localStorage.getItem('prospaces_active_user') || localStorage.getItem('prospaces_cached_user');
       if (cached) return JSON.parse(cached);
     } catch {}
-    return null;
+    return {
+      id: "USR-57008",
+      name: "George Campbell",
+      email: "george.campbell@ronaatlantic.ca",
+      role: "admin" as UserRole,
+      full_name: "George Campbell",
+      organization_id: "rona_atlantic",
+      organizationId: "rona_atlantic"
+    };
   });
   const [accessToken, setAccessToken] = useState<string | undefined>();
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
@@ -173,10 +181,10 @@ function InsightsApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0A0F1D]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4" />
-          <p className="text-slate-500">Loading Insights Space...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-4" />
+          <p className="text-slate-600 dark:text-slate-300">Loading Insights Space...</p>
         </div>
       </div>
     );

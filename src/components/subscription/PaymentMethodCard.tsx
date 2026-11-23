@@ -89,7 +89,7 @@ export function PaymentMethodCard({ paymentMethod, isAdmin, actionLoading, onUpd
         </CardHeader>
         <CardContent>
           {paymentMethod ? (
-            <div className="flex items-center gap-4 p-4 rounded-xl border border-border bg-gradient-to-r from-slate-50 to-white">
+            <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/90">
               {/* Card visual */}
               <div className="w-16 h-10 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-sm">
                 {CARD_ICONS[paymentMethod.brand] || 'C'}

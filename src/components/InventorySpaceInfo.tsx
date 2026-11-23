@@ -42,10 +42,10 @@ const INVENTORY_KPIS = [
 export function InventorySpaceInfo({ onBack, onEnterSpace }: InventorySpaceInfoProps) {
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen bg-[#0A0F1D] text-slate-100"
       style={{
         background:
-          'radial-gradient(circle at 12% 12%, rgba(16,185,129,0.15) 0%, transparent 38%), radial-gradient(circle at 88% 86%, rgba(20,184,166,0.16) 0%, transparent 42%), linear-gradient(180deg, #ECFDF5 0%, #F8FAFC 70%)',
+          'radial-gradient(circle at 12% 12%, rgba(16,185,129,0.15) 0%, transparent 38%), radial-gradient(circle at 88% 86%, rgba(20,184,166,0.12) 0%, transparent 42%), linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
       }}
     >
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-10">

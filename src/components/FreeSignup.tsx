@@ -124,42 +124,45 @@ export function FreeSignup({ onSignupSuccess, onBack }: FreeSignupProps) {
 
   if (showSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <Card className="w-full max-w-md shadow-lg border-0">
+      <div
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}
+      >
+        <Card className="w-full max-w-md shadow-2xl border border-slate-800 bg-slate-900/95 text-slate-100">
           <CardHeader className="text-center space-y-2">
             <div className="flex justify-center mb-4">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-green-600" />
+              <div className="w-12 h-12 bg-emerald-500/15 border border-emerald-500/30 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
               </div>
             </div>
-            <CardTitle className="text-2xl text-green-700">Welcome to ProSpaces!</CardTitle>
-            <CardDescription className="text-base">Account created successfully</CardDescription>
+            <CardTitle className="text-2xl text-emerald-400">Welcome to ProSpaces!</CardTitle>
+            <CardDescription className="text-base text-slate-400">Account created successfully</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-              <p className="text-sm font-medium text-slate-700">Next steps:</p>
-              <ul className="text-sm text-slate-600 space-y-2">
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 space-y-3">
+              <p className="text-sm font-medium text-slate-200">Next steps:</p>
+              <ul className="text-sm text-slate-300 space-y-2">
                 <li className="flex gap-2">
-                  <span className="text-blue-600">1.</span>
+                  <span className="text-blue-400">1.</span>
                   <span>Check your email at <strong>{email}</strong> for a temporary password</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-blue-600">2.</span>
+                  <span className="text-blue-400">2.</span>
                   <span>Sign in with your email and the password from the email</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-blue-600">3.</span>
+                  <span className="text-blue-400">3.</span>
                   <span>Set your permanent password on first login</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-blue-600">4.</span>
+                  <span className="text-blue-400">4.</span>
                   <span>Enjoy your 15-day free trial!</span>
                 </li>
               </ul>
             </div>
 
             <div className="pt-4 space-y-2">
-              <p className="text-xs text-slate-500 text-center">
+              <p className="text-xs text-slate-400 text-center">
                 After 15 days, you'll be able to choose a permanent plan.
               </p>
               <Button 
@@ -177,22 +180,25 @@ export function FreeSignup({ onSignupSuccess, onBack }: FreeSignupProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md shadow-lg border-0">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}
+    >
+      <Card className="w-full max-w-md shadow-2xl border border-slate-800 bg-slate-900/95 text-slate-100">
         <CardHeader className="space-y-2">
           <div className="flex items-center gap-2 mb-2">
             {onBack && (
               <button
                 onClick={onBack}
-                className="p-1 hover:bg-slate-100 rounded transition-colors"
+                className="p-1 hover:bg-slate-800 rounded transition-colors"
               >
-                <ArrowLeft className="w-5 h-5 text-slate-600" />
+                <ArrowLeft className="w-5 h-5 text-slate-400 hover:text-white" />
               </button>
             )}
             <Logo size="sm" className="h-5 w-auto" />
           </div>
-          <CardTitle className="text-2xl">Create free trial account</CardTitle>
-          <CardDescription>Get 15 days of free access to ProSpaces</CardDescription>
+          <CardTitle className="text-2xl text-white">Create free trial account</CardTitle>
+          <CardDescription className="text-slate-400">Get 15 days of free access to ProSpaces</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -216,7 +222,7 @@ export function FreeSignup({ onSignupSuccess, onBack }: FreeSignupProps) {
                 disabled={isLoading}
                 autoComplete="email"
               />
-              <p className="text-xs text-slate-500">We'll send your temporary password here</p>
+              <p className="text-xs text-slate-400">We'll send your temporary password here</p>
             </div>
 
             {/* First & Last Name */}
@@ -270,7 +276,7 @@ export function FreeSignup({ onSignupSuccess, onBack }: FreeSignupProps) {
                 disabled={isLoading}
                 autoComplete="new-password"
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400">
                 At least 8 characters with uppercase, lowercase, number, and special character (!@#$%&*)
               </p>
             </div>
@@ -299,13 +305,13 @@ export function FreeSignup({ onSignupSuccess, onBack }: FreeSignupProps) {
             </Button>
 
             {/* Terms Link */}
-            <p className="text-xs text-center text-slate-500">
+            <p className="text-xs text-center text-slate-400">
               By creating an account, you agree to our{' '}
-              <a href="?view=terms-of-service" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              <a href="?view=terms-of-service" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
                 Terms of Service
               </a>
               {' '}and{' '}
-              <a href="?view=privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              <a href="?view=privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
                 Privacy Policy
               </a>
             </p>

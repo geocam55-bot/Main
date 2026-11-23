@@ -297,7 +297,7 @@ export default function UserProfileModal({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="profile-management-modal">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 text-slate-800 flex flex-col md:flex-row overflow-hidden max-h-[90vh] animate-fade-in">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row overflow-hidden max-h-[90vh] animate-fade-in">
         
         {/* Sidebar Nav */}
         <div className="bg-slate-50 dark:bg-slate-850 border-r border-slate-100 dark:border-slate-800 p-5 md:w-56 shrink-0 flex flex-col justify-between">
@@ -393,13 +393,13 @@ export default function UserProfileModal({
 
             {/* Error & Success Banners */}
             {errorMsg && (
-              <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-xs text-rose-800 flex items-start space-x-2">
+              <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900 rounded-xl p-3 text-xs text-rose-800 dark:text-rose-200 flex items-start space-x-2">
                 <span className="text-rose-500 font-bold shrink-0">⚠️</span>
                 <span>{errorMsg}</span>
               </div>
             )}
             {successMsg && (
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs text-emerald-800 flex items-start space-x-2 animate-pulse">
+              <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900 rounded-xl p-3 text-xs text-emerald-800 dark:text-emerald-200 flex items-start space-x-2 animate-pulse">
                 <span className="text-emerald-500 font-bold shrink-0">✅</span>
                 <span>{successMsg}</span>
               </div>
@@ -410,7 +410,7 @@ export default function UserProfileModal({
               <form onSubmit={handleInfoSubmit} className="space-y-4 text-left">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <UserIcon className="h-3 w-3 text-slate-400" /> Full Name
                     </label>
                     <input
@@ -418,12 +418,12 @@ export default function UserProfileModal({
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <Mail className="h-3 w-3 text-slate-400" /> Email Address
                     </label>
                     <input
@@ -431,12 +431,12 @@ export default function UserProfileModal({
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <Phone className="h-3 w-3 text-slate-400" /> Phone Contact
                     </label>
                     <input
@@ -444,18 +444,18 @@ export default function UserProfileModal({
                       value={phone}
                       placeholder="+1 (555) 019-2834"
                       onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <Building className="h-3 w-3 text-slate-400" /> Associated Depot/Store
                     </label>
                     <select
                       value={associatedStoreId}
                       onChange={(e) => setAssociatedStoreId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium"
                     >
                       <option value="">No Depot Affiliation</option>
                       {branches.map(b => (
@@ -465,19 +465,19 @@ export default function UserProfileModal({
                   </div>
 
                   <div className="space-y-1 sm:col-span-2">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <FileText className="h-3 w-3 text-slate-400" /> CDL / Driver's License Expiration
                     </label>
                     <input
                       type="date"
                       value={driverLicenseExpire}
                       onChange={(e) => setDriverLicenseExpire(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium"
                     />
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex justify-end">
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
                   <button
                     type="submit"
                     disabled={loading}
@@ -493,56 +493,56 @@ export default function UserProfileModal({
             {activeTab === 'photo' && (
               <div className="space-y-5 text-left">
                 <div>
-                  <h4 className="text-xs font-bold text-slate-700 mb-2">Preset Illustrated Avatars</h4>
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Preset Illustrated Avatars</h4>
                   <div className="grid grid-cols-4 gap-4">
                     <button
                       onClick={() => handleAvatarSelect('PRESET_GUITARIST')}
-                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 flex flex-col items-center justify-center cursor-pointer ${
-                        avatarUrl === 'PRESET_GUITARIST' ? 'border-blue-500 bg-blue-50/20' : 'border-transparent hover:border-slate-200'
+                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 dark:bg-slate-800 flex flex-col items-center justify-center cursor-pointer ${
+                        avatarUrl === 'PRESET_GUITARIST' ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/30' : 'border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="h-12 w-12 rounded-full overflow-hidden mb-1"><GuitaristSvg /></div>
-                      <span className="text-[9px] font-black text-slate-700">Guitarist</span>
+                      <span className="text-[9px] font-black text-slate-700 dark:text-slate-200">Guitarist</span>
                       {avatarUrl === 'PRESET_GUITARIST' && <div className="absolute top-1 right-1 bg-blue-500 text-white p-0.5 rounded-full"><Check className="h-2.5 w-2.5" /></div>}
                     </button>
 
                     <button
                       onClick={() => handleAvatarSelect('PRESET_DISPATCHER')}
-                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 flex flex-col items-center justify-center cursor-pointer ${
-                        avatarUrl === 'PRESET_DISPATCHER' ? 'border-blue-500 bg-blue-50/20' : 'border-transparent hover:border-slate-200'
+                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 dark:bg-slate-800 flex flex-col items-center justify-center cursor-pointer ${
+                        avatarUrl === 'PRESET_DISPATCHER' ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/30' : 'border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="h-12 w-12 rounded-full overflow-hidden mb-1"><DispatcherSvg /></div>
-                      <span className="text-[9px] font-black text-slate-700">Planner</span>
+                      <span className="text-[9px] font-black text-slate-700 dark:text-slate-200">Planner</span>
                       {avatarUrl === 'PRESET_DISPATCHER' && <div className="absolute top-1 right-1 bg-blue-500 text-white p-0.5 rounded-full"><Check className="h-2.5 w-2.5" /></div>}
                     </button>
 
                     <button
                       onClick={() => handleAvatarSelect('PRESET_DRIVER')}
-                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 flex flex-col items-center justify-center cursor-pointer ${
-                        avatarUrl === 'PRESET_DRIVER' ? 'border-blue-500 bg-blue-50/20' : 'border-transparent hover:border-slate-200'
+                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 dark:bg-slate-800 flex flex-col items-center justify-center cursor-pointer ${
+                        avatarUrl === 'PRESET_DRIVER' ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/30' : 'border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="h-12 w-12 rounded-full overflow-hidden mb-1"><DriverSvg /></div>
-                      <span className="text-[9px] font-black text-slate-700">Navigator</span>
+                      <span className="text-[9px] font-black text-slate-700 dark:text-slate-200">Navigator</span>
                       {avatarUrl === 'PRESET_DRIVER' && <div className="absolute top-1 right-1 bg-blue-500 text-white p-0.5 rounded-full"><Check className="h-2.5 w-2.5" /></div>}
                     </button>
 
                     <button
                       onClick={() => handleAvatarSelect('PRESET_ADMIN')}
-                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 flex flex-col items-center justify-center cursor-pointer ${
-                        avatarUrl === 'PRESET_ADMIN' ? 'border-blue-500 bg-blue-50/20' : 'border-transparent hover:border-slate-200'
+                      className={`relative rounded-2xl p-1.5 border-2 transition-all hover:scale-105 bg-slate-50 dark:bg-slate-800 flex flex-col items-center justify-center cursor-pointer ${
+                        avatarUrl === 'PRESET_ADMIN' ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/30' : 'border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="h-12 w-12 rounded-full overflow-hidden mb-1"><AdminSvg /></div>
-                      <span className="text-[9px] font-black text-slate-700">HQ Director</span>
+                      <span className="text-[9px] font-black text-slate-700 dark:text-slate-200">HQ Director</span>
                       {avatarUrl === 'PRESET_ADMIN' && <div className="absolute top-1 right-1 bg-blue-500 text-white p-0.5 rounded-full"><Check className="h-2.5 w-2.5" /></div>}
                     </button>
                   </div>
                 </div>
 
-                <div className="border-t border-slate-100 pt-4">
-                  <h4 className="text-xs font-bold text-slate-700 mb-2">Or Upload a Custom Photo</h4>
+                <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Or Upload a Custom Photo</h4>
                   
                   <div
                     onDragEnter={handleDrag}
@@ -550,7 +550,7 @@ export default function UserProfileModal({
                     onDragLeave={handleDrag}
                     onDrop={handleDrop}
                     className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 ${
-                      dragActive ? 'border-blue-500 bg-blue-50/30' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                      dragActive ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-950/30' : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                     }`}
                   >
                     <input
@@ -562,12 +562,12 @@ export default function UserProfileModal({
                     />
                     <label htmlFor="avatar-file-upload" className="cursor-pointer flex flex-col items-center justify-center">
                       <Upload className="h-7 w-7 text-slate-400 mb-1" />
-                      <span className="text-xs font-black text-slate-700">Click to upload or drag & drop</span>
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-200">Click to upload or drag & drop</span>
                       <span className="text-[10px] text-slate-400 mt-0.5">Supports PNG, JPG, WebP (Max 2MB)</span>
                     </label>
                   </div>
 
-                  {fileError && <p className="text-[11px] text-rose-600 mt-2 font-medium">⚠️ {fileError}</p>}
+                  {fileError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 font-medium">⚠️ {fileError}</p>}
                 </div>
               </div>
             )}
@@ -767,42 +767,42 @@ export default function UserProfileModal({
             {activeTab === 'password' && (
               <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Current Password</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Current Password</label>
                   <input
                     type="password"
                     required
                     placeholder="Enter current password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium font-mono"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">New Password</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">New Password</label>
                   <input
                     type="password"
                     required
                     placeholder="Min 6 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium font-mono"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Confirm New Password</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Confirm New Password</label>
                   <input
                     type="password"
                     required
                     placeholder="Repeat new password"
                     value={confirmNewPassword}
                     onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600 transition-all font-medium font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-blue-600 transition-all font-medium font-mono"
                   />
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex justify-end">
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
                   <button
                     type="submit"
                     disabled={loading}

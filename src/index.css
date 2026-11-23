@@ -3,71 +3,71 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* ProSpaces Logistics Light Mode Defaults */
-  --prospaces-bg-main: #F7F8FA;
+  /* ProSpaces CRM Light Mode Defaults */
+  --prospaces-bg-main: #F8FAFC;
   --prospaces-bg-depth: #FFFFFF;
   --prospaces-bg-card: #FFFFFF;
   --prospaces-bg-bottom-nav: #FFFFFF;
-  --prospaces-text-heading: #24262B;
-  --prospaces-text-body: #4F535B;
-  --prospaces-text-secondary: #7A7F87;
-  --prospaces-text-disabled: #A8ACB3;
+  --prospaces-text-heading: #0F172A;
+  --prospaces-text-body: #334155;
+  --prospaces-text-secondary: #64748B;
+  --prospaces-text-disabled: #94A3B8;
   --prospaces-input-bg: #FFFFFF;
-  --prospaces-input-border: #D7DADF;
-  --prospaces-input-border-focus: #EF2B2D;
-  --prospaces-input-text: #24262B;
-  --prospaces-input-placeholder: #777C84;
-  --prospaces-input-icon: #60656D;
-  --prospaces-btn-red: #F52225;
-  --prospaces-btn-red-hover: #D91E21;
+  --prospaces-input-border: #CBD5E1;
+  --prospaces-input-border-focus: #1E6FD9;
+  --prospaces-input-text: #0F172A;
+  --prospaces-input-placeholder: #94A3B8;
+  --prospaces-input-icon: #64748B;
+  --prospaces-btn-red: #1E6FD9;
+  --prospaces-btn-red-hover: #155FBC;
   --prospaces-btn-red-text: #FFFFFF;
-  --prospaces-link: #D92A2D;
-  --prospaces-nav-active: #E52B2F;
-  --prospaces-nav-icon-active: #E52B2F;
-  --prospaces-nav-text-active: #D9282C;
-  --prospaces-nav-icon-inactive: #6F747C;
-  --prospaces-nav-text-inactive: #6F747C;
-  --prospaces-nav-border: #E6E8EB;
+  --prospaces-link: #1E6FD9;
+  --prospaces-nav-active: #1E6FD9;
+  --prospaces-nav-icon-active: #1E6FD9;
+  --prospaces-nav-text-active: #1E6FD9;
+  --prospaces-nav-icon-inactive: #64748B;
+  --prospaces-nav-text-inactive: #475569;
+  --prospaces-nav-border: #E2E8F0;
   --prospaces-social-bg: #FFFFFF;
-  --prospaces-social-border: #D1D4D9;
-  --prospaces-social-text: #24262B;
+  --prospaces-social-border: #CBD5E1;
+  --prospaces-social-text: #0F172A;
   --prospaces-social-apple-icon: #000000;
 }
 
 .dark {
-  /* ProSpaces Logistics Dark Mode Defaults */
-  --prospaces-bg-main: #202124;
-  --prospaces-bg-depth: #18191B;
-  --prospaces-bg-card: #18191B;
-  --prospaces-bg-bottom-nav: #1C1D20;
-  --prospaces-text-heading: #F4F4F5;
-  --prospaces-text-body: #C9CBD0;
-  --prospaces-text-secondary: #8E939C;
-  --prospaces-text-disabled: #62666E;
-  --prospaces-input-bg: #1E1F22;
-  --prospaces-input-border: #44474D;
-  --prospaces-input-border-focus: #FF383A;
-  --prospaces-input-text: #F2F2F3;
-  --prospaces-input-placeholder: #90949B;
-  --prospaces-input-icon: #A5A8AD;
-  --prospaces-btn-red: #F52225;
-  --prospaces-btn-red-hover: #D91E21;
+  /* ProSpaces Midnight Dark Mode Defaults */
+  --prospaces-bg-main: #0A0F1D;
+  --prospaces-bg-depth: #0F172A;
+  --prospaces-bg-card: #0F172A;
+  --prospaces-bg-bottom-nav: #020617;
+  --prospaces-text-heading: #F8FAFC;
+  --prospaces-text-body: #CBD5E1;
+  --prospaces-text-secondary: #94A3B8;
+  --prospaces-text-disabled: #64748B;
+  --prospaces-input-bg: #0F172A;
+  --prospaces-input-border: #334155;
+  --prospaces-input-border-focus: #3B82F6;
+  --prospaces-input-text: #F8FAFC;
+  --prospaces-input-placeholder: #64748B;
+  --prospaces-input-icon: #94A3B8;
+  --prospaces-btn-red: #3B82F6;
+  --prospaces-btn-red-hover: #2563EB;
   --prospaces-btn-red-text: #FFFFFF;
-  --prospaces-link: #FF4547;
-  --prospaces-nav-active: #FF3A3C;
-  --prospaces-nav-icon-active: #FF393B;
-  --prospaces-nav-text-active: #FF4547;
-  --prospaces-nav-icon-inactive: #8B9098;
-  --prospaces-nav-text-inactive: #A1A5AC;
-  --prospaces-nav-border: #303237;
-  --prospaces-social-bg: #1E1F22;
-  --prospaces-social-border: #4A4D53;
-  --prospaces-social-text: #F1F1F2;
+  --prospaces-link: #60A5FA;
+  --prospaces-nav-active: #2563EB;
+  --prospaces-nav-icon-active: #60A5FA;
+  --prospaces-nav-text-active: #93C5FD;
+  --prospaces-nav-icon-inactive: #94A3B8;
+  --prospaces-nav-text-inactive: #94A3B8;
+  --prospaces-nav-border: #1E293B;
+  --prospaces-social-bg: #0F172A;
+  --prospaces-social-border: #334155;
+  --prospaces-social-text: #F8FAFC;
   --prospaces-social-apple-icon: #FFFFFF;
 }
 
 @theme {
-  /* ProSpaces Logistics theme tokens */
+  /* ProSpaces theme tokens */
   --color-prospaces-main: var(--prospaces-bg-main);
   --color-prospaces-depth: var(--prospaces-bg-depth);
   --color-prospaces-card: var(--prospaces-bg-card);
@@ -139,39 +139,199 @@ html.dark {
 }
 
 html, body, #root {
-  background-color: var(--prospaces-bg-main, #F7F8FA);
-  color: var(--prospaces-text-body, #4F535B);
+  background-color: var(--prospaces-bg-main, #F8FAFC);
+  color: var(--prospaces-text-body, #334155);
   min-height: 100vh;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 html.dark, html.dark body, html.dark #root {
-  background-color: var(--prospaces-bg-main, #202124);
-  color: var(--prospaces-text-body, #C9CBD0);
+  background-color: var(--prospaces-bg-main, #0A0F1D);
+  color: var(--prospaces-text-body, #CBD5E1);
 }
 
-/* Comprehensive ProSpaces dark mode container and surface handling */
+/* Comprehensive ProSpaces Midnight Dark mode container and surface handling */
 .dark .bg-white:not([data-keep-light]) {
-  background-color: var(--prospaces-bg-depth, #18191B);
+  background-color: var(--prospaces-bg-depth, #0F172A);
+}
+
+.dark .bg-white\/95:not([data-keep-light]),
+.dark .bg-white\/90:not([data-keep-light]),
+.dark .bg-white\/80:not([data-keep-light]),
+.dark .bg-white\/70:not([data-keep-light]),
+.dark .bg-white\/60:not([data-keep-light]),
+.dark .bg-white\/50:not([data-keep-light]) {
+  background-color: rgba(15, 23, 42, 0.9);
 }
 
 .dark .bg-slate-50:not([data-keep-light]),
-.dark .bg-gray-50:not([data-keep-light]) {
-  background-color: var(--prospaces-bg-main, #202124);
+.dark .bg-slate-50\/80:not([data-keep-light]),
+.dark .bg-slate-50\/70:not([data-keep-light]),
+.dark .bg-slate-50\/50:not([data-keep-light]),
+.dark .bg-gray-50:not([data-keep-light]),
+.dark .bg-gray-50\/80:not([data-keep-light]),
+.dark .bg-gray-50\/50:not([data-keep-light]) {
+  background-color: var(--prospaces-bg-main, #0A0F1D);
 }
 
 .dark .bg-slate-100:not([data-keep-light]),
-.dark .bg-gray-100:not([data-keep-light]) {
-  background-color: #1E1F22;
+.dark .bg-slate-100\/80:not([data-keep-light]),
+.dark .bg-slate-100\/70:not([data-keep-light]),
+.dark .bg-slate-100\/50:not([data-keep-light]),
+.dark .bg-gray-100:not([data-keep-light]),
+.dark .bg-gray-100\/80:not([data-keep-light]) {
+  background-color: #111827;
 }
 
 .dark .bg-slate-200:not([data-keep-light]),
 .dark .bg-slate-200\/60:not([data-keep-light]),
 .dark .bg-slate-200\/70:not([data-keep-light]),
 .dark .bg-gray-200:not([data-keep-light]) {
-  background-color: #282A2E;
+  background-color: #1E293B;
 }
 
+.dark .hover\:bg-slate-50:not([data-keep-light]):hover,
+.dark .hover\:bg-slate-50\/80:not([data-keep-light]):hover,
+.dark .hover\:bg-slate-100:not([data-keep-light]):hover,
+.dark .hover\:bg-gray-50:not([data-keep-light]):hover,
+.dark .hover\:bg-gray-100:not([data-keep-light]):hover,
+.dark .hover\:bg-white:not([data-keep-light]):hover {
+  background-color: #1E293B;
+}
+
+/* Soft tinted alert/badge light backgrounds in dark mode */
+.dark .bg-blue-50:not([data-keep-light]),
+.dark .bg-blue-50\/50:not([data-keep-light]),
+.dark .bg-blue-100:not([data-keep-light]),
+.dark .bg-sky-50:not([data-keep-light]),
+.dark .bg-sky-100:not([data-keep-light]),
+.dark .bg-cyan-50:not([data-keep-light]),
+.dark .bg-cyan-100:not([data-keep-light]) {
+  background-color: rgba(30, 58, 138, 0.25);
+}
+.dark .bg-indigo-50:not([data-keep-light]),
+.dark .bg-indigo-100:not([data-keep-light]),
+.dark .bg-violet-50:not([data-keep-light]),
+.dark .bg-violet-100:not([data-keep-light]),
+.dark .bg-purple-50:not([data-keep-light]),
+.dark .bg-purple-100:not([data-keep-light]) {
+  background-color: rgba(49, 46, 129, 0.28);
+}
+.dark .bg-emerald-50:not([data-keep-light]),
+.dark .bg-emerald-100:not([data-keep-light]),
+.dark .bg-green-50:not([data-keep-light]),
+.dark .bg-green-100:not([data-keep-light]),
+.dark .bg-teal-50:not([data-keep-light]),
+.dark .bg-teal-100:not([data-keep-light]) {
+  background-color: rgba(6, 78, 59, 0.25);
+}
+.dark .bg-amber-50:not([data-keep-light]),
+.dark .bg-amber-100:not([data-keep-light]),
+.dark .bg-yellow-50:not([data-keep-light]),
+.dark .bg-yellow-100:not([data-keep-light]),
+.dark .bg-orange-50:not([data-keep-light]),
+.dark .bg-orange-100:not([data-keep-light]) {
+  background-color: rgba(120, 53, 15, 0.28);
+}
+.dark .bg-red-50:not([data-keep-light]),
+.dark .bg-red-100:not([data-keep-light]),
+.dark .bg-rose-50:not([data-keep-light]),
+.dark .bg-rose-100:not([data-keep-light]),
+.dark .bg-pink-50:not([data-keep-light]),
+.dark .bg-pink-100:not([data-keep-light]) {
+  background-color: rgba(127, 29, 29, 0.25);
+}
+
+/* Readable tinted text in dark mode when components use -700/-800/-900 accents on dark or tinted surfaces */
+.dark .text-blue-700:not([data-keep-light]),
+.dark .text-blue-800:not([data-keep-light]),
+.dark .text-blue-900:not([data-keep-light]) {
+  color: #93C5FD;
+}
+.dark .text-sky-700:not([data-keep-light]),
+.dark .text-sky-800:not([data-keep-light]),
+.dark .text-sky-900:not([data-keep-light]),
+.dark .text-cyan-700:not([data-keep-light]),
+.dark .text-cyan-800:not([data-keep-light]),
+.dark .text-cyan-900:not([data-keep-light]) {
+  color: #67E8F9;
+}
+.dark .text-indigo-700:not([data-keep-light]),
+.dark .text-indigo-800:not([data-keep-light]),
+.dark .text-indigo-900:not([data-keep-light]),
+.dark .text-violet-700:not([data-keep-light]),
+.dark .text-violet-800:not([data-keep-light]),
+.dark .text-violet-900:not([data-keep-light]),
+.dark .text-purple-700:not([data-keep-light]),
+.dark .text-purple-800:not([data-keep-light]),
+.dark .text-purple-900:not([data-keep-light]) {
+  color: #C4B5FD;
+}
+.dark .text-emerald-700:not([data-keep-light]),
+.dark .text-emerald-800:not([data-keep-light]),
+.dark .text-emerald-900:not([data-keep-light]),
+.dark .text-green-700:not([data-keep-light]),
+.dark .text-green-800:not([data-keep-light]),
+.dark .text-green-900:not([data-keep-light]),
+.dark .text-teal-700:not([data-keep-light]),
+.dark .text-teal-800:not([data-keep-light]),
+.dark .text-teal-900:not([data-keep-light]) {
+  color: #6EE7B7;
+}
+.dark .text-amber-700:not([data-keep-light]),
+.dark .text-amber-800:not([data-keep-light]),
+.dark .text-amber-900:not([data-keep-light]),
+.dark .text-yellow-700:not([data-keep-light]),
+.dark .text-yellow-800:not([data-keep-light]),
+.dark .text-yellow-900:not([data-keep-light]),
+.dark .text-orange-700:not([data-keep-light]),
+.dark .text-orange-800:not([data-keep-light]),
+.dark .text-orange-900:not([data-keep-light]) {
+  color: #FCD34D;
+}
+.dark .text-red-700:not([data-keep-light]),
+.dark .text-red-800:not([data-keep-light]),
+.dark .text-red-900:not([data-keep-light]),
+.dark .text-rose-700:not([data-keep-light]),
+.dark .text-rose-800:not([data-keep-light]),
+.dark .text-rose-900:not([data-keep-light]),
+.dark .text-pink-700:not([data-keep-light]),
+.dark .text-pink-800:not([data-keep-light]),
+.dark .text-pink-900:not([data-keep-light]) {
+  color: #FCA5A5;
+}
+
+/* Soft tinted borders in dark mode */
+.dark .border-blue-200:not([data-keep-light]),
+.dark .border-blue-300:not([data-keep-light]) {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.dark .border-indigo-200:not([data-keep-light]),
+.dark .border-indigo-300:not([data-keep-light]),
+.dark .border-violet-200:not([data-keep-light]),
+.dark .border-purple-200:not([data-keep-light]),
+.dark .border-purple-300:not([data-keep-light]) {
+  border-color: rgba(139, 92, 246, 0.3);
+}
+.dark .border-emerald-200:not([data-keep-light]),
+.dark .border-emerald-300:not([data-keep-light]),
+.dark .border-green-200:not([data-keep-light]),
+.dark .border-green-300:not([data-keep-light]) {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.dark .border-amber-200:not([data-keep-light]),
+.dark .border-amber-300:not([data-keep-light]),
+.dark .border-yellow-200:not([data-keep-light]),
+.dark .border-orange-200:not([data-keep-light]) {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.dark .border-red-200:not([data-keep-light]),
+.dark .border-red-300:not([data-keep-light]),
+.dark .border-rose-200:not([data-keep-light]) {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.dark .border-slate-300:not([data-keep-light]),
 .dark .border-slate-200:not([data-keep-light]),
 .dark .border-slate-200\/90:not([data-keep-light]),
 .dark .border-slate-200\/80:not([data-keep-light]),
@@ -179,43 +339,50 @@ html.dark, html.dark body, html.dark #root {
 .dark .border-slate-200\/60:not([data-keep-light]),
 .dark .border-slate-200\/50:not([data-keep-light]),
 .dark .border-slate-100:not([data-keep-light]),
+.dark .border-gray-300:not([data-keep-light]),
 .dark .border-gray-200:not([data-keep-light]),
 .dark .border-gray-100:not([data-keep-light]) {
-  border-color: #303237;
+  border-color: #1E293B;
+}
+
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1E293B;
 }
 
 .dark .text-slate-900:not([data-keep-light]),
 .dark .text-slate-800:not([data-keep-light]),
 .dark .text-gray-900:not([data-keep-light]),
 .dark .text-gray-800:not([data-keep-light]) {
-  color: var(--prospaces-text-heading, #F4F4F5);
+  color: var(--prospaces-text-heading, #F8FAFC);
 }
 
 .dark .text-slate-700:not([data-keep-light]),
 .dark .text-slate-600:not([data-keep-light]),
 .dark .text-gray-700:not([data-keep-light]),
 .dark .text-gray-600:not([data-keep-light]) {
-  color: var(--prospaces-text-body, #C9CBD0);
+  color: var(--prospaces-text-body, #CBD5E1);
 }
 
 .dark .text-slate-500:not([data-keep-light]),
 .dark .text-slate-400:not([data-keep-light]),
 .dark .text-gray-500:not([data-keep-light]),
 .dark .text-gray-400:not([data-keep-light]) {
-  color: var(--prospaces-text-secondary, #8E939C);
+  color: var(--prospaces-text-secondary, #94A3B8);
 }
 
 .dark input:not([type="checkbox"]):not([type="radio"]):not([data-keep-light]),
 .dark textarea:not([data-keep-light]),
 .dark select:not([data-keep-light]) {
-  background-color: var(--prospaces-input-bg, #1E1F22);
-  border-color: var(--prospaces-input-border, #44474D);
-  color: var(--prospaces-input-text, #F2F2F3);
+  background-color: var(--prospaces-input-bg, #0F172A);
+  border-color: var(--prospaces-input-border, #334155);
+  color: var(--prospaces-input-text, #F8FAFC);
 }
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: var(--prospaces-input-placeholder, #90949B);
+  color: var(--prospaces-input-placeholder, #64748B);
 }
 
 /* Custom class for Printable Deck Planner hidden by default on screen */

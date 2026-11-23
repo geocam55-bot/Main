@@ -95,10 +95,10 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
 
   return (
     <div
-      className="min-h-screen bg-[#FFFDF9]"
+      className="min-h-screen bg-[#0A0F1D] text-slate-100"
       style={{
         background:
-          'radial-gradient(circle at 10% 10%, rgba(217,123,30,0.08) 0%, transparent 40%), radial-gradient(circle at 90% 90%, rgba(249,115,22,0.06) 0%, transparent 40%), #FFFDF9',
+          'radial-gradient(circle at 10% 10%, rgba(217,123,30,0.14) 0%, transparent 40%), radial-gradient(circle at 90% 90%, rgba(249,115,22,0.10) 0%, transparent 40%), linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
         fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif'
       }}
     >
@@ -120,7 +120,7 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
               <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 border border-orange-100/50 px-3 py-1 font-bold text-xs uppercase tracking-wider text-orange-700">
                 <Building2 className="h-3.5 w-3.5 text-orange-600" /> Building Materials Specialist
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-[#002f5d] md:text-4xl leading-tight">
+              <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl leading-tight">
                 Lumber & Building Suppliers
               </h1>
               <p className="text-base text-slate-600 leading-relaxed">
@@ -162,7 +162,7 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
 
         {/* Feature Value Cards */}
         <div className="mt-14 space-y-6">
-          <h2 className="text-2xl font-extrabold text-[#002f5d] tracking-tight">
+          <h2 className="text-2xl font-extrabold text-white tracking-tight">
             Built-in Intelligence for Multi-Yard Operations
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -184,7 +184,7 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
         <div className="mt-14 rounded-3xl border border-orange-100 bg-white p-6 md:p-8 shadow-sm">
           <div className="max-w-2xl">
             <span className="text-xs font-bold text-orange-600 uppercase tracking-widest">Pricing Formula Sandbox</span>
-            <h2 className="text-2xl font-black text-[#002f5d] tracking-tight mt-1">
+            <h2 className="text-2xl font-black text-white tracking-tight mt-1">
               Interactive Lumber Bid & takeoff Estimator
             </h2>
             <p className="text-sm text-slate-500 mt-2 leading-relaxed">
@@ -204,7 +204,7 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
                     className={`px-4 py-2.5 rounded-xl text-left text-xs font-bold border transition-all ${
                       lumberGrade === grade
                         ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
-                        : 'border-slate-200 hover:bg-slate-50 text-[#002f5d]'
+                        : 'border-slate-700 hover:bg-slate-800 text-slate-200'
                     }`}
                   >
                     <span>{priceGrid[grade].gradeLabel}</span>
@@ -231,7 +231,7 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
                   className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
                 <div className="text-[11px] text-slate-500 leading-normal bg-white p-3 rounded-lg border border-slate-200">
-                  <span className="font-semibold text-[#002f5d]">Dealer Tip:</span> High-wind locations require solid stud configurations. Setting waste to 12%-15% is recommended to protect material contingency budgets.
+                  <span className="font-semibold text-white">Dealer Tip:</span> High-wind locations require solid stud configurations. Setting waste to 12%-15% is recommended to protect material contingency budgets.
                 </div>
               </div>
             </div>
@@ -271,25 +271,25 @@ export function LumberSuppliersBenefits({ onBack, onGetStarted }: LumberSupplier
             </div>
 
             {/* Calculations Panel */}
-            <div className="lg:col-span-2 bg-[#FFFDF9] border border-orange-100 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
               <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest block">ProSpaces Dealer Invoice formula</span>
               
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Lumber Base Cost ({totalBoardFeet.toLocaleString()} BF × ${currentGrade.basePricePerBF}):</span>
-                  <span className="font-bold text-[#002f5d]">${Math.round(rawLumberCost).toLocaleString()}</span>
+                  <span className="text-slate-400 font-medium">Lumber Base Cost ({totalBoardFeet.toLocaleString()} BF × ${currentGrade.basePricePerBF}):</span>
+                  <span className="font-bold text-white">${Math.round(rawLumberCost).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Regional Heavy Flatbed Delivery Fee:</span>
-                  <span className="font-bold text-slate-700">${deliverySurcharge}</span>
+                  <span className="text-slate-400 font-medium">Regional Heavy Flatbed Delivery Fee:</span>
+                  <span className="font-bold text-slate-200">${deliverySurcharge}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Lumberyard Dealer Margin Allowance ({coreMarginPercentage}%):</span>
-                  <span className="font-bold text-[#1E6FD9]">+${targetDealerProfit.toLocaleString()}</span>
+                  <span className="text-slate-400 font-medium">Lumberyard Dealer Margin Allowance ({coreMarginPercentage}%):</span>
+                  <span className="font-bold text-blue-400">+${targetDealerProfit.toLocaleString()}</span>
                 </div>
-                <div className="pt-3 border-t border-slate-100 flex justify-between text-sm">
-                  <span className="font-black text-[#002f5d]">Total Contractor Contract Price:</span>
-                  <span className="font-black text-orange-600 text-base">${totalBidPrice.toLocaleString()}</span>
+                <div className="pt-3 border-t border-slate-800 flex justify-between text-sm">
+                  <span className="font-black text-white">Total Contractor Contract Price:</span>
+                  <span className="font-black text-orange-400 text-base">${totalBidPrice.toLocaleString()}</span>
                 </div>
               </div>
 

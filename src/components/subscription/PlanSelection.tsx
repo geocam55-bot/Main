@@ -94,9 +94,9 @@ const PLAN_ICON_MAP: Record<string, any> = {
 };
 
 const PLAN_COLOR_MAP: Record<string, string> = {
-  starter: 'text-orange-600 bg-orange-50 border-orange-200',
-  professional: 'text-blue-600 bg-blue-50 border-blue-200',
-  enterprise: 'text-purple-600 bg-purple-50 border-purple-200',
+  starter: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/30',
+  professional: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30',
+  enterprise: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/30',
 };
 
 export function PlanSelection({
@@ -169,19 +169,22 @@ export function PlanSelection({
 
   const activePlanObj = plans.find((p) => p.id === selectedPlanId) || plans[0];
   const PlanIcon = PLAN_ICON_MAP[selectedPlanId] || Zap;
-  const planColorClass = PLAN_COLOR_MAP[selectedPlanId] || 'text-blue-600 bg-blue-50 border-blue-200';
+  const planColorClass = PLAN_COLOR_MAP[selectedPlanId] || 'text-blue-400 bg-blue-500/10 border-blue-500/30';
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8 font-sans">
+    <div
+      className="min-h-screen text-slate-900 dark:text-slate-100 p-4 sm:p-6 md:p-8 font-sans"
+      style={{ background: 'var(--gradient, var(--color-background))' }}
+    >
       <div className="max-w-6xl mx-auto">
         {/* Navigation Header bar with Cancel option */}
-        <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
+        <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200 dark:border-slate-800">
           <Logo size="md" />
           {onLogout && (
             <Button 
               variant="ghost" 
               onClick={onLogout}
-              className="text-slate-600 hover:text-red-650 hover:bg-slate-100 flex items-center gap-2 text-sm px-4 h-11 rounded-lg"
+              className="text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 text-sm px-4 h-11 rounded-lg"
               id="plan-selection-top-cancel"
             >
               <LogOut className="w-4 h-4" />
@@ -196,10 +199,10 @@ export function PlanSelection({
           <div>
             {/* Header Text */}
             <div className="text-center mb-10 max-w-3xl mx-auto">
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-3">
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight mb-3">
                 Select your CRM plan
               </h1>
-              <p className="text-base sm:text-lg text-slate-600">
+              <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
                 Your 15-day trial {trialEndDate ? `ended on ${formatDate(trialEndDate)}` : 'has ended'}. Select a suitable tier to secure your data and continue using ProSpaces CRM.
               </p>
             </div>
@@ -216,14 +219,14 @@ export function PlanSelection({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12 items-stretch">
               {plans.map((plan) => {
                 const CurrentIcon = PLAN_ICON_MAP[plan.id] || Zap;
-                const activeColor = PLAN_COLOR_MAP[plan.id] || 'text-blue-600 bg-blue-50 border-blue-200';
+                const activeColor = PLAN_COLOR_MAP[plan.id] || 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30';
                 return (
                   <Card
                     key={plan.id}
-                    className={`relative flex flex-col shadow-md hover:shadow-lg border-2 transition-all duration-300 rounded-xl overflow-hidden ${
+                    className={`relative flex flex-col bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 shadow-lg hover:shadow-xl border-2 transition-all duration-300 rounded-xl overflow-hidden cursor-pointer ${
                       selectedPlanId === plan.id 
-                        ? 'border-blue-600 ring-2 ring-blue-600/25 md:scale-[1.02]' 
-                        : 'border-slate-100 hover:border-slate-300'
+                        ? 'border-blue-500 ring-2 ring-blue-500/25 md:scale-[1.02]' 
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                     onClick={() => setSelectedPlanId(plan.id)}
                   >
@@ -235,12 +238,12 @@ export function PlanSelection({
 
                     <CardHeader className="pt-8 pb-4">
                       <div className="flex items-center gap-3 mb-2">
-                        <div className={`p-2 rounded-lg border ${activeColor.split(' ')[1]} ${activeColor.split(' ')[2]}`}>
-                          <CurrentIcon className={`h-5 w-5 ${activeColor.split(' ' )[0]}`} />
+                        <div className={`p-2 rounded-lg border ${activeColor}`}>
+                          <CurrentIcon className="h-5 w-5" />
                         </div>
-                        <CardTitle className="text-xl font-bold text-slate-900">{plan.name}</CardTitle>
+                        <CardTitle className="text-xl font-bold text-slate-900 dark:text-white">{plan.name}</CardTitle>
                       </div>
-                      <CardDescription className="text-slate-500 text-sm h-10 line-clamp-2">
+                      <CardDescription className="text-slate-500 dark:text-slate-400 text-sm h-10 line-clamp-2">
                         {plan.description}
                       </CardDescription>
                     </CardHeader>
@@ -250,23 +253,23 @@ export function PlanSelection({
                       <div className="pt-2">
                         {plan.price > 0 ? (
                           <div>
-                            <span className="text-4xl font-extrabold text-slate-900">${plan.price}</span>
-                            <span className="text-slate-500 text-base font-normal">/month</span>
-                            <p className="text-xs text-slate-400 mt-1">Billed monthly • Cancel anytime</p>
+                            <span className="text-4xl font-extrabold text-slate-900 dark:text-white">${plan.price}</span>
+                            <span className="text-slate-500 dark:text-slate-400 text-base font-normal">/month</span>
+                            <p className="text-xs text-slate-500 mt-1">Billed monthly • Cancel anytime</p>
                           </div>
                         ) : (
-                          <div className="text-xl font-bold text-slate-900">
+                          <div className="text-xl font-bold text-slate-900 dark:text-white">
                             Custom enterprise pricing
                           </div>
                         )}
                       </div>
 
                       {/* Feature Lists */}
-                      <ul className="space-y-3 pt-3 border-t border-slate-100 flex-1">
+                      <ul className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800 flex-1">
                         {plan.features.map((feature, idx) => (
                           <li key={idx} className="flex items-start gap-2.5">
-                            <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                            <span className="text-sm text-slate-700">{feature}</span>
+                            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-slate-600 dark:text-slate-300">{feature}</span>
                           </li>
                         ))}
                       </ul>
@@ -293,13 +296,13 @@ export function PlanSelection({
 
             {/* Bottom Support and Bottom Logout Section */}
             <div className="max-w-2xl mx-auto space-y-6 text-center">
-              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="bg-white dark:bg-slate-900/90 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5 justify-center sm:justify-start">
-                    <LifeBuoy className="w-4 h-4 text-blue-500" />
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 justify-center sm:justify-start">
+                    <LifeBuoy className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     Need custom pricing or assistance?
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     We help businesses with volume discounts, custom integrations, & dedicated SLA guarantees.
                   </p>
                 </div>
@@ -307,7 +310,7 @@ export function PlanSelection({
                   variant="outline" 
                   size="sm" 
                   onClick={onContactSupport}
-                  className="whitespace-nowrap h-10 px-4 rounded-lg"
+                  className="whitespace-nowrap h-10 px-4 rounded-lg border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   id="contact-sales-btn"
                 >
                   Contact Sales Support
@@ -319,7 +322,7 @@ export function PlanSelection({
                   <Button 
                     variant="link" 
                     onClick={onLogout}
-                    className="text-slate-500 hover:text-red-650 text-sm flex items-center justify-center gap-2 mx-auto"
+                    className="text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 text-sm flex items-center justify-center gap-2 mx-auto"
                     id="plan-selection-bottom-logout"
                   >
                     <LogOut className="w-4 h-4" />
@@ -337,14 +340,14 @@ export function PlanSelection({
               <Button
                 variant="ghost"
                 onClick={() => setShowCheckout(false)}
-                className="text-slate-600 hover:bg-slate-100 flex items-center gap-2 text-sm"
+                className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 text-sm"
                 id="back-to-plans-btn"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to Plans
               </Button>
-              <span className="text-xs font-semibold px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+              <span className="text-xs font-semibold px-2.5 py-1 bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 rounded-full flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 Demo Secured Checkout Mode
               </span>
             </div>
@@ -360,56 +363,56 @@ export function PlanSelection({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* Left Column: Order Summary */}
               <div className="lg:col-span-5 space-y-6">
-                <Card className="border border-slate-200 shadow-sm rounded-xl overflow-hidden">
-                  <CardHeader className="bg-slate-100 border-b border-slate-200 p-5">
-                    <CardTitle className="text-base font-bold text-slate-900">Order Summary</CardTitle>
-                    <CardDescription className="text-xs">Verify your chosen subscription details</CardDescription>
+                <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 shadow-sm rounded-xl overflow-hidden">
+                  <CardHeader className="bg-slate-50 dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800 p-5">
+                    <CardTitle className="text-base font-bold text-slate-900 dark:text-white">Order Summary</CardTitle>
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Verify your chosen subscription details</CardDescription>
                   </CardHeader>
                   <CardContent className="p-5 space-y-4">
                     {/* Selected Plan badge */}
-                    <div className="flex items-center justify-between p-3.5 rounded-lg border bg-slate-50 border-slate-150">
+                    <div className="flex items-center justify-between p-3.5 rounded-lg border bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg border ${planColorClass.split(' ')[1]} ${planColorClass.split(' ')[2]}`}>
-                          <PlanIcon className={`h-5 w-5 ${planColorClass.split(' ')[0]}`} />
+                        <div className={`p-2 rounded-lg border ${planColorClass}`}>
+                          <PlanIcon className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900">{activePlanObj.name}</p>
-                          <p className="text-xs text-slate-500">Billed Monthly</p>
+                          <p className="font-bold text-slate-900 dark:text-white">{activePlanObj.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Billed Monthly</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-extrabold text-slate-900">${activePlanObj.price}</p>
-                        <p className="text-[10px] text-slate-400">USD / mo</p>
+                        <p className="text-lg font-extrabold text-slate-900 dark:text-white">${activePlanObj.price}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">USD / mo</p>
                       </div>
                     </div>
 
                     {/* Pricing Breakdown */}
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between text-slate-600">
+                      <div className="flex justify-between text-slate-500 dark:text-slate-400">
                         <span>Subscription Cost</span>
-                        <span>${activePlanObj.price}.00</span>
+                        <span className="text-slate-800 dark:text-slate-200">${activePlanObj.price}.00</span>
                       </div>
-                      <div className="flex justify-between text-slate-600">
+                      <div className="flex justify-between text-slate-500 dark:text-slate-400">
                         <span>Workspace Setup Fees</span>
-                        <span className="text-emerald-600">FREE</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">FREE</span>
                       </div>
-                      <div className="flex justify-between text-slate-600">
+                      <div className="flex justify-between text-slate-500 dark:text-slate-400">
                         <span>Taxes & Duties</span>
-                        <span>$0.00</span>
+                        <span className="text-slate-800 dark:text-slate-200">$0.00</span>
                       </div>
-                      <div className="border-t border-slate-100 my-2 pt-2 flex justify-between font-bold text-slate-900">
+                      <div className="border-t border-slate-200 dark:border-slate-800 my-2 pt-2 flex justify-between font-bold text-slate-900 dark:text-white">
                         <span>Total Due Today</span>
                         <span>${activePlanObj.price}.00</span>
                       </div>
                     </div>
 
                     {/* Features list shrunken */}
-                    <div className="border-t border-slate-100 pt-3 mt-2">
-                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Included Premium Features:</p>
+                    <div className="border-t border-slate-200 dark:border-slate-800 pt-3 mt-2">
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Included Premium Features:</p>
                       <ul className="space-y-1.5">
                         {activePlanObj.features.slice(0, 4).map((feature, idx) => (
-                          <li key={idx} className="flex items-center gap-2 text-xs text-slate-600">
-                            <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          <li key={idx} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                             <span className="truncate">{feature}</span>
                           </li>
                         ))}
@@ -419,10 +422,10 @@ export function PlanSelection({
                 </Card>
 
                 {/* Secure Trust Banner */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex gap-3 text-slate-600 text-xs">
-                  <Lock className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs">
+                  <Lock className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-bold text-slate-900">Interactive Secure Tunnel</p>
+                    <p className="font-bold text-slate-900 dark:text-white">Interactive Secure Tunnel</p>
                     <p className="mt-0.5 leading-relaxed">
                       All connection states are encrypted and stored inside your secure Supabase database environment helper. No actual payment methods are billed.
                     </p>
@@ -432,13 +435,13 @@ export function PlanSelection({
 
               {/* Right Column: Secure Payment Details Form Card */}
               <div className="lg:col-span-7">
-                <Card className="border border-slate-200 shadow-md rounded-xl">
-                  <CardHeader className="p-5 sm:p-6 border-b border-slate-100">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                      <CreditCard className="w-5 h-5 text-blue-600" />
+                <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 shadow-md rounded-xl">
+                  <CardHeader className="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800">
+                    <CardTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       Secure Payment Information
                     </CardTitle>
-                    <CardDescription className="text-xs">
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">
                       Enter your card details to activate your subscription and proceed.
                     </CardDescription>
                   </CardHeader>
@@ -446,7 +449,7 @@ export function PlanSelection({
                     <form onSubmit={handlePaymentSubmit} className="space-y-4">
                       {/* Name on Card */}
                       <div className="space-y-1">
-                        <Label htmlFor="nameOnCard" className="text-xs font-semibold text-slate-700">Cardholder Name</Label>
+                        <Label htmlFor="nameOnCard" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Cardholder Name</Label>
                         <Input
                           id="nameOnCard"
                           type="text"
@@ -454,7 +457,7 @@ export function PlanSelection({
                           placeholder="John Smith"
                           value={nameOnCard}
                           onChange={(e) => setNameOnCard(e.target.value)}
-                          className="h-11 bg-slate-50 focus:bg-white text-sm"
+                          className="h-11 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:border-blue-500 text-sm"
                           disabled={isLoading}
                         />
                       </div>
@@ -462,8 +465,8 @@ export function PlanSelection({
                       {/* Card Number */}
                       <div className="space-y-1">
                         <div className="flex justify-between items-center">
-                          <Label htmlFor="cardNumber" className="text-xs font-semibold text-slate-700">Credit Card Number</Label>
-                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 text-slate-500 rounded font-bold uppercase tracking-wider">Demo Default Provided</span>
+                          <Label htmlFor="cardNumber" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Credit Card Number</Label>
+                          <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-slate-500 dark:text-slate-400 rounded font-bold uppercase tracking-wider">Demo Default Provided</span>
                         </div>
                         <div className="relative">
                           <CreditCard className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
@@ -475,7 +478,7 @@ export function PlanSelection({
                             value={cardNumber}
                             onChange={(e) => setCardNumber(formatCardInput(e.target.value))}
                             maxLength={19}
-                            className="h-11 pl-9 bg-slate-50 focus:bg-white font-mono text-sm"
+                            className="h-11 pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:border-blue-500 font-mono text-sm"
                             disabled={isLoading}
                           />
                         </div>
@@ -484,7 +487,7 @@ export function PlanSelection({
                       {/* Expiry & CVC inline */}
                       <div className="grid grid-cols-3 gap-3">
                         <div className="space-y-1">
-                          <Label htmlFor="expMonth" className="text-xs font-semibold text-slate-700">Exp. Month</Label>
+                          <Label htmlFor="expMonth" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Exp. Month</Label>
                           <Input
                             id="expMonth"
                             type="text"
@@ -492,12 +495,12 @@ export function PlanSelection({
                             placeholder="12"
                             value={expMonth}
                             onChange={(e) => setExpMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                            className="h-11 text-center bg-slate-50 focus:bg-white text-sm"
+                            className="h-11 text-center bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:border-blue-500 text-sm"
                             disabled={isLoading}
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label htmlFor="expYear" className="text-xs font-semibold text-slate-700">Exp. Year</Label>
+                          <Label htmlFor="expYear" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Exp. Year</Label>
                           <Input
                             id="expYear"
                             type="text"
@@ -505,12 +508,12 @@ export function PlanSelection({
                             placeholder="2028"
                             value={expYear}
                             onChange={(e) => setExpYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                            className="h-11 text-center bg-slate-50 focus:bg-white text-sm"
+                            className="h-11 text-center bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:border-blue-500 text-sm"
                             disabled={isLoading}
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label htmlFor="cvc" className="text-xs font-semibold text-slate-700">CVC Code</Label>
+                          <Label htmlFor="cvc" className="text-xs font-semibold text-slate-700 dark:text-slate-300">CVC Code</Label>
                           <Input
                             id="cvc"
                             type="password"
@@ -518,7 +521,7 @@ export function PlanSelection({
                             placeholder="123"
                             value={cvc}
                             onChange={(e) => setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                            className="h-11 text-center bg-slate-50 focus:bg-white font-mono text-sm shadow-sm"
+                            className="h-11 text-center bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:border-blue-500 font-mono text-sm shadow-sm"
                             disabled={isLoading}
                           />
                         </div>
@@ -526,9 +529,9 @@ export function PlanSelection({
 
                       {/* Trust Info */}
                       <div className="pt-2">
-                        <Alert className="border-blue-150 bg-blue-50/50 p-3 leading-tight flex items-start gap-2.5">
-                          <ShieldCheck className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                          <AlertDescription className="text-xs text-blue-800">
+                        <Alert className="border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/10 p-3 leading-tight flex items-start gap-2.5">
+                          <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                          <AlertDescription className="text-xs text-blue-900 dark:text-blue-200">
                             Pressing the button will simulate payment processing, store visa card suffix ending in <strong>{cardNumber.slice(-4) || '4242'}</strong>, & transition your workspace to <strong>{activePlanObj.name} User</strong>.
                           </AlertDescription>
                         </Alert>
@@ -539,7 +542,7 @@ export function PlanSelection({
                         <Button
                           type="submit"
                           disabled={isLoading}
-                          className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-1.5 shadow"
+                          className="w-full h-12 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-1.5 shadow"
                           id="submit-payment-btn"
                         >
                           {isLoading ? (
@@ -561,7 +564,7 @@ export function PlanSelection({
                             variant="outline" 
                             onClick={() => setShowCheckout(false)}
                             disabled={isLoading}
-                            className="h-11 text-xs font-semibold rounded-lg border-slate-200"
+                            className="h-11 text-xs font-semibold rounded-lg border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                             id="payment-cancel-back-btn"
                           >
                             Go Back
@@ -572,7 +575,7 @@ export function PlanSelection({
                               variant="outline" 
                               onClick={onLogout}
                               disabled={isLoading}
-                              className="h-11 text-xs font-semibold rounded-lg text-red-650 hover:bg-red-50 border-red-200"
+                              className="h-11 text-xs font-semibold rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border-red-200 dark:border-red-500/30"
                               id="payment-cancel-logoff-btn"
                             >
                               <LogOut className="w-3.5 h-3.5 mr-1" />

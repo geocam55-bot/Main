@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Wand2, Building2, ChevronRight, TrendingUp, BarChart3, Package, Monitor, MessageSquare, LogOut, Truck } from 'lucide-react';
+import { Wand2, Building2, TrendingUp, BarChart3, Package, Monitor, MessageSquare, LogOut, Truck, Sparkles, ShieldCheck, Info } from 'lucide-react';
 import { Logo } from './Logo';
 import { TrialCountdown } from './TrialCountdown';
+import { ProfileThemeSwitch } from './ProfileThemeSwitch';
+import { useTheme } from './ThemeProvider';
 import { canAccessSpace, canView, onPermissionsChanged } from '../utils/permissions';
 import type { UserRole } from '../App';
 
-/* ── Asset imports (shared with LandingPage) ── */
 import grainOverlay from '../assets/landing/backgrounds/grain-overlay.svg';
-
-const environmentBg: string | null = null;
 
 interface SpaceChooserProps {
   userRole: UserRole;
@@ -24,8 +23,36 @@ interface SpaceChooserProps {
   onBack: () => void;
 }
 
-export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace, onSelectMarketingSpace, onSelectInsightsSpace, onSelectInventorySpace, onSelectITSpace, onSelectMessagingSpace, onSelectLogisticsSpace, onBack }: SpaceChooserProps) {
-  const [hoveredCard, setHoveredCard] = useState<'sales' | 'design' | 'marketing' | 'insights' | 'inventory' | 'it' | 'messaging' | 'logistics' | null>(null);
+interface SpaceConfig {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: React.ComponentType<{ className?: string }>;
+  gradient: string;
+  borderGlow: string;
+  iconBg: string;
+  textColor: string;
+  onSelect: () => void;
+  hasAccess: boolean;
+  isDesktopOnly?: boolean;
+}
+
+export function SpaceChooser({
+  userRole,
+  onSelectSalesSpace,
+  onSelectDesignSpace,
+  onSelectMarketingSpace,
+  onSelectInsightsSpace,
+  onSelectInventorySpace,
+  onSelectITSpace,
+  onSelectMessagingSpace,
+  onSelectLogisticsSpace,
+  onBack,
+}: SpaceChooserProps) {
+  const { theme } = useTheme();
+  const isDark = theme.isDark;
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [mobileNotice, setMobileNotice] = useState<string | null>(null);
   const [, setPermissionVersion] = useState(0);
@@ -42,701 +69,293 @@ export function SpaceChooser({ userRole, onSelectSalesSpace, onSelectDesignSpace
 
   const handleDesktopOnlyClick = (spaceLabel: string, onDesktopSelect: () => void) => {
     if (isMobile) {
-      setMobileNotice(`${spaceLabel} is desktop only. Please switch to a desktop or laptop to continue.`);
+      setMobileNotice(`${spaceLabel} is desktop-optimized. Please switch to a desktop or laptop to continue.`);
       return;
     }
     setMobileNotice(null);
     onDesktopSelect();
   };
 
+  const formattedRoleName = String(userRole || 'User')
+    .replace(/[_]/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase());
+
+  const spaces: SpaceConfig[] = [
+    {
+      id: 'sales',
+      name: 'Sales Space',
+      description: 'CRM dashboard, contacts, pipeline opportunities, customer quotes, meetings, and team accounts.',
+      category: 'CRM & Sales',
+      icon: Building2,
+      gradient: 'from-blue-600 to-cyan-500',
+      borderGlow: 'hover:border-blue-400 dark:hover:border-blue-500/50',
+      iconBg: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
+      textColor: 'text-blue-600 dark:text-blue-400',
+      onSelect: onSelectSalesSpace,
+      hasAccess: canAccessSpace('sales', userRole, 'view'),
+    },
+    {
+      id: 'design',
+      name: 'Design Space',
+      description: 'Desktop 3D design tools for decks, kitchens, sheds, and garages with instant material breakdowns.',
+      category: '3D / Wizards',
+      icon: Wand2,
+      gradient: 'from-indigo-600 to-purple-500',
+      borderGlow: 'hover:border-indigo-400 dark:hover:border-indigo-500/50',
+      iconBg: 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20',
+      textColor: 'text-indigo-600 dark:text-indigo-400',
+      onSelect: () => handleDesktopOnlyClick('Design Space', onSelectDesignSpace),
+      hasAccess: canAccessSpace('design', userRole, 'view'),
+      isDesktopOnly: true,
+    },
+    {
+      id: 'marketing',
+      name: 'Marketing Space',
+      description: 'Campaign automation, lead scoring, customer journeys, referral programs, and email outreach.',
+      category: 'Growth',
+      icon: TrendingUp,
+      gradient: 'from-rose-600 to-orange-500',
+      borderGlow: 'hover:border-rose-400 dark:hover:border-rose-500/50',
+      iconBg: 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20',
+      textColor: 'text-rose-600 dark:text-rose-400',
+      onSelect: () => handleDesktopOnlyClick('Marketing Space', onSelectMarketingSpace),
+      hasAccess: canAccessSpace('marketing', userRole, 'view'),
+      isDesktopOnly: true,
+    },
+    {
+      id: 'insights',
+      name: 'Insights Space',
+      description: 'Executive summaries, revenue analytics, deal velocity metrics, and team performance dashboards.',
+      category: 'Analytics',
+      icon: BarChart3,
+      gradient: 'from-sky-600 to-teal-500',
+      borderGlow: 'hover:border-sky-400 dark:hover:border-sky-500/50',
+      iconBg: 'bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20',
+      textColor: 'text-sky-600 dark:text-sky-400',
+      onSelect: () => handleDesktopOnlyClick('Insights Space', onSelectInsightsSpace),
+      hasAccess: canAccessSpace('insights', userRole, 'view'),
+      isDesktopOnly: true,
+    },
+    {
+      id: 'inventory',
+      name: 'Inventory Space',
+      description: 'SKU catalog, multi-tier pricing, stock level adjustments, warehouse tracking, and reorder alerts.',
+      category: 'Stock',
+      icon: Package,
+      gradient: 'from-emerald-600 to-green-500',
+      borderGlow: 'hover:border-emerald-400 dark:hover:border-emerald-500/50',
+      iconBg: 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
+      textColor: 'text-emerald-600 dark:text-emerald-400',
+      onSelect: () => handleDesktopOnlyClick('Inventory Space', onSelectInventorySpace),
+      hasAccess: canAccessSpace('inventory', userRole, 'view'),
+      isDesktopOnly: true,
+    },
+    {
+      id: 'logistics',
+      name: 'Logistics & Fleet',
+      description: 'Commercial fleet tracking, live OCR document parsing, freight boards, cargo manifests, and driver portals.',
+      category: 'Fleet & Dispatch',
+      icon: Truck,
+      gradient: 'from-blue-600 to-indigo-600',
+      borderGlow: 'hover:border-blue-400 dark:hover:border-blue-500/50',
+      iconBg: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
+      textColor: 'text-blue-600 dark:text-blue-400',
+      onSelect: () => (onSelectLogisticsSpace ? onSelectLogisticsSpace() : (sessionStorage.setItem('accessed_from_crm', 'true'), window.location.href = '/logistics?from=crm')),
+      hasAccess: canAccessSpace('logistics', userRole, 'view'),
+    },
+    {
+      id: 'it',
+      name: 'IT Space',
+      description: 'User role assignments, security controls, billing, audit logs, import/export, and tenant settings.',
+      category: 'Admin & Security',
+      icon: Monitor,
+      gradient: 'from-purple-600 to-pink-500',
+      borderGlow: 'hover:border-purple-400 dark:hover:border-purple-500/50',
+      iconBg: 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20',
+      textColor: 'text-purple-600 dark:text-purple-400',
+      onSelect: onSelectITSpace,
+      hasAccess: canAccessSpace('it', userRole, 'view'),
+    },
+    {
+      id: 'messaging',
+      name: 'Messaging Space',
+      description: 'Team chats, direct messages, customer conversation threads, and shared notes in real time.',
+      category: 'Communication',
+      icon: MessageSquare,
+      gradient: 'from-cyan-600 to-blue-500',
+      borderGlow: 'hover:border-cyan-400 dark:hover:border-cyan-500/50',
+      iconBg: 'bg-cyan-50 text-cyan-600 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20',
+      textColor: 'text-cyan-600 dark:text-cyan-400',
+      onSelect: onSelectMessagingSpace,
+      hasAccess: canView('messages', userRole),
+    },
+  ];
+
+  const accessibleSpaces = spaces.filter(s => s.hasAccess);
+
   return (
     <div
-      className="relative min-h-screen flex flex-col items-center justify-start overflow-hidden"
+      className="relative min-h-screen flex flex-col items-center justify-start overflow-hidden text-slate-900 dark:text-slate-100 transition-colors duration-200"
       style={{
-        background: environmentBg
-          ? `url(${environmentBg}) center / cover no-repeat`
-          : 'linear-gradient(160deg, #F8FAFC 0%, #E2E8F0 50%, #F1F5F9 100%)',
-        fontFamily:
-          "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+        background: 'var(--gradient, var(--color-background))',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
-      {/* Grain overlay */}
-      {grainOverlay && (
+      {/* Background radial glow & grain */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(30,111,217,0.08),transparent_60%)] dark:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_60%)] pointer-events-none" />
+      {grainOverlay && isDark && (
         <div
           className="pointer-events-none fixed inset-0 z-10"
           style={{
             backgroundImage: `url(${grainOverlay})`,
             backgroundRepeat: 'repeat',
-            opacity: 0.4,
-            mixBlendMode: 'multiply',
+            opacity: 0.2,
+            mixBlendMode: 'overlay',
           }}
         />
       )}
 
-      {/* Content */}
-      <div className="relative z-20 w-full max-w-5xl mx-auto px-6 pt-6 sm:pt-10 pb-12">
-        {/* Top Header Row with Back button and Logo on the same line */}
-        <div className="grid grid-cols-3 items-center w-full mb-8 sm:mb-10">
-          {/* Back button (Left column) */}
-          <div className="flex justify-start">
+      {/* Main Container */}
+      <div className="relative z-20 w-full max-w-5xl mx-auto px-6 pt-6 pb-16 flex flex-col min-h-screen justify-between">
+        <div>
+          {/* Top Navigation / Brand Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full mb-8 pb-4 border-b border-slate-200/80 dark:border-slate-800/80">
             <motion.button
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3 }}
               onClick={onBack}
-              className="inline-flex items-center gap-2 text-sm font-medium transition-all duration-200 hover:gap-3 group"
-              style={{ color: '#475569', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-all bg-white/90 hover:bg-slate-100 dark:bg-slate-900/80 dark:hover:bg-slate-800 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 cursor-pointer shadow-sm"
             >
-              <LogOut className="h-4 w-4 transition-transform" />
-              Exit ProSpaces CRM
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Exit CRM</span>
             </motion.button>
-          </div>
 
-          {/* Logo (Center column) */}
-          <div className="flex justify-center">
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
+              className="flex items-center space-x-3"
             >
-              <Logo size="md" />
+              <div className="px-3 py-1.5 bg-white/90 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <Logo size="sm" />
+              </div>
             </motion.div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center space-x-2 bg-white/90 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 shadow-sm">
+                <ShieldCheck className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Role: <strong className="text-slate-900 dark:text-white">{formattedRoleName}</strong></span>
+              </div>
+              <ProfileThemeSwitch variant="pill" />
+            </div>
           </div>
 
-          {/* Placeholder (Right column to balance the centering) */}
-          <div className="flex justify-end invisible sm:visible">
-            {/* Empty space */}
+          {/* Title Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.05 }}
+            className="text-center mb-8 space-y-2"
+          >
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400 text-xs font-semibold uppercase tracking-wider">
+              <Sparkles className="h-3 w-3 animate-pulse" />
+              <span>Workspace Portal</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Select Your Workspace
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+              Hover over any workspace icon for details, or click to launch your authorized environment.
+            </p>
+
+            {mobileNotice && (
+              <div className="mt-3 inline-flex max-w-md items-center rounded-xl border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 px-3 py-2 text-left dark:text-amber-200 text-xs">
+                <span>{mobileNotice}</span>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Trial Countdown Banner */}
+          <div className="mb-6">
+            <TrialCountdown variant="banner" className="bg-white/90 border-slate-200 text-slate-700 dark:bg-slate-900/60 dark:border-slate-800 dark:text-slate-300 rounded-xl" />
           </div>
-        </div>
 
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.05 }}
-          className="text-center mb-10"
-        >
-          <h1
-            style={{
-              fontSize: 32,
-              fontWeight: 800,
-              color: '#0F172A',
-              letterSpacing: '-0.02em',
-              lineHeight: 1.2,
-            }}
-          >
-            Choose your Space
-          </h1>
-          <p style={{ fontSize: 16, color: '#64748B', marginTop: 8 }}>
-            You’re signed in — choose the space you want to enter.
-          </p>
+          {/* Refined Compact Icon Grid with Tooltips */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto">
+            {accessibleSpaces.map((space, index) => {
+              const IconComponent = space.icon;
+              const isTooltipActive = activeTooltip === space.id;
 
-          {mobileNotice && (
-            <div className="mt-4 inline-flex max-w-xl items-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-left">
-              <p style={{ fontSize: 13, color: '#92400E', lineHeight: 1.4 }}>{mobileNotice}</p>
-            </div>
-          )}
-        </motion.div>
-
-        {/* Trial Countdown Banner */}
-        <TrialCountdown variant="banner" className="mb-6" />
-
-        {/* Space cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Sales Space → CRM */}
-          {canAccessSpace('sales', userRole, 'view') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.15 }}
-            onClick={onSelectSalesSpace}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectSalesSpace(); } }}
-            onMouseEnter={() => setHoveredCard('sales')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'sales'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'sales'
-                  ? '1.5px solid rgba(30,111,217,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'sales'
-                  ? '0 20px 50px rgba(30,111,217,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'sales' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #1E6FD9, #4DA3FF)' }}
-              />
-
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #1E6FD9 0%, #4DA3FF 100%)',
-                  boxShadow: '0 8px 24px rgba(30,111,217,0.3)',
-                }}
-              >
-                <Building2 className="h-7 w-7 text-white" />
-              </div>
-
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                Sales Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                Access your CRM dashboard, manage contacts, track opportunities, and collaborate with your team.
-              </p>
-
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#1E6FD9', fontWeight: 600, fontSize: 14 }}>
-                Enter Sales Space
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </motion.div>
-          )}
-
-          {/* Design Space → Project Wizards */}
-          {canAccessSpace('design', userRole, 'view') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.25 }}
-            onClick={() => handleDesktopOnlyClick('Design Space', onSelectDesignSpace)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Design Space', onSelectDesignSpace); } }}
-            onMouseEnter={() => setHoveredCard('design')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'design'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'design'
-                  ? '1.5px solid rgba(99,102,241,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'design'
-                  ? '0 20px 50px rgba(99,102,241,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'design' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #6366F1, #A78BFA)' }}
-              />
-
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
-                  boxShadow: '0 8px 24px rgba(99,102,241,0.3)',
-                }}
-              >
-                <Wand2 className="h-7 w-7 text-white" />
-              </div>
-
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                Design Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                Desktop 3D design tools for decks, garages, sheds, roofs, and kitchens with real-time material estimates.
-              </p>
-
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#6366F1', fontWeight: 600, fontSize: 14 }}>
-                Open Project Wizards
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </motion.div>
-          )}
-
-          {/* Marketing Space */}
-          {canAccessSpace('marketing', userRole, 'view') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.35 }}
-            onClick={() => handleDesktopOnlyClick('Marketing Space', onSelectMarketingSpace)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Marketing Space', onSelectMarketingSpace); } }}
-            onMouseEnter={() => setHoveredCard('marketing')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'marketing'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'marketing'
-                  ? '1.5px solid rgba(225,29,72,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'marketing'
-                  ? '0 20px 50px rgba(225,29,72,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'marketing' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #E11D48, #F97316)' }}
-              />
-
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #E11D48 0%, #F97316 100%)',
-                  boxShadow: '0 8px 24px rgba(225,29,72,0.3)',
-                }}
-              >
-                <TrendingUp className="h-7 w-7 text-white" />
-              </div>
-
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                Marketing Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                Campaign automation, lead scoring, customer journeys, landing pages, referrals, and analytics.
-              </p>
-
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#E11D48', fontWeight: 600, fontSize: 14 }}>
-                Open Marketing Space
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </motion.div>
-          )}
-
-          {/* Insights Space → Reports */}
-          {canAccessSpace('insights', userRole, 'view') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.45 }}
-            onClick={() => handleDesktopOnlyClick('Insights Space', onSelectInsightsSpace)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Insights Space', onSelectInsightsSpace); } }}
-            onMouseEnter={() => setHoveredCard('insights')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'insights'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'insights'
-                  ? '1.5px solid rgba(99,102,241,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'insights'
-                  ? '0 20px 50px rgba(99,102,241,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'insights' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #6366F1, #8B5CF6)' }}
-              />
-
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
-                  boxShadow: '0 8px 24px rgba(99,102,241,0.3)',
-                }}
-              >
-                <BarChart3 className="h-7 w-7 text-white" />
-              </div>
-
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                Insights Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                Executive summaries, deal analytics, revenue tracking, and team performance reports.
-              </p>
-
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#6366F1', fontWeight: 600, fontSize: 14 }}>
-                Open Insights Space
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </motion.div>
-          )}
-
-          {/* Inventory Space */}
-          {canAccessSpace('inventory', userRole, 'view') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.55 }}
-            onClick={() => handleDesktopOnlyClick('Inventory Space', onSelectInventorySpace)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Inventory Space', onSelectInventorySpace); } }}
-            onMouseEnter={() => setHoveredCard('inventory')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'inventory'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'inventory'
-                  ? '1.5px solid rgba(16,185,129,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'inventory'
-                  ? '0 20px 50px rgba(16,185,129,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'inventory' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #10B981, #14B8A6)' }}
-              />
-
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #10B981 0%, #14B8A6 100%)',
-                  boxShadow: '0 8px 24px rgba(16,185,129,0.3)',
-                }}
-              >
-                <Package className="h-7 w-7 text-white" />
-              </div>
-
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                Inventory Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                Product catalog, SKU tracking, multi-tier pricing, stock levels, and reorder management.
-              </p>
-
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#10B981', fontWeight: 600, fontSize: 14 }}>
-                Open Inventory Space
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </motion.div>
-          )}
-
-          {/* Logistics & Fleet Space */}
-          {canAccessSpace('logistics', userRole, 'view') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.6 }}
-            onClick={() => handleDesktopOnlyClick('Logistics & Fleet Space', onSelectLogisticsSpace || (() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics?from=crm'; }))}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDesktopOnlyClick('Logistics & Fleet Space', onSelectLogisticsSpace || (() => { sessionStorage.setItem('accessed_from_crm', 'true'); window.location.href = '/logistics?from=crm'; })); } }}
-            onMouseEnter={() => setHoveredCard('logistics')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'logistics'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'logistics'
-                  ? '1.5px solid rgba(37,99,235,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'logistics'
-                  ? '0 20px 50px rgba(37,99,235,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'logistics' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #2563EB, #1D4ED8)' }}
-              />
-
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
-                  boxShadow: '0 8px 24px rgba(37,99,235,0.3)',
-                }}
-              >
-                <Truck className="h-7 w-7 text-white" />
-              </div>
-
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                Logistics & Fleet Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                Commercial fleet tracking, GPS telemetry, barcode scanning, proof-of-delivery, and multi-depot distribution.
-              </p>
-
-              {/* Arrow link & Customer Portal Quick Link */}
-              <div className="flex items-center justify-between gap-2 mt-auto pt-3 border-t border-slate-100">
-                <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#2563EB', fontWeight: 600, fontSize: 14 }}>
-                  Open Logistics Space
-                  <ChevronRight className="h-4 w-4" />
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.open('/track', '_blank');
-                  }}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 transition flex items-center gap-1 cursor-pointer border border-blue-200/60"
-                  title="Open Customer Live Delivery Tracking Portal in new window"
+              return (
+                <motion.div
+                  key={space.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  className="relative group"
+                  onMouseEnter={() => setActiveTooltip(space.id)}
+                  onMouseLeave={() => setActiveTooltip(null)}
                 >
-                  <Package className="h-3.5 w-3.5" />
-                  <span>Customer Portal ↗</span>
-                </button>
-              </div>
-            </div>
-          </motion.div>
-          )}
+                  <button
+                    type="button"
+                    onClick={space.onSelect}
+                    className={`w-full bg-white/95 hover:bg-white dark:bg-slate-900/90 dark:hover:bg-slate-800/90 border border-slate-200 dark:border-slate-800 ${space.borderGlow} rounded-2xl p-5 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-lg dark:shadow-lg flex flex-col items-center text-center relative overflow-hidden group-hover:-translate-y-1`}
+                  >
+                    {/* Top gradient indicator */}
+                    <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${space.gradient} opacity-80 group-hover:opacity-100`} />
 
-          {/* IT Space */}
-          {canAccessSpace('it', userRole, 'view') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.65 }}
-            onClick={onSelectITSpace}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectITSpace(); } }}
-            onMouseEnter={() => setHoveredCard('it')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'it'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'it'
-                  ? '1.5px solid rgba(139,92,246,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'it'
-                  ? '0 20px 50px rgba(139,92,246,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'it' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #8B5CF6, #7C3AED)' }}
-              />
+                    {/* Refined Icon */}
+                    <div className={`w-14 h-14 rounded-2xl ${space.iconBg} border flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm`}>
+                      <IconComponent className="h-7 w-7" />
+                    </div>
 
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
-                  boxShadow: '0 8px 24px rgba(139,92,246,0.3)',
-                }}
-              >
-                <Monitor className="h-7 w-7 text-white" />
-              </div>
+                    <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-300 transition-colors mb-1">
+                      {space.name}
+                    </h3>
+                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      {space.category}
+                    </span>
+                  </button>
 
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                IT Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                User management, security, billing, audit logs, scheduled jobs, and platform administration.
-              </p>
-
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#8B5CF6', fontWeight: 600, fontSize: 14 }}>
-                Open IT Space
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </motion.div>
-          )}
-
-          {/* Messaging Space */}
-          {canView('messages', userRole) && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.75 }}
-            onClick={onSelectMessagingSpace}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectMessagingSpace(); } }}
-            onMouseEnter={() => setHoveredCard('messaging')}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="group text-left cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0 }}
-          >
-            <div
-              className="relative overflow-hidden transition-all duration-300"
-              style={{
-                borderRadius: 20,
-                padding: '36px 28px',
-                background: hoveredCard === 'messaging'
-                  ? 'rgba(255,255,255,0.92)'
-                  : 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: hoveredCard === 'messaging'
-                  ? '1.5px solid rgba(6,182,212,0.35)'
-                  : '1.5px solid rgba(255,255,255,0.6)',
-                boxShadow: hoveredCard === 'messaging'
-                  ? '0 20px 50px rgba(6,182,212,0.15), 0 8px 24px rgba(0,0,0,0.06)'
-                  : '0 8px 32px rgba(0,0,0,0.06)',
-                transform: hoveredCard === 'messaging' ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-            >
-              {/* Top gradient bar */}
-              <div
-                className="absolute top-0 left-0 right-0 h-1.5"
-                style={{ background: 'linear-gradient(90deg, #06B6D4, #0EA5E9)' }}
-              />
-
-              {/* Icon */}
-              <div
-                className="flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 16,
-                  background: 'linear-gradient(135deg, #06B6D4 0%, #0EA5E9 100%)',
-                  boxShadow: '0 8px 24px rgba(6,182,212,0.3)',
-                }}
-              >
-                <MessageSquare className="h-7 w-7 text-white" />
-              </div>
-
-              {/* Text */}
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
-                Messaging Space
-              </h3>
-              <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
-                Team chats, direct messages, customer portal conversations, and internal notes — all in one place.
-              </p>
-
-              {/* Arrow link */}
-              <div className="flex items-center gap-1.5 transition-all duration-200 group-hover:gap-3" style={{ color: '#06B6D4', fontWeight: 600, fontSize: 14 }}>
-                Open Messaging Space
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </motion.div>
-          )}
+                  {/* Modern Floating Tooltip on Hover */}
+                  {isTooltipActive && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 4 }}
+                      className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-64 p-3.5 bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-2xl backdrop-blur-md z-50 text-left pointer-events-none"
+                    >
+                      <div className="flex items-center space-x-1.5 mb-1 text-xs font-bold text-slate-900 dark:text-white">
+                        <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span>{space.name}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {space.description}
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+                        <span>Click to launch workspace</span>
+                        <span>&rarr;</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Footer */}
-        <motion.p
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-          className="text-center mt-10"
-          style={{ fontSize: 12, color: '#94A3B8' }}
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className="text-center mt-12 pt-4 border-t border-slate-200/80 dark:border-slate-800/80 text-xs text-slate-500"
         >
-          &copy; {new Date().getFullYear()} ProSpaces CRM. All rights reserved.
-        </motion.p>
+          &copy; {new Date().getFullYear()} ProSpaces CRM. Modern Workspace Launcher.
+        </motion.div>
       </div>
     </div>
   );
 }
+

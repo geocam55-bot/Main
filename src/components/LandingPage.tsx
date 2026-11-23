@@ -381,20 +381,23 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
 
   return (
     <div
-      className="relative min-h-screen flex flex-col bg-slate-50/50"
-      style={{ fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif' }}
+      className="dark relative min-h-screen flex flex-col bg-[#0A0F1D] text-slate-100"
+      style={{
+        fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif',
+        background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
+      }}
     >
       {/* ── HEADER ── */}
-      <header className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-md border-b border-slate-100">
+      <header className="sticky top-0 z-40 w-full bg-slate-950/90 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between">
           {/* Logo brand with navigation triggers */}
           <div className="flex items-center gap-4">
             <div className="flex items-center cursor-pointer" onClick={() => { setSelectedSpaceInfo(null); setActiveNavTab(null); setMobileMenuOpen(false); }}>
-              <Logo size="md" className="h-[40px] sm:h-[50px] md:h-[60px] w-auto transition-all duration-200" />
+              <Logo size="md" variant="dark" className="h-[40px] sm:h-[50px] md:h-[60px] w-auto transition-all duration-200" />
             </div>
 
             {/* Desktop Center Navigation Links */}
-            <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-base font-semibold text-[#002f5d] ml-4 lg:ml-10">
+            <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-base font-semibold text-slate-200 ml-4 lg:ml-10">
               <button 
                 onClick={() => setActiveNavTab('features')}
                 className={`group flex items-center gap-1.5 hover:text-[#1E6FD9] transition-all py-1 px-1 cursor-pointer ${activeNavTab === 'features' ? 'text-[#1E6FD9] border-b-2 border-[#1E6FD9]' : ''}`}
@@ -482,7 +485,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
             {/* Mobile Menu Toggle Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-1.5 sm:p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-all focus:outline-none cursor-pointer"
+              className="md:hidden p-1.5 sm:p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-all focus:outline-none cursor-pointer"
               aria-label="Toggle menu"
               title="Toggle Menu"
             >
@@ -574,7 +577,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
       </header>
 
       {/* ── HERO SECTION ── */}
-      <div className="w-full bg-[#e3effc] border-b border-blue-100">
+      <div className="w-full bg-gradient-to-br from-[#0A0F1D] via-[#0F172A] to-[#111827] border-b border-slate-800">
         <main className="flex-grow max-w-7xl mx-auto px-6 sm:px-8 py-12 md:py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
         
         {/* Left Column Text Content */}
@@ -584,11 +587,11 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
           >
-            <h1 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold text-slate-800 tracking-tight leading-[1.08] lg:-mr-4">
+            <h1 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold text-white tracking-tight leading-[1.08] lg:-mr-4">
               Built for How You Actually Sell, Build, and Deliver
             </h1>
             
-            <p className="text-slate-600 font-normal text-base sm:text-lg mt-6 leading-relaxed max-w-xl">
+            <p className="text-slate-300 font-normal text-base sm:text-lg mt-6 leading-relaxed max-w-xl">
               Prospaces CRM connects sales, projects, inventory, and teams.
             </p>
 
@@ -596,7 +599,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
             <div className="flex flex-col sm:flex-row flex-wrap gap-3.5 mt-8">
               <button
                 onClick={() => onMemberLogin ? onMemberLogin() : onGetStarted()}
-                className="bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 cursor-pointer"
               >
                 <span>Enter CRM Workspace</span>
                 <ArrowRight className="h-4 w-4" />
@@ -955,7 +958,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
             className="bg-white rounded-3xl w-full max-w-5xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col border border-slate-100"
           >
             {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center bg-gradient-to-r from-slate-50 to-blue-50/20">
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
                   <TrendingUp className="h-5 w-5" />
@@ -1005,7 +1008,7 @@ export function LandingPage({ onGetStarted, onMemberLogin }: LandingPageProps) {
                 </div>
 
                 {/* Professional Plan (Most Popular) */}
-                <div className="p-6 rounded-2xl bg-[#E8EFF8] border-2 border-[#1E6FD9] flex flex-col justify-between shadow-md relative">
+                <div className="p-6 rounded-2xl bg-blue-500/10 border-2 border-blue-500 flex flex-col justify-between shadow-md relative">
                   <span className="absolute -top-3 right-4 bg-[#1E6FD9] text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-0.5 rounded-full">
                     Most Popular
                   </span>

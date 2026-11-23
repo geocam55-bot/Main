@@ -21,16 +21,19 @@ export function ErrorBoundaryFallback({ error, onReset, onReload }: { error: any
   const handleReset = onReset || (() => { window.location.href = '/'; });
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted p-4">
-      <Card className="max-w-2xl w-full">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}
+    >
+      <Card className="max-w-2xl w-full bg-slate-900/95 border border-slate-800 text-slate-100 shadow-2xl">
         <CardHeader>
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
-              <AlertCircle className="h-6 w-6 text-red-600" />
+            <div className="h-12 w-12 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+              <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
             <div>
-              <CardTitle className="text-2xl">Something went wrong</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-2xl text-white">Something went wrong</CardTitle>
+              <CardDescription className="text-slate-400">
                 An unexpected error occurred in the application
               </CardDescription>
             </div>
@@ -38,9 +41,9 @@ export function ErrorBoundaryFallback({ error, onReset, onReload }: { error: any
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Error Message */}
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="font-medium text-red-900 mb-1">Error Details:</p>
-            <p className="text-sm text-red-700 font-mono">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+            <p className="font-medium text-red-200 mb-1">Error Details:</p>
+            <p className="text-sm text-red-300 font-mono">
               {error?.message || String(error) || 'Unknown error'}
             </p>
           </div>
@@ -65,11 +68,11 @@ export function ErrorBoundaryFallback({ error, onReset, onReload }: { error: any
           </div>
 
           {/* Help Text */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
-            <p className="text-blue-900">
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-sm">
+            <p className="text-blue-200">
               <strong>What you can do:</strong>
             </p>
-            <ul className="list-disc list-inside text-blue-800 mt-2 space-y-1">
+            <ul className="list-disc list-inside text-blue-300 mt-2 space-y-1">
               <li>Try reloading the application</li>
               <li>Clear your browser cache and cookies</li>
               <li>Check your internet connection</li>

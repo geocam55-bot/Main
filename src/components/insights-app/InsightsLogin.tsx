@@ -238,7 +238,7 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
   ];
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className="min-h-screen flex bg-[#0A0F1D]">
       {/* ── Left Panel — Hero ── */}
       <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900">
         {/* Grid pattern */}
@@ -322,11 +322,11 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
       </div>
 
       {/* ── Right Panel — Login ── */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12 sm:px-12 bg-white relative">
+      <div className="flex-1 flex items-center justify-center px-6 py-12 sm:px-12 bg-[#0A0F1D] text-slate-100 relative">
         {/* Back to landing */}
         <a
           href="/"
-          className="absolute top-6 left-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors group"
+          className="absolute top-6 left-6 inline-flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-white transition-colors group"
         >
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
           Back to home
@@ -338,20 +338,20 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
               <BarChart3 className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">
+            <span className="text-xl font-bold text-white tracking-tight">
               Insights Space
             </span>
           </div>
 
           {/* Destination Switcher */}
-          <div className="flex rounded-xl bg-slate-100 p-1 gap-1">
+          <div className="flex rounded-xl bg-slate-900 border border-slate-800 p-1 gap-1">
             <button
               type="button"
               onClick={() => setDestination('insights')}
               className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                 destination === 'insights'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <BarChart3 className="h-4 w-4" />
@@ -362,8 +362,8 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
               onClick={() => setDestination('crm')}
               className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                 destination === 'crm'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Building2 className="h-4 w-4" />
@@ -373,8 +373,8 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
 
           {/* Header */}
           <div className="text-center lg:text-left">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome back</h1>
-            <p className="mt-2 text-slate-500">
+            <h1 className="text-3xl font-bold text-white tracking-tight">Welcome back</h1>
+            <p className="mt-2 text-slate-400">
               {destination === 'insights'
                 ? 'Sign in to your Insights Space.'
                 : 'Sign in to access the full ProSpaces CRM.'}
@@ -384,13 +384,13 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
           {/* Form */}
           <form onSubmit={handleSignIn} className="space-y-5">
             {successMessage && (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
-                <p className="text-sm text-emerald-800">{successMessage}</p>
+              <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3">
+                <p className="text-sm text-emerald-300">{successMessage}</p>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="ins-email" className="text-sm font-medium text-slate-700">
+              <Label htmlFor="ins-email" className="text-sm font-medium text-slate-300">
                 Email address
               </Label>
               <div className="relative">
@@ -406,21 +406,21 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
                     setSuccessMessage('');
                   }}
                   required
-                  className="pl-10 h-12 rounded-xl border-slate-200 bg-slate-50 focus:border-indigo-500 focus:ring-indigo-500/20 text-base text-slate-900"
+                  className="pl-10 h-12 rounded-xl border-slate-700 bg-slate-900 focus:border-indigo-500 focus:ring-indigo-500/20 text-base text-white placeholder:text-slate-500"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="ins-password" className="text-sm font-medium text-slate-700">
+                <Label htmlFor="ins-password" className="text-sm font-medium text-slate-300">
                   Password
                 </Label>
                 <button
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={isResetLoading}
-                  className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-50"
+                  className="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
                 >
                   {isResetLoading ? 'Sending...' : 'Forgot password?'}
                 </button>
@@ -437,12 +437,12 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
                     setError('');
                   }}
                   required
-                  className="pl-10 pr-12 h-12 rounded-xl border-slate-200 bg-slate-50 focus:border-indigo-500 focus:ring-indigo-500/20 text-base text-slate-900"
+                  className="pl-10 pr-12 h-12 rounded-xl border-slate-700 bg-slate-900 focus:border-indigo-500 focus:ring-indigo-500/20 text-base text-white placeholder:text-slate-500"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -451,21 +451,21 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <label htmlFor="ins-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 select-none">
+              <label htmlFor="ins-keep-logged-in" className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 select-none">
                 <input
                   id="ins-keep-logged-in"
                   type="checkbox"
                   checked={keepLoggedIn}
                   onChange={(e) => setKeepLoggedIn(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
                 />
                 <span className="font-medium text-xs sm:text-sm">Keep me logged in</span>
               </label>
             </div>
 
             {error && (
-              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-                <p className="text-sm text-red-700">{error}</p>
+              <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3">
+                <p className="text-sm text-red-300">{error}</p>
               </div>
             )}
 
@@ -474,8 +474,8 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
               disabled={isLoading}
               className={`w-full h-12 rounded-xl text-white font-medium text-base shadow-lg transition-all duration-200 ${
                 destination === 'insights'
-                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 shadow-indigo-500/25 hover:shadow-indigo-500/40'
-                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25 hover:shadow-blue-500/40'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-indigo-500/25 hover:shadow-indigo-500/40'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-500/25 hover:shadow-blue-500/40'
               }`}
             >
               {isLoading ? (
@@ -494,11 +494,11 @@ export function InsightsLogin({ onLogin }: InsightsLoginProps) {
           {/* Footer */}
           <div className="pt-4 text-center space-y-3">
             <div className="flex items-center gap-4 justify-center text-xs text-slate-400">
-              <a href="/?view=privacy-policy" className="hover:text-slate-600 transition-colors">
+              <a href="/?view=privacy-policy" className="hover:text-slate-200 transition-colors">
                 Privacy Policy
               </a>
-              <span className="text-slate-300">|</span>
-              <a href="/?view=terms-of-service" className="hover:text-slate-600 transition-colors">
+              <span className="text-slate-700">|</span>
+              <a href="/?view=terms-of-service" className="hover:text-slate-200 transition-colors">
                 Terms of Service
               </a>
             </div>

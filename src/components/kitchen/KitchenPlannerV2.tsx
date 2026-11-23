@@ -199,7 +199,7 @@ function CabinetCard({
       className="rounded-lg border border-border hover:shadow-md transition-shadow cursor-pointer bg-background group relative overflow-hidden" 
       onClick={handleAdd}
     >
-      <div className="h-32 p-4 border-b border-border bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+      <div className="h-32 p-4 border-b border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900/90 flex items-center justify-center">
         {getCabinetIcon()}
         <div className="absolute top-0 left-0 right-0 h-32 bg-transparent group-hover:bg-black/5 transition-all flex items-center justify-center">
           <Plus className="w-8 h-8 text-foreground opacity-0 group-hover:opacity-50 transition-opacity drop-shadow" />
@@ -240,7 +240,7 @@ function ApplianceCard({
 
   return (
     <Card className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer group" onClick={handleAdd}>
-      <div className="relative h-32 bg-gradient-to-br from-slate-50 to-slate-100 border-b border-border p-4 flex items-center justify-center">
+      <div className="relative h-32 bg-slate-100 border-b border-slate-200 dark:bg-slate-900/90 dark:border-slate-800 p-4 flex items-center justify-center">
         {getApplianceIcon()}
         <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-all flex items-center justify-center">
           <Plus className="w-8 h-8 text-foreground opacity-0 group-hover:opacity-50 transition-opacity drop-shadow" />

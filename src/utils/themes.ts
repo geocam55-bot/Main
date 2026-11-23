@@ -125,108 +125,110 @@ export const themes: Record<string, Theme> = {
   light: {
     id: 'light',
     name: 'ProSpaces Light',
-    description: 'ProSpaces Logistics official light theme (#F7F8FA background, #24262B primary text, #F52225 ProSpaces Red)',
+    description: 'ProSpaces CRM official crisp light theme (#F8FAFC canvas, #FFFFFF cards, #1E6FD9 Royal Blue)',
     isDark: false,
     colors: {
-      background: '#F7F8FA',
+      background: '#F8FAFC',
       backgroundSecondary: '#FFFFFF',
-      backgroundTertiary: '#F0F2F5',
+      backgroundTertiary: '#F1F5F9',
       
-      text: '#24262B',
-      textSecondary: '#4F535B',
-      textMuted: '#7A7F87',
+      text: '#0F172A',
+      textSecondary: '#334155',
+      textMuted: '#64748B',
       
-      primary: '#F52225',
-      primaryHover: '#D91E21',
+      primary: '#1E6FD9',
+      primaryHover: '#155FBC',
       primaryText: '#FFFFFF',
       
-      secondary: '#F0F2F5',
-      secondaryText: '#24262B',
+      secondary: '#F1F5F9',
+      secondaryText: '#0F172A',
       
-      accent: '#E52B2F',
-      accentHover: '#D91E21',
+      accent: '#2563EB',
+      accentHover: '#1D4ED8',
       accentText: '#FFFFFF',
       
-      border: '#D7DADF',
-      borderLight: '#E6E8EB',
+      border: '#E2E8F0',
+      borderLight: '#F1F5F9',
       
       card: '#FFFFFF',
-      cardHover: '#F7F8FA',
-      cardText: '#24262B',
+      cardHover: '#F8FAFC',
+      cardText: '#0F172A',
       
-      input: '#D7DADF',
+      input: '#CBD5E1',
       
       success: '#10B981',
       warning: '#F59E0B',
-      error: '#F52225',
+      error: '#EF4444',
       info: '#2563EB',
       
-      destructive: '#F52225',
+      destructive: '#EF4444',
       destructiveText: '#FFFFFF',
       
       navBackground: '#FFFFFF',
-      navText: '#4F535B',
-      navHover: '#F7F8FA',
-      navActive: '#E52B2F',
+      navText: '#334155',
+      navHover: '#F1F5F9',
+      navActive: '#1E6FD9',
       
       topBarBackground: '#FFFFFF',
-      topBarText: '#24262B',
+      topBarText: '#0F172A',
       
-      shadow: '0 1px 3px 0 rgba(36, 38, 43, 0.06), 0 1px 2px 0 rgba(36, 38, 43, 0.04)',
+      gradient: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 45%, #F8FAFC 100%)',
+      shadow: '0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px 0 rgba(15, 23, 42, 0.04)',
     },
   },
   
   dark: {
     id: 'dark',
-    name: 'ProSpaces Dark',
-    description: 'ProSpaces Logistics official dark theme (#202124 background, #F4F4F5 primary text, #F52225 ProSpaces Red)',
+    name: 'ProSpaces Midnight Dark',
+    description: 'ProSpaces CRM official Midnight Dark theme (#0A0F1D canvas, #0F172A cards, #3B82F6 accent)',
     isDark: true,
     colors: {
-      background: '#202124',
-      backgroundSecondary: '#18191B',
-      backgroundTertiary: '#282A2E',
+      background: '#0A0F1D',
+      backgroundSecondary: '#111827',
+      backgroundTertiary: '#1E293B',
       
-      text: '#F4F4F5',
-      textSecondary: '#C9CBD0',
-      textMuted: '#8E939C',
+      text: '#F8FAFC',
+      textSecondary: '#CBD5E1',
+      textMuted: '#94A3B8',
       
-      primary: '#F52225',
-      primaryHover: '#D91E21',
+      primary: '#3B82F6',
+      primaryHover: '#2563EB',
       primaryText: '#FFFFFF',
       
-      secondary: '#282A2E',
-      secondaryText: '#F4F4F5',
+      secondary: '#1E293B',
+      secondaryText: '#F8FAFC',
       
-      accent: '#FF393B',
-      accentHover: '#FF4547',
+      accent: '#6366F1',
+      accentHover: '#4F46E5',
       accentText: '#FFFFFF',
       
-      border: '#44474D',
-      borderLight: '#303237',
+      border: '#1E293B',
+      borderLight: '#334155',
       
-      card: '#18191B',
-      cardHover: '#202124',
-      cardText: '#F4F4F5',
+      card: '#0F172A',
+      cardHover: '#1E293B',
+      cardText: '#F8FAFC',
       
-      input: '#44474D',
+      input: '#1E293B',
       
       success: '#34D399',
       warning: '#FBBF24',
-      error: '#FF4547',
+      error: '#F87171',
       info: '#60A5FA',
       
-      destructive: '#FF4547',
+      destructive: '#EF4444',
       destructiveText: '#FFFFFF',
       
-      navBackground: '#1B1C1F',
-      navText: '#C9CBD0',
-      navHover: '#202124',
-      navActive: '#FF3A3C',
+      navBackground: '#020617',
+      navText: '#CBD5E1',
+      navHover: '#0F172A',
+      navActive: '#2563EB',
       
-      topBarBackground: '#18191B',
-      topBarText: '#F4F4F5',
+      topBarBackground: '#020617',
+      topBarText: '#F8FAFC',
       
-      shadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+      gradient: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
+      shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.55), 0 4px 10px -2px rgba(2, 6, 23, 0.4)',
     },
   },
 
@@ -286,109 +288,111 @@ export const themes: Record<string, Theme> = {
 
   'prospaces-light': {
     id: 'prospaces-light',
-    name: 'ProSpaces Light',
-    description: 'ProSpaces Logistics official light theme',
+    name: 'ProSpaces Classic Light',
+    description: 'ProSpaces CRM light surface theme',
     isDark: false,
     colors: {
-      background: '#F7F8FA',
+      background: '#F8FAFC',
       backgroundSecondary: '#FFFFFF',
-      backgroundTertiary: '#F0F2F5',
+      backgroundTertiary: '#F1F5F9',
       
-      text: '#24262B',
-      textSecondary: '#4F535B',
-      textMuted: '#7A7F87',
+      text: '#0F172A',
+      textSecondary: '#334155',
+      textMuted: '#64748B',
       
-      primary: '#F52225',
-      primaryHover: '#D91E21',
+      primary: '#1E6FD9',
+      primaryHover: '#155FBC',
       primaryText: '#FFFFFF',
       
-      secondary: '#F0F2F5',
-      secondaryText: '#24262B',
+      secondary: '#F1F5F9',
+      secondaryText: '#0F172A',
       
-      accent: '#E52B2F',
-      accentHover: '#D91E21',
+      accent: '#2563EB',
+      accentHover: '#1D4ED8',
       accentText: '#FFFFFF',
       
-      border: '#D7DADF',
-      borderLight: '#E6E8EB',
+      border: '#E2E8F0',
+      borderLight: '#F1F5F9',
       
       card: '#FFFFFF',
-      cardHover: '#F7F8FA',
-      cardText: '#24262B',
+      cardHover: '#F8FAFC',
+      cardText: '#0F172A',
       
-      input: '#D7DADF',
+      input: '#CBD5E1',
       
       success: '#10B981',
       warning: '#F59E0B',
-      error: '#F52225',
+      error: '#EF4444',
       info: '#2563EB',
       
-      destructive: '#F52225',
+      destructive: '#EF4444',
       destructiveText: '#FFFFFF',
       
       navBackground: '#FFFFFF',
-      navText: '#4F535B',
-      navHover: '#F7F8FA',
-      navActive: '#E52B2F',
+      navText: '#334155',
+      navHover: '#F1F5F9',
+      navActive: '#1E6FD9',
       
       topBarBackground: '#FFFFFF',
-      topBarText: '#24262B',
+      topBarText: '#0F172A',
       
-      shadow: '0 1px 3px 0 rgba(36, 38, 43, 0.06), 0 1px 2px 0 rgba(36, 38, 43, 0.04)',
+      gradient: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 45%, #F8FAFC 100%)',
+      shadow: '0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px 0 rgba(15, 23, 42, 0.04)',
     },
   },
 
   'prospaces-dark': {
     id: 'prospaces-dark',
     name: 'ProSpaces Dark',
-    description: 'ProSpaces Logistics official dark theme',
+    description: 'ProSpaces CRM official Midnight Dark theme',
     isDark: true,
     colors: {
-      background: '#202124',
-      backgroundSecondary: '#18191B',
-      backgroundTertiary: '#282A2E',
+      background: '#0A0F1D',
+      backgroundSecondary: '#111827',
+      backgroundTertiary: '#1E293B',
       
-      text: '#F4F4F5',
-      textSecondary: '#C9CBD0',
-      textMuted: '#8E939C',
+      text: '#F8FAFC',
+      textSecondary: '#CBD5E1',
+      textMuted: '#94A3B8',
       
-      primary: '#F52225',
-      primaryHover: '#D91E21',
+      primary: '#3B82F6',
+      primaryHover: '#2563EB',
       primaryText: '#FFFFFF',
       
-      secondary: '#282A2E',
-      secondaryText: '#F4F4F5',
+      secondary: '#1E293B',
+      secondaryText: '#F8FAFC',
       
-      accent: '#FF393B',
-      accentHover: '#FF4547',
+      accent: '#6366F1',
+      accentHover: '#4F46E5',
       accentText: '#FFFFFF',
       
-      border: '#44474D',
-      borderLight: '#303237',
+      border: '#1E293B',
+      borderLight: '#334155',
       
-      card: '#18191B',
-      cardHover: '#202124',
-      cardText: '#F4F4F5',
+      card: '#0F172A',
+      cardHover: '#1E293B',
+      cardText: '#F8FAFC',
       
-      input: '#44474D',
+      input: '#1E293B',
       
       success: '#34D399',
       warning: '#FBBF24',
-      error: '#FF4547',
+      error: '#F87171',
       info: '#60A5FA',
       
-      destructive: '#FF4547',
+      destructive: '#EF4444',
       destructiveText: '#FFFFFF',
       
-      navBackground: '#1B1C1F',
-      navText: '#C9CBD0',
-      navHover: '#202124',
-      navActive: '#FF3A3C',
+      navBackground: '#020617',
+      navText: '#CBD5E1',
+      navHover: '#0F172A',
+      navActive: '#2563EB',
       
-      topBarBackground: '#18191B',
-      topBarText: '#F4F4F5',
+      topBarBackground: '#020617',
+      topBarText: '#F8FAFC',
       
-      shadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+      gradient: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)',
+      shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.55), 0 4px 10px -2px rgba(2, 6, 23, 0.4)',
     },
   },
   
@@ -834,7 +838,7 @@ export const themes: Record<string, Theme> = {
 };
 
 export const getTheme = (themeId: string): Theme => {
-  const baseTheme = themes[themeId] || themes.vibrant;
+  const baseTheme = themes[themeId] || themes.dark;
   try {
     if (typeof window !== 'undefined') {
       const customColorsStr = localStorage.getItem(`prospace-theme-custom-${themeId}`);
@@ -856,20 +860,45 @@ export const getTheme = (themeId: string): Theme => {
 };
 
 export const saveTheme = (themeId: string): void => {
-  localStorage.setItem('prospace-theme', themeId);
+  try {
+    localStorage.setItem('prospace-theme', themeId);
+    localStorage.setItem('prospace-theme-midnight-v1', '1');
+  } catch {
+    // Ignore
+  }
 };
 
 export const loadTheme = (): string => {
-  return localStorage.getItem('prospace-theme') || 'light';
+  try {
+    const migrated = localStorage.getItem('prospace-theme-midnight-v1');
+    const stored = localStorage.getItem('prospace-theme');
+    if (!migrated) {
+      localStorage.setItem('prospace-theme-midnight-v1', '1');
+      if (!stored || stored === 'light' || stored === 'vibrant' || stored === 'prospaces' || stored === 'prospaces-light') {
+        localStorage.setItem('prospace-theme', 'dark');
+        localStorage.setItem('prospace-theme-mode', 'dark');
+        localStorage.setItem('prospace-preferred-dark-theme', 'dark');
+        return 'dark';
+      }
+    }
+    return stored || 'dark';
+  } catch {
+    return 'dark';
+  }
 };
 
 // Save theme to database for persistence across devices
 // NOTE: Uses KV store via the server settings API since the profiles table
 // may not have a 'theme' column. Falls back gracefully.
-export const saveThemeToDatabase = async (themeId: string, userId: string): Promise<void> => {
+export const saveThemeToDatabase = async (themeId: string, userId: string, themeMode?: string): Promise<void> => {
   try {
     // Always save to localStorage as backup
     localStorage.setItem('prospace-theme', themeId);
+    localStorage.setItem('prospace-theme-midnight-v1', '1');
+    localStorage.setItem('prospace-theme-updated-at', String(Date.now()));
+    if (themeMode) {
+      localStorage.setItem('prospace-theme-mode', themeMode);
+    }
     
     // Save to database via server API
     const { projectId, publicAnonKey } = await import('./supabase/info');
@@ -878,20 +907,25 @@ export const saveThemeToDatabase = async (themeId: string, userId: string): Prom
     const { data: { session } } = await supabase.auth.getSession();
     
     if (session?.access_token) {
+      const payload: Record<string, string> = { theme: themeId };
+      if (themeMode) {
+        payload.themeMode = themeMode;
+      }
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/settings/theme`, {
         method: 'PUT',
+        keepalive: true,
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`,
           'X-User-Token': session.access_token,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ theme: themeId }),
+        body: JSON.stringify(payload),
       });
       
       if (response.ok) {
         // Theme saved to database
       } else {
-        const errorText = await response.text();
+        await response.text();
         // Failed to save theme to database
       }
     } else {
@@ -899,7 +933,6 @@ export const saveThemeToDatabase = async (themeId: string, userId: string): Prom
     }
   } catch (error) {
     // Error saving theme to database - non-fatal since localStorage still has it
-    // Error saving theme to database
   }
 };
 

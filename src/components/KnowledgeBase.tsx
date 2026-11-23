@@ -913,7 +913,7 @@ export function KnowledgeBase({
               onClick={() => setActiveSubTab('kb')}
               className="flex items-center gap-3 cursor-pointer select-none group"
             >
-              <Logo size="sm" showText={false} className="h-8 w-auto shrink-0 transition-transform duration-300 group-hover:scale-105 bg-white p-1 rounded-md" />
+              <Logo size="sm" showText={false} variant="dark" className="h-8 w-auto shrink-0 transition-transform duration-300 group-hover:scale-105 bg-slate-950/35 border border-white/20 p-1 rounded-lg" />
               <span className="font-sans font-black tracking-widest text-xs sm:text-sm uppercase text-white">
                 Help Center
               </span>

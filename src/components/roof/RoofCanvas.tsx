@@ -1905,22 +1905,22 @@ export function RoofCanvas({ config, onChange }: RoofCanvasProps) {
           <div className="text-xs text-orange-700 font-medium">Total Roof Area</div>
           <div className="text-sm font-bold text-orange-900 mt-1">{formatRoofArea(config)}</div>
         </div>
-        <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
-          <div className="text-xs text-purple-700 font-medium">Roof Pitch</div>
-          <div className="text-sm font-bold text-purple-900 mt-1">{getPitchDescription(config.pitch || '6/12')}</div>
+        <div className="p-3 bg-purple-950/30 rounded-lg border border-purple-500/30">
+          <div className="text-xs text-purple-300 font-medium">Roof Pitch</div>
+          <div className="text-sm font-bold text-purple-100 mt-1">{getPitchDescription(config.pitch || '6/12')}</div>
         </div>
-        <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-          <div className="text-xs text-blue-700 font-medium">Roof Style</div>
-          <div className="text-sm font-bold text-blue-900 mt-1 capitalize">{config.style.replace('-', ' ')}</div>
+        <div className="p-3 bg-blue-950/30 rounded-lg border border-blue-500/30">
+          <div className="text-xs text-blue-300 font-medium">Roof Style</div>
+          <div className="text-sm font-bold text-blue-100 mt-1 capitalize">{config.style.replace('-', ' ')}</div>
         </div>
-        <div className="p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
-          <div className="text-xs text-green-700 font-medium">Shingle Type</div>
-          <div className="text-sm font-bold text-green-900 mt-1 capitalize">{config.shingleType.replace('-', ' ')}</div>
+        <div className="p-3 bg-emerald-950/30 rounded-lg border border-emerald-500/30">
+          <div className="text-xs text-emerald-300 font-medium">Shingle Type</div>
+          <div className="text-sm font-bold text-emerald-100 mt-1 capitalize">{config.shingleType.replace('-', ' ')}</div>
         </div>
         {config.hasDormers && (config.dormers || []).length > 0 && (
-          <div className="p-3 bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg border border-violet-200">
-            <div className="text-xs text-violet-700 font-medium">Dormers</div>
-            <div className="text-sm font-bold text-violet-900 mt-1">
+          <div className="p-3 bg-violet-950/30 rounded-lg border border-violet-500/30">
+            <div className="text-xs text-violet-300 font-medium">Dormers</div>
+            <div className="text-sm font-bold text-violet-100 mt-1">
               {(config.dormers || []).length} dormer{(config.dormers || []).length !== 1 ? 's' : ''}
             </div>
           </div>

@@ -87,7 +87,7 @@ export function OAuthCallback() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex items-center justify-center bg-[#0A0F1D]" style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}>
       <div className="bg-background p-8 rounded-lg shadow-lg max-w-md w-full">
         <div className="flex flex-col items-center space-y-4">
           {status === 'loading' && (

@@ -34,18 +34,18 @@ export function OfflineIndicator() {
   return (
     <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
       <Alert
-        className={`${
+        className={`backdrop-blur-md shadow-xl ${
           online
-            ? 'bg-green-50 border-green-200 animate-slide-down'
-            : 'bg-yellow-50 border-yellow-200 animate-slide-down'
+            ? 'bg-emerald-950/90 border-emerald-500/40 animate-slide-down'
+            : 'bg-amber-950/90 border-amber-500/40 animate-slide-down'
         }`}
       >
         {online ? (
-          <Wifi className="h-4 w-4 text-green-600" />
+          <Wifi className="h-4 w-4 text-emerald-400" />
         ) : (
-          <WifiOff className="h-4 w-4 text-yellow-600" />
+          <WifiOff className="h-4 w-4 text-amber-400" />
         )}
-        <AlertDescription className={online ? 'text-green-800' : 'text-yellow-800'}>
+        <AlertDescription className={online ? 'text-emerald-200' : 'text-amber-200'}>
           {online ? (
             <span className="font-medium">Back online! Data will sync automatically.</span>
           ) : (

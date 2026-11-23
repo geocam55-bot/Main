@@ -57,6 +57,7 @@ import { useTaskNotifications } from '../hooks/useTaskNotifications';
 import { useAppointmentNotifications } from '../hooks/useAppointmentNotifications';
 import { getCurrentSubscription } from '../utils/subscription-client';
 import { TrialCountdown } from './TrialCountdown';
+import { ProfileThemeSwitch } from './ProfileThemeSwitch';
 
 interface NavigationProps {
   user: UserType;
@@ -210,6 +211,7 @@ export function Navigation({
   };
 
   const { theme } = useTheme();
+  const isDark = theme.isDark;
 
   // Highlight Email menu if its children are active
   const isEmailActive =
@@ -222,27 +224,39 @@ export function Navigation({
     <>
       {/* ── Top Header and Sticky Navigation ── */}
       <header
-        className="sticky top-0 z-50 w-full shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-6 py-2.5 md:py-0 md:h-16 gap-3 md:gap-4 shadow-sm"
-        style={{
-          background: theme.colors.navBackground,
-          borderColor: theme.colors.border,
-          color: theme.colors.navText,
-        }}
+        className={`sticky top-0 z-50 w-full shrink-0 flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-6 py-2.5 md:py-0 md:h-16 gap-3 md:gap-4 shadow-sm ${
+          isDark ? 'bg-slate-950/90 backdrop-blur-md border-slate-800 text-slate-100' : ''
+        }`}
+        style={
+          isDark
+            ? undefined
+            : {
+                background: theme.colors.navBackground,
+                borderColor: theme.colors.border,
+                color: theme.colors.navText,
+              }
+        }
       >
         {/* Left Side: Space Branding & Navigation back */}
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={handleBackToSpaces}
-            className="flex items-center justify-center p-2 rounded-xl transition-colors shrink-0"
+            className={`flex items-center justify-center p-2 rounded-xl transition-colors shrink-0 cursor-pointer ${
+              isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : ''
+            }`}
             title="Back to Spaces"
-            style={{ color: theme.colors.textMuted }}
+            style={isDark ? undefined : { color: theme.colors.textMuted }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = theme.colors.navHover;
-              e.currentTarget.style.color = theme.colors.navText;
+              if (!isDark) {
+                e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                e.currentTarget.style.color = theme.colors.navText;
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = theme.colors.textMuted;
+              if (!isDark) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = theme.colors.textMuted;
+              }
             }}
           >
             <ArrowLeft className="h-5 w-5" />
@@ -250,7 +264,10 @@ export function Navigation({
 
           <Logo size="sm" className="h-9 w-auto shrink-0" showText={false} />
           <div className="overflow-hidden">
-            <span className="text-sm md:text-base font-bold tracking-tight block truncate" style={{ color: theme.colors.navText }}>
+            <span
+              className={`text-sm md:text-base font-bold tracking-tight block truncate ${isDark ? 'text-white' : ''}`}
+              style={isDark ? undefined : { color: theme.colors.navText }}
+            >
               Sales Space
             </span>
           </div>
@@ -267,24 +284,34 @@ export function Navigation({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium relative ${
-                  isActive ? 'shadow-sm border border-current/10 font-semibold' : ''
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 transition-all duration-150 shrink-0 text-xs font-semibold relative cursor-pointer ${
+                  isActive
+                    ? (isDark
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 border border-blue-500/40'
+                        : 'text-white shadow-sm border border-transparent font-semibold')
+                    : (isDark
+                        ? 'text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent font-medium'
+                        : 'font-medium')
                 }`}
-                style={{
-                  color: isActive ? undefined : theme.colors.navText,
-                  backgroundColor: isActive ? theme.colors.navActive : 'transparent',
-                }}
+                style={
+                  isDark
+                    ? undefined
+                    : {
+                        color: isActive ? '#FFFFFF' : theme.colors.navText,
+                        backgroundColor: isActive ? theme.colors.navActive : 'transparent',
+                      }
+                }
                 onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                  if (!isDark && !isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                  if (!isDark && !isActive) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span>{item.label}</span>
                 {hasCount && (
-                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-amber-500 text-white rounded-full leading-none animate-pulse">
+                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-amber-500 text-slate-950 rounded-full leading-none">
                     {item.count}
                   </span>
                 )}
@@ -295,33 +322,43 @@ export function Navigation({
           {/* Email Dropdown (Contains Email Inbox, Tasks, Appointments) */}
           <DropdownMenu>
             <DropdownMenuTrigger
-              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium focus:outline-none ${
-                isEmailActive ? 'shadow-sm border border-current/10 font-semibold text-blue-600' : ''
+              className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 transition-all duration-150 shrink-0 text-xs relative focus:outline-none cursor-pointer ${
+                isEmailActive
+                  ? (isDark
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 border border-blue-500/40 font-semibold'
+                      : 'shadow-sm border border-transparent font-semibold text-white')
+                  : (isDark
+                      ? 'text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent font-medium'
+                      : 'font-medium')
               }`}
-              style={{
-                backgroundColor: isEmailActive ? theme.colors.navActive : 'transparent',
-                color: isEmailActive ? undefined : theme.colors.navText,
-              }}
+              style={
+                isDark
+                  ? undefined
+                  : {
+                      backgroundColor: isEmailActive ? theme.colors.navActive : 'transparent',
+                      color: isEmailActive ? '#FFFFFF' : theme.colors.navText,
+                    }
+              }
               onMouseEnter={(e) => {
-                if (!isEmailActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                if (!isDark && !isEmailActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
               }}
               onMouseLeave={(e) => {
-                if (!isEmailActive) e.currentTarget.style.backgroundColor = 'transparent';
+                if (!isDark && !isEmailActive) e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
               <Mail className="h-3.5 w-3.5" />
               <span>Email</span>
               {(unreadCount > 0 || taskCount > 0 || appointmentCount > 0) && (
-                <span className="h-2 w-2 rounded-full bg-red-500 animate-ping absolute top-1 right-2" />
+                <span className="h-2 w-2 rounded-full bg-rose-500 absolute top-1 right-1.5" />
               )}
               <ChevronDown className="h-3 w-3 opacity-60" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuLabel>Email Channels</DropdownMenuLabel>
-              <DropdownMenuSeparator />
+            <DropdownMenuContent align="start" className="w-48 bg-white border-slate-200 text-slate-800 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200">
+              <DropdownMenuLabel className="dark:text-slate-300">Email Channels</DropdownMenuLabel>
+              <DropdownMenuSeparator className="dark:bg-slate-800" />
               <DropdownMenuItem
                 onClick={() => handleNavClick('email')}
-                className={currentView === 'email' ? 'bg-accent font-semibold' : ''}
+                className={`cursor-pointer dark:focus:bg-slate-800 dark:focus:text-white ${currentView === 'email' ? 'bg-accent font-semibold dark:bg-slate-800 dark:text-white' : ''}`}
               >
                 <Mail className="mr-2 h-4 w-4" />
                 Email Inbox
@@ -333,12 +370,12 @@ export function Navigation({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleNavClick('tasks')}
-                className={currentView === 'tasks' ? 'bg-accent font-semibold' : ''}
+                className={`cursor-pointer dark:focus:bg-slate-800 dark:focus:text-white ${currentView === 'tasks' ? 'bg-accent font-semibold dark:bg-slate-800 dark:text-white' : ''}`}
               >
                 <CheckSquare className="mr-2 h-4 w-4" />
                 Tasks
                 {taskCount > 0 && (
-                  <span className="ml-auto text-[10px] font-bold bg-green-500 text-white rounded-full px-1.5 py-0.5">
+                  <span className="ml-auto text-[10px] font-bold bg-emerald-500 text-white rounded-full px-1.5 py-0.5">
                     {taskCount}
                   </span>
                 )}
@@ -346,7 +383,7 @@ export function Navigation({
               {organization?.appointments_enabled !== false && canView('appointments', user.role) && (
                 <DropdownMenuItem
                   onClick={() => handleNavClick('appointments')}
-                  className={currentView === 'appointments' ? 'bg-accent font-semibold' : ''}
+                  className={`cursor-pointer dark:focus:bg-slate-800 dark:focus:text-white ${currentView === 'appointments' ? 'bg-accent font-semibold dark:bg-slate-800 dark:text-white' : ''}`}
                 >
                   <Calendar className="mr-2 h-4 w-4" />
                   Appointments
@@ -364,18 +401,28 @@ export function Navigation({
           {organization?.documents_enabled !== false && canView('documents', user.role) && (
             <button
               onClick={() => handleNavClick('documents')}
-              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium ${
-                currentView === 'documents' ? 'shadow-sm border border-current/10 font-semibold' : ''
+              className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 transition-all duration-150 shrink-0 text-xs cursor-pointer ${
+                currentView === 'documents'
+                  ? (isDark
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 border border-blue-500/40 font-semibold'
+                      : 'text-white shadow-sm border border-transparent font-semibold')
+                  : (isDark
+                      ? 'text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent font-medium'
+                      : 'font-medium')
               }`}
-              style={{
-                color: currentView === 'documents' ? undefined : theme.colors.navText,
-                backgroundColor: currentView === 'documents' ? theme.colors.navActive : 'transparent',
-              }}
+              style={
+                isDark
+                  ? undefined
+                  : {
+                      color: currentView === 'documents' ? '#FFFFFF' : theme.colors.navText,
+                      backgroundColor: currentView === 'documents' ? theme.colors.navActive : 'transparent',
+                    }
+              }
               onMouseEnter={(e) => {
-                if (currentView !== 'documents') e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                if (!isDark && currentView !== 'documents') e.currentTarget.style.backgroundColor = theme.colors.navHover;
               }}
               onMouseLeave={(e) => {
-                if (currentView !== 'documents') e.currentTarget.style.backgroundColor = 'transparent';
+                if (!isDark && currentView !== 'documents') e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
               <Folder className="h-3.5 w-3.5" />
@@ -390,18 +437,28 @@ export function Navigation({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium ${
-                  isActive ? 'shadow-sm border border-current/10 font-semibold' : ''
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 transition-all duration-150 shrink-0 text-xs cursor-pointer ${
+                  isActive
+                    ? (isDark
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 border border-blue-500/40 font-semibold'
+                        : 'text-white shadow-sm border border-transparent font-semibold')
+                    : (isDark
+                        ? 'text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent font-medium'
+                        : 'font-medium')
                 }`}
-                style={{
-                  color: isActive ? undefined : theme.colors.navText,
-                  backgroundColor: isActive ? theme.colors.navActive : 'transparent',
-                }}
+                style={
+                  isDark
+                    ? undefined
+                    : {
+                        color: isActive ? '#FFFFFF' : theme.colors.navText,
+                        backgroundColor: isActive ? theme.colors.navActive : 'transparent',
+                      }
+                }
                 onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                  if (!isDark && !isActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                  if (!isDark && !isActive) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
                 <UsersRound className="h-3.5 w-3.5" />
@@ -414,34 +471,44 @@ export function Navigation({
           {adminSubmenu.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger
-                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all duration-150 shrink-0 text-xs font-medium focus:outline-none ${
-                  isAdminActive ? 'shadow-sm border border-current/10 font-semibold text-rose-600' : ''
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 transition-all duration-150 shrink-0 text-xs focus:outline-none cursor-pointer ${
+                  isAdminActive
+                    ? (isDark
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 border border-blue-500/40 font-semibold'
+                        : 'shadow-sm border border-transparent font-semibold text-white')
+                    : (isDark
+                        ? 'text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent font-medium'
+                        : 'font-medium')
                 }`}
-                style={{
-                  backgroundColor: isAdminActive ? theme.colors.navActive : 'transparent',
-                  color: isAdminActive ? undefined : theme.colors.navText,
-                }}
+                style={
+                  isDark
+                    ? undefined
+                    : {
+                        backgroundColor: isAdminActive ? theme.colors.navActive : 'transparent',
+                        color: isAdminActive ? '#FFFFFF' : theme.colors.navText,
+                      }
+                }
                 onMouseEnter={(e) => {
-                  if (!isAdminActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                  if (!isDark && !isAdminActive) e.currentTarget.style.backgroundColor = theme.colors.navHover;
                 }}
                 onMouseLeave={(e) => {
-                  if (!isAdminActive) e.currentTarget.style.backgroundColor = 'transparent';
+                  if (!isDark && !isAdminActive) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
                 <Shield className="h-3.5 w-3.5" />
                 <span>Admin settings</span>
                 <ChevronDown className="h-3 w-3 opacity-60" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-52 max-h-96 overflow-y-auto">
-                <DropdownMenuLabel>Admin Operations</DropdownMenuLabel>
-                <DropdownMenuSeparator />
+              <DropdownMenuContent align="start" className="w-52 max-h-96 overflow-y-auto bg-white border-slate-200 text-slate-800 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200">
+                <DropdownMenuLabel className="dark:text-slate-300">Admin Operations</DropdownMenuLabel>
+                <DropdownMenuSeparator className="dark:bg-slate-800" />
                 {adminSubmenu.map((subItem) => {
                   const SubIcon = subItem.icon;
                   return (
                     <DropdownMenuItem
                       key={subItem.id}
                       onClick={() => handleNavClick(subItem.id)}
-                      className={currentView === subItem.id ? 'bg-accent font-semibold' : ''}
+                      className={`cursor-pointer dark:focus:bg-slate-800 dark:focus:text-white ${currentView === subItem.id ? 'bg-accent font-semibold dark:bg-slate-800 dark:text-white' : ''}`}
                     >
                       <SubIcon className="mr-2 h-4 w-4" />
                       <span>{subItem.label}</span>
@@ -477,13 +544,15 @@ export function Navigation({
           <DropdownMenu>
             <DropdownMenuTrigger className="focus:outline-none">
               <div
-                className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 transition-all text-left cursor-pointer"
-                style={{ backgroundColor: theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)' }}
+                className={`flex items-center gap-2 rounded-xl px-3 py-1.5 transition-all text-left cursor-pointer ${
+                  isDark ? 'bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200' : ''
+                }`}
+                style={isDark ? undefined : { backgroundColor: theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)' }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = theme.colors.navHover;
+                  if (!isDark) e.currentTarget.style.backgroundColor = theme.colors.navHover;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)';
+                  if (!isDark) e.currentTarget.style.backgroundColor = theme.colors.backgroundTertiary || 'rgba(0,0,0,0.02)';
                 }}
               >
                 <Avatar className="h-7 w-7 rounded-full shrink-0">
@@ -492,50 +561,52 @@ export function Navigation({
                     {getInitials(user.full_name || user.email || '')}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-xs font-medium max-w-[100px] truncate hidden md:inline-block" style={{ color: theme.colors.text }}>
+                <span className={`text-xs font-medium max-w-[100px] truncate hidden md:inline-block ${isDark ? 'text-white' : ''}`} style={isDark ? undefined : { color: theme.colors.text }}>
                   {user.full_name?.split(' ')[0] || user.email}
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" style={{ color: theme.colors.textMuted }} />
+                <ChevronDown className={`h-3.5 w-3.5 opacity-60 ${isDark ? 'text-slate-400' : ''}`} style={isDark ? undefined : { color: theme.colors.textMuted }} />
               </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="bottom" className="w-56 mt-1">
+            <DropdownMenuContent align="end" side="bottom" className="w-60 mt-1 bg-white border-slate-200 text-slate-800 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200">
               <DropdownMenuLabel>
                 <div>
-                  <p className="font-medium text-sm">{user.full_name || user.email}</p>
-                  <p className="text-xs text-muted-foreground font-normal mt-0.5 truncate">{user.email || 'No email'}</p>
+                  <p className="font-medium text-sm text-slate-900 dark:text-white">{user.full_name || user.email}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5 truncate">{user.email || 'No email'}</p>
                 </div>
               </DropdownMenuLabel>
               {organization && (
                 <>
-                  <DropdownMenuSeparator />
+                  <DropdownMenuSeparator className="dark:bg-slate-800" />
                   <DropdownMenuLabel>
                     <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <div className="h-6 w-6 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                        <Building2 className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                       </div>
                       <div className="overflow-hidden">
-                        <p className="text-[10px] text-muted-foreground font-normal">Organization</p>
-                        <p className="text-xs font-medium truncate">{organization.name}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Organization</p>
+                        <p className="text-xs font-medium truncate text-slate-800 dark:text-slate-200">{organization.name}</p>
                       </div>
                     </div>
                   </DropdownMenuLabel>
                 </>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleNavClick('settings')}>
+              <DropdownMenuSeparator className="dark:bg-slate-800" />
+              <ProfileThemeSwitch variant="menu" />
+              <DropdownMenuSeparator className="dark:bg-slate-800" />
+              <DropdownMenuItem onClick={() => handleNavClick('settings')} className="cursor-pointer dark:focus:bg-slate-800 dark:focus:text-white">
                 <User className="mr-2 h-4 w-4" />
                 Profile Settings
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleBackToSpaces}>
+              <DropdownMenuItem onClick={handleBackToSpaces} className="cursor-pointer dark:focus:bg-slate-800 dark:focus:text-white">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Spaces Main Page
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleNavClick('about')}>
+              <DropdownMenuItem onClick={() => handleNavClick('about')} className="cursor-pointer dark:focus:bg-slate-800 dark:focus:text-white">
                 <Info className="mr-2 h-4 w-4" />
                 About
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onLogout} className="text-red-600">
+              <DropdownMenuSeparator className="dark:bg-slate-800" />
+              <DropdownMenuItem onClick={onLogout} className="text-rose-500 dark:text-rose-400 dark:focus:bg-rose-950/50 dark:focus:text-rose-300 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 Log Off
               </DropdownMenuItem>
@@ -546,7 +617,7 @@ export function Navigation({
           <Button
             variant="ghost"
             size="sm"
-            className="md:hidden rounded-full p-1.5 hover:bg-slate-100 text-slate-600 shrink-0"
+            className="md:hidden rounded-full p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -556,23 +627,25 @@ export function Navigation({
 
       {/* ── Mobile Sidebar Slide-out menus ── */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-gray-900 bg-opacity-50" onClick={() => setIsMobileMenuOpen(false)}>
+        <div className="md:hidden fixed inset-0 z-40 bg-slate-950/75 backdrop-blur-xs" onClick={() => setIsMobileMenuOpen(false)}>
           <div
-            className="fixed inset-y-0 left-0 w-[88vw] max-w-72 bg-white flex flex-col h-full overflow-y-auto"
+            className={`fixed inset-y-0 left-0 w-[88vw] max-w-72 flex flex-col h-full overflow-y-auto border-r ${
+              isDark ? 'bg-[#0A0F1D] border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+            }`}
             onClick={(e) => e.stopPropagation()}
-            style={{ background: theme.colors.background || '#ffffff' }}
+            style={isDark ? undefined : { background: theme.colors.background || '#ffffff' }}
           >
             {/* Drawer header */}
-            <div className="flex h-16 items-center gap-3 px-5 border-b shrink-0" style={{ borderColor: theme.colors.border }}>
+            <div className="flex h-16 items-center gap-3 px-5 border-b border-slate-200 dark:border-slate-800 shrink-0">
               <Logo size="sm" className="h-9 w-auto shrink-0" showText={false} />
               <div className="overflow-hidden flex-1 min-w-0">
-                <span className="text-base font-bold text-slate-900 tracking-tight block truncate" style={{ color: theme.colors.text }}>
+                <span className={`text-base font-bold tracking-tight block truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Sales Space
                 </span>
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="ml-auto text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+                className="ml-auto text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -587,18 +660,26 @@ export function Navigation({
                   <button
                     key={item.id}
                     onClick={() => handleNavClick(item.id)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-xl transition-all"
-                    style={{
-                      backgroundColor: isActive ? theme.colors.navActive : 'transparent',
-                      color: isActive ? undefined : theme.colors.text,
-                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-xl transition-all ${
+                      isDark
+                        ? (isActive ? 'bg-blue-600 text-white font-semibold' : 'text-slate-300 hover:bg-slate-900 hover:text-white')
+                        : (isActive ? 'font-semibold' : 'hover:bg-slate-100')
+                    }`}
+                    style={
+                      isDark
+                        ? undefined
+                        : {
+                            backgroundColor: isActive ? theme.colors.navActive : 'transparent',
+                            color: isActive ? '#FFFFFF' : theme.colors.text,
+                          }
+                    }
                   >
                     <div className="flex items-center gap-3">
-                      <Icon className="h-5 w-5 opacity-70" />
+                      <Icon className="h-5 w-5 opacity-75" />
                       <span>{item.label}</span>
                     </div>
                     {item.count !== undefined && item.count > 0 && (
-                      <span className="ml-2 text-[10px] bg-amber-500 text-white rounded-full px-1.5 py-0.5">
+                      <span className="ml-2 text-[10px] bg-amber-500 text-slate-950 font-bold rounded-full px-1.5 py-0.5">
                         {item.count}
                       </span>
                     )}
@@ -617,7 +698,7 @@ export function Navigation({
                     className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all pl-6"
                     style={{
                       backgroundColor: currentView === 'email' ? theme.colors.navActive : 'transparent',
-                      color: currentView === 'email' ? undefined : theme.colors.text,
+                      color: currentView === 'email' ? '#FFFFFF' : theme.colors.text,
                     }}
                   >
                     <div className="flex items-center gap-2">
@@ -633,7 +714,7 @@ export function Navigation({
                     className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all pl-6"
                     style={{
                       backgroundColor: currentView === 'tasks' ? theme.colors.navActive : 'transparent',
-                      color: currentView === 'tasks' ? undefined : theme.colors.text,
+                      color: currentView === 'tasks' ? '#FFFFFF' : theme.colors.text,
                     }}
                   >
                     <div className="flex items-center gap-2">
@@ -650,7 +731,7 @@ export function Navigation({
                       className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all pl-6"
                       style={{
                         backgroundColor: currentView === 'appointments' ? theme.colors.navActive : 'transparent',
-                        color: currentView === 'appointments' ? undefined : theme.colors.text,
+                        color: currentView === 'appointments' ? '#FFFFFF' : theme.colors.text,
                       }}
                     >
                       <div className="flex items-center gap-2">
@@ -675,7 +756,7 @@ export function Navigation({
                       className="w-full flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all"
                       style={{
                         backgroundColor: currentView === item.id ? theme.colors.navActive : 'transparent',
-                        color: currentView === item.id ? undefined : theme.colors.text,
+                        color: currentView === item.id ? '#FFFFFF' : theme.colors.text,
                       }}
                     >
                       <UsersRound className="h-5 w-5 opacity-70" />
@@ -697,7 +778,7 @@ export function Navigation({
                         className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-xl transition-all pl-6"
                         style={{
                           backgroundColor: currentView === subItem.id ? theme.colors.navActive : 'transparent',
-                          color: currentView === subItem.id ? undefined : theme.colors.text,
+                          color: currentView === subItem.id ? '#FFFFFF' : theme.colors.text,
                         }}
                       >
                         <SubIcon className="h-4 w-4 opacity-70" />
@@ -733,7 +814,8 @@ export function Navigation({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center justify-around mt-4">
+              <ProfileThemeSwitch variant="menu" className="px-0 pt-3 pb-1" />
+              <div className="flex items-center justify-around mt-3">
                 <button
                   onClick={handleBackToSpaces}
                   className="text-xs transition-colors"

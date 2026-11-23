@@ -272,7 +272,7 @@ export function ThirdPartyDbSync() {
   return (
     <div className="space-y-6">
       {/* Top Banner & Overview */}
-      <Card className="border-indigo-200 bg-gradient-to-r from-indigo-50/80 via-purple-50/40 to-background">
+      <Card className="border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-slate-900/90 to-slate-900">
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start gap-4">

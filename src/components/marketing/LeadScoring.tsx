@@ -349,7 +349,7 @@ export function LeadScoring({ user }: LeadScoringProps) {
       </Card>
 
       {/* AI Insights */}
-      <Card className="bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
+      <Card className="bg-purple-950/20 border-purple-500/30">
         <CardHeader>
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-purple-600" />

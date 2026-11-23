@@ -306,7 +306,8 @@ export function settingsAPI(app: Hono) {
       if (error) return c.json({ error }, status);
 
       const theme = await kv.get(`user_theme:${user!.id}`);
-      return c.json({ theme: theme || null });
+      const themeMode = await kv.get(`user_theme_mode:${user!.id}`);
+      return c.json({ theme: theme || null, themeMode: themeMode || null });
     } catch (err: any) {
       console.error('[settings-api] GET theme error:', err);
       return c.json({ error: err.message }, 500);
@@ -319,11 +320,12 @@ export function settingsAPI(app: Hono) {
       const { error, status, user } = await authenticateCaller(c);
       if (error) return c.json({ error }, status);
 
-      const { theme } = await c.req.json();
-      if (!theme) return c.json({ error: 'Missing theme' }, 400);
+      const { theme, themeMode } = await c.req.json();
+      if (!theme && !themeMode) return c.json({ error: 'Missing theme' }, 400);
 
-      await kv.set(`user_theme:${user!.id}`, theme);
-      console.log(`[settings-api] Theme saved for user=${user!.id}: ${theme}`);
+      if (theme) await kv.set(`user_theme:${user!.id}`, theme);
+      if (themeMode) await kv.set(`user_theme_mode:${user!.id}`, themeMode);
+      console.log(`[settings-api] Theme saved for user=${user!.id}: ${theme} (mode=${themeMode || 'n/a'})`);
       return c.json({ success: true });
     } catch (err: any) {
       console.error('[settings-api] PUT theme error:', err);

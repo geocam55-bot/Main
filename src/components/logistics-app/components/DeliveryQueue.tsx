@@ -1692,7 +1692,7 @@ export default function DeliveryQueue({
                         {getEffectivePdfUrl(delivery) && (
                           <div>
                             <h5 className="font-bold text-gray-900 mb-1 uppercase tracking-wider font-mono text-[10px]">Physical Document Archive</h5>
-                            <div className="bg-gradient-to-br from-indigo-50/50 to-blue-50/50 border border-indigo-100 rounded-xl p-3.5 shadow-xs flex items-center justify-between">
+                            <div className="bg-indigo-950/30 border border-indigo-500/30 rounded-xl p-3.5 shadow-xs flex items-center justify-between">
                               <div className="flex items-center space-x-2.5">
                                 <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg">
                                   <FileText className="h-4 w-4" />

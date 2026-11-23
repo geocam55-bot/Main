@@ -5,13 +5,13 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 // Fallback theme used when useTheme is called outside of ThemeProvider
 // (e.g. during hot-reload boundary resets)
-const fallbackTheme = getTheme('vibrant');
+const fallbackTheme = getTheme('dark');
 const fallbackContext: ThemeContextType = {
   theme: fallbackTheme,
-  themeId: 'vibrant',
+  themeId: 'dark',
   setTheme: () => {},
   updateThemeColors: () => {},
-  themeMode: 'system',
+  themeMode: 'dark',
   setThemeMode: () => {},
 };
 
@@ -149,10 +149,143 @@ function getContrastSafeColors(colors: Theme['colors']): Theme['colors'] {
   };
 }
 
-export function ThemeProvider({ children, userId }: { children: ReactNode; userId?: string }) {
+function applyThemeStylesToDom(targetTheme: Theme) {
+  const safeColors = getContrastSafeColors(targetTheme.colors);
+  const root = document.documentElement;
+
+  if (targetTheme.isDark) {
+    root.classList.add('dark');
+    document.body.classList.add('dark');
+    root.setAttribute('data-theme', 'dark');
+    root.setAttribute('data-mode', 'dark');
+    root.style.colorScheme = 'dark';
+  } else {
+    root.classList.remove('dark');
+    document.body.classList.remove('dark');
+    root.setAttribute('data-theme', 'light');
+    root.setAttribute('data-mode', 'light');
+    root.style.colorScheme = 'light';
+  }
+
+  root.style.backgroundColor = safeColors.background;
+  root.style.setProperty('--color-background', safeColors.background);
+  root.style.setProperty('--color-background-secondary', safeColors.backgroundSecondary);
+  root.style.setProperty('--color-background-tertiary', safeColors.backgroundTertiary);
+  root.style.setProperty('--color-text', safeColors.text);
+  root.style.setProperty('--color-text-secondary', safeColors.textSecondary);
+  root.style.setProperty('--color-text-muted', safeColors.textMuted);
+  root.style.setProperty('--color-primary', safeColors.primary);
+  root.style.setProperty('--color-primary-hover', safeColors.primaryHover);
+  root.style.setProperty('--color-primary-text', safeColors.primaryText);
+  root.style.setProperty('--color-accent', safeColors.accent);
+  root.style.setProperty('--color-accent-hover', safeColors.accentHover);
+  root.style.setProperty('--color-border', safeColors.border);
+  root.style.setProperty('--color-border-light', safeColors.borderLight);
+  root.style.setProperty('--color-card', safeColors.card);
+  root.style.setProperty('--color-card-hover', safeColors.cardHover);
+  root.style.setProperty('--color-success', safeColors.success);
+  root.style.setProperty('--color-warning', safeColors.warning);
+  root.style.setProperty('--color-error', safeColors.error);
+  root.style.setProperty('--color-info', safeColors.info);
+  root.style.setProperty('--color-nav-background', safeColors.navBackground);
+  root.style.setProperty('--color-nav-text', safeColors.navText);
+  root.style.setProperty('--color-nav-hover', safeColors.navHover);
+  root.style.setProperty('--color-nav-active', safeColors.navActive);
+  root.style.setProperty('--color-topbar-background', safeColors.topBarBackground);
+  root.style.setProperty('--color-topbar-text', safeColors.topBarText);
+  root.style.setProperty('--shadow', safeColors.shadow);
+
+  root.style.setProperty('--gradient', safeColors.gradient || safeColors.background);
+
+  root.style.setProperty('--background', hexToHSL(safeColors.background));
+  root.style.setProperty('--foreground', hexToHSL(safeColors.text));
+  root.style.setProperty('--card', hexToHSL(safeColors.card));
+  root.style.setProperty('--card-foreground', hexToHSL(safeColors.cardText));
+  root.style.setProperty('--popover', hexToHSL(safeColors.card));
+  root.style.setProperty('--popover-foreground', hexToHSL(safeColors.cardText));
+  root.style.setProperty('--primary', hexToHSL(safeColors.primary));
+  root.style.setProperty('--primary-foreground', hexToHSL(safeColors.primaryText));
+  root.style.setProperty('--secondary', hexToHSL(safeColors.secondary));
+  root.style.setProperty('--secondary-foreground', hexToHSL(safeColors.secondaryText));
+  root.style.setProperty('--muted', hexToHSL(safeColors.backgroundTertiary));
+  root.style.setProperty('--muted-foreground', hexToHSL(safeColors.textMuted));
+  root.style.setProperty('--accent', hexToHSL(targetTheme.isDark ? safeColors.backgroundTertiary : '#EFF6FF'));
+  root.style.setProperty('--accent-foreground', hexToHSL(targetTheme.isDark ? '#F8FAFC' : '#0F172A'));
+  root.style.setProperty('--destructive', hexToHSL(safeColors.destructive));
+  root.style.setProperty('--destructive-foreground', hexToHSL(safeColors.destructiveText));
+  root.style.setProperty('--border', hexToHSL(safeColors.border));
+  root.style.setProperty('--input', hexToHSL(safeColors.input));
+  root.style.setProperty('--ring', hexToHSL(safeColors.primary));
+
+  if (targetTheme.isDark) {
+    root.style.setProperty('--prospaces-bg-main', '#0A0F1D');
+    root.style.setProperty('--prospaces-bg-depth', '#0F172A');
+    root.style.setProperty('--prospaces-bg-card', '#0F172A');
+    root.style.setProperty('--prospaces-bg-bottom-nav', '#020617');
+    root.style.setProperty('--prospaces-text-heading', '#F8FAFC');
+    root.style.setProperty('--prospaces-text-body', '#CBD5E1');
+    root.style.setProperty('--prospaces-text-secondary', '#94A3B8');
+    root.style.setProperty('--prospaces-text-disabled', '#64748B');
+    root.style.setProperty('--prospaces-input-bg', '#0F172A');
+    root.style.setProperty('--prospaces-input-border', '#334155');
+    root.style.setProperty('--prospaces-input-border-focus', '#3B82F6');
+    root.style.setProperty('--prospaces-input-text', '#F8FAFC');
+    root.style.setProperty('--prospaces-input-placeholder', '#64748B');
+    root.style.setProperty('--prospaces-input-icon', '#94A3B8');
+    root.style.setProperty('--prospaces-btn-red', '#3B82F6');
+    root.style.setProperty('--prospaces-btn-red-hover', '#2563EB');
+    root.style.setProperty('--prospaces-btn-red-text', '#FFFFFF');
+    root.style.setProperty('--prospaces-link', '#60A5FA');
+    root.style.setProperty('--prospaces-nav-active', '#2563EB');
+    root.style.setProperty('--prospaces-nav-icon-active', '#60A5FA');
+    root.style.setProperty('--prospaces-nav-text-active', '#93C5FD');
+    root.style.setProperty('--prospaces-nav-icon-inactive', '#94A3B8');
+    root.style.setProperty('--prospaces-nav-text-inactive', '#94A3B8');
+    root.style.setProperty('--prospaces-nav-border', '#1E293B');
+    root.style.setProperty('--prospaces-social-bg', '#0F172A');
+    root.style.setProperty('--prospaces-social-border', '#334155');
+    root.style.setProperty('--prospaces-social-text', '#F8FAFC');
+    root.style.setProperty('--prospaces-social-apple-icon', '#FFFFFF');
+  } else {
+    root.style.setProperty('--prospaces-bg-main', '#F8FAFC');
+    root.style.setProperty('--prospaces-bg-depth', '#FFFFFF');
+    root.style.setProperty('--prospaces-bg-card', '#FFFFFF');
+    root.style.setProperty('--prospaces-bg-bottom-nav', '#FFFFFF');
+    root.style.setProperty('--prospaces-text-heading', '#0F172A');
+    root.style.setProperty('--prospaces-text-body', '#334155');
+    root.style.setProperty('--prospaces-text-secondary', '#64748B');
+    root.style.setProperty('--prospaces-text-disabled', '#94A3B8');
+    root.style.setProperty('--prospaces-input-bg', '#FFFFFF');
+    root.style.setProperty('--prospaces-input-border', '#CBD5E1');
+    root.style.setProperty('--prospaces-input-border-focus', '#1E6FD9');
+    root.style.setProperty('--prospaces-input-text', '#0F172A');
+    root.style.setProperty('--prospaces-input-placeholder', '#94A3B8');
+    root.style.setProperty('--prospaces-input-icon', '#64748B');
+    root.style.setProperty('--prospaces-btn-red', '#1E6FD9');
+    root.style.setProperty('--prospaces-btn-red-hover', '#155FBC');
+    root.style.setProperty('--prospaces-btn-red-text', '#FFFFFF');
+    root.style.setProperty('--prospaces-link', '#1E6FD9');
+    root.style.setProperty('--prospaces-nav-active', '#1E6FD9');
+    root.style.setProperty('--prospaces-nav-icon-active', '#1E6FD9');
+    root.style.setProperty('--prospaces-nav-text-active', '#1E6FD9');
+    root.style.setProperty('--prospaces-nav-icon-inactive', '#64748B');
+    root.style.setProperty('--prospaces-nav-text-inactive', '#475569');
+    root.style.setProperty('--prospaces-nav-border', '#E2E8F0');
+    root.style.setProperty('--prospaces-social-bg', '#FFFFFF');
+    root.style.setProperty('--prospaces-social-border', '#CBD5E1');
+    root.style.setProperty('--prospaces-social-text', '#0F172A');
+    root.style.setProperty('--prospaces-social-apple-icon', '#000000');
+  }
+
+  root.style.setProperty('--mobile-control-background', safeColors.card);
+  root.style.setProperty('--mobile-control-foreground', ensureMinContrast(safeColors.cardText, safeColors.card, 4.5, [safeColors.text, safeColors.textSecondary]));
+  root.style.setProperty('--mobile-control-placeholder', ensureMinContrast(safeColors.textMuted, safeColors.card, 3, [safeColors.textSecondary, safeColors.text]));
+}
+
+export function ThemeProvider({ children, userId, forceDark = false }: { children: ReactNode; userId?: string; forceDark?: boolean }) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(loadThemeMode());
   const [themeId, setThemeId] = useState<string>(loadTheme());
-  const [theme, setThemeState] = useState<Theme>(getTheme(themeId));
+  const [theme, setThemeState] = useState<Theme>(() => getTheme(loadTheme()));
   const [customColorsVersion, setCustomColorsVersion] = useState(0);
 
   // Resolve theme based on mode
@@ -174,51 +307,25 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
         : getSystemPrefersDark()
           ? getPreferredThemeForMode('dark')
           : getPreferredThemeForMode('light');
-    
+
     setThemeId(resolvedId);
     saveTheme(resolvedId);
-
-    // Apply immediate visual feedback to DOM
+    try {
+      localStorage.setItem('prospace-theme-updated-at', String(Date.now()));
+    } catch {
+      // Ignored
+    }
     const immediateTheme = getTheme(resolvedId);
-    const root = document.documentElement;
-    if (immediateTheme.isDark) {
-      root.classList.add('dark');
-      document.body.classList.add('dark');
-      root.setAttribute('data-theme', 'dark');
-      root.setAttribute('data-mode', 'dark');
-    } else {
-      root.classList.remove('dark');
-      document.body.classList.remove('dark');
-      root.setAttribute('data-theme', 'light');
-      root.setAttribute('data-mode', 'light');
+    setThemeState(immediateTheme);
+
+    if (!forceDark) {
+      applyThemeStylesToDom(immediateTheme);
     }
 
     if (userId) {
-      await saveThemeToDatabase(resolvedId, userId);
+      await saveThemeToDatabase(resolvedId, userId, mode);
     }
-    // Persist mode to server
-    if (userId) {
-      try {
-        const { projectId, publicAnonKey } = await import('../utils/supabase/info');
-        const { createClient } = await import('../utils/supabase/client');
-        const supabase = createClient();
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/settings/theme`, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'X-User-Token': session.access_token,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ theme: resolvedId, themeMode: mode }),
-          });
-        }
-      } catch {
-        // Non-fatal: mode saved locally
-      }
-    }
-  }, [userId]);
+  }, [userId, forceDark]);
 
   // Listen for system preference changes when in system mode
   useEffect(() => {
@@ -232,6 +339,40 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
     mql.addEventListener('change', handler);
     return () => mql.removeEventListener('change', handler);
   }, [themeMode]);
+
+  // Re-sync from localStorage on bfcache restore (browser Back button) or cross-tab storage change
+  useEffect(() => {
+    const syncFromStorage = () => {
+      if (forceDark) return;
+      const latestMode = loadThemeMode();
+      const latestThemeId = latestMode === 'system'
+        ? (getSystemPrefersDark() ? getPreferredThemeForMode('dark') : getPreferredThemeForMode('light'))
+        : loadTheme();
+      const latestThemeObj = getTheme(latestThemeId);
+
+      setThemeModeState(latestMode);
+      setThemeId(latestThemeId);
+      setThemeState(latestThemeObj);
+      applyThemeStylesToDom(latestThemeObj);
+    };
+
+    const handlePageShow = () => {
+      syncFromStorage();
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'prospace-theme' || e.key === 'prospace-theme-mode') {
+        syncFromStorage();
+      }
+    };
+
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [forceDark]);
 
   const updateThemeColors = (id: string, colors: Partial<Theme['colors']>) => {
     try {
@@ -251,18 +392,52 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
   // Load theme from database on mount if user is logged in
   useEffect(() => {
     const loadUserTheme = async () => {
+      const wasMigratedBeforeMount = localStorage.getItem('prospace-theme-midnight-v1') === '1';
       let activeMode = loadThemeMode();
 
       if (userId) {
-        // Loading theme for user
+        // If user just changed theme locally in the last 15s (e.g. just before moving back),
+        // preserve the fresh local choice and ensure DB receives it rather than overwriting with stale DB state.
+        const updatedAt = Number(localStorage.getItem('prospace-theme-updated-at') || '0');
+        if (updatedAt && Date.now() - updatedAt < 15000) {
+          const localMode = loadThemeMode();
+          const localTheme = localMode === 'system'
+            ? (getSystemPrefersDark() ? getPreferredThemeForMode('dark') : getPreferredThemeForMode('light'))
+            : loadTheme();
+          setThemeModeState(localMode);
+          setThemeId(localTheme);
+          await saveThemeToDatabase(localTheme, userId, localMode);
+          return;
+        }
+
         const dbResult = await loadThemeFromDatabase(userId);
         const dbTheme = dbResult.theme;
         const dbMode = dbResult.themeMode as ThemeMode | null;
+
+        // Upgrade legacy pre-Midnight-Dark users only when no explicit themeMode/theme was saved
+        if (!wasMigratedBeforeMount && !dbMode && !dbTheme) {
+          localStorage.setItem('prospace-theme-midnight-v1', '1');
+          setThemeModeState('dark');
+          saveThemeModeToStorage('dark');
+          setThemeId('dark');
+          saveTheme('dark');
+          savePreferredThemeForMode('dark', 'dark');
+          await saveThemeToDatabase('dark', userId, 'dark');
+          return;
+        }
+        if (!wasMigratedBeforeMount) {
+          localStorage.setItem('prospace-theme-midnight-v1', '1');
+        }
         
         if (dbMode && (dbMode === 'light' || dbMode === 'dark' || dbMode === 'system')) {
           setThemeModeState(dbMode);
           saveThemeModeToStorage(dbMode);
           activeMode = dbMode;
+        } else if (dbTheme) {
+          const inferredMode: ThemeMode = getTheme(dbTheme).isDark ? 'dark' : 'light';
+          setThemeModeState(inferredMode);
+          saveThemeModeToStorage(inferredMode);
+          activeMode = inferredMode;
         }
 
         // If the mode is system, we must respect the current device's system preference
@@ -270,8 +445,6 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
         if (activeMode === 'system') {
           const systemPrefersDark = getSystemPrefersDark();
           
-          // If the DB provided a theme and its light/dark nature matches the system preference, use it!
-          // This ensures cross-device sync of the specific theme works even in system mode.
           let resolvedId = systemPrefersDark 
             ? getPreferredThemeForMode('dark') 
             : getPreferredThemeForMode('light');
@@ -292,10 +465,8 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
             savePreferredThemeForMode('light', resolvedId);
           }
         } else if (dbTheme) {
-          // Mode is 'light' or 'dark', and we have a specific theme from DB
           setThemeId(dbTheme);
-          saveTheme(dbTheme); // Also save to localStorage
-          // Track the preferred theme for current mode
+          saveTheme(dbTheme);
           const currentThemeObj = getTheme(dbTheme);
           if (currentThemeObj.isDark) {
             savePreferredThemeForMode('dark', dbTheme);
@@ -303,12 +474,10 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
             savePreferredThemeForMode('light', dbTheme);
           }
         } else {
-          // No theme found in database, using localStorage or default
           const localTheme = loadTheme();
           setThemeId(localTheme);
         }
       } else {
-        // No user ID, loading theme from localStorage
         const localTheme = loadTheme();
         
         if (activeMode === 'system') {
@@ -327,177 +496,47 @@ export function ThemeProvider({ children, userId }: { children: ReactNode; userI
   }, [userId]);
 
   useEffect(() => {
+    if (forceDark) {
+      const darkTheme = getTheme('dark');
+      setThemeState(darkTheme);
+      applyThemeStylesToDom(darkTheme);
+      return;
+    }
+
     const newTheme = getTheme(themeId);
     setThemeState(newTheme);
     saveTheme(themeId);
-    // Applying theme
-    const safeColors = getContrastSafeColors(newTheme.colors);
-    
-    // Apply theme colors to CSS variables
-    const root = document.documentElement;
-    
-    // ─── Toggle dark class for dark: prefixed Tailwind classes ───
-    if (newTheme.isDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    
-    // ─── Set hex color variables (for direct use) ───
-    root.style.setProperty('--color-background', safeColors.background);
-    root.style.setProperty('--color-background-secondary', safeColors.backgroundSecondary);
-    root.style.setProperty('--color-background-tertiary', safeColors.backgroundTertiary);
-    root.style.setProperty('--color-text', safeColors.text);
-    root.style.setProperty('--color-text-secondary', safeColors.textSecondary);
-    root.style.setProperty('--color-text-muted', safeColors.textMuted);
-    root.style.setProperty('--color-primary', safeColors.primary);
-    root.style.setProperty('--color-primary-hover', safeColors.primaryHover);
-    root.style.setProperty('--color-primary-text', safeColors.primaryText);
-    root.style.setProperty('--color-accent', safeColors.accent);
-    root.style.setProperty('--color-accent-hover', safeColors.accentHover);
-    root.style.setProperty('--color-border', safeColors.border);
-    root.style.setProperty('--color-border-light', safeColors.borderLight);
-    root.style.setProperty('--color-card', safeColors.card);
-    root.style.setProperty('--color-card-hover', safeColors.cardHover);
-    root.style.setProperty('--color-success', safeColors.success);
-    root.style.setProperty('--color-warning', safeColors.warning);
-    root.style.setProperty('--color-error', safeColors.error);
-    root.style.setProperty('--color-info', safeColors.info);
-    root.style.setProperty('--color-nav-background', safeColors.navBackground);
-    root.style.setProperty('--color-nav-text', safeColors.navText);
-    root.style.setProperty('--color-nav-hover', safeColors.navHover);
-    root.style.setProperty('--color-nav-active', safeColors.navActive);
-    root.style.setProperty('--color-topbar-background', safeColors.topBarBackground);
-    root.style.setProperty('--color-topbar-text', safeColors.topBarText);
-    root.style.setProperty('--shadow', safeColors.shadow);
-    
-    if (safeColors.gradient) {
-      root.style.setProperty('--gradient', safeColors.gradient);
-    }
-    
-    // ─── Set ALL Tailwind HSL variables consumed by UI components ───
-    // Background / Foreground
-    root.style.setProperty('--background', hexToHSL(safeColors.background));
-    root.style.setProperty('--foreground', hexToHSL(safeColors.text));
-    
-    // Card
-    root.style.setProperty('--card', hexToHSL(safeColors.card));
-    root.style.setProperty('--card-foreground', hexToHSL(safeColors.cardText));
-    
-    // Popover (same as card)
-    root.style.setProperty('--popover', hexToHSL(safeColors.card));
-    root.style.setProperty('--popover-foreground', hexToHSL(safeColors.cardText));
-    
-    // Primary
-    root.style.setProperty('--primary', hexToHSL(safeColors.primary));
-    root.style.setProperty('--primary-foreground', hexToHSL(safeColors.primaryText));
-    
-    // Secondary (PREVIOUSLY MISSING - caused light buttons on dark themes)
-    root.style.setProperty('--secondary', hexToHSL(safeColors.secondary));
-    root.style.setProperty('--secondary-foreground', hexToHSL(safeColors.secondaryText));
-    
-    // Muted
-    root.style.setProperty('--muted', hexToHSL(safeColors.backgroundTertiary));
-    root.style.setProperty('--muted-foreground', hexToHSL(safeColors.textMuted));
-    
-    // Accent (ACCENT-FOREGROUND PREVIOUSLY MISSING - caused dark hover text on dark themes)
-    root.style.setProperty('--accent', hexToHSL(safeColors.accent));
-    root.style.setProperty('--accent-foreground', hexToHSL(safeColors.accentText));
-    
-    // Destructive (PREVIOUSLY MISSING)
-    root.style.setProperty('--destructive', hexToHSL(safeColors.destructive));
-    root.style.setProperty('--destructive-foreground', hexToHSL(safeColors.destructiveText));
-    
-    // Border & Input
-    root.style.setProperty('--border', hexToHSL(safeColors.border));
-    root.style.setProperty('--input', hexToHSL(safeColors.input));
-    
-    // Ring
-    root.style.setProperty('--ring', hexToHSL(safeColors.primary));
-
-    // ProSpaces Logistics Color Palette Variables
-    if (newTheme.isDark) {
-      root.style.setProperty('--prospaces-bg-main', '#202124');
-      root.style.setProperty('--prospaces-bg-depth', '#18191B');
-      root.style.setProperty('--prospaces-bg-card', '#18191B');
-      root.style.setProperty('--prospaces-bg-bottom-nav', '#1C1D20');
-      root.style.setProperty('--prospaces-text-heading', '#F4F4F5');
-      root.style.setProperty('--prospaces-text-body', '#C9CBD0');
-      root.style.setProperty('--prospaces-text-secondary', '#8E939C');
-      root.style.setProperty('--prospaces-text-disabled', '#62666E');
-      root.style.setProperty('--prospaces-input-bg', '#1E1F22');
-      root.style.setProperty('--prospaces-input-border', '#44474D');
-      root.style.setProperty('--prospaces-input-border-focus', '#FF383A');
-      root.style.setProperty('--prospaces-input-text', '#F2F2F3');
-      root.style.setProperty('--prospaces-input-placeholder', '#90949B');
-      root.style.setProperty('--prospaces-input-icon', '#A5A8AD');
-      root.style.setProperty('--prospaces-btn-red', '#F52225');
-      root.style.setProperty('--prospaces-btn-red-hover', '#D91E21');
-      root.style.setProperty('--prospaces-btn-red-text', '#FFFFFF');
-      root.style.setProperty('--prospaces-link', '#FF4547');
-      root.style.setProperty('--prospaces-nav-active', '#FF3A3C');
-      root.style.setProperty('--prospaces-nav-icon-active', '#FF393B');
-      root.style.setProperty('--prospaces-nav-text-active', '#FF4547');
-      root.style.setProperty('--prospaces-nav-icon-inactive', '#8B9098');
-      root.style.setProperty('--prospaces-nav-text-inactive', '#A1A5AC');
-      root.style.setProperty('--prospaces-nav-border', '#303237');
-      root.style.setProperty('--prospaces-social-bg', '#1E1F22');
-      root.style.setProperty('--prospaces-social-border', '#4A4D53');
-      root.style.setProperty('--prospaces-social-text', '#F1F1F2');
-      root.style.setProperty('--prospaces-social-apple-icon', '#FFFFFF');
-    } else {
-      root.style.setProperty('--prospaces-bg-main', '#F7F8FA');
-      root.style.setProperty('--prospaces-bg-depth', '#FFFFFF');
-      root.style.setProperty('--prospaces-bg-card', '#FFFFFF');
-      root.style.setProperty('--prospaces-bg-bottom-nav', '#FFFFFF');
-      root.style.setProperty('--prospaces-text-heading', '#24262B');
-      root.style.setProperty('--prospaces-text-body', '#4F535B');
-      root.style.setProperty('--prospaces-text-secondary', '#7A7F87');
-      root.style.setProperty('--prospaces-text-disabled', '#A8ACB3');
-      root.style.setProperty('--prospaces-input-bg', '#FFFFFF');
-      root.style.setProperty('--prospaces-input-border', '#D7DADF');
-      root.style.setProperty('--prospaces-input-border-focus', '#EF2B2D');
-      root.style.setProperty('--prospaces-input-text', '#24262B');
-      root.style.setProperty('--prospaces-input-placeholder', '#777C84');
-      root.style.setProperty('--prospaces-input-icon', '#60656D');
-      root.style.setProperty('--prospaces-btn-red', '#F52225');
-      root.style.setProperty('--prospaces-btn-red-hover', '#D91E21');
-      root.style.setProperty('--prospaces-btn-red-text', '#FFFFFF');
-      root.style.setProperty('--prospaces-link', '#D92A2D');
-      root.style.setProperty('--prospaces-nav-active', '#E52B2F');
-      root.style.setProperty('--prospaces-nav-icon-active', '#E52B2F');
-      root.style.setProperty('--prospaces-nav-text-active', '#D9282C');
-      root.style.setProperty('--prospaces-nav-icon-inactive', '#6F747C');
-      root.style.setProperty('--prospaces-nav-text-inactive', '#6F747C');
-      root.style.setProperty('--prospaces-nav-border', '#E6E8EB');
-      root.style.setProperty('--prospaces-social-bg', '#FFFFFF');
-      root.style.setProperty('--prospaces-social-border', '#D1D4D9');
-      root.style.setProperty('--prospaces-social-text', '#24262B');
-      root.style.setProperty('--prospaces-social-apple-icon', '#000000');
-    }
-
-    // Mobile control vars keep form controls readable even for custom themes.
-    root.style.setProperty('--mobile-control-background', safeColors.card);
-    root.style.setProperty('--mobile-control-foreground', ensureMinContrast(safeColors.cardText, safeColors.card, 4.5, [safeColors.text, safeColors.textSecondary]));
-    root.style.setProperty('--mobile-control-placeholder', ensureMinContrast(safeColors.textMuted, safeColors.card, 3, [safeColors.textSecondary, safeColors.text]));
-  }, [themeId, customColorsVersion]);
+    applyThemeStylesToDom(newTheme);
+  }, [themeId, customColorsVersion, forceDark]);
 
   const handleSetTheme = async (newThemeId: string) => {
-    // Setting theme
     setThemeId(newThemeId);
     saveTheme(newThemeId); // Save to localStorage immediately
+    try {
+      localStorage.setItem('prospace-theme-updated-at', String(Date.now()));
+    } catch {
+      // Ignored
+    }
 
-    // Also save as preferred theme for this mode category
+    // Sync themeMode and preferred theme for this mode category
     const newThemeObj = getTheme(newThemeId);
+    setThemeState(newThemeObj);
+    const targetMode: ThemeMode = newThemeObj.isDark ? 'dark' : 'light';
+    setThemeModeState(targetMode);
+    saveThemeModeToStorage(targetMode);
+
     if (newThemeObj.isDark) {
       savePreferredThemeForMode('dark', newThemeId);
     } else {
       savePreferredThemeForMode('light', newThemeId);
     }
+
+    if (!forceDark) {
+      applyThemeStylesToDom(newThemeObj);
+    }
     
     if (userId) {
-      // Saving theme to database for user
-      await saveThemeToDatabase(newThemeId, userId);
+      await saveThemeToDatabase(newThemeId, userId, targetMode);
     }
   };
 
@@ -524,10 +563,15 @@ export function useTheme() {
 
 // Helper to get the stored preferred theme for a given mode
 function getPreferredThemeForMode(mode: 'light' | 'dark'): string {
+  const defaultId = mode === 'light' ? 'light' : 'dark';
   try {
-    return localStorage.getItem(`prospace-preferred-${mode}-theme`) || (mode === 'light' ? 'light' : 'dark');
+    const stored = localStorage.getItem(`prospace-preferred-${mode}-theme`);
+    if (stored && Boolean(getTheme(stored).isDark) === (mode === 'dark')) {
+      return stored;
+    }
+    return defaultId;
   } catch {
-    return mode === 'light' ? 'light' : 'dark';
+    return defaultId;
   }
 }
 
@@ -541,17 +585,22 @@ function savePreferredThemeForMode(mode: 'light' | 'dark', themeId: string): voi
 
 function loadThemeMode(): ThemeMode {
   try {
+    const migrated = localStorage.getItem('prospace-theme-midnight-v1');
     const stored = localStorage.getItem('prospace-theme-mode');
+    if (!migrated && (!stored || stored === 'system' || stored === 'light')) {
+      return 'dark';
+    }
     if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
   } catch {
     // Ignored
   }
-  return 'system';
+  return 'dark';
 }
 
 function saveThemeModeToStorage(mode: ThemeMode): void {
   try {
     localStorage.setItem('prospace-theme-mode', mode);
+    localStorage.setItem('prospace-theme-midnight-v1', '1');
   } catch {
     // Ignored
   }

@@ -185,7 +185,7 @@ export function OrganizationModuleManager({ user }: OrganizationModuleManagerPro
   return (
     <div className="space-y-4">
       {/* Header */}
-      <Card className="border-blue-100 bg-gradient-to-r from-blue-50/80 to-indigo-50/80">
+      <Card className="border-blue-500/30 bg-blue-950/20">
         <CardContent className="pt-6">
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">

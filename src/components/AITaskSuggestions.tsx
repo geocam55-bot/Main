@@ -862,7 +862,7 @@ export function AITaskSuggestions({ user, onNavigate }: AITaskSuggestionsProps) 
             )}
 
             {/* Daily Tip */}
-            <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white">
+            <Card className="border-2 border-amber-500/30 bg-amber-950/20">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Lightbulb className="h-5 w-5 text-amber-500" />

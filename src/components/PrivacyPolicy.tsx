@@ -10,7 +10,10 @@ export function PrivacyPolicy({ onBack, standalone = true }: PrivacyPolicyProps)
   const lastUpdated = 'February 17, 2026';
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 ${standalone ? '' : ''}`}>
+    <div
+      className={`min-h-screen bg-[#0A0F1D] ${standalone ? '' : ''}`}
+      style={{ background: 'linear-gradient(135deg, #0A0F1D 0%, #111827 40%, #0A0F1D 100%)' }}
+    >
       {/* Header */}
       <header className="bg-background/80 backdrop-blur-md border-b border-border sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
