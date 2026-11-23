@@ -25,10 +25,12 @@ export interface InventoryItem {
 
 export async function getProjectWizardDefaults(organizationId: string): Promise<ProjectWizardDefault[]> {
   if (!organizationId) return [];
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
     const headers = await getServerHeaders();
     const url = buildServerFunctionUrl(`/project-wizard-defaults?organization_id=${encodeURIComponent(organizationId)}`);
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, signal: controller.signal });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.defaults)) {
@@ -37,6 +39,8 @@ export async function getProjectWizardDefaults(organizationId: string): Promise<
     }
   } catch (err) {
     console.warn('[project-wizard-defaults] Server fetch failed, falling back to direct query:', err);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   try {
@@ -116,44 +120,117 @@ export async function getInventoryItemsForDropdown(
 ): Promise<InventoryItem[]> {
   const PRIMARY_ORG_ID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
   const activeOrgId = (organizationId && organizationId !== 'default-org') ? organizationId : PRIMARY_ORG_ID;
+  const orgsToTry = Array.from(new Set([activeOrgId, PRIMARY_ORG_ID, organizationId].filter(Boolean)));
 
-  // 1. If specific itemIds are requested, fetch them globally by ID (since UUIDs are unique)
+  // 1. If specific itemIds are requested, fetch them directly in chunks and fall back to server endpoint for any missing IDs
   if (itemIds && itemIds.length > 0) {
-    try {
-      const { data, error } = await supabase
-        .from('inventory')
-        .select('id, name, sku, category, description')
-        .in('id', itemIds)
-        .limit(1000);
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data;
+    const uniqueIds = Array.from(new Set(itemIds.filter(Boolean)));
+    const foundById = new Map<string, InventoryItem>();
+
+    // Chunked direct query (UUIDs are globally unique)
+    const CHUNK_SIZE = 150;
+    for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+      const chunk = uniqueIds.slice(i, i + CHUNK_SIZE);
+      try {
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('id, name, sku, category, description')
+          .in('id', chunk)
+          .limit(CHUNK_SIZE);
+        if (!error && Array.isArray(data)) {
+          data.forEach((item) => foundById.set(item.id, item));
+        }
+      } catch (err) {
+        console.warn('[project-wizard-defaults] Direct itemIds inventory query failed:', err);
       }
-    } catch (err) {
-      console.warn('[project-wizard-defaults] Direct itemIds inventory query failed:', err);
     }
+
+    // Server fallback for any IDs not returned by client Supabase (e.g. RLS restrictions)
+    const missingIds = uniqueIds.filter((id) => !foundById.has(id));
+    if (missingIds.length > 0) {
+      try {
+        const headers = await getServerHeaders();
+        for (const orgId of orgsToTry) {
+          const stillMissing = uniqueIds.filter((id) => !foundById.has(id));
+          if (stillMissing.length === 0) break;
+          for (let i = 0; i < stillMissing.length; i += CHUNK_SIZE) {
+            const chunk = stillMissing.slice(i, i + CHUNK_SIZE);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            try {
+              const url = buildServerFunctionUrl(
+                `/project-wizard-inventory/${encodeURIComponent(orgId)}?ids=${encodeURIComponent(chunk.join(','))}`
+              );
+              const res = await fetch(url, { headers, signal: controller.signal });
+              if (res.ok) {
+                const payload = await res.json();
+                if (Array.isArray(payload?.items)) {
+                  payload.items.forEach((item: InventoryItem) => foundById.set(item.id, item));
+                }
+              }
+            } finally {
+              clearTimeout(timeoutId);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[project-wizard-defaults] Server itemIds inventory fallback failed:', err);
+      }
+    }
+
+    return Array.from(foundById.values());
   }
 
-  // 2. Try fetching by activeOrgId or primary org id
-  const orgsToTry = [activeOrgId, PRIMARY_ORG_ID, organizationId].filter(Boolean);
+  // 2. Full dropdown list: try service-role server endpoint first (paginates all org inventory & bypasses RLS)
+  try {
+    const headers = await getServerHeaders();
+    for (const orgId of orgsToTry) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      try {
+        const url = buildServerFunctionUrl(`/project-wizard-inventory/${encodeURIComponent(orgId)}`);
+        const res = await fetch(url, { headers, signal: controller.signal });
+        if (res.ok) {
+          const payload = await res.json();
+          if (Array.isArray(payload?.items) && payload.items.length > 0) {
+            return payload.items;
+          }
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+  } catch (err) {
+    console.warn('[project-wizard-defaults] Server full inventory fetch failed, falling back to direct query:', err);
+  }
+
+  // 3. Direct Supabase fallback with pagination (up to 5,000 items)
   for (const orgId of orgsToTry) {
     try {
-      let query = supabase
-        .from('inventory')
-        .select('id, name, sku, category, description')
-        .eq('organization_id', orgId);
-      if (itemIds && itemIds.length > 0) {
-        query = query.in('id', itemIds);
+      const pageSize = 1000;
+      const collected: InventoryItem[] = [];
+      for (let page = 0; page < 5; page++) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('id, name, sku, category, description')
+          .eq('organization_id', orgId)
+          .order('name', { ascending: true })
+          .range(from, to);
+        if (error || !Array.isArray(data) || data.length === 0) break;
+        collected.push(...data);
+        if (data.length < pageSize) break;
       }
-      const { data, error } = await query.order('name', { ascending: true }).limit(1000);
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data;
+      if (collected.length > 0) {
+        return collected;
       }
     } catch (err) {
       console.warn(`[project-wizard-defaults] Inventory query for org ${orgId} failed:`, err);
     }
   }
 
-  // 3. Absolute fallback: fetch any inventory items available
+  // 4. Absolute fallback: fetch any inventory items available
   try {
     const { data, error } = await supabase
       .from('inventory')
@@ -172,16 +249,20 @@ export async function getInventoryItemsForDropdown(
 
 export async function getOrgConversionFactors(organizationId: string): Promise<Record<string, string>> {
   if (!organizationId) return {};
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
     const headers = await getServerHeaders();
     const url = buildServerFunctionUrl(`/org-conversion-factors/${organizationId}`);
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, signal: controller.signal });
     if (res.ok) {
       const data = await res.json();
       return data.conversionFactors || {};
     }
   } catch (err) {
     console.warn('[project-wizard-defaults] Failed to get org conversion factors:', err);
+  } finally {
+    clearTimeout(timeoutId);
   }
   return {};
 }

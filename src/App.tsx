@@ -833,7 +833,8 @@ export function AppContent() {
       phone: '(902) 555-0199',
       status: 'Active',
       associatedStoreId: 'DC-WINAMILL',
-      organization_id: orgId
+      organization_id: orgId,
+      organizationId: orgId,
     };
 
     try {

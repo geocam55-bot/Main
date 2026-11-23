@@ -53,6 +53,7 @@ export function InventoryCombobox({
   const [searchQuery, setSearchQuery] = useState('');
   const [useAdvancedSearch, setUseAdvancedSearch] = useState(true);
   const [fetchedItem, setFetchedItem] = useState<InventoryItem | null>(null);
+  const [isFetchingItem, setIsFetchingItem] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const focusSearchInput = () => {
@@ -75,24 +76,38 @@ export function InventoryCombobox({
   useEffect(() => {
     if (!value || value === 'none') {
       setFetchedItem(null);
+      setIsFetchingItem(false);
       return;
     }
-    if (items.some(item => item.id === value)) {
+    const localMatch = items.find(item => item.id === value);
+    if (localMatch) {
       setFetchedItem(null);
+      setIsFetchingItem(false);
+      return;
+    }
+    if (fetchedItem && fetchedItem.id === value) {
+      setIsFetchingItem(false);
       return;
     }
 
     let isMounted = true;
-    getCachedInventoryItem(value).then(item => {
-      if (isMounted && item) {
-        setFetchedItem(item);
-      }
-    });
+    setIsFetchingItem(true);
+    getCachedInventoryItem(value)
+      .then(item => {
+        if (isMounted) {
+          setFetchedItem(item || null);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsFetchingItem(false);
+        }
+      });
 
     return () => {
       isMounted = false;
     };
-  }, [value]);
+  }, [value, items]);
 
   // AI-Powered search with advanced-search.ts engine
   const filteredItems = useMemo(() => {
@@ -167,7 +182,7 @@ export function InventoryCombobox({
   }, [debouncedSearch, items, useAdvancedSearch]);
 
   // Find the selected item
-  const selectedItem = items.find((item) => item.id === value) || fetchedItem;
+  const selectedItem = items.find((item) => item.id === value) || (fetchedItem?.id === value ? fetchedItem : null);
   
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -184,16 +199,23 @@ export function InventoryCombobox({
               <span className="truncate text-foreground">None</span>
             ) : selectedItem ? (
               <>
-                <span className="truncate w-full font-semibold text-foreground">SKU: {selectedItem.sku}</span>
+                <span className="truncate w-full font-semibold text-foreground">
+                  SKU: {selectedItem.sku || selectedItem.name}
+                </span>
                 {selectedItem.description && (
                   <span className="text-xs text-muted-foreground truncate w-full">{cleanDescription(selectedItem.description)}</span>
                 )}
                 <span className="text-xs text-muted-foreground">MFG #: {selectedItem.name}</span>
               </>
+            ) : value && isFetchingItem ? (
+              <>
+                <span className="truncate w-full text-sm text-muted-foreground">Loading inventory item...</span>
+                <span className="text-xs text-muted-foreground/70 truncate w-full">ID: {value}</span>
+              </>
             ) : value ? (
               <>
-                <span className="truncate w-full font-medium text-amber-700">Saved item not found</span>
-                <span className="text-xs text-amber-600 truncate w-full">ID: {value}</span>
+                <span className="truncate w-full font-medium text-amber-500">Saved item not found</span>
+                <span className="text-xs text-amber-400/90 truncate w-full">ID: {value}</span>
               </>
             ) : (
               <span className="truncate text-foreground">{placeholder}</span>

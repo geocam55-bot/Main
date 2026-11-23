@@ -859,9 +859,7 @@ export function PlannerDefaults({ organizationId, userId, plannerType, materialT
       hasInitializedDefaults.current = true;
       return;
     }
-
-    onDefaultsSaved?.();
-  }, [userDefaults, loading, draftStorageKey, onDefaultsSaved]);
+  }, [userDefaults, loading, draftStorageKey]);
 
   const handleDefaultChange = (materialType: string | null, category: string, itemId: string) => {
     const effectiveCat = getEffectiveCategoryForSize(category, plannerType, userDefaults);

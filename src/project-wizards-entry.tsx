@@ -19,7 +19,15 @@ function ProjectWizardsApp() {
   const [user, setUser] = useState<User | null>(() => {
     try {
       const cached = localStorage.getItem('prospaces_active_user') || localStorage.getItem('prospaces_cached_user');
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const orgId = parsed.organizationId || parsed.organization_id || localStorage.getItem('currentOrgId') || 'rona_atlantic';
+        return {
+          ...parsed,
+          organization_id: orgId,
+          organizationId: orgId,
+        };
+      }
     } catch {}
     return {
       id: "USR-57008",

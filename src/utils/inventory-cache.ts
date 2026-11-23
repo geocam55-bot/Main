@@ -1,8 +1,12 @@
 import { createClient } from './supabase/client';
 
+import { getServerHeaders } from './server-headers';
+import { buildServerFunctionUrl } from './server-function-url';
+
 const supabase = createClient();
 const itemCache = new Map<string, any>();
 const pendingFetches = new Map<string, Promise<any>>();
+const PRIMARY_ORG_ID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
 
 async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3, delay = 1000): Promise<T> {
   let attempt = 0;
@@ -37,10 +41,19 @@ export async function getCachedInventoryItem(id: string): Promise<any | null> {
       const data = await retryWithBackoff(async () => {
         const { data, error } = await supabase
           .from('inventory')
-          .select('id, name, sku, category, description, cost, priceTier1, status')
+          .select('id, name, sku, category, description, cost, unit_price, status')
           .eq('id', id)
           .maybeSingle();
-        if (error) throw error;
+        if (error) {
+          // Retry with minimal guaranteed columns if optional columns (unit_price/status) are missing
+          const fallback = await supabase
+            .from('inventory')
+            .select('id, name, sku, category, description')
+            .eq('id', id)
+            .maybeSingle();
+          if (fallback.error) throw fallback.error;
+          return fallback.data;
+        }
         return data;
       });
       if (data) {
@@ -48,7 +61,32 @@ export async function getCachedInventoryItem(id: string): Promise<any | null> {
         return data;
       }
     } catch (err) {
-      console.warn('Failed to fetch cached inventory item after retries:', err);
+      console.warn('Failed to fetch cached inventory item directly:', err);
+    }
+
+    // Fallback to service-role server endpoint in case client RLS blocked the direct read
+    try {
+      const orgId =
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('currentOrgId') : null) ||
+        PRIMARY_ORG_ID;
+      const orgsToTry = Array.from(new Set([orgId, PRIMARY_ORG_ID].filter(Boolean)));
+      const headers = await getServerHeaders();
+      for (const candidateOrg of orgsToTry) {
+        const url = buildServerFunctionUrl(
+          `/project-wizard-inventory/${encodeURIComponent(candidateOrg)}?ids=${encodeURIComponent(id)}`
+        );
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const payload = await res.json();
+          const item = Array.isArray(payload?.items) ? payload.items[0] : null;
+          if (item) {
+            itemCache.set(id, item);
+            return item;
+          }
+        }
+      }
+    } catch (serverErr) {
+      console.warn('Failed to fetch cached inventory item via server:', serverErr);
     } finally {
       pendingFetches.delete(id);
     }

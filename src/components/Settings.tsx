@@ -263,6 +263,12 @@ function ThemeModeCard() {
 }
 
 export function Settings({ user, organization, onUserUpdate, onOrganizationUpdate }: SettingsProps) {
+  const resolvedOrganizationId =
+    user.organizationId ||
+    user.organization_id ||
+    organization?.id ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('currentOrgId') : null) ||
+    '';
   const [activeTab, setActiveTab] = useState('profile');
   const [orgName, setOrgName] = useState('ProSpaces Organization');
   const [profileData, setProfileData] = useState({
@@ -469,7 +475,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     }, SETTINGS_LOAD_TIMEOUT);
 
     return () => clearTimeout(safetyTimer);
-  }, [user.id, user.organizationId]);
+  }, [user.id, resolvedOrganizationId]);
 
   const loadSettingsFromSupabase = async () => {
     try {
@@ -477,7 +483,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       setShowDatabaseWarning(false);
 
       // Guard: if organizationId is missing, skip API calls and use localStorage
-      if (!user.organizationId) {
+      if (!resolvedOrganizationId) {
         loadSettingsFromLocalStorage();
         return;
       }
@@ -486,7 +492,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       let userPrefs = null;
       try {
         userPrefs = await withTimeout(
-          settingsAPI.getUserPreferences(user.id, user.organizationId),
+          settingsAPI.getUserPreferences(user.id, resolvedOrganizationId),
           API_CALL_TIMEOUT,
           'getUserPreferences'
         );
@@ -515,7 +521,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       let orgSettings = null;
       try {
         orgSettings = await withTimeout(
-          settingsAPI.getOrganizationSettings(user.organizationId),
+          settingsAPI.getOrganizationSettings(resolvedOrganizationId),
           API_CALL_TIMEOUT,
           'getOrganizationSettings'
         );
@@ -525,7 +531,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       if (orgSettings) {
         // price_tier_labels may not exist as a DB column yet.
         // Merge from localStorage so custom labels aren't lost.
-        const orgId = localStorage.getItem('currentOrgId') || user.organizationId;
+        const orgId = localStorage.getItem('currentOrgId') || resolvedOrganizationId;
         let storedPriceTierLabels: PriceTierLabels | null = null;
         let storedExportTemplates: CustomExportTemplate[] | null = null;
         try {
@@ -557,7 +563,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
         }
       } else {
         // Fallback to localStorage for org settings
-        const orgId = localStorage.getItem('currentOrgId') || user.organizationId;
+        const orgId = localStorage.getItem('currentOrgId') || resolvedOrganizationId;
         const stored = localStorage.getItem(`global_settings_${orgId}`);
         if (stored) {
           try {
@@ -578,7 +584,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
         // Try to get org name from organizations table (also with timeout)
         try {
           const { tenant } = await withTimeout(
-            tenantsAPI.getById(user.organizationId),
+            tenantsAPI.getById(resolvedOrganizationId),
             API_CALL_TIMEOUT,
             'getOrgName'
           );
@@ -592,7 +598,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       // Load organization user mode from KV store
       try {
         const orgModeData = await withTimeout(
-          getOrgMode(user.organizationId),
+          getOrgMode(resolvedOrganizationId),
           API_CALL_TIMEOUT,
           'getOrgMode'
         );
@@ -614,7 +620,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
   const loadSettingsFromLocalStorage = () => {
     // Fallback: Load from localStorage
     try {
-      const orgId = localStorage.getItem('currentOrgId') || user.organizationId;
+      const orgId = resolvedOrganizationId;
       const stored = localStorage.getItem(`global_settings_${orgId}`);
       if (stored) {
         const parsedSettings = JSON.parse(stored);
@@ -813,7 +819,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     setIsPrintingId(template.id);
     try {
       const supabase = createClient();
-      let orgId = user.organizationId;
+      let orgId = resolvedOrganizationId;
       
       if (!orgId) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -1003,7 +1009,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
           // Save to Supabase user preferences (profile_picture)
           await settingsAPI.upsertUserPreferences({
             user_id: user.id,
-            organization_id: user.organizationId,
+            organization_id: resolvedOrganizationId,
             profile_picture: base64String,
             notifications_email: notifications.email,
             notifications_push: notifications.push,
@@ -1051,7 +1057,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       // Remove from Supabase user_preferences table
       await settingsAPI.upsertUserPreferences({
         user_id: user.id,
-        organization_id: user.organizationId,
+        organization_id: resolvedOrganizationId,
         profile_picture: '',
         notifications_email: notifications.email,
         notifications_push: notifications.push,
@@ -1092,7 +1098,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       // Save profile picture to user_preferences table
       await settingsAPI.upsertUserPreferences({
         user_id: user.id,
-        organization_id: user.organizationId,
+        organization_id: resolvedOrganizationId,
         profile_picture: profileData.profilePicture || '',
         notifications_email: notifications.email,
         notifications_push: notifications.push,
@@ -1127,11 +1133,11 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     
     try {
       // Save organization name to Supabase
-      await settingsAPI.updateOrganizationName(user.organizationId, orgName);
+      await settingsAPI.updateOrganizationName(resolvedOrganizationId, orgName);
       
       // Also save to organization_settings table
       await settingsAPI.upsertOrganizationSettings({
-        organization_id: user.organizationId,
+        organization_id: resolvedOrganizationId,
         tax_rate: globalSettings.taxRate,
         default_price_level: globalSettings.defaultPriceLevel,
         organization_name: orgName,
@@ -1151,7 +1157,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       // Save notification preferences to Supabase
       await settingsAPI.upsertUserPreferences({
         user_id: user.id,
-        organization_id: user.organizationId,
+        organization_id: resolvedOrganizationId,
         notifications_email: notifications.email,
         notifications_push: notifications.push,
         notifications_task_assignments: notifications.taskAssignments,
@@ -1172,7 +1178,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     setIsSavingUserMode(true);
     try {
       setUserMode(newMode);
-      await setOrgMode(user.organizationId, newMode);
+      await setOrgMode(resolvedOrganizationId, newMode);
 
       // Update organization object in parent if callback available
       if (onOrganizationUpdate && organization) {
@@ -1197,7 +1203,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
     try {
       // Save to Supabase
       const payload: any = {
-        organization_id: user.organizationId,
+        organization_id: resolvedOrganizationId,
         tax_rate: globalSettings.taxRate,
         tax_rate_2: globalSettings.taxRate2,
         default_price_level: globalSettings.defaultPriceLevel,
@@ -1215,7 +1221,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       const result = await settingsAPI.upsertOrganizationSettings(payload);
       
       // Keep localStorage as backup (always save regardless of Supabase status)
-      const orgId = localStorage.getItem('currentOrgId') || user.organizationId;
+      const orgId = resolvedOrganizationId;
       localStorage.setItem(`global_settings_${orgId}`, JSON.stringify(globalSettings));
       
       if (result) {
@@ -1229,7 +1235,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       // Check if it's an RLS permission error
       if (error?.message?.includes('Permission denied') || error?.message?.includes('RLS')) {
         try {
-          const orgId = localStorage.getItem('currentOrgId') || user.organizationId;
+          const orgId = resolvedOrganizationId;
           localStorage.setItem(`global_settings_${orgId}`, JSON.stringify(globalSettings));
         } catch (_) {
           // ignore localStorage errors here; we still surface the backend error
@@ -1238,7 +1244,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       } else {
         // Still try to save to localStorage as fallback
         try {
-          const orgId = localStorage.getItem('currentOrgId') || user.organizationId;
+          const orgId = resolvedOrganizationId;
           localStorage.setItem(`global_settings_${orgId}`, JSON.stringify(globalSettings));
           showAlert('success', 'Global settings saved locally (offline mode)');
         } catch (localError) {
@@ -1347,12 +1353,12 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
       <WorkflowSettingsDialog 
         open={showWorkflowDialog} 
         onOpenChange={setShowWorkflowDialog} 
-        organizationId={user.organizationId}
+        organizationId={resolvedOrganizationId}
       />
       <CustomFieldsDialog
         open={showCustomFieldsDialog}
         onOpenChange={setShowCustomFieldsDialog}
-        organizationId={user.organizationId}
+        organizationId={resolvedOrganizationId}
       />
       {/* Database Warning Banner */}
       {showDatabaseWarning && (
@@ -1427,7 +1433,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                   <div className="flex-1">
                     <Input 
                       id="organization" 
-                      defaultValue={user.organizationId} 
+                      defaultValue={resolvedOrganizationId} 
                       disabled 
                       className="bg-transparent border-none p-0 h-auto font-mono text-sm"
                     />
@@ -1576,7 +1582,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
 
         {canManageSettings && (
           <TabsContent value="tenant-variables" className="space-y-4">
-            <EnvironmentSettingsPanel scope="tenant" organizationId={user.organizationId} />
+            <EnvironmentSettingsPanel scope="tenant" organizationId={resolvedOrganizationId} />
           </TabsContent>
         )}
 
@@ -1607,7 +1613,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="orgId">Organization ID</Label>
-                    <Input id="orgId" defaultValue={user.organizationId} disabled />
+                    <Input id="orgId" defaultValue={resolvedOrganizationId} disabled />
                   </div>
                   <Button type="submit" disabled={isSavingOrg}>
                     {isSavingOrg ? 'Saving...' : 'Save Organization Settings'}
@@ -2445,7 +2451,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
                       </CardHeader>
                       <CardContent>
                         <ProjectWizardSettings 
-                          organizationId={user.organizationId}
+                          organizationId={resolvedOrganizationId}
                           onSave={showAlert}
                         />
                       </CardContent>
@@ -2557,7 +2563,7 @@ export function Settings({ user, organization, onUserUpdate, onOrganizationUpdat
           {/* Planner Defaults Migration Status */}
           <PlannerDefaultsMigrationStatus 
             userId={user.id}
-            organizationId={user.organizationId}
+            organizationId={resolvedOrganizationId}
           />
         </TabsContent>
 

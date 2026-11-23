@@ -762,6 +762,10 @@ function LengthCollapsible({
 }
 
 export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardSettingsProps) {
+  const effectiveOrganizationId =
+    organizationId ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('currentOrgId') : null) ||
+    '';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -1023,13 +1027,12 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
   }, [selectedPlannerNav, manualPlannerSelection]);
 
   useEffect(() => {
-    // Only load if we have a valid organization ID
-    if (organizationId) {
+    if (effectiveOrganizationId) {
       loadData();
     } else {
-      // Skipping load - organizationId is undefined
+      setLoading(false);
     }
-  }, [organizationId]);
+  }, [effectiveOrganizationId]);
 
   useEffect(() => {
     defaultsRef.current = defaults;
@@ -1040,54 +1043,71 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
   }, [orgCFs]);
 
   const loadData = async () => {
-    // Guard against undefined organizationId
-    if (!organizationId) {
-      // Cannot load data - organizationId is undefined
-      onSave('error', 'Unable to load settings. Please refresh the page.');
+    if (!effectiveOrganizationId) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    // Safety net: always clear the spinner after 12s even if a fetch hangs
-    const safetyTimer = setTimeout(() => setLoading(false), 12000);
+    // Safety net: always clear the spinner after 8s even if a fetch hangs
+    const safetyTimer = setTimeout(() => setLoading(false), 8000);
     
     try {
-      // Step 1: Load wizard defaults
-      const wizardDefaults = await getProjectWizardDefaults(organizationId);
+      // Step 1: Load wizard defaults and conversion factors concurrently
+      const [wizardDefaults, cfData] = await Promise.all([
+        getProjectWizardDefaults(effectiveOrganizationId),
+        getOrgConversionFactors(effectiveOrganizationId),
+      ]);
 
       // Convert defaults array to lookup object
       const defaultsMap: Record<string, string> = {};
-      const itemIdsToFetch: string[] = [];
+      const itemIdsSetToFetch = new Set<string>();
       
       wizardDefaults.forEach((def) => {
         const key = makeDefaultsKey(def.planner_type, def.material_type || 'default', def.material_category);
         if (def.inventory_item_id) {
           defaultsMap[key] = def.inventory_item_id;
-          itemIdsToFetch.push(def.inventory_item_id);
+          itemIdsSetToFetch.add(def.inventory_item_id);
         }
       });
+      const itemIdsToFetch = Array.from(itemIdsSetToFetch);
       
       setDefaults(defaultsMap);
       setLoadedDefaults(wizardDefaults);
+
+      const normalizedCFData: Record<string, string> = {};
+      Object.entries(cfData || {}).forEach(([key, value]) => {
+        normalizedCFData[normalizeStoredKey(key)] = value;
+      });
+      setOrgCFs(normalizedCFData);
 
       // Step 2: Load only the inventory items that are currently set as defaults
       let items: InventoryItem[] = [];
       
       if (itemIdsToFetch.length > 0) {
-        items = await getInventoryItemsForDropdown(organizationId, itemIdsToFetch);
+        items = await getInventoryItemsForDropdown(effectiveOrganizationId, itemIdsToFetch);
       }
 
       setInventoryItems(items);
       
-      // Step 3: Load the full inventory list in the background (lazy load)
+      // Step 3: Load the full inventory list in the background (lazy load) and merge without overwriting Step 2 items
       setTimeout(async () => {
-        const allItems = await getInventoryItemsForDropdown(organizationId);
-        setInventoryItems(allItems);
-
-        // Auto-heal orphaned defaults
+        const allItems = await getInventoryItemsForDropdown(effectiveOrganizationId);
         if (allItems.length > 0) {
-          const itemIdsSet = new Set(allItems.map(i => i.id));
+          setInventoryItems((prev) => {
+            const byId = new Map<string, InventoryItem>();
+            prev.forEach((item) => byId.set(item.id, item));
+            allItems.forEach((item) => byId.set(item.id, item));
+            return Array.from(byId.values());
+          });
+        }
+
+        // Auto-heal orphaned defaults using the combined known inventory IDs
+        if (allItems.length > 0) {
+          const itemIdsSet = new Set([
+            ...items.map((i) => i.id),
+            ...allItems.map((i) => i.id),
+          ]);
           const healed: Record<string, string> = { ...defaultsMap };
           const healedKeysList: string[] = [];
 
@@ -1115,7 +1135,7 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
                 const parsed = parseDefaultsKey(key);
                 if (!parsed) return null;
                 return {
-                  organization_id: organizationId,
+                  organization_id: effectiveOrganizationId,
                   planner_type: parsed.plannerType as 'deck' | 'garage' | 'shed' | 'roof' | 'finishing',
                   material_type: getCanonicalMaterialType(parsed.plannerType, parsed.materialType || 'default'),
                   material_category: getCanonicalMaterialCategory(parsed.plannerType, parsed.materialType || 'default', parsed.category),
@@ -1136,15 +1156,6 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
           }
         }
       }, 100); // Small delay to let UI render first
-      
-      // Step 4: Load organization conversion factors from KV
-      const cfData = await getOrgConversionFactors(organizationId);
-      const normalizedCFData: Record<string, string> = {};
-      Object.entries(cfData || {}).forEach(([key, value]) => {
-        normalizedCFData[normalizeStoredKey(key)] = value;
-      });
-      setOrgCFs(normalizedCFData);
-      
     } catch (error) {
       // Error loading project wizard settings
       // Only show error if it's not an authentication issue
@@ -1217,8 +1228,8 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
       const latestDefaults = defaultsRef.current;
       const latestOrgCFs = orgCFsRef.current;
 
-      const beforeRows = await getProjectWizardDefaults(organizationId);
-      const rawBeforeRows = await getProjectWizardDefaultsRaw(organizationId);
+      const beforeRows = await getProjectWizardDefaults(effectiveOrganizationId);
+      const rawBeforeRows = await getProjectWizardDefaultsRaw(effectiveOrganizationId);
       const beforeMap = new Map<string, ProjectWizardDefault>();
       beforeRows.forEach((row) => {
         const key = makeDefaultsKey(row.planner_type, row.material_type || 'default', row.material_category);
@@ -1243,7 +1254,7 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
         }
 
         return {
-          organization_id: organizationId,
+          organization_id: effectiveOrganizationId,
           planner_type: parsed.plannerType as 'deck' | 'garage' | 'shed' | 'roof' | 'finishing',
           // Send explicit "default" to avoid NULL upsert collisions on older server deployments.
           material_type: getCanonicalMaterialType(parsed.plannerType, parsed.materialType || 'default'),
@@ -1317,7 +1328,7 @@ export function ProjectWizardSettings({ organizationId, onSave }: ProjectWizardS
       // data was written successfully. We trust the write acknowledgements above.
       
       // Also save org conversion factors to KV
-      const cfResult = await saveOrgConversionFactors(organizationId, latestOrgCFs);
+      const cfResult = await saveOrgConversionFactors(effectiveOrganizationId, latestOrgCFs);
 
       if (!cfResult) {
         // CF save failed
