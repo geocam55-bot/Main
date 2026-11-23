@@ -301,7 +301,7 @@ function getRoleCapabilityPermission(module: string, role: UserRole): Permission
 
   if (normRole === 'admin') {
     if (module === 'tenants') {
-      return { visible: false, add: false, change: false, delete: false };
+      return { visible: true, add: true, change: true, delete: false };
     }
     return {
       visible: true,
