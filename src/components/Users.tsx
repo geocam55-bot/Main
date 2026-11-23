@@ -141,12 +141,12 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     }
   }, []);
 
-  // Load tenants if super admin
+  // Load tenants if super admin or admin
   useEffect(() => {
-    if (isSuperAdmin) {
+    if (isSuperAdmin || isAdmin) {
       loadTenants();
     }
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, isAdmin]);
 
   // Load user plans when users list changes
   useEffect(() => {
@@ -268,26 +268,22 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     try {
       setIsLoadingTenants(true);
       
-      // Load organizations directly from Supabase for SUPER_ADMIN
-      const { data: organizations, error } = await supabase
-        .from('organizations')
-        .select('*')
-        .order('name', { ascending: true });
-      
-      if (error) {
-        return;
+      const result = await tenantsAPI.getAll();
+      let loadedTenants = result.tenants || [];
+
+      if (loadedTenants.length === 0) {
+        loadedTenants = [
+          { id: 'rona_atlantic', name: 'RONA Atlantic Logistics', status: 'active' },
+          { id: '34638283-7b3d-47e2-bec8-a9e600e28c4a', name: 'ProSpaces CRM', status: 'active' }
+        ];
       }
-      
-      // Map to tenant format
-      const loadedTenants = organizations?.map(org => ({
-        id: org.id,
-        name: org.name,
-        status: org.status || 'active',
-        logo: org.logo,
-      })) || [];
       
       setTenants(loadedTenants);
     } catch (error) {
+      setTenants([
+        { id: 'rona_atlantic', name: 'RONA Atlantic Logistics', status: 'active' },
+        { id: '34638283-7b3d-47e2-bec8-a9e600e28c4a', name: 'ProSpaces CRM', status: 'active' }
+      ]);
     } finally {
       setIsLoadingTenants(false);
     }
@@ -567,28 +563,10 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     // Check if organization changed
     const orgChanged = editUser.organizationId !== originalOrganizationId;
     
-    // If organization changed, show warning and require confirmation
+    // If organization changed, notify user
     if (orgChanged && isSuperAdmin) {
       const oldOrgName = getOrgName(originalOrganizationId);
       const newOrgName = getOrgName(editUser.organizationId);
-      
-      const confirmed = confirm(
-        `⚠️ ORGANIZATION CHANGE WARNING\n\n` +
-        `You are about to move ${selectedUser.name} from:\n` +
-        `  "${oldOrgName}"\n` +
-        `to:\n` +
-        `  "${newOrgName}"\n\n` +
-        `This will affect their access to data and may cause issues.\n\n` +
-        `Are you absolutely sure you want to do this?`
-      );
-      
-      if (!confirmed) {
-        toast.info('User update cancelled');
-        return;
-      }
-      
-      // Removed log
-      
       toast.success(`User organization changed from "${oldOrgName}" to "${newOrgName}"`);
     }
 

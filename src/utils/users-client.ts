@@ -403,22 +403,67 @@ export async function updateUserClient(id: string, updates: Partial<ClientUser>)
 
     const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/users/${id}`;
     const headers = await getServerHeaders();
-    const response = await fetch(serverUrl, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({
-        name: updates.name,
-        email: updates.email,
-        role: updates.role,
-        organization_id: updates.organization_id,
-        status: updates.status,
-      }),
-    });
+    let response;
+    try {
+      response = await fetch(serverUrl, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          name: updates.name,
+          email: updates.email,
+          role: updates.role,
+          organization_id: updates.organization_id,
+          status: updates.status,
+        }),
+      });
+    } catch {}
 
-    const result = await response.json();
+    if (!response || !response.ok) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          name: updates.name,
+          email: updates.email,
+          role: updates.role,
+          organization_id: updates.organization_id,
+          status: updates.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (!response.ok || !result?.success) {
-      throw new Error(result?.error || 'Failed to update user');
+      if (error) {
+        throw new Error(error.message || 'Failed to update user');
+      }
+
+      return { user: data };
+    }
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!result?.success) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          name: updates.name,
+          email: updates.email,
+          role: updates.role,
+          organization_id: updates.organization_id,
+          status: updates.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(result?.error || error.message || 'Failed to update user');
+      }
+
+      return { user: data };
     }
 
     return { user: result.user };

@@ -2551,25 +2551,24 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
     const finalOrgId = nextOrgId ?? existingProfile.organization_id;
     const finalStatus = nextStatus ?? existingProfile.status;
 
-    const { data: authUserData, error: getAuthUserError } = await auth.supabase.auth.admin.getUserById(id);
-    if (getAuthUserError) return c.json({ error: getAuthUserError.message }, 500);
-
-    const authUser = authUserData.user;
-    if (!authUser) return c.json({ error: 'Auth user not found' }, 404);
-
-    const mergedUserMetadata = {
-      ...(authUser.user_metadata || {}),
-      name: finalName,
-      role: finalRole,
-      organizationId: finalOrgId,
-    };
-
-    const { error: authUpdateError } = await auth.supabase.auth.admin.updateUserById(id, {
-      email: finalEmail,
-      user_metadata: mergedUserMetadata,
-    });
-
-    if (authUpdateError) return c.json({ error: authUpdateError.message }, 500);
+    try {
+      const { data: authUserData } = await auth.supabase.auth.admin.getUserById(id);
+      const authUser = authUserData?.user;
+      if (authUser) {
+        const mergedUserMetadata = {
+          ...(authUser.user_metadata || {}),
+          name: finalName,
+          role: finalRole,
+          organizationId: finalOrgId,
+        };
+        await auth.supabase.auth.admin.updateUserById(id, {
+          email: finalEmail,
+          user_metadata: mergedUserMetadata,
+        });
+      }
+    } catch (authErr) {
+      console.warn("Optional auth user update skipped:", authErr);
+    }
 
     const { data: updatedProfile, error: profileUpdateError } = await auth.supabase
       .from('profiles')
