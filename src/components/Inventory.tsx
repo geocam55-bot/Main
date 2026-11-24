@@ -2455,24 +2455,22 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                               <span className="truncate max-w-[250px] sm:max-w-none">{item.notes}</span>
                             </div>
                           )}
-                          {item.lastDateUpdated && (
-                            <div
-                              className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded"
-                              title={(() => {
+                          <div
+                            className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded"
+                            title={item.lastDateUpdated ? (() => {
+                              const d = new Date(item.lastDateUpdated);
+                              return isNaN(d.getTime()) ? String(item.lastDateUpdated) : d.toLocaleString();
+                            })() : 'Not yet updated'}
+                          >
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span>
+                              <span className="font-semibold text-muted-foreground mr-1">Last Date Updated:</span>
+                              {item.lastDateUpdated ? (() => {
                                 const d = new Date(item.lastDateUpdated);
-                                return isNaN(d.getTime()) ? String(item.lastDateUpdated) : d.toLocaleString();
-                              })()}
-                            >
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <span>
-                                <span className="font-semibold text-muted-foreground mr-1">Last Date Updated:</span>
-                                {(() => {
-                                  const d = new Date(item.lastDateUpdated);
-                                  return isNaN(d.getTime()) ? String(item.lastDateUpdated) : d.toLocaleDateString();
-                                })()}
-                              </span>
-                            </div>
-                          )}
+                                return isNaN(d.getTime()) ? String(item.lastDateUpdated) : d.toLocaleDateString();
+                              })() : 'Not set'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -2842,6 +2840,19 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                     </SelectContent>
                   </Select>
                 </div>
+                {editingItem && (
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-foreground font-medium">Last Date Updated</label>
+                    <Input
+                      value={editingItem.lastDateUpdated ? (() => {
+                        const d = new Date(editingItem.lastDateUpdated);
+                        return isNaN(d.getTime()) ? String(editingItem.lastDateUpdated) : d.toLocaleString();
+                      })() : 'Not set (run an inventory import or update this item to set)'}
+                      readOnly
+                      className="bg-muted/60 text-foreground cursor-default"
+                    />
+                  </div>
+                )}
                 <div className="md:col-span-2">
                   <label className="text-sm text-foreground">Description</label>
                   <Textarea
@@ -3063,20 +3074,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                     placeholder="Enter department code"
                   />
                 </div>
-                {editingItem && (
-                  <div>
-                    <label className="text-sm text-foreground font-medium">Last Date Updated</label>
-                    <Input
-                      value={editingItem.lastDateUpdated ? (() => {
-                        const d = new Date(editingItem.lastDateUpdated);
-                        return isNaN(d.getTime()) ? String(editingItem.lastDateUpdated) : d.toLocaleString();
-                      })() : 'Not set'}
-                      readOnly
-                      disabled
-                      className="bg-muted text-muted-foreground"
-                    />
-                  </div>
-                )}
                 <div className="sm:col-span-2 md:col-span-3">
                   <label className="text-sm text-foreground">Tags (comma-separated)</label>
                   <Input

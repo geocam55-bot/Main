@@ -2355,14 +2355,14 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
           } else {
             const fallbackCols: Record<string, string[]> = {
               contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags", "ptd_sales", "ptd_gp_percent", "ytd_sales", "ytd_gp_percent", "lyr_sales", "lyr_gp_percent"],
-              inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure"],
+              inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_hand", "quantity_on_order", "status", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "last_date_updated"],
               opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
             };
             (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
           }
 
           if (table === "inventory") {
-            ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url"].forEach(k => existingDbCols.add(k));
+            ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url", "last_date_updated"].forEach(k => existingDbCols.add(k));
           }
 
           const profilesMap = new Map<string, string>();
@@ -2386,6 +2386,7 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
           });
 
           const cleanedRecordsList: any[] = [];
+          const importRunTimestamp = new Date().toISOString();
 
           for (const rec of parsedRecords) {
             const mappedRec: any = {};
@@ -2492,6 +2493,7 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
                   mappedRec.unit_of_measure = cleanVal;
                 }
                 else if (lowerKey === "imageurl" || lowerKey === "image") mappedRec.image_url = cleanVal;
+                else if (lowerKey === "lastdateupdated" || lowerKey === "dateimported" || lowerKey === "importdate") mappedRec.last_date_updated = cleanVal;
               }
               else if (table === "opportunities") {
                 if (lowerKey === "projectname" || lowerKey === "title" || lowerKey === "dealname" || lowerKey === "deal" || lowerKey === "project") mappedRec.title = cleanVal;
@@ -2525,6 +2527,7 @@ app.post(`${PREFIX}/import-export/execute-task`, async (c) => {
               if (mappedRec.price_tier_4 === undefined) mappedRec.price_tier_4 = defaultPrice;
               if (mappedRec.price_tier_5 === undefined) mappedRec.price_tier_5 = defaultPrice;
               if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
+              mappedRec.last_date_updated = importRunTimestamp;
 
               const metadata: any = {};
               if (mappedRec.image_url) metadata.imageUrl = mappedRec.image_url;

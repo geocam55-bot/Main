@@ -2939,24 +2939,39 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       if (tempTaskId) {
         let runData: any;
         if (connectionMode === "supabase") {
-          const { data, error } = await supabase.functions.invoke(
-            'make-server-8405be07/import-export/execute-task',
-            { body: { taskId: tempTaskId } }
-          );
-          if (error) {
-            const context = error.context;
-            if (context instanceof Response) {
-              const responseBody = await context.clone().json().catch(() => null);
-              const responseMessage =
-                responseBody?.error ||
-                responseBody?.message ||
-                responseBody?.log?.message ||
-                responseBody?.logResult?.message;
-              if (responseMessage) throw new Error(responseMessage);
+          try {
+            const runRes = await safeFetch(`/api/import-export/tasks/${tempTaskId}/run`, {
+              method: "POST",
+              headers: session?.access_token ? {
+                "Authorization": `Bearer ${session.access_token}`
+              } : {}
+            }, 120000);
+            if (!runRes.ok) {
+              const errBody = await runRes.json().catch(() => ({}));
+              throw new Error(errBody?.error || `HTTP ${runRes.status}`);
             }
-            throw error;
+            runData = await parseResponseJson(runRes);
+          } catch (localRunErr) {
+            console.warn("Direct Express manual run failed in supabase mode, falling back to Edge Function:", localRunErr);
+            const { data, error } = await supabase.functions.invoke(
+              'make-server-8405be07/import-export/execute-task',
+              { body: { taskId: tempTaskId } }
+            );
+            if (error) {
+              const context = error.context;
+              if (context instanceof Response) {
+                const responseBody = await context.clone().json().catch(() => null);
+                const responseMessage =
+                  responseBody?.error ||
+                  responseBody?.message ||
+                  responseBody?.log?.message ||
+                  responseBody?.logResult?.message;
+                if (responseMessage) throw new Error(responseMessage);
+              }
+              throw error;
+            }
+            runData = { ...data, logResult: data?.log || data?.logResult };
           }
-          runData = { ...data, logResult: data?.log || data?.logResult };
         } else {
           const runRes = await safeFetch(`/api/import-export/tasks/${tempTaskId}/run`, {
             method: "POST",

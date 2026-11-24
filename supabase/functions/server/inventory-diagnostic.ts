@@ -21,13 +21,19 @@ async function smartBatchUpsert(
   startIdx: number,
 ): Promise<BatchResult> {
   const result: BatchResult = { inserted: 0, updated: 0, skipped: 0, errors: 0, errorMessages: [] };
+  const importTimestamp = new Date().toISOString();
+  const { error: lastDateColErr } = await supabase
+    .from('inventory')
+    .select('last_date_updated')
+    .limit(1);
+  const hasLastDateUpdatedCol = !lastDateColErr;
 
   // 1. Build inventory records from raw import data
   const inventoryRecords: any[] = [];
   for (const record of records) {
     try {
       if (!record.name && !record.sku) { result.skipped++; continue; }
-      inventoryRecords.push({
+      const itemPayload: any = {
         organization_id: orgId,
         name: record.name || record.sku || 'Unnamed Item',
         sku: record.sku || `AUTO-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -45,7 +51,11 @@ async function smartBatchUpsert(
         department_code: record.department_code || null,
         unit_of_measure: record.unit_of_measure || record.unit || record.Unit || record.uom || 'ea',
         image_url: record.image_url || record.imageUrl || record.image || record.imageURL || null,
-      });
+      };
+      if (hasLastDateUpdatedCol) {
+        itemPayload.last_date_updated = importTimestamp;
+      }
+      inventoryRecords.push(itemPayload);
     } catch (e: any) {
       result.errors++;
       if (result.errorMessages.length < 20) result.errorMessages.push(`Record ${startIdx + records.indexOf(record)}: ${e.message}`);
