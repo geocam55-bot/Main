@@ -609,7 +609,7 @@ export const usersAPI = {
   getAll: () => getAllUsersClient(),
   invite: (data: { email: string; name: string; role: string; organizationName?: string }) => inviteUserClient(data),
   update: (id: string, data: any) => updateUserClient(id, data),
-  delete: (id: string) => deleteUserClient(id),
+  delete: (id: string, email?: string) => deleteUserClient(id, email),
   resetPassword: (userId: string, newPassword: string) => resetPasswordClient(userId, newPassword),
 };
 

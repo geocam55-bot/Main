@@ -11,11 +11,11 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Search, Plus, UserPlus, Edit, Trash2, MoreVertical, Building2, Shield, AlertCircle, Key, Copy, Pencil, Check, X } from 'lucide-react';
+import { Search, Plus, UserPlus, Edit, Trash2, MoreVertical, Building2, Shield, AlertCircle, Key, Copy, Pencil, Check, X, ArrowRight, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from './ui/alert';
 import { copyToClipboard } from '../utils/clipboard';
 import { ProfilesSyncFixer } from './ProfilesSyncFixer';
@@ -60,6 +60,85 @@ function normalizeUserRole(role: unknown): string {
   return normalized === 'super_user' || normalized === 'superadmin' ? 'super_admin' : normalized;
 }
 
+const ROLE_OPTIONS: { value: string; label: string; description: string; superAdminOnly?: boolean }[] = [
+  { value: 'standard_user', label: 'Standard User', description: 'Can manage only their own data' },
+  { value: 'marketing', label: 'Marketing', description: 'Full access to marketing and campaigns, limited access to contacts' },
+  { value: 'designer', label: 'Designer', description: 'Access to Project Wizards and design tools. Admins can enable additional modules.' },
+  { value: 'manager', label: 'Manager', description: 'Can manage data of users they oversee' },
+  { value: 'director', label: 'Director', description: 'Same as Manager, plus full user visibility on Team Dashboard' },
+  { value: 'dispatcher', label: 'Dispatcher', description: 'Can coordinate dispatches, routes, and schedules' },
+  { value: 'driver', label: 'Driver', description: 'Access to assigned routes and delivery tracking' },
+  { value: 'picker', label: 'Picker', description: 'Access to warehouse picking and fulfillment tasks' },
+  { value: 'admin', label: 'Admin', description: 'Full access within the organization' },
+  { value: 'super_admin', label: 'Super Admin', description: 'Full access across all organizations', superAdminOnly: true },
+];
+
+const FALLBACK_USERS_STORAGE_KEY = 'prospaces_fallback_users_overrides';
+
+const SAFE_PROFILES_RLS_SQL = `-- Keep Row-Level Security (RLS) ENABLED on profiles while allowing Super Admins
+-- to update any user (including organization changes) without infinite recursion.
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION public.current_user_is_super_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND lower(role) IN ('super_admin', 'superadmin', 'super_user')
+  )
+  OR lower(coalesce(auth.jwt() -> 'user_metadata' ->> 'role', '')) IN ('super_admin', 'superadmin', 'super_user');
+$$;
+
+CREATE OR REPLACE FUNCTION public.current_user_is_org_admin(target_org_id text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+      AND lower(role) = 'admin'
+      AND organization_id = target_org_id
+  );
+$$;
+
+DROP POLICY IF EXISTS "users_update_own_profile" ON public.profiles;
+DROP POLICY IF EXISTS "users_can_update_profiles" ON public.profiles;
+
+CREATE POLICY "users_can_update_profiles" ON public.profiles
+  FOR UPDATE TO authenticated
+  USING (
+    auth.uid() = id
+    OR public.current_user_is_super_admin()
+    OR public.current_user_is_org_admin(organization_id)
+  )
+  WITH CHECK (
+    auth.uid() = id
+    OR public.current_user_is_super_admin()
+    OR public.current_user_is_org_admin(organization_id)
+  );
+
+DROP POLICY IF EXISTS "users_can_delete_profiles" ON public.profiles;
+
+CREATE POLICY "users_can_delete_profiles" ON public.profiles
+  FOR DELETE TO authenticated
+  USING (
+    auth.uid() <> id
+    AND (
+      public.current_user_is_super_admin()
+      OR (
+        public.current_user_is_org_admin(organization_id)
+        AND lower(role) NOT IN ('super_admin', 'superadmin', 'super_user')
+      )
+    )
+  );`;
+
 export function Users({ user, organization, onOrganizationUpdate }: UsersProps) {
   const [activeTab, setActiveTab] = useState('users');
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,6 +155,8 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [showAllOrgs, setShowAllOrgs] = useState(false); // Debug toggle
   const [showProfilesFix, setShowProfilesFix] = useState(false); // Show profiles table fix
+  const [showProfilesRlsFix, setShowProfilesRlsFix] = useState(false); // Show RLS-safe policy helper
+  const [copiedRlsSql, setCopiedRlsSql] = useState(false);
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
@@ -83,6 +164,9 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
   const [showOrgChangeWarning, setShowOrgChangeWarning] = useState(false);
   const [originalOrganizationId, setOriginalOrganizationId] = useState('');
   const [pendingOrgChange, setPendingOrgChange] = useState<string | null>(null);
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState<OrgUser | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [isInviteCredentialsDialogOpen, setIsInviteCredentialsDialogOpen] = useState(false);
   const [inviteCredentials, setInviteCredentials] = useState<{ email: string; tempPassword: string; name: string } | null>(null);
   const [isEditingOrgName, setIsEditingOrgName] = useState(false);
@@ -232,12 +316,33 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
       }
     ];
 
+    const getFallbackUsers = (): OrgUser[] => {
+      let overrides: Record<string, Partial<OrgUser> & { __deleted?: boolean }> = {};
+      try {
+        const raw = localStorage.getItem(FALLBACK_USERS_STORAGE_KEY);
+        if (raw) overrides = JSON.parse(raw);
+      } catch {}
+      return defaultUsers
+        .filter((u) => !overrides[u.id]?.__deleted)
+        .map((u) => {
+          const merged = { ...u, ...(overrides[u.id] || {}) };
+          const orgId = merged.organizationId || merged.organization_id || user.organizationId || 'rona_atlantic';
+          return {
+            ...merged,
+            role: (normalizeUserRole(merged.role) || 'standard_user') as UserRole,
+            organization_id: orgId,
+            organizationId: orgId,
+          };
+        });
+    };
+
     try {
       const result = await usersAPI.getAll();
       const allUsers = result?.users || [];
 
       if (allUsers.length === 0) {
-        setUsers(defaultUsers);
+        setUsingClientSide(true);
+        setUsers(getFallbackUsers());
         setIsLoadingUsers(false);
         return;
       }
@@ -249,16 +354,18 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
 
       const mappedUsers = filtered.map((u: any) => ({
         ...u,
-        role: normalizeUserRole(u.role),
+        role: (normalizeUserRole(u.role) || 'standard_user') as UserRole,
         organizationId: u.organization_id,
         lastLogin: u.last_login,
         managerId: u.manager_id || '',
       }));
 
-      setUsers(mappedUsers.length > 0 ? mappedUsers : defaultUsers);
+      setUsingClientSide(mappedUsers.length === 0);
+      setUsers(mappedUsers.length > 0 ? mappedUsers : getFallbackUsers());
       setError(null);
     } catch {
-      setUsers(defaultUsers);
+      setUsingClientSide(true);
+      setUsers(getFallbackUsers());
     } finally {
       setIsLoadingUsers(false);
     }
@@ -508,30 +615,72 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     }
   };
 
-  const handleDeleteUser = async (id: string) => {
-    // Find the user to check their role
-    const userToDelete = users.find(u => u.id === id);
-    
+  const handleDeleteUser = (id: string) => {
+    const userToDelete = users.find((u) => u.id === id);
+    if (!userToDelete) return;
+
+    if (userToDelete.id === user.id || userToDelete.email?.toLowerCase() === user.email?.toLowerCase()) {
+      toast.error('You cannot remove your own user account');
+      return;
+    }
+
     // Prevent admin from deleting super_admin users
-    if (currentRole === 'admin' && userToDelete && normalizeUserRole(userToDelete.role) === 'super_admin') {
+    if (currentRole === 'admin' && normalizeUserRole(userToDelete.role) === 'super_admin') {
       toast.error('You do not have permission to delete Super Admin users');
       return;
     }
-    
-    if (!confirm('Are you sure you want to remove this user?')) {
-      return;
-    }
-    
+
+    setDeleteCandidate(userToDelete);
+  };
+
+  const applyLocalFallbackUserDelete = (targetUser: OrgUser) => {
     try {
-      const result = await usersAPI.delete(id);
-      await loadUsers(); // Reload users after deletion
+      const raw = localStorage.getItem(FALLBACK_USERS_STORAGE_KEY);
+      const overrides = raw ? JSON.parse(raw) : {};
+      overrides[targetUser.id] = { ...(overrides[targetUser.id] || {}), __deleted: true };
+      localStorage.setItem(FALLBACK_USERS_STORAGE_KEY, JSON.stringify(overrides));
+    } catch {}
+
+    setUsers((prev) => prev.filter((u) => u.id !== targetUser.id));
+    setDeleteCandidate(null);
+    toast.success(`Removed ${targetUser.name} from local session`);
+  };
+
+  const executeDeleteUser = async () => {
+    if (!deleteCandidate) return;
+    const targetUser = deleteCandidate;
+    setIsDeletingUser(true);
+    setShowProfilesRlsFix(false);
+
+    try {
+      const result = await usersAPI.delete(targetUser.id, targetUser.email);
+      setDeleteCandidate(null);
+      await loadUsers();
       if (result?.alreadyRemoved) {
         toast.info('User was already removed. The list has been refreshed.');
       } else {
-        toast.success('User removed successfully');
+        toast.success(`User ${targetUser.name} removed successfully`);
       }
     } catch (error: any) {
-      toast.error(error?.message || 'Failed to remove user. Please try again.');
+      if (
+        error?.code === 'DEMO_USER_LOCAL_ONLY' ||
+        (error?.code === 'NOT_AUTHENTICATED' && (usingClientSide || targetUser.id.startsWith('USR-')))
+      ) {
+        applyLocalFallbackUserDelete(targetUser);
+        return;
+      }
+
+      const message = error?.message || 'Failed to remove user. Please try again.';
+      toast.error(message);
+
+      if (
+        error?.isRlsError ||
+        /row-level security|infinite recursion|permission denied|42501|42P17/i.test(message)
+      ) {
+        setShowProfilesRlsFix(true);
+      }
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -541,14 +690,20 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
       toast.error('You do not have permission to edit Super Admin users');
       return;
     }
-    
+
+    const normalizedOrgId = orgUser.organizationId || orgUser.organization_id || '';
+    const normalizedRole = (normalizeUserRole(orgUser.role) || 'standard_user') as UserRole;
+
     setSelectedUser(orgUser);
-    setOriginalOrganizationId(orgUser.organizationId); // Store original for comparison
+    setOriginalOrganizationId(normalizedOrgId); // Store original for comparison
+    setShowOrgChangeWarning(false);
+    setPendingOrgChange(null);
+    setShowProfilesRlsFix(false);
     setEditUser({
       name: orgUser.name,
       email: orgUser.email,
-      role: normalizeUserRole(orgUser.role) as UserRole,
-      organizationId: orgUser.organizationId,
+      role: normalizedRole,
+      organizationId: normalizedOrgId,
       status: orgUser.status,
       managerId: orgUser.managerId || '',
       plan: userPlanMap[orgUser.id] || '',
@@ -556,19 +711,58 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser) return;
+  const applyLocalFallbackUserUpdate = (targetUser: OrgUser, orgChanged: boolean) => {
+    const updatedLocal: OrgUser = {
+      ...targetUser,
+      name: editUser.name,
+      email: editUser.email,
+      role: editUser.role,
+      organizationId: editUser.organizationId,
+      organization_id: editUser.organizationId,
+      status: editUser.status,
+      managerId: editUser.managerId || '',
+    };
 
-    // Check if organization changed
-    const orgChanged = editUser.organizationId !== originalOrganizationId;
-    
-    // If organization changed, notify user
+    try {
+      const raw = localStorage.getItem(FALLBACK_USERS_STORAGE_KEY);
+      const overrides = raw ? JSON.parse(raw) : {};
+      overrides[targetUser.id] = {
+        name: updatedLocal.name,
+        email: updatedLocal.email,
+        role: updatedLocal.role,
+        organizationId: updatedLocal.organizationId,
+        organization_id: updatedLocal.organizationId,
+        status: updatedLocal.status,
+        managerId: updatedLocal.managerId,
+      };
+      localStorage.setItem(FALLBACK_USERS_STORAGE_KEY, JSON.stringify(overrides));
+    } catch {}
+
+    setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? updatedLocal : u)));
+    if (editUser.plan) {
+      setUserPlanMap((prev) => ({ ...prev, [targetUser.id]: editUser.plan as PlanId }));
+    }
+
     if (orgChanged && isSuperAdmin) {
       const oldOrgName = getOrgName(originalOrganizationId);
       const newOrgName = getOrgName(editUser.organizationId);
-      toast.success(`User organization changed from "${oldOrgName}" to "${newOrgName}"`);
+      toast.success(`User updated in local session (${oldOrgName} → ${newOrgName}).`);
+    } else {
+      toast.success('User updated in local session!');
     }
+
+    setShowOrgChangeWarning(false);
+    setPendingOrgChange(null);
+    setIsEditDialogOpen(false);
+    setSelectedUser(null);
+  };
+
+  const executeUpdateUser = async () => {
+    if (!selectedUser) return;
+    const orgChanged = isSuperAdmin && editUser.organizationId !== originalOrganizationId;
+
+    setIsUpdatingUser(true);
+    setShowProfilesRlsFix(false);
 
     try {
       const currentPlan = userPlanMap[selectedUser.id];
@@ -577,6 +771,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
         email: editUser.email,
         role: editUser.role,
         organization_id: editUser.organizationId,
+        organizationName: getOrgName(editUser.organizationId),
         status: editUser.status,
         manager_id: editUser.managerId || null,
         ...(editUser.plan !== currentPlan ? { billing_plan: editUser.plan || null } : {}),
@@ -587,7 +782,14 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
         if (result.warnings.some((warning: string) => warning.includes('manager assignment'))) setError('MANAGER_COLUMN_MISSING');
         result.warnings.forEach((warning: string) => toast.warning(warning));
       }
-      toast.success('User updated successfully!');
+
+      if (orgChanged && isSuperAdmin) {
+        const oldOrgName = getOrgName(originalOrganizationId);
+        const newOrgName = getOrgName(editUser.organizationId);
+        toast.success(`User updated! Organization changed from "${oldOrgName}" to "${newOrgName}".`);
+      } else {
+        toast.success('User updated successfully!');
+      }
 
       // Handle plan change if admin changed the billing plan
       if (selectedUser && editUser.plan) {
@@ -596,9 +798,9 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
             // Also try the subscription API (works after server deploy)
             try {
               if (currentPlan) {
-                await updateSubscription(editUser.plan as PlanId, undefined, selectedUser.id, selectedUser.organizationId);
+                await updateSubscription(editUser.plan as PlanId, undefined, selectedUser.id, editUser.organizationId || selectedUser.organizationId);
               } else {
-                await createSubscription(editUser.plan as PlanId, 'month', undefined, false, selectedUser.id, selectedUser.organizationId);
+                await createSubscription(editUser.plan as PlanId, 'month', undefined, false, selectedUser.id, editUser.organizationId || selectedUser.organizationId);
               }
             } catch { /* Edge Function may not be deployed yet */ }
             toast.success(`Billing plan updated to ${editUser.plan === 'starter' ? 'Standard User' : editUser.plan === 'professional' ? 'Professional' : 'Enterprise'} for ${selectedUser.name}`);
@@ -612,12 +814,47 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
       await loadUsers();
       await loadUserPlans();
 
-      // Close dialog
+      // Close dialogs
+      setShowOrgChangeWarning(false);
+      setPendingOrgChange(null);
       setIsEditDialogOpen(false);
       setSelectedUser(null);
-    } catch (error) {
-      toast.error('Failed to update user. Please try again.');
+    } catch (error: any) {
+      if (
+        error?.code === 'DEMO_USER_LOCAL_ONLY' ||
+        (error?.code === 'NOT_AUTHENTICATED' && (usingClientSide || selectedUser.id.startsWith('USR-')))
+      ) {
+        applyLocalFallbackUserUpdate(selectedUser, orgChanged);
+        return;
+      }
+
+      setShowOrgChangeWarning(false);
+      const message = error?.message || 'Failed to update user. Please try again.';
+      toast.error(message);
+
+      if (
+        error?.isRlsError ||
+        /row-level security|infinite recursion|permission denied|42501|42P17|only assign users within their own organization/i.test(message)
+      ) {
+        setShowProfilesRlsFix(true);
+      }
+    } finally {
+      setIsUpdatingUser(false);
     }
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+
+    const orgChanged = isSuperAdmin && editUser.organizationId !== originalOrganizationId;
+    if (orgChanged) {
+      setPendingOrgChange(editUser.organizationId);
+      setShowOrgChangeWarning(true);
+      return;
+    }
+
+    await executeUpdateUser();
   };
 
   const handleResetPassword = async (orgUser: OrgUser) => {
@@ -829,6 +1066,59 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
           
           {/* Profiles Table Fix - Shows when foreign key constraint error occurs */}
           {showProfilesFix && <ProfilesTableFix />}
+
+          {/* RLS-Safe Policy Helper - Keeps RLS enabled while permitting Super Admin cross-org updates */}
+          {showProfilesRlsFix && (
+            <Card className="border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/30">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-semibold text-sm text-amber-900 dark:text-amber-200">
+                        Row-Level Security (RLS) Policy Update Required for Cross-Organization Edits
+                      </h4>
+                      <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                        RLS remains turned on. Run this SQL in Supabase SQL Editor so Super Admins can reassign users between organizations without RLS recursion or permission errors.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowProfilesRlsFix(false)}
+                    className="h-7 px-2"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      const ok = await copyToClipboard(SAFE_PROFILES_RLS_SQL);
+                      if (ok) {
+                        setCopiedRlsSql(true);
+                        toast.success('RLS SQL script copied to clipboard!');
+                        setTimeout(() => setCopiedRlsSql(false), 2000);
+                      } else {
+                        toast.error('Failed to copy automatically. Please copy from the box below.');
+                      }
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5 mr-1.5" />
+                    {copiedRlsSql ? 'Copied!' : 'Copy RLS SQL'}
+                  </Button>
+                </div>
+                <pre className="bg-slate-950 text-emerald-300 p-3 rounded-lg overflow-x-auto text-xs max-h-48">
+                  {SAFE_PROFILES_RLS_SQL}
+                </pre>
+              </CardContent>
+            </Card>
+          )}
           
           {/* Organization Info Card */}
           <Card className="border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-100 shadow-sm dark:shadow-xl">
@@ -1019,28 +1309,18 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                       <Label htmlFor="role">Role</Label>
                       <Select value={newUser.role} onValueChange={(value: UserRole) => setNewUser({ ...newUser, role: value })}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select a role" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="standard_user">Standard User</SelectItem>
-                          <SelectItem value="marketing">Marketing</SelectItem>
-                          <SelectItem value="designer">Designer</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
-                          <SelectItem value="director">Director</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          {isSuperAdmin && (
-                            <SelectItem value="super_admin">Super Admin</SelectItem>
-                          )}
+                          {ROLE_OPTIONS.filter((opt) => !opt.superAdminOnly || isSuperAdmin).map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {newUser.role === 'standard_user' && 'Can manage only their own data'}
-                        {newUser.role === 'marketing' && 'Full access to marketing and campaigns, limited access to contacts'}
-                        {newUser.role === 'designer' && 'Access to Project Wizards and design tools. Admins can enable additional modules.'}
-                        {newUser.role === 'manager' && 'Can manage data of users they oversee'}
-                        {newUser.role === 'director' && 'Same as Manager, plus full user visibility on Team Dashboard'}
-                        {newUser.role === 'admin' && 'Full access within the organization'}
-                        {newUser.role === 'super_admin' && 'Full access across all organizations'}
+                        {ROLE_OPTIONS.find((opt) => opt.value === normalizeUserRole(newUser.role))?.description || 'Role permissions apply based on organization settings'}
                       </p>
                     </div>
 
@@ -1176,7 +1456,7 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                 <Alert className="mb-4">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>Local Mode:</strong> Currently showing users that you've invited in this session. Deploy the backend to see all organization users and sync across devices.
+                    <strong>Local Mode:</strong> No active database session was detected, so sample/local user records are shown. Sign in with your account to sync live database users.
                   </AlertDescription>
                 </Alert>
               )}
@@ -1379,6 +1659,14 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                             </div>
                           </SelectItem>
                         ))}
+                        {editUser.organizationId && !tenants.some((t) => t.id === editUser.organizationId) && (
+                          <SelectItem value={editUser.organizationId}>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4" />
+                              <span>{getOrgName(editUser.organizationId)}</span>
+                            </div>
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     {editUser.organizationId !== originalOrganizationId ? (
@@ -1400,28 +1688,23 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                   <Label htmlFor="role">Role</Label>
                   <Select value={editUser.role} onValueChange={(value: UserRole) => setEditUser({ ...editUser, role: value })}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="standard_user">Standard User</SelectItem>
-                      <SelectItem value="marketing">Marketing</SelectItem>
-                      <SelectItem value="designer">Designer</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="director">Director</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      {isSuperAdmin && (
-                        <SelectItem value="super_admin">Super Admin</SelectItem>
+                      {ROLE_OPTIONS.filter((opt) => !opt.superAdminOnly || isSuperAdmin).map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                      {editUser.role && !ROLE_OPTIONS.some((opt) => opt.value === editUser.role) && (
+                        <SelectItem value={editUser.role}>
+                          {String(editUser.role).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                        </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {editUser.role === 'standard_user' && 'Can manage only their own data'}
-                    {editUser.role === 'marketing' && 'Full access to marketing and campaigns, limited access to contacts'}
-                    {editUser.role === 'designer' && 'Access to Project Wizards and design tools. Admins can enable additional modules.'}
-                    {editUser.role === 'manager' && 'Can manage data of users they oversee'}
-                    {editUser.role === 'director' && 'Same as Manager, plus full user visibility on Team Dashboard'}
-                    {editUser.role === 'admin' && 'Full access within the organization'}
-                    {editUser.role === 'super_admin' && 'Full access across all organizations'}
+                    {ROLE_OPTIONS.find((opt) => opt.value === normalizeUserRole(editUser.role))?.description || 'Role permissions apply based on organization settings'}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -1491,15 +1774,159 @@ export function Users({ user, organization, onOrganizationUpdate }: UsersProps) 
                   </p>
                 </div>
                 <div className="flex gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="flex-1">
+                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isUpdatingUser} className="flex-1">
                     Cancel
                   </Button>
-                  <Button type="submit" className="flex-1">
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Update User
+                  <Button type="submit" disabled={isUpdatingUser} className="flex-1">
+                    {isUpdatingUser ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Update User
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Confirm Organization Change Dialog */}
+          <Dialog
+            open={showOrgChangeWarning}
+            onOpenChange={(open) => {
+              if (!isUpdatingUser) {
+                setShowOrgChangeWarning(open);
+                if (!open) setPendingOrgChange(null);
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-md bg-background">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-orange-400">
+                  <AlertCircle className="h-5 w-5" />
+                  Confirm Organization Change
+                </DialogTitle>
+                <DialogDescription>
+                  You are about to move <strong>{editUser.name}</strong> ({editUser.email}) to a different organization.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3 py-2">
+                <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground text-xs uppercase tracking-wide">From</span>
+                    <span className="font-medium text-foreground text-right">{getOrgName(originalOrganizationId)}</span>
+                  </div>
+                  <div className="flex justify-center text-orange-400">
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground text-xs uppercase tracking-wide">To</span>
+                    <span className="font-semibold text-orange-300 text-right">
+                      {getOrgName(pendingOrgChange || editUser.organizationId)}
+                    </span>
+                  </div>
+                </div>
+
+                <Alert className="border-orange-500/40 bg-orange-500/10">
+                  <AlertCircle className="h-4 w-4 text-orange-400" />
+                  <AlertDescription className="text-orange-200 text-xs">
+                    Changing organization will immediately affect which records and spaces this user can access.
+                  </AlertDescription>
+                </Alert>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowOrgChangeWarning(false);
+                    setPendingOrgChange(null);
+                  }}
+                  disabled={isUpdatingUser}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={executeUpdateUser}
+                  disabled={isUpdatingUser}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  {isUpdatingUser ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Confirm & Update User'
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Confirm User Removal Dialog */}
+          <Dialog
+            open={Boolean(deleteCandidate)}
+            onOpenChange={(open) => {
+              if (!isDeletingUser && !open) {
+                setDeleteCandidate(null);
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-md bg-background">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-400">
+                  <Trash2 className="h-5 w-5" />
+                  Remove User Account
+                </DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to remove <strong>{deleteCandidate?.name}</strong> ({deleteCandidate?.email})?
+                </DialogDescription>
+              </DialogHeader>
+
+              <Alert className="border-red-500/40 bg-red-500/10">
+                <AlertCircle className="h-4 w-4 text-red-400" />
+                <AlertDescription className="text-red-200 text-xs">
+                  This user will lose access to their organization and account data. This action cannot be undone.
+                </AlertDescription>
+              </Alert>
+
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeleteCandidate(null)}
+                  disabled={isDeletingUser}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={executeDeleteUser}
+                  disabled={isDeletingUser}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {isDeletingUser ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Removing...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Remove User
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 

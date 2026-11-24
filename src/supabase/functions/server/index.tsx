@@ -2508,8 +2508,9 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
   try {
     const auth = await authenticateUser(c);
     if (auth.error) return c.json({ error: auth.error }, auth.status);
-    const actorRole = normalizeUserRole(auth.profile.role);
-    const isSuperAdmin = actorRole === 'super_admin';
+    const actorRole = normalizeUserRole(auth.profile?.role || auth.user?.user_metadata?.role);
+    const metaRole = normalizeUserRole(auth.user?.user_metadata?.role);
+    const isSuperAdmin = actorRole === 'super_admin' || metaRole === 'super_admin';
     if (actorRole !== 'admin' && !isSuperAdmin) {
       return c.json({ error: 'Forbidden' }, 403);
     }
@@ -2550,6 +2551,26 @@ app.patch(`${PREFIX}/users/:id`, async (c) => {
     const finalRole = nextRole ?? existingProfile.role;
     const finalOrgId = nextOrgId ?? existingProfile.organization_id;
     const finalStatus = nextStatus ?? existingProfile.status;
+
+    // Ensure target organization exists in organizations table before updating profiles FK
+    if (finalOrgId && finalOrgId !== existingProfile.organization_id) {
+      const { data: orgCheck } = await auth.supabase
+        .from('organizations')
+        .select('id')
+        .eq('id', finalOrgId)
+        .maybeSingle();
+      if (!orgCheck) {
+        const { error: orgErr } = await auth.supabase.from('organizations').insert({
+          id: finalOrgId,
+          name: body.organizationName || finalOrgId,
+          status: 'active',
+          created_at: new Date().toISOString(),
+        });
+        if (orgErr && orgErr.code !== '23505') {
+          return c.json({ error: `Target organization "${finalOrgId}" does not exist and could not be created: ${orgErr.message}` }, 400);
+        }
+      }
+    }
 
     try {
       const { data: authUserData } = await auth.supabase.auth.admin.getUserById(id);
@@ -2630,8 +2651,10 @@ app.delete(`${PREFIX}/users/:id`, async (c) => {
     const auth = await authenticateUser(c);
     if (auth.error) return c.json({ error: auth.error }, auth.status);
 
-    const actorRole = normalizeUserRole(auth.profile.role);
-    const isSuperAdmin = actorRole === 'super_admin';
+    const profileRole = normalizeUserRole(auth.profile?.role);
+    const metaRole = normalizeUserRole(auth.user?.user_metadata?.role);
+    const isSuperAdmin = profileRole === 'super_admin' || metaRole === 'super_admin';
+    const actorRole = isSuperAdmin ? 'super_admin' : profileRole;
     if (actorRole !== 'admin' && !isSuperAdmin) return c.json({ error: 'Forbidden' }, 403);
 
     const id = c.req.param('id');

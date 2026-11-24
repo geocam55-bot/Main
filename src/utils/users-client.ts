@@ -26,12 +26,17 @@ async function getCurrentUser() {
     // This is more robust than relying on a potentially unset global token
     const { data: { user }, error } = await supabase.auth.getUser();
     
-    if (error || !user) {
-      // User auth error
-      return null;
+    if (!error && user) {
+      return user;
     }
-    
-    return user;
+
+    // Fallback to local session if getUser() failed due to a transient network/refresh issue
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      return session.user;
+    }
+
+    return null;
   } catch (error: any) {
     // Only log actual errors, not "Failed to fetch" network glitches which are common
     if (error?.message !== 'Failed to fetch' && error?.message !== 'Load failed') {
@@ -386,87 +391,193 @@ function generateTempPassword(length: number = 14): string {
 /**
  * Update a user
  */
-export async function updateUserClient(id: string, updates: Partial<ClientUser>) {
+export async function updateUserClient(
+  id: string,
+  updates: Partial<ClientUser> & {
+    manager_id?: string | null;
+    billing_plan?: string | null;
+    organizationName?: string;
+  }
+) {
   try {
     const user = await getCurrentUser();
-    
+
     if (!user) {
-      throw new Error('Not authenticated');
+      const authErr: any = new Error('Not authenticated. Please sign in to save user changes to the database.');
+      authErr.code = 'NOT_AUTHENTICATED';
+      throw authErr;
     }
 
     // Check if profiles table exists
     const profilesTableExists = await checkProfilesTableExists();
-    
     if (!profilesTableExists) {
       throw new Error('Profiles table not set up. Please run the database migration first.');
     }
 
-    const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/users/${id}`;
+    // Resolve real UUID if editing a fallback/sample user ID (USR-*)
+    let targetId = id;
+    if (String(targetId).startsWith('USR-')) {
+      if (updates.email) {
+        const { data: matchedProfile } = await supabase
+          .from('profiles' as any)
+          .select('id')
+          .eq('email', updates.email.toLowerCase())
+          .maybeSingle();
+        if (matchedProfile?.id) {
+          targetId = matchedProfile.id;
+        } else {
+          const demoErr: any = new Error('This sample user does not exist in the database yet.');
+          demoErr.code = 'DEMO_USER_LOCAL_ONLY';
+          throw demoErr;
+        }
+      } else {
+        const demoErr: any = new Error('This sample user does not exist in the database yet.');
+        demoErr.code = 'DEMO_USER_LOCAL_ONLY';
+        throw demoErr;
+      }
+    }
+
+    const requestPayload: Record<string, any> = {
+      name: updates.name,
+      email: updates.email,
+      role: updates.role,
+      organization_id: updates.organization_id,
+      status: updates.status,
+      ...(updates.manager_id !== undefined ? { manager_id: updates.manager_id } : {}),
+      ...(updates.billing_plan !== undefined ? { billing_plan: updates.billing_plan } : {}),
+      ...(updates.organizationName ? { organizationName: updates.organizationName } : {}),
+    };
+
+    const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/users/${targetId}`;
     const headers = await getServerHeaders();
-    let response;
+    let response: Response | undefined;
+    let serverResult: any = {};
+    let serverError = '';
+
     try {
       response = await fetch(serverUrl, {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({
-          name: updates.name,
-          email: updates.email,
-          role: updates.role,
-          organization_id: updates.organization_id,
-          status: updates.status,
-        }),
+        body: JSON.stringify(requestPayload),
       });
-    } catch {}
-
-    if (!response || !response.ok) {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({
-          name: updates.name,
-          email: updates.email,
-          role: updates.role,
-          organization_id: updates.organization_id,
-          status: updates.status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) {
-        throw new Error(error.message || 'Failed to update user');
+      serverResult = await response.json().catch(() => ({}));
+      if (!response.ok || !serverResult?.success) {
+        serverError = serverResult?.error || `Server returned ${response.status}`;
       }
-
-      return { user: data };
+    } catch (fetchErr: any) {
+      serverError = fetchErr?.message || '';
     }
 
-    const result = await response.json().catch(() => ({}));
-
-    if (!result?.success) {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({
-          name: updates.name,
-          email: updates.email,
-          role: updates.role,
-          organization_id: updates.organization_id,
-          status: updates.status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) {
-        throw new Error(result?.error || error.message || 'Failed to update user');
-      }
-
-      return { user: data };
+    if (response?.ok && serverResult?.success) {
+      return { user: serverResult.user, warnings: serverResult.warnings || [] };
     }
 
-    return { user: result.user };
+    // Fallback to direct Supabase client update (respects Postgres RLS)
+    const coreUpdate: Record<string, any> = {
+      name: updates.name,
+      email: updates.email ? updates.email.toLowerCase() : updates.email,
+      role: updates.role,
+      organization_id: updates.organization_id,
+      status: updates.status,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { data, error } = await supabase
+      .from('profiles' as any)
+      .update(coreUpdate)
+      .eq('id', targetId)
+      .select();
+
+    // If organization_id violates foreign key constraint because org row doesn't exist yet, try creating the org row
+    if (error?.code === '23503' && updates.organization_id) {
+      try {
+        await supabase
+          .from('organizations' as any)
+          .upsert(
+            {
+              id: updates.organization_id,
+              name: updates.organizationName || updates.organization_id,
+              status: 'active',
+            },
+            { onConflict: 'id' }
+          );
+
+        const retry = await supabase
+          .from('profiles' as any)
+          .update(coreUpdate)
+          .eq('id', targetId)
+          .select();
+        data = retry.data;
+        error = retry.error;
+      } catch {
+        // Keep original FK error
+      }
+    }
+
+    if (error) {
+      const isRlsError =
+        error.code === '42501' ||
+        error.code === '42P17' ||
+        /row-level security|infinite recursion|permission denied/i.test(error.message || '') ||
+        /row-level security|infinite recursion|permission denied|only assign users within their own organization/i.test(serverError || '');
+
+      const combinedMsg =
+        serverError && !serverError.includes(error.message || '')
+          ? `${serverError} (${error.message})`
+          : error.message || serverError || 'Failed to update user';
+
+      const wrappedErr: any = new Error(combinedMsg);
+      wrappedErr.code = error.code;
+      wrappedErr.isRlsError = isRlsError;
+      throw wrappedErr;
+    }
+
+    if (!data || data.length === 0) {
+      const rlsErr: any = new Error(
+        serverError ||
+          'Permission denied by Row-Level Security (RLS): your database profile role cannot update this user across organizations.'
+      );
+      rlsErr.code = 'RLS_DENIED';
+      rlsErr.isRlsError = true;
+      throw rlsErr;
+    }
+
+    const updatedUser = data[0];
+    const warnings: string[] = [];
+
+    if (updates.manager_id !== undefined) {
+      const { error: managerError } = await supabase
+        .from('profiles' as any)
+        .update({ manager_id: updates.manager_id || null })
+        .eq('id', targetId);
+      if (managerError) {
+        if (managerError.code === 'PGRST204' || managerError.code === '42703') {
+          warnings.push('User details were saved, but manager assignment requires the manager_id database migration.');
+        } else {
+          warnings.push(`User details saved, but manager assignment failed: ${managerError.message}`);
+        }
+      } else {
+        updatedUser.manager_id = updates.manager_id || null;
+      }
+    }
+
+    if (updates.billing_plan !== undefined) {
+      const { error: planError } = await supabase
+        .from('profiles' as any)
+        .update({ billing_plan: updates.billing_plan || null })
+        .eq('id', targetId);
+      if (planError) {
+        if (planError.code === 'PGRST204' || planError.code === '42703') {
+          warnings.push('User details were saved, but billing plan storage is not available in the profiles table.');
+        } else {
+          warnings.push(`User details saved, but billing plan update failed: ${planError.message}`);
+        }
+      } else {
+        updatedUser.billing_plan = updates.billing_plan || null;
+      }
+    }
+
+    return { user: updatedUser, warnings };
   } catch (error: any) {
     // Error in updateUserClient
     throw error;
@@ -476,12 +587,14 @@ export async function updateUserClient(id: string, updates: Partial<ClientUser>)
 /**
  * Delete a user
  */
-export async function deleteUserClient(id: string) {
+export async function deleteUserClient(id: string, email?: string) {
   try {
     const user = await getCurrentUser();
-    
+
     if (!user) {
-      throw new Error('Not authenticated');
+      const authErr: any = new Error('Not authenticated. Please sign in to remove users from the database.');
+      authErr.code = 'NOT_AUTHENTICATED';
+      throw authErr;
     }
 
     if (user.id === id) {
@@ -490,20 +603,94 @@ export async function deleteUserClient(id: string) {
 
     // Check if profiles table exists
     const profilesTableExists = await checkProfilesTableExists();
-    
     if (!profilesTableExists) {
       throw new Error('Profiles table not set up. Please run the database migration first.');
     }
 
-    // Delete from profiles table
-    const { error } = await supabase
+    // Resolve real UUID if removing a fallback/sample user ID (USR-*)
+    let targetId = id;
+    if (String(targetId).startsWith('USR-')) {
+      if (email) {
+        const { data: matchedProfile } = await supabase
+          .from('profiles' as any)
+          .select('id')
+          .eq('email', email.toLowerCase())
+          .maybeSingle();
+        if (matchedProfile?.id) {
+          targetId = matchedProfile.id;
+        } else {
+          const demoErr: any = new Error('This sample user does not exist in the database.');
+          demoErr.code = 'DEMO_USER_LOCAL_ONLY';
+          throw demoErr;
+        }
+      } else {
+        const demoErr: any = new Error('This sample user does not exist in the database.');
+        demoErr.code = 'DEMO_USER_LOCAL_ONLY';
+        throw demoErr;
+      }
+    }
+
+    if (user.id === targetId) {
+      throw new Error('Cannot delete yourself');
+    }
+
+    // Try server Edge Function first (handles both Auth user removal and profile cleanup)
+    const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/users/${targetId}`;
+    const headers = await getServerHeaders();
+    let response: Response | undefined;
+    let serverResult: any = {};
+    let serverError = '';
+
+    try {
+      response = await fetch(serverUrl, {
+        method: 'DELETE',
+        headers,
+      });
+      serverResult = await response.json().catch(() => ({}));
+      if (response.ok && serverResult?.success) {
+        return { success: true, alreadyRemoved: Boolean(serverResult.alreadyRemoved) };
+      }
+      serverError = serverResult?.error || `Server returned ${response.status}`;
+    } catch (fetchErr: any) {
+      serverError = fetchErr?.message || '';
+    }
+
+    // Fallback to direct Supabase profile delete (respects Postgres RLS)
+    const { data, error } = await supabase
       .from('profiles' as any)
       .delete()
-      .eq('id', id);
+      .eq('id', targetId)
+      .select('id');
 
     if (error) {
-      // Error deleting user
-      throw new Error('Failed to delete user: ' + error.message);
+      const isRlsError =
+        error.code === '42501' ||
+        error.code === '42P17' ||
+        /row-level security|infinite recursion|permission denied/i.test(error.message || '') ||
+        /row-level security|infinite recursion|permission denied|forbidden/i.test(serverError || '');
+
+      const combinedMsg =
+        serverError && !serverError.includes(error.message || '')
+          ? `${serverError} (${error.message})`
+          : error.message || serverError || 'Failed to delete user';
+
+      const wrappedErr: any = new Error(combinedMsg);
+      wrappedErr.code = error.code;
+      wrappedErr.isRlsError = isRlsError;
+      throw wrappedErr;
+    }
+
+    if (!data || data.length === 0) {
+      if (response?.status === 404) {
+        return { success: true, alreadyRemoved: true };
+      }
+      const rlsErr: any = new Error(
+        serverError ||
+          'Permission denied by Row-Level Security (RLS): your database profile does not have permission to delete this user.'
+      );
+      rlsErr.code = 'RLS_DENIED';
+      rlsErr.isRlsError = true;
+      throw rlsErr;
     }
 
     return { success: true };

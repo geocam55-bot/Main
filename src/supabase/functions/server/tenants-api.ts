@@ -42,6 +42,40 @@ async function authenticateSuperAdmin(c: any) {
 
 export function tenantsAPI(app: Hono) {
 
+  // ── LIST ORGANIZATIONS ────────────────────────────────────────────────
+  app.get(`${PREFIX}/tenants`, async (c) => {
+    try {
+      const supabase = getSupabase();
+      const token = extractUserToken(c);
+      if (!token) return c.json({ error: 'Missing auth token' }, 401);
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) return c.json({ error: 'Unauthorized' }, 401);
+
+      const { data: profile } = await supabase.from('profiles').select('role, organization_id').eq('id', user.id).single();
+      const role = String(profile?.role || user.user_metadata?.role || 'standard_user').toLowerCase();
+
+      if (role === 'super_admin' || role === 'admin') {
+        const { data: orgs, error } = await supabase
+          .from('organizations')
+          .select('*')
+          .order('name', { ascending: true });
+        if (error) return c.json({ error: error.message }, 500);
+        return c.json({ tenants: orgs || [] });
+      }
+
+      if (!profile?.organization_id) return c.json({ tenants: [] });
+      const { data: ownOrg, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', profile.organization_id);
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({ tenants: ownOrg || [] });
+    } catch (err: any) {
+      return c.json({ error: err.message }, 500);
+    }
+  });
+
   // ── CREATE ORGANIZATION ───────────────────────────────────────────────
   app.post(`${PREFIX}/tenants`, async (c) => {
     try {
