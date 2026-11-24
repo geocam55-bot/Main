@@ -33,9 +33,9 @@ import {
   Loader2,
   Download,
   RefreshCw,
-  ShoppingCart,
   StopCircle,
   Terminal,
+  Clock,
 } from 'lucide-react';
 import { inventoryAPI, catalogAgentAPI, type CatalogAgentStatusResponse } from '../utils/api';
 import type { User } from '../App';
@@ -59,10 +59,6 @@ import { getPriceTierLabel, isTierActive, getActiveTierNumbers } from '../lib/gl
 import { settingsAPI } from '../utils/api';
 import { InventoryDiagnostic } from './InventoryDiagnostic';
 
-import { CompetitivePricingDashboard } from './inventory/CompetitivePricingDashboard';
-import { CompetitivePricingAdmin } from './inventory/CompetitivePricingAdmin';
-import { CompetitivePricingPanel } from './inventory/CompetitivePricingPanel';
-import { ShoppingListSubModule } from './inventory/ShoppingListSubModule';
 // import { ImportExport } from './ImportExport';
 
 // Module-level singleton — avoids re-creation per render
@@ -113,6 +109,7 @@ interface InventoryItem {
   search_keywords?: string[];
   enrichmentUpdatedAt?: string;
   status: 'active' | 'inactive' | 'discontinued';
+  lastDateUpdated?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,7 +124,9 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [activeTab, setActiveTab] = useState(initialTab || 'items');
+  const [activeTab, setActiveTab] = useState(
+    initialTab && initialTab !== 'shopping-list' && initialTab !== 'competitive-pricing' ? initialTab : 'items'
+  );
   const [showImportExportWindow, setShowImportExportWindow] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [scanResult, setScanResult] = useState<{ title: string; message: string; type: 'info' | 'success' | 'error'; action?: () => void } | null>(null);
@@ -260,64 +259,18 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   
   // ⚡ Performance tracking
   const [loadTimeMs, setLoadTimeMs] = useState(0);
-  
-  // 🛒 Shopping list item count tracking
-  const [shoppingListCount, setShoppingListCount] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('prospaces_active_shopping_list');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return Array.isArray(parsed) ? parsed.length : 0;
-      }
-    } catch {}
-    return 0;
-  });
 
   useEffect(() => {
-    const handleCountUpdate = (e: any) => {
-      if (typeof e.detail?.count === 'number') {
-        setShoppingListCount(e.detail.count);
-      }
-    };
     const handleTabSwitch = (e: any) => {
-      if (e.detail?.tab) {
+      if (e.detail?.tab && e.detail.tab !== 'shopping-list' && e.detail.tab !== 'competitive-pricing') {
         setActiveTab(e.detail.tab);
       }
     };
-    window.addEventListener('shopping-list-updated', handleCountUpdate);
     window.addEventListener('switch-inventory-tab', handleTabSwitch);
     return () => {
-      window.removeEventListener('shopping-list-updated', handleCountUpdate);
       window.removeEventListener('switch-inventory-tab', handleTabSwitch);
     };
   }, []);
-
-  const handleAddToShoppingList = (item: InventoryItem, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    window.dispatchEvent(
-      new CustomEvent('add-to-shopping-list', {
-        detail: {
-          item: {
-            id: item.id,
-            name: item.name,
-            sku: item.sku,
-            description: item.description,
-            category: item.category,
-            unit_price: item.unit_price || item.unitPrice,
-            cost: item.cost,
-            replacement_cost: item.replacement_cost || item.replacementCost,
-            quantity_on_hand: item.quantity_on_hand || item.quantityOnHand || 0,
-            unit_of_measure: item.unit_of_measure || item.unitOfMeasure || 'EA',
-            supplier: item.supplier,
-            supplier_sku: item.supplier_sku || item.supplierSKU,
-            mfg_part_number: item.mfg_part_number || item.mfgPartNumber,
-            upc: item.upc,
-          },
-          quantity: 1,
-        },
-      })
-    );
-  };
   
   // ⚡ Track total count for pagination
   const [totalCount, setTotalCount] = useState(0);
@@ -792,6 +745,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       priceLevels: typeof dbPriceLevels === 'object' && dbPriceLevels !== null ? JSON.stringify(dbPriceLevels) : (dbPriceLevels || ''),
       barcode: dbUpc,
       upc: dbUpc,
+      lastDateUpdated: getCaseInsensitive(dbItem, 'last_date_updated', '') || getCaseInsensitive(dbItem, 'lastDateUpdated', ''),
       createdAt: getCaseInsensitive(dbItem, 'created_at', ''),
       updatedAt: getCaseInsensitive(dbItem, 'updated_at', ''),
     };
@@ -1439,7 +1393,8 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       'Cost',
       'Location',
       'Department',
-      'Unit of Measure'
+      'Unit of Measure',
+      'Last Date Updated'
     ];
 
     const csvRows = [headers.join(',')];
@@ -1447,18 +1402,25 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     // If no items, we still export the headers as a template
     if (items.length > 0) {
       items.forEach(item => {
+        const lastDateUpdatedStr = item.lastDateUpdated
+          ? (() => {
+              const d = new Date(item.lastDateUpdated);
+              return isNaN(d.getTime()) ? String(item.lastDateUpdated) : d.toISOString();
+            })()
+          : '';
         const row = [
           item.id,
           `"${(item.name || '').replace(/"/g, '""')}"`,
           `"${(item.description || '').replace(/"/g, '""')}"`,
           `"${(item.sku || '').replace(/"/g, '""')}"`,
           `"${(item.category || '').replace(/"/g, '""')}"`,
-          item.quantity || 0,
-          item.unit_price || 0,
+          item.quantityOnHand ?? (item as any).quantity ?? 0,
+          item.unitPrice ?? (item as any).unit_price ?? 0,
           item.cost || 0,
           `"${(item.location || '').replace(/"/g, '""')}"`,
-          `"${(item.department_code || '').replace(/"/g, '""')}"`,
-          `"${(item.unit_of_measure || '').replace(/"/g, '""')}"`
+          `"${(item.departmentCode || (item as any).department_code || '').replace(/"/g, '""')}"`,
+          `"${(item.unitOfMeasure || (item as any).unit_of_measure || '').replace(/"/g, '""')}"`,
+          `"${lastDateUpdatedStr.replace(/"/g, '""')}"`
         ];
         csvRows.push(row.join(','));
       });
@@ -1893,16 +1855,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                 <Badge className="ml-2 bg-red-100 text-red-700">{displayLowStockCount.toLocaleString()}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="shopping-list" className="whitespace-nowrap flex items-center gap-1.5">
-              <ShoppingCart className="h-4 w-4" />
-              Shopping List
-              {shoppingListCount > 0 && (
-                <Badge className="ml-1 bg-blue-100 text-blue-700 font-semibold">{shoppingListCount}</Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="competitive-pricing" className="whitespace-nowrap">
-              Competitive Pricing
-            </TabsTrigger>
 
             {isAdminOrSuperAdmin && (
               <TabsTrigger value="diagnostic" className="whitespace-nowrap">
@@ -2266,15 +2218,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                           <div className="flex items-start justify-between gap-2">
                             <h3 className="text-base sm:text-lg text-foreground font-medium truncate">{item.name}</h3>
                             <div className="flex gap-1 shrink-0">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                  onClick={(e) => handleAddToShoppingList(item, e)}
-                                  title="Add to Shopping List"
-                                >
-                                  <ShoppingCart className="h-4 w-4" />
-                                </Button>
                                 {canChange('inventory', user.role) && (
                                 <Button
                                   variant="ghost"
@@ -2399,16 +2342,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => handleAddToShoppingList(item, e)}
-                              title="Add to Shopping List"
-                              className="text-blue-600 hover:bg-blue-50"
-                            >
-                              <ShoppingCart className="h-4 w-4 mr-1" />
-                              <span className="hidden lg:inline text-xs">Add to List</span>
-                            </Button>
                             {canChange('inventory', user.role) && (
                             <Button
                               variant="outline"
@@ -2520,6 +2453,24 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                             <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                               <span className="font-semibold text-muted-foreground mr-1">Notes:</span>
                               <span className="truncate max-w-[250px] sm:max-w-none">{item.notes}</span>
+                            </div>
+                          )}
+                          {item.lastDateUpdated && (
+                            <div
+                              className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted px-2 py-1 rounded"
+                              title={(() => {
+                                const d = new Date(item.lastDateUpdated);
+                                return isNaN(d.getTime()) ? String(item.lastDateUpdated) : d.toLocaleString();
+                              })()}
+                            >
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span>
+                                <span className="font-semibold text-muted-foreground mr-1">Last Date Updated:</span>
+                                {(() => {
+                                  const d = new Date(item.lastDateUpdated);
+                                  return isNaN(d.getTime()) ? String(item.lastDateUpdated) : d.toLocaleDateString();
+                                })()}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -2780,122 +2731,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
             )}
           </div>
         </TabsContent>
-        
-        <TabsContent value="competitive-pricing" className="space-y-6 mt-6">
-          <div className="space-y-6">
-            <CompetitivePricingDashboard
-              onSelectProduct={async (productOrId) => {
-                let targetId = typeof productOrId === 'object' && productOrId !== null ? (productOrId.productId || productOrId.id || productOrId.sku) : productOrId;
-                let item = items.find((i) => i.id === targetId || i.sku === targetId || i.id === productOrId?.productId);
-                
-                if (!item && typeof productOrId === 'object' && productOrId !== null) {
-                  // Map directly from competitive pricing dashboard item
-                  item = {
-                    id: productOrId.productId || productOrId.id,
-                    sku: productOrId.sku,
-                    name: productOrId.productName || productOrId.name,
-                    description: productOrId.description,
-                    category: productOrId.category || 'General',
-                    unitOfMeasure: productOrId.unitOfMeasure || 'EA',
-                    quantityOnHand: productOrId.quantityOnHand || 0,
-                    quantityOnOrder: productOrId.quantityOnOrder || 0,
-                    reorderLevel: productOrId.reorderLevel || 0,
-                    unitPrice: productOrId.yourPrice || productOrId.unitPrice || 0,
-                    supplier: productOrId.supplier || '',
-                    supplierSKU: productOrId.supplierSKU || productOrId.mfgPartNumber || '',
-                    mfgPartNumber: productOrId.mfgPartNumber || '',
-                    upc: productOrId.upc || '',
-                  };
-                }
-
-                if (!item && targetId) {
-                  try {
-                    const res = await fetch(`/api/inventory/${targetId}`);
-                    if (res.ok) {
-                      const json = await res.json();
-                      const data = json.item || json.data || json;
-                      if (data) {
-                        item = {
-                          id: data.id,
-                          sku: data.sku,
-                          name: data.name,
-                          description: data.description,
-                          category: data.category,
-                          unitOfMeasure: data.unit_of_measure || data.unitOfMeasure || 'EA',
-                          quantityOnHand: data.quantity_on_hand || data.quantityOnHand || 0,
-                          quantityOnOrder: data.quantity_on_order || data.quantityOnOrder || 0,
-                          reorderLevel: data.reorder_level || data.reorderLevel || 0,
-                          unitPrice: data.unit_price || data.unitPrice || 0,
-                          supplier: data.supplier || '',
-                          supplierSKU: data.supplier_sku || data.supplierSKU || '',
-                          mfgPartNumber: data.mfg_part_number || data.mfgPartNumber || '',
-                          upc: data.upc || data.barcode || '',
-                        };
-                      }
-                    }
-                  } catch (e) {
-                    console.error('Failed to fetch product for inspection:', e);
-                  }
-                }
-
-                if (item) {
-                  handleOpenDialog(item as any);
-                } else if (typeof productOrId === 'object' && productOrId !== null) {
-                  handleOpenDialog({
-                    id: productOrId.productId || productOrId.id || '1',
-                    sku: productOrId.sku || 'SKU',
-                    name: productOrId.productName || productOrId.name || 'Product',
-                    category: productOrId.category || 'General',
-                    quantityOnHand: productOrId.quantityOnHand || 0,
-                    reorderLevel: productOrId.reorderLevel || 0,
-                    unitPrice: productOrId.yourPrice || 0,
-                    description: productOrId.description || '',
-                    unitOfMeasure: productOrId.unitOfMeasure || 'EA',
-                    mfgPartNumber: productOrId.mfgPartNumber || '',
-                    upc: productOrId.upc || '',
-                  } as any);
-                }
-              }}
-            />
-
-            {(user.role === 'admin' || user.role === 'super_admin') && (
-              <div className="pt-6 border-t">
-                <CompetitivePricingAdmin />
-              </div>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="shopping-list" className="space-y-6 mt-6">
-          <ShoppingListSubModule
-            onInspectProduct={(item) => {
-              const target = items.find((i) => String(i.id) === String(item.inventoryId || item.id) || (item.sku && String(i.sku) === String(item.sku)));
-              if (target) {
-                handleOpenDialog(target);
-              } else {
-                handleOpenDialog({
-                  id: item.inventoryId || item.id,
-                  name: item.name,
-                  sku: item.sku,
-                  description: item.description,
-                  category: item.category,
-                  cost: item.cost,
-                  unitPrice: item.unitPrice,
-                  unitOfMeasure: item.unitOfMeasure || 'EA',
-                  quantity: item.quantity,
-                } as any);
-              }
-            }}
-            onSelectProduct={(productId) => {
-              const target = items.find((i) => String(i.id) === String(productId));
-              if (target) {
-                handleOpenDialog(target);
-              }
-            }}
-          />
-        </TabsContent>
-
-
 
         {(user.role === 'admin' || user.role === 'super_admin') && (
           <TabsContent value="diagnostic" className="space-y-4 mt-6">
@@ -3148,23 +2983,6 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
               </div>
             </div>
 
-            {/* Competitive Pricing Panel (for existing items) */}
-            {editingItem && (
-              <div className="pt-2">
-                <CompetitivePricingPanel
-                  productId={editingItem.id}
-                  sku={editingItem.sku}
-                  productName={editingItem.name}
-                  description={editingItem.description}
-                  currentPrice={editingItem.unitPrice || editingItem.priceTier1 || 0}
-                  unitOfMeasure={editingItem.unitOfMeasure || 'EA'}
-                  manufacturerPartNumber={editingItem.supplierSKU || (editingItem as any).supplier_sku || editingItem.mfgPartNumber}
-                  upc={editingItem.upc || (editingItem as any).barcode}
-                  category={editingItem.category}
-                />
-              </div>
-            )}
-
             {/* Supplier Information */}
             <div className="space-y-4">
               <h3 className="text-sm text-foreground">Supplier Information</h3>
@@ -3245,6 +3063,20 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                     placeholder="Enter department code"
                   />
                 </div>
+                {editingItem && (
+                  <div>
+                    <label className="text-sm text-foreground font-medium">Last Date Updated</label>
+                    <Input
+                      value={editingItem.lastDateUpdated ? (() => {
+                        const d = new Date(editingItem.lastDateUpdated);
+                        return isNaN(d.getTime()) ? String(editingItem.lastDateUpdated) : d.toLocaleString();
+                      })() : 'Not set'}
+                      readOnly
+                      disabled
+                      className="bg-muted text-muted-foreground"
+                    />
+                  </div>
+                )}
                 <div className="sm:col-span-2 md:col-span-3">
                   <label className="text-sm text-foreground">Tags (comma-separated)</label>
                   <Input

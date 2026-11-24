@@ -371,6 +371,7 @@ function ScheduledJobs({ user, onNavigate }) {
     } else if (job.data_type === 'inventory') {
       // Validate and clean inventory data before bulk upsert
       const cleanedInventory = [];
+      const importTimestamp = new Date().toISOString();
       
       for (const record of data) {
         try {
@@ -388,7 +389,8 @@ function ScheduledJobs({ user, onNavigate }) {
           cleanedInventory.push({
             ...record,
             name: resolvedName,
-            sku: resolvedSku
+            sku: resolvedSku,
+            last_date_updated: importTimestamp,
           });
         } catch (error: any) {
           errors.push(`Error cleaning inventory record: ${error.message}`);

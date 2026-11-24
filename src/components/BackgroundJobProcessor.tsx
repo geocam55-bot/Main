@@ -57,6 +57,7 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
       let failCount = 0;
       const errors: string[] = [];
       const dataType = job.data_type;
+      const importTimestamp = new Date().toISOString();
 
       // Pre-load auth for contacts batch processing
       let preloadedAuth: any = undefined;
@@ -94,6 +95,7 @@ export function BackgroundJobProcessor({ user, onNavigate }: BackgroundJobProces
                 sku: record.sku,
                 description: record.description || '',
                 category: record.category || 'Uncategorized',
+                last_date_updated: importTimestamp,
               };
               if (record.quantity != null && record.quantity !== '') inventoryData.quantity = parseFloat(record.quantity) || 0;
               if (record.quantity_on_order != null && record.quantity_on_order !== '') inventoryData.quantity_on_order = parseFloat(record.quantity_on_order) || 0;

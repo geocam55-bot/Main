@@ -1,7 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import {
   Package,
-  ShoppingCart,
   BarChart3,
   AlertTriangle,
   Search,
@@ -47,7 +46,7 @@ const SettingsComponent = lazyNamed(
   'Settings'
 );
 
-type InventoryView = 'home' | 'catalog' | 'shopping-list' | 'messages' | 'profile';
+type InventoryView = 'home' | 'catalog' | 'messages' | 'profile';
 
 interface NavItem {
   id: InventoryView;
@@ -61,7 +60,6 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: LayoutDashboard, color: 'text-slate-600', bgColor: 'bg-slate-100' },
   { id: 'catalog', label: 'Inventory Catalog', icon: Package, color: 'text-emerald-600', bgColor: 'bg-emerald-50', module: 'inventory' },
-  { id: 'shopping-list', label: 'Shopping List', icon: ShoppingCart, color: 'text-blue-600', bgColor: 'bg-blue-50', module: 'inventory' },
   { id: 'messages', label: 'Message Space', icon: MessageSquare, color: 'text-violet-600', bgColor: 'bg-violet-50', module: 'messages' },
 ];
 
@@ -97,7 +95,7 @@ export function InventoryShell({ user, accessToken, onLogout }: InventoryShellPr
   const canOpenCatalog = canAccessSpace('inventory', currentUser.role, 'view') || canView('inventory', currentUser.role);
 
   const hasNavAccess = useCallback((item: NavItem) => {
-    if (item.id === 'catalog' || item.id === 'shopping-list') return canOpenCatalog;
+    if (item.id === 'catalog') return canOpenCatalog;
     if (item.module && !canView(item.module, currentUser.role)) return false;
     return true;
   }, [canOpenCatalog, currentUser.role]);
@@ -252,7 +250,6 @@ export function InventoryShell({ user, accessToken, onLogout }: InventoryShellPr
 
         <Suspense fallback={<ModuleLoading />}>
           {currentView === 'catalog' && canOpenCatalog && <Inventory user={currentUser} initialTab="items" />}
-          {currentView === 'shopping-list' && canOpenCatalog && <Inventory user={currentUser} initialTab="shopping-list" />}
           {currentView === 'messages' && canView('messages', currentUser.role) && <MessagingHub user={currentUser} />}
           {currentView === 'profile' && (
             <SettingsComponent
@@ -298,15 +295,6 @@ function HomeView({
       module: 'inventory',
     },
     {
-      id: 'shopping-list',
-      label: 'Shopping List',
-      description: 'Build material packages, monitor replacement vs. average cost, and compare live pricing across regional competitors.',
-      icon: ShoppingCart,
-      gradient: 'from-blue-500 to-cyan-600',
-      iconBg: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
-      module: 'inventory',
-    },
-    {
       id: 'messages',
       label: 'Message Space',
       description: 'Collaborate with teammates, ask about product availability, stock replenishment plans, or share layout requests in real-time.',
@@ -326,7 +314,7 @@ function HomeView({
   ];
 
   const visibleCards = cards.filter((card) => {
-    if (card.id === 'catalog' || card.id === 'shopping-list') return canOpenCatalog;
+    if (card.id === 'catalog') return canOpenCatalog;
     if (card.module && !canView(card.module, user.role)) return false;
     return true;
   });
@@ -342,7 +330,7 @@ function HomeView({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {visibleCards.map((card) => {
           const Icon = card.icon;
           const isTooltipActive = activeTooltip === card.id;

@@ -362,7 +362,8 @@ const SCHEMA_GUIDES = {
       { name: "PriceTier4", req: false, desc: "Tier 4 - Preferred Price (decimal format, e.g. 44.99)." },
       { name: "PriceTier5", req: false, desc: "Tier 5 - Preferred VIP Price (decimal format, e.g. 39.99)." },
       { name: "Unit / UnitOfMeasure", req: false, desc: "Unit of Measure multiplier standard code (e.g. ea, lf, bf, pc)." },
-      { name: "ImageUrl / ImageURL", req: false, desc: "Raw web URL for material thumb image cataloging." }
+      { name: "ImageUrl / ImageURL", req: false, desc: "Raw web URL for material thumb image cataloging." },
+      { name: "LastDateUpdated", req: false, desc: "Timestamp of the most recent inventory import or update (auto-populated with the import date when an inventory import runs)." }
     ]
   },
   deals: {
@@ -1322,6 +1323,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         else if (/lead_time_days|leadtimedays|leadtime|lead_time/i.test(header)) key = "leadTimeDays";
         else if (/departmentcode|department_code/i.test(header)) key = "departmentCode";
         else if (/imageurl|image_url|photo|image/i.test(header)) key = "imageUrl";
+        else if (/last_date_updated|lastdateupdated|last date updated|date_imported|dateimported|date imported/i.test(header)) key = "lastDateUpdated";
         else if (/email/i.test(header)) key = "email";
         else if (/phone/i.test(header)) key = "phone";
         else if (/company/i.test(header)) key = "company";
@@ -4684,7 +4686,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                           <tr className="bg-slate-50 border-b font-semibold text-slate-600">
                             {Object.keys(crmRecords[0]).map((key) => {
                               if (key === "id") return null;
-                              return <th key={key} className="p-2 border font-bold capitalize">{key}</th>;
+                              const label = key === "last_date_updated" ? "Last Date Updated" : key.replace(/_/g, " ");
+                              return <th key={key} className="p-2 border font-bold capitalize">{label}</th>;
                             })}
                           </tr>
                         </thead>
@@ -4693,7 +4696,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                             <tr key={rec.id || index} className="hover:bg-slate-50/50">
                               {Object.entries(rec).map(([key, val]: any) => {
                                 if (key === "id") return null;
-                                return <td key={key} className="p-2 border max-w-xs truncate">{String(val ?? '')}</td>;
+                                const displayVal =
+                                  key === "last_date_updated" && val
+                                    ? (() => {
+                                        const d = new Date(val);
+                                        return isNaN(d.getTime()) ? String(val) : d.toLocaleString();
+                                      })()
+                                    : String(val ?? '');
+                                return <td key={key} className="p-2 border max-w-xs truncate">{displayVal}</td>;
                               })}
                             </tr>
                           ))}

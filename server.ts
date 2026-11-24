@@ -23,21 +23,6 @@ import {
   groupItemsIntoLines,
   PositionedTextItem
 } from "./src/components/logistics-app/lib/ocrFieldExtractor";
-import {
-  resolveInventoryTitles,
-  extractBuildingDimensions,
-  extractRealProductSearchTerm,
-  buildCompetitorSearchUrl,
-  isGenericCategoryName,
-} from "./src/utils/building-dimensions";
-import {
-  runCompetitivePricing,
-  requestStopPricingAgent,
-  resetPricingAgentState,
-  getInProcessAgentStatus,
-  getInProcessRecentLogs
-} from "./src/scripts/pricing-agent";
-import { runRetailPriceComparison } from "./src/services/playwright-scraper";
 
 const FALLBACK_PROJECT_ID = "usorqldwroecyxucmtuw";
 const FALLBACK_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM";
@@ -634,8 +619,8 @@ async function resolveMicrosoftAccessToken(
     }
 
     if (sawInvalidGrant && account.kvKey) {
-      console.warn(
-        `[${modeLabel}] Marking stale OneDrive token as reauth_required for ${account.email} (AADSTS70000). Reconnect Microsoft account to resume live sync.`
+      console.log(
+        `[${modeLabel}] Marking OneDrive token as reauth_required for ${account.email} (client ID mismatch or expired refresh token).`
       );
       try {
         const kvValue = { ...account };
@@ -666,7 +651,10 @@ async function resolveMicrosoftAccessToken(
 }
 
 // Helper to automatically pull fresh file content from OneDrive during unattended task execution
-export async function syncOneDriveFileOnBackend(task: any) {
+export async function syncOneDriveFileOnBackend(
+  task: any,
+  options?: { allowCachedFallback?: boolean }
+) {
   const fileName = task.action.fileName;
   if (!fileName) {
     throw new Error("No fileName specified in the action.");
@@ -679,6 +667,9 @@ export async function syncOneDriveFileOnBackend(task: any) {
     .like('key', 'email_account:%');
 
   if (kvErr || !kvData || kvData.length === 0) {
+    if (options?.allowCachedFallback) {
+      return { buffer: null, base64Url: null, fileName, skippedReauthRequired: true };
+    }
     throw new Error("No connected OAuth accounts found on the server. Please connect under connected Microsoft OneDrive panel first.");
   }
 
@@ -690,6 +681,9 @@ export async function syncOneDriveFileOnBackend(task: any) {
     .sort((a: any, b: any) => new Date(b.connectedAt || 0).getTime() - new Date(a.connectedAt || 0).getTime());
 
   if (accounts.length === 0) {
+    if (options?.allowCachedFallback) {
+      return { buffer: null, base64Url: null, fileName, skippedReauthRequired: true };
+    }
     throw new Error("No connected Microsoft OneDrive accounts found in database records.");
   }
 
@@ -711,6 +705,11 @@ export async function syncOneDriveFileOnBackend(task: any) {
   } = await resolveMicrosoftAccessToken(candidateAccounts, 'OneDrive Background Sync');
 
   if (!accessToken || !selectedAccount) {
+    const isReauth = lastErrorMsg.includes("invalid_grant") || lastErrorMsg.includes("AADSTS70000");
+    if (options?.allowCachedFallback && isReauth) {
+      return { buffer: null, base64Url: null, fileName, skippedReauthRequired: true };
+    }
+
     // If we failed all accounts, provide a comprehensive explanation using the last encountered error
     let friendlyError = lastErrorMsg || "No active access tokens found and no refresh tokens succeeded.";
     if (lastErrorMsg.includes("invalid_client") || lastErrorMsg.includes("AADSTS7000215")) {
@@ -722,11 +721,11 @@ export async function syncOneDriveFileOnBackend(task: any) {
       } else {
         friendlyError = `[Azure/OneDrive Auth Error] AADSTS700016: Application with identifier '${AZURE_CLIENT_ID}' was not found. Please ensure that in the Azure App Registration of your app, under "Supported account types", you selected "Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)". If it is selected as single tenant, personal accounts won't be able to log in.`;
       }
-    } else if (lastErrorMsg.includes("invalid_grant") || lastErrorMsg.includes("AADSTS70000")) {
+    } else if (isReauth) {
       friendlyError = `[Azure/OneDrive Auth Error] AADSTS70000: The refresh token is invalid or was issued for a different client ID. This can happen if the client ID was changed, or if the token is too old. Please reconnect your Microsoft account under the connected Microsoft OneDrive panel.`;
     }
     const authErr: any = new Error(`OneDrive login/refresh failed: ${friendlyError}`);
-    authErr.isReauthRequired = lastErrorMsg.includes("invalid_grant") || lastErrorMsg.includes("AADSTS70000");
+    authErr.isReauthRequired = isReauth;
     throw authErr;
   }
 
@@ -833,8 +832,8 @@ async function uploadOneDriveFileFromBackend(task: any, base64Content: string) {
   }));
 
   if (!accessToken) {
-    console.warn(
-      `[OneDrive Background Export] Skipped upload for "${fileName}" — Microsoft OneDrive needs reconnection (${lastErrorMsg || 'no valid token'}).`
+    console.log(
+      `[OneDrive Background Export] Skipped remote upload for "${fileName}" — Microsoft OneDrive awaiting reconnection.`
     );
     return;
   }
@@ -935,18 +934,16 @@ async function executeScheduledTask(task: any) {
       if (task.action.fileStorage === 'onedrive') {
         console.log(`[Scheduler] Unattended OneDrive Import: Fetching latest copy of "${task.action.fileName}" from OneDrive...`);
         try {
-          const syncResult = await syncOneDriveFileOnBackend(task);
-          if (syncResult && syncResult.buffer) {
+          const syncResult = await syncOneDriveFileOnBackend(task, { allowCachedFallback: true });
+          if (syncResult?.skippedReauthRequired) {
+            console.log(`[Scheduler] Live OneDrive pull skipped (Microsoft reconnection required); using cached workspace/DB copy.`);
+          } else if (syncResult && syncResult.buffer) {
             fs.writeFileSync(filePath, syncResult.buffer);
             console.log(`[Scheduler] Unattended OneDrive Import: Successfully pulled a fresh copy of "${task.action.fileName}" to local workspace.`);
           }
         } catch (syncErr: any) {
           const msg = syncErr?.message || String(syncErr);
-          if (syncErr?.isReauthRequired || msg.includes('AADSTS70000') || msg.includes('invalid_grant')) {
-            console.warn(`[Scheduler] Unattended OneDrive Import using cached copy (${msg})`);
-          } else {
-            console.error(`[Scheduler] Unattended OneDrive Import refresh failure:`, msg);
-          }
+          console.error(`[Scheduler] Unattended OneDrive Import refresh failure:`, msg);
         }
       }
 
@@ -1057,6 +1054,7 @@ async function executeScheduledTask(task: any) {
       // Upsert records in local crm database
       if (!crmDb[moduleKey]) crmDb[moduleKey] = [];
     let upserts = 0;
+      const importRunTimestamp = new Date().toISOString();
       importedRecords.forEach((item: any) => {
         // Find by identifiers e.g. Email for contacts, SKU for inventory, ProjectName for deals
         let existingIdx = -1;
@@ -1110,6 +1108,7 @@ async function executeScheduledTask(task: any) {
           else if (lowerK === 'pricetier5' || lowerK === 'price_tier_5' || lowerK === 'tier5' || lowerK === 'wholesale') key = 'PriceTier5';
           else if (lowerK === 'unit' || lowerK === 'unitofmeasure' || lowerK === 'unit_of_measure' || lowerK === 'uom') key = 'Unit';
           else if (lowerK === 'imageurl' || lowerK === 'image_url' || lowerK === 'image') key = 'image_url';
+          else if (lowerK === 'lastdateupdated' || lowerK === 'dateimported' || lowerK === 'importdate') key = 'last_date_updated';
           normalizedRecord[key] = v;
         });
 
@@ -1130,6 +1129,8 @@ async function executeScheduledTask(task: any) {
           if (normalizedRecord.PriceTier4 === undefined) normalizedRecord.PriceTier4 = defaultPrice;
           if (normalizedRecord.PriceTier5 === undefined) normalizedRecord.PriceTier5 = defaultPrice;
           if (normalizedRecord.Unit === undefined) normalizedRecord.Unit = 'ea';
+          normalizedRecord.last_date_updated = importRunTimestamp;
+          normalizedRecord.LastDateUpdated = importRunTimestamp;
         }
 
         if (existingIdx !== -1) {
@@ -1364,25 +1365,23 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
       if (task.action.fileStorage === 'onedrive') {
         console.log(`[Scheduler Supabase] Unattended OneDrive Import: Fetching latest copy of "${fileName}" from OneDrive...`);
         try {
-          const syncResult = await syncOneDriveFileOnBackend(task);
-          if (syncResult && (syncResult.base64Url || syncResult.buffer)) {
+          const syncResult = await syncOneDriveFileOnBackend(task, { allowCachedFallback: true });
+          if (syncResult?.skippedReauthRequired) {
+            console.log(`[Scheduler Supabase] Live OneDrive pull skipped (Microsoft reconnection required); using cached DB copy.`);
+          } else if (syncResult && (syncResult.base64Url || syncResult.buffer)) {
             activeBase64 = syncResult.base64Url;
             activeBuffer = syncResult.buffer;
             console.log(`[Scheduler Supabase] Unattended OneDrive Import: Successfully retrieved online copy of "${fileName}" in-memory.`);
             // Save cache back in background (non-blocking, ignore statement timeouts)
             saveVirtualFileServer(fileName, syncResult.base64Url).catch(e => {
-              console.warn(`[Scheduler Supabase] Background database file cache writing notice:`, e.message || e);
+              console.log(`[Scheduler Supabase] Background database file cache notice:`, e.message || e);
             });
           } else {
-            console.warn(`[Scheduler Supabase] Unattended OneDrive Import sync fetched empty or invalid response.`);
+            console.log(`[Scheduler Supabase] Unattended OneDrive Import fetched empty payload; falling back to cache.`);
           }
         } catch (syncErr: any) {
           const msg = syncErr?.message || String(syncErr);
-          if (syncErr?.isReauthRequired || msg.includes('AADSTS70000') || msg.includes('invalid_grant')) {
-            console.warn(`[Scheduler Supabase] Unattended OneDrive Import falling back to cached copy (${msg})`);
-          } else {
-            console.error(`[Scheduler Supabase] Unattended OneDrive Import refresh failure:`, msg);
-          }
+          console.error(`[Scheduler Supabase] Unattended OneDrive Import refresh failure:`, msg);
         }
       }
 
@@ -1510,14 +1509,14 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         } else {
           const fallbackCols: Record<string, string[]> = {
             contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags", "ptd_sales", "ptd_gp_percent", "ytd_sales", "ytd_gp_percent", "lyr_sales", "lyr_gp_percent"],
-            inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_order", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "department_code", "reorder_level", "upc", "supplier", "supplier_sku", "min_stock", "max_stock", "lead_time_days", "notes", "tags", "price_levels"],
+            inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_order", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "department_code", "reorder_level", "upc", "supplier", "supplier_sku", "min_stock", "max_stock", "lead_time_days", "notes", "tags", "price_levels", "last_date_updated"],
             opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
           };
           (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
         }
 
         if (table === "inventory") {
-          ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url"].forEach(k => existingDbCols.add(k));
+          ["price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "image_url", "last_date_updated"].forEach(k => existingDbCols.add(k));
         }
 
         let priceTierLabels: any = null;
@@ -1642,6 +1641,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         }
 
         const cleanedRecordsMap = new Map<string, any>();
+        const importRunTimestamp = new Date().toISOString();
 
         for (const rec of parsedRecords) {
           const mappedRec: any = { organization_id: organizationId };
@@ -1735,6 +1735,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
               else if (lowerKey === "suppliersku" || lowerKey === "supplier_sku" || lowerKey === "supplierpartnumber" || lowerKey === "supplierpart") mappedRec.supplier_sku = cleanVal;
               else if (lowerKey === "status" || lowerKey === "state") mappedRec.status = cleanVal;
               else if (lowerKey === "departmentcode" || lowerKey === "department_code" || lowerKey === "dept" || lowerKey === "department") mappedRec.department_code = cleanVal;
+              else if (lowerKey === "lastdateupdated" || lowerKey === "dateimported" || lowerKey === "importdate") mappedRec.last_date_updated = cleanVal;
               else {
                 // Check against dynamic price tier labels if loaded
                 let matchedTier = 0;
@@ -1806,6 +1807,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
             if (mappedRec.price_tier_4 === undefined || mappedRec.price_tier_4 === 0) mappedRec.price_tier_4 = t1;
             if (mappedRec.price_tier_5 === undefined || mappedRec.price_tier_5 === 0) mappedRec.price_tier_5 = t1;
             if (mappedRec.unit_of_measure === undefined) mappedRec.unit_of_measure = "ea";
+            mappedRec.last_date_updated = importRunTimestamp;
 
             // Strip any pre-existing <!--metadata:...--> tags from the description field
             // to ensure it only contains the clean description. Extract their properties to individual columns if not already populated.
@@ -2326,24 +2328,6 @@ async function startServer() {
   const app = express();
   app.set('trust proxy', true);
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-
-  // On server startup, ensure pricing-agent-status is not stuck as running
-  try {
-    const fs = await import('fs');
-    const path = await import('path');
-    const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
-    if (fs.existsSync(statusPath)) {
-      const content = fs.readFileSync(statusPath, 'utf8');
-      const st = JSON.parse(content);
-      if (st && st.isRunning) {
-        st.isRunning = false;
-        st.progress = st.progress || {};
-        st.progress.currentSku = st.progress.current >= st.progress.total ? 'Completed' : 'Stopped';
-        st.progress.lastUpdated = new Date().toISOString();
-        fs.writeFileSync(statusPath, JSON.stringify(st, null, 2));
-      }
-    }
-  } catch (e) {}
 
   // Essential Health Check for Container Ingress & Reverse Proxy
   app.get(['/api/health', '/healthz', '/health'], (req, res) => {
@@ -3569,11 +3553,11 @@ Result:
       if (!client) {
         return res.json({
           reply: `Filtered for "${message}".`,
-          filters: { search: message, category: 'all', varianceFilter: 'all' }
+          filters: { search: message, category: 'all' }
         });
       }
 
-      const prompt = `You are an expert AI inventory and pricing assistant for ProSpaces CRM (managing building materials, hardware, lumber, tools, etc.).
+      const prompt = `You are an expert AI inventory assistant for ProSpaces CRM (managing building materials, hardware, lumber, tools, etc.).
 The user is asking in the "${module}" module: "${message}".
 
 Analyze the user's natural language request and extract structured search filter parameters and provide a helpful, natural conversational reply.
@@ -3583,7 +3567,6 @@ Return JSON matching this schema:
   "filters": {
     "search": "extracted search terms or keywords (e.g. Spruce 2x4)",
     "category": "category filter if mentioned (or 'all')",
-    "varianceFilter": "for competitive pricing: 'all', 'higher', 'lower', 'no_match', 'outdated' (or 'all')",
     "priceMin": null or number,
     "priceMax": null or number
   }
@@ -3603,7 +3586,6 @@ Return JSON matching this schema:
                 properties: {
                   search: { type: Type.STRING },
                   category: { type: Type.STRING },
-                  varianceFilter: { type: Type.STRING },
                   priceMin: { type: Type.NUMBER, nullable: true },
                   priceMax: { type: Type.NUMBER, nullable: true },
                 },
@@ -3617,7 +3599,7 @@ Return JSON matching this schema:
 
       let parsed = {
         reply: `Here are the results for "${message}".`,
-        filters: { search: message, category: 'all', varianceFilter: 'all' }
+        filters: { search: message, category: 'all' }
       };
 
       try {
@@ -3632,7 +3614,7 @@ Return JSON matching this schema:
     } catch (err: any) {
       res.json({
         reply: `Filtered for "${req.body?.message || ''}".`,
-        filters: { search: req.body?.message || '', category: 'all', varianceFilter: 'all' }
+        filters: { search: req.body?.message || '', category: 'all' }
       });
     }
   });
@@ -4045,1968 +4027,6 @@ Return JSON matching this schema:
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // COMPETITIVE PRICING MODULE REST API (RONA ATLANTIC vs REGIONAL COMPETITORS)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // In-memory fallback stores for jobs & competitors if DB tables are pending
-  const inMemoryJobs = new Map<string, any>();
-  const inMemoryCompetitors = [
-    {
-      id: 1,
-      name: 'KENT Building Supplies',
-      websiteUrl: 'https://kent.ca',
-      searchUrlTemplate: 'https://kent.ca/en/search/?q={query}',
-      active: true,
-      scrapingMethod: 'playwright_browser',
-      lastSuccessfulCheck: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-      lastError: null,
-    },
-    {
-      id: 2,
-      name: 'The Home Depot',
-      websiteUrl: 'https://www.homedepot.ca',
-      searchUrlTemplate: 'https://www.homedepot.ca/en/home/search.html?q={query}',
-      active: true,
-      scrapingMethod: 'playwright_browser',
-      lastSuccessfulCheck: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-      lastError: null,
-    },
-  ];
-
-  // In-memory price history store fallback
-  const inMemoryHistory: any[] = [];
-  const latestCompetitorResultsByProduct = new Map<string, any[]>();
-
-  // Helper: fetch product details from inventory or products table (uses imported resolveInventoryTitles from ./src/utils/building-dimensions)
-  async function resolveProductRecord(productId: string | number) {
-    try {
-      const pidStr = String(productId).trim();
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pidStr);
-    let invItem: any = null;
-      if (isUUID) {
-        const { data } = await supabase
-          .from('inventory')
-          .select('*')
-          .eq('id', pidStr)
-          .limit(1)
-          .maybeSingle();
-        invItem = data;
-      }
-
-      if (!invItem) {
-        const { data } = await supabase
-          .from('inventory')
-          .select('*')
-          .or(`sku.eq.${pidStr},upc.eq.${pidStr},supplier_sku.eq.${pidStr}`)
-          .limit(1)
-          .maybeSingle();
-        invItem = data;
-      }
-      
-      if (!invItem && pidStr.length > 2) {
-        const andClause = buildInventoryAndSearchClause(pidStr);
-    let query = supabase.from('inventory').select('*').limit(1);
-        if (andClause) {
-          query = query.or(andClause);
-        } else {
-          query = query.eq('id', '00000000-0000-0000-0000-000000000000');
-        }
-        const { data } = await query.maybeSingle();
-        invItem = data;
-      }
-
-      if (invItem) {
-        const { title, description } = resolveInventoryTitles(invItem.name, invItem.description, invItem.category);
-        const rawUnitPrice = Number(invItem.unit_price || invItem.unitPrice || 0);
-        const unitPriceInDollars = rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : rawUnitPrice;
-
-        return {
-          productId: invItem.id,
-          sku: invItem.sku || String(productId),
-          productName: title,
-          description: description || invItem.description || '',
-          yourPrice: unitPriceInDollars,
-          category: invItem.category || 'General',
-          unitOfMeasure: invItem.unit_of_measure || invItem.unitOfMeasure || 'EA',
-          mfgPartNumber: (invItem.supplier_sku || invItem.supplierSku || invItem.mfg_part_number || '').trim(),
-          upc: (invItem.upc || invItem.barcode || '').trim(),
-        };
-      }
-    } catch (e) {
-      // Ignore
-    }
-
-    return {
-      productId: String(productId),
-      sku: String(productId),
-      productName: `Product ${productId}`,
-      description: '',
-      yourPrice: 0,
-      category: 'General',
-      unitOfMeasure: 'EA',
-      mfgPartNumber: '',
-      upc: '',
-    };
-  }
-
-  // Helper to normalize building material text (expanding abbreviations and cleaning special symbols while preserving fractions like 1/2)
-  function normalizeBuildingText(text: string) {
-    return String(text || '')
-      .toLowerCase()
-      .replace(/[\u00d7]/g, 'x')
-      .replace(/½/g, '1/2')
-      .replace(/¾/g, '3/4')
-      .replace(/⅝/g, '5/8')
-      .replace(/⅜/g, '3/8')
-      .replace(/¼/g, '1/4')
-      .replace(/\b(\d+(?:\.\d+)?|\d+\/\d+)\s*(?:in\.?|inch(?:es)?|["”])\s*(?:x|-)\s*(\d+(?:\.\d+)?|\d+\/\d+)\s*(?:in\.?|inch(?:es)?|["”])?/gi, '$1 x $2')
-      .replace(/\b(\d+)\s*(?:ft\.?|feet|foot|['’])\s*(?:x|-)\s*(\d+)\s*(?:ft\.?|feet|foot|['’])?/gi, '$1 x $2')
-      .replace(/\b(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\b/gi, '$1 x $2 x $3')
-      .replace(/\b(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\b/gi, '$1 x $2')
-      .replace(/\bply\b/g, 'plywood')
-      .replace(/\bspr\b/g, 'spruce')
-      .replace(/\bstd\b/g, 'standard')
-      .replace(/\bspf\b/g, 'spruce pine fir')
-      .replace(/\bpt\b/g, 'pressure treated')
-      .replace(/\(\d+(?:\.\d+)?\)/g, ' ')
-      .replace(/[#&()]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  // Treat Search Description as a bag of words (extracting, cleaning, and tokenizing words)
-  function getBagOfWordsQueries(text: string): string[] {
-    const clean = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-    const stopWords = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with']);
-    const tokens = clean.split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t));
-    
-    const results = new Set<string>();
-    if (tokens.length > 0) {
-      results.add(tokens.join(' ')); // All bag of words tokens together
-      if (tokens.length >= 3) {
-        results.add(tokens.slice(0, 3).join(' '));
-      }
-      if (tokens.length >= 2) {
-        results.add(tokens.slice(0, 2).join(' '));
-      }
-      for (const token of tokens.slice(0, 5)) {
-        results.add(token);
-      }
-    }
-    return Array.from(results);
-  }
-
-  // Multi-tier matching helper adhering to user rules:
-  // 1) Match on UPC exact match (Priority 1)
-  // 2) Match on MFG# (Supplier SKU) exact match (Priority 2)
-  // 3) Match on Description / Item Name with STRICT DIMENSION VETO (Priority 3)
-  function scoreAndPickBestProduct(items: any[], product: { productName?: string; description?: string; upc?: string; mfgPartNumber?: string }, query: string = '') {
-    if (!items || items.length === 0) return null;
-
-    const targetDesc = String(product.description || '');
-    const targetName = String(product.productName || '');
-    const targetUpc = String(product.upc || '').trim();
-    const targetMfg = String(product.mfgPartNumber || '').trim().toLowerCase();
-    const qTrim = String(query || '').trim().toLowerCase();
-
-    // Priority 1: Exact UPC match
-    if (targetUpc) {
-      const upcItem = items.find(it => {
-        const u = String(it.upc || it.barcode || '').trim();
-        return u && u === targetUpc;
-      });
-      if (upcItem) return { item: upcItem, method: 'UPC', confidence: 'EXACT', score: 1.0 };
-    }
-
-    // Priority 2: Exact MFG / Supplier SKU match
-    if (targetMfg) {
-      const mfgItem = items.find(it => {
-        const m = String(it.mfgPartNumber || it.supplierSku || it.code || it.modelNumber || '').trim().toLowerCase();
-        return m && (m === targetMfg || m.replace(/[^a-z0-9]/g, '') === targetMfg.replace(/[^a-z0-9]/g, ''));
-      });
-      if (mfgItem) return { item: mfgItem, method: 'MANUFACTURER_PART_NUMBER', confidence: 'EXACT', score: 1.0 };
-    }
-
-    // Extract precision target dimensions from DESCRIPTION (and fallback to Name)
-    const targetDims = extractBuildingDimensions(targetDesc || targetName);
-
-    let bestResult: any = null;
-    let bestScore = -1;
-
-    for (const item of items) {
-      const candTitle = String(item.title || item.name || '').toLowerCase();
-      const candUpc = String(item.upc || item.barcode || '').trim();
-      const candMfg = String(item.mfgPartNumber || item.supplierSku || item.code || item.modelNumber || '').trim().toLowerCase();
-
-      // Rule: UPC exact match
-      if (targetUpc && candUpc && candUpc === targetUpc) {
-        return { item, method: 'UPC', confidence: 'EXACT', score: 1.0 };
-      }
-
-      // Rule: MFG# (Supplier SKU) exact match
-      if (targetMfg && candMfg && candMfg === targetMfg) {
-        return { item, method: 'MANUFACTURER_PART_NUMBER', confidence: 'EXACT', score: 1.0 };
-      }
-
-      // Extract candidate dimensions
-      const candDims = extractBuildingDimensions(candTitle);
-
-      // STRICT HARD VETO 0: Material Category Conflict (Plywood vs Drywall vs OSB vs Lumber vs Ceiling Tile)
-      const targetMat = targetDims.materialType || 
-        (/\b(?:plywood|sheathing)\b/i.test(targetDesc || targetName) ? 'plywood' :
-         /\b(?:drywall|sheetrock|gypsum)\b/i.test(targetDesc || targetName) ? 'drywall' :
-         /\b(?:osb|waferboard)\b/i.test(targetDesc || targetName) ? 'osb' :
-         /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(targetDesc || targetName) ? 'ceiling_tile' :
-         (targetDims.crossSection || targetDims.lengthFt ? 'lumber' : null));
-
-      const candMat = candDims.materialType || 
-        (/\b(?:plywood|sheathing)\b/i.test(candTitle) ? 'plywood' :
-         /\b(?:drywall|sheetrock|gypsum)\b/i.test(candTitle) ? 'drywall' :
-         /\b(?:osb|waferboard)\b/i.test(candTitle) ? 'osb' :
-         /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(candTitle) ? 'ceiling_tile' :
-         (candDims.crossSection || candDims.lengthFt ? 'lumber' : null));
-
-      if (targetMat && candMat && targetMat !== candMat) {
-        continue; // Strict hard veto: Never match drywall to plywood, ceiling tile to lumber, etc.
-      }
-      if (targetMat === 'plywood' && (/\b(?:drywall|sheetrock|gypsum|ceiling|fissured|moulding|trim)\b/i.test(candTitle))) {
-        continue;
-      }
-      if (targetMat === 'drywall' && (/\b(?:plywood|sheathing|osb|ceiling|fissured|stud|lumber)\b/i.test(candTitle))) {
-        continue;
-      }
-      if (targetMat === 'lumber' && (/\b(?:corner|moulding|trim|casing|baseboard|tile|mosaic|pipe|conduit|bolt|screw|hood|plunger|filter|stringer|hanger|bracket)\b/i.test(candTitle))) {
-        continue;
-      }
-
-      // Pressure-Treated vs Untreated Framing Lumber Hard Veto
-      const targetIsTreated = /\b(?:treated|pressure|pt|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(targetDesc || targetName);
-      const candIsTreated = /\b(?:treated|pressure|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(candTitle);
-      if (!targetIsTreated && candIsTreated) {
-        continue; // Do not match pressure-treated lumber when looking for standard SPF lumber
-      }
-      if (targetIsTreated && !candIsTreated) {
-        continue; // Do not match untreated stud when looking for pressure treated
-      }
-
-      // STRICT HARD VETO 1: Cross-Section Mismatch (e.g. searching 2x4, candidate is 2x6, 2x8, or has no cross section)
-      if (targetDims.crossSection) {
-        if (!candDims.crossSection || targetDims.crossSection !== candDims.crossSection) {
-          continue; // Strict hard veto: candidate must have the exact matching cross section!
-        }
-      }
-
-      // STRICT HARD VETO 2: Length Mismatch (e.g. searching 10 ft, candidate is 8 ft, 12 ft, 16 ft)
-      if (targetDims.lengthFt && candDims.lengthFt) {
-        if (targetDims.lengthFt !== candDims.lengthFt) {
-          continue; // Strict hard veto: do not match 8ft board when looking for 10ft!
-        }
-      }
-
-      // STRICT HARD VETO 3: Stud Length Mismatch (e.g. 92-5/8" vs 104-5/8")
-      if (targetDims.studLength && candDims.studLength) {
-        if (targetDims.studLength !== candDims.studLength) {
-          continue; // Strict hard veto
-        }
-      }
-
-      // STRICT HARD VETO 4: Sheet Thickness Mismatch (e.g. 1/2" drywall vs 5/8" drywall)
-      if (targetDims.thickness && candDims.thickness && (targetDims.sheetSize || candDims.sheetSize || targetMat === 'plywood' || targetMat === 'drywall')) {
-        if (targetDims.thickness !== candDims.thickness) {
-          continue; // Strict hard veto: do not match 5/8" sheet when looking for 1/2"!
-        }
-      }
-
-      // STRICT HARD VETO 5: Sheet Size Mismatch (e.g. 4x8 vs 4x12)
-      if (targetDims.sheetSize && candDims.sheetSize) {
-        if (targetDims.sheetSize !== candDims.sheetSize) {
-          continue; // Strict hard veto
-        }
-      }
-
-      // Grade check: Standard vs Select
-      const targetIsSelect = /\bselect\b/i.test(targetDesc || targetName);
-      const targetIsStandard = /\bstandard\b/i.test(targetDesc || targetName);
-      const candIsSelect = /\bselect\b/i.test(candTitle);
-      const candIsStandard = /\bstandard\b/i.test(candTitle);
-
-      let gradeBonus = 0;
-      if (targetIsStandard && candIsStandard) gradeBonus += 0.25;
-      if (targetIsSelect && candIsSelect) gradeBonus += 0.25;
-      if ((targetIsStandard && candIsSelect) || (targetIsSelect && candIsStandard)) gradeBonus -= 0.35;
-
-      // Bag of words token overlap similarity (Jaccard) between target and candidate
-      const stopWords = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'with']);
-      const targetTokens = new Set([
-        ...normalizeBuildingText(targetDesc).replace(/[^a-z0-9\/]/g, ' ').split(/\s+/),
-        ...normalizeBuildingText(targetName).replace(/[^a-z0-9\/]/g, ' ').split(/\s+/)
-      ].filter(t => t.length > 1 && !stopWords.has(t)));
-      
-      const candTokens = new Set(normalizeBuildingText(candTitle).replace(/[^a-z0-9\/]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t)));
-
-      let intersection = 0;
-      for (const t of targetTokens) {
-        if (candTokens.has(t)) intersection++;
-      }
-      const union = new Set([...targetTokens, ...candTokens]).size;
-      const nameSimilarity = union > 0 ? intersection / union : 0;
-
-      // Calculate Dimension Match Bonus / Penalty
-      let dimBonus = 0;
-      if (targetDims.signature && candDims.signature && targetDims.signature === candDims.signature) {
-        dimBonus = 0.50; // High confidence for exact dimension signature match (e.g. 2x4x10, 1/2-4x8)
-      } else if (targetDims.lengthFt && !candDims.lengthFt) {
-        // Target specified length (e.g. 10ft) but candidate does not specify length
-        dimBonus = -0.25;
-      }
-      if (targetMat && candMat && targetMat === candMat) {
-        dimBonus += 0.20;
-      }
-
-      // Exact title/description match bonus
-      const normTarget = (targetDesc || targetName).toLowerCase().trim();
-      const normCand = candTitle.toLowerCase().trim();
-      let exactBonus = 0;
-      if (normTarget === normCand || normCand.includes(normTarget) || normTarget.includes(normCand)) {
-        exactBonus = 0.40;
-      }
-
-      const totalScore = nameSimilarity + dimBonus + gradeBonus + exactBonus;
-
-      if (totalScore >= 0.40 && totalScore > bestScore) {
-        bestScore = totalScore;
-        bestResult = {
-          item,
-          method: 'DESCRIPTION',
-          confidence: totalScore >= 0.70 ? 'HIGH' : 'MEDIUM',
-          score: totalScore,
-          dimensionMatched: targetDims.signature ? (targetDims.signature === candDims.signature) : true
-        };
-      }
-    }
-
-    // Safety fallback: only accept candidate if dimensions and material do not conflict
-    if (!bestResult && items.length > 0) {
-      const targetMat = targetDims.materialType || 
-        (/\b(?:plywood|sheathing)\b/i.test(targetDesc || targetName) ? 'plywood' :
-         /\b(?:drywall|sheetrock|gypsum)\b/i.test(targetDesc || targetName) ? 'drywall' :
-         /\b(?:osb|waferboard)\b/i.test(targetDesc || targetName) ? 'osb' :
-         /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(targetDesc || targetName) ? 'ceiling_tile' : null);
-
-      for (const candItem of items) {
-        const candTitle = String(candItem.title || candItem.name || '').toLowerCase();
-        const candDims = extractBuildingDimensions(candTitle);
-
-        const candMat = candDims.materialType || 
-          (/\b(?:plywood|sheathing)\b/i.test(candTitle) ? 'plywood' :
-           /\b(?:drywall|sheetrock|gypsum)\b/i.test(candTitle) ? 'drywall' :
-           /\b(?:osb|waferboard)\b/i.test(candTitle) ? 'osb' :
-           /\b(?:ceiling\s*(?:tile|panel)|fissured)\b/i.test(candTitle) ? 'ceiling_tile' : null);
-
-        if (targetMat && candMat && targetMat !== candMat) continue;
-        if (targetMat === 'plywood' && (/\b(?:drywall|sheetrock|gypsum|ceiling|fissured)\b/i.test(candTitle))) continue;
-        if (targetMat === 'drywall' && (/\b(?:plywood|sheathing|osb|ceiling|fissured)\b/i.test(candTitle))) continue;
-        if (targetMat === 'lumber' && (/\b(?:corner|moulding|trim|casing|baseboard|tile|mosaic|pipe|conduit|bolt|screw|hood|plunger|filter|stringer|hanger|bracket)\b/i.test(candTitle))) continue;
-
-        const targetIsTreated = /\b(?:treated|pressure|pt|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(targetDesc || targetName);
-        const candIsTreated = /\b(?:treated|pressure|above\s*ground|ground\s*contact|sienna|micropro)\b/i.test(candTitle);
-        if (!targetIsTreated && candIsTreated) continue;
-        if (targetIsTreated && !candIsTreated) continue;
-
-        // Disqualify if dimensions conflict or crossSection is missing for lumber
-        if (targetDims.crossSection && (!candDims.crossSection || targetDims.crossSection !== candDims.crossSection)) continue;
-        if (targetDims.lengthFt && candDims.lengthFt && targetDims.lengthFt !== candDims.lengthFt) continue;
-        if (targetDims.thickness && candDims.thickness && targetDims.thickness !== candDims.thickness) continue;
-        if (targetDims.sheetSize && candDims.sheetSize && targetDims.sheetSize !== candDims.sheetSize) continue;
-
-        // If exact length or dimension matches
-        if ((targetDims.lengthFt && candDims.lengthFt === targetDims.lengthFt) ||
-            (targetDims.signature && candDims.signature === targetDims.signature)) {
-          return {
-            item: candItem,
-            method: 'DESCRIPTION',
-            confidence: 'MEDIUM',
-            score: 0.65,
-            dimensionMatched: true
-          };
-        }
-      }
-    }
-
-    return bestResult;
-  }
-
-    // Dynamic helper to execute live competitor web search using ONLY the item information from the list
-  async function executeDynamicCompetitorSearch(
-    product: {
-      productId: string;
-      sku: string;
-      productName: string;
-      description: string;
-      yourPrice?: number;
-      category?: string;
-      unitOfMeasure?: string;
-      mfgPartNumber?: string;
-      upc?: string;
-    },
-    bodyCriteria: {
-      upc?: string;
-      mfgPartNumber?: string;
-      supplierSku?: string;
-      description?: string;
-      name?: string;
-      productName?: string;
-      category?: string;
-      searchQuery?: string;
-    } = {}
-  ) {
-    const effectiveUpc = String(bodyCriteria.upc || product.upc || '').trim();
-    const effectiveMfg = String(bodyCriteria.mfgPartNumber || bodyCriteria.supplierSku || product.mfgPartNumber || '').trim();
-    const effectiveDesc = String(bodyCriteria.description || product.description || '').trim();
-    const effectiveName = String(bodyCriteria.name || bodyCriteria.productName || product.productName || '').trim();
-    const customQuery = String(bodyCriteria.searchQuery || '').trim();
-
-    // Resolve real titles and descriptions, discarding generic categories like "FRAME MATERIALS"
-    const { title: resolvedTitle, description: resolvedDesc } = resolveInventoryTitles(
-      effectiveName,
-      effectiveDesc,
-      bodyCriteria.category || product.category || ''
-    );
-
-    // Prioritize the inventory table's DESCRIPTION & DIMENSIONS, strictly filtering out generic category headers
-    const primarySearchTerm = extractRealProductSearchTerm({
-      description: resolvedDesc || effectiveDesc,
-      name: resolvedTitle || effectiveName,
-      productName: resolvedTitle || effectiveName,
-      category: bodyCriteria.category || product.category,
-      sku: product.sku,
-      mfgPartNumber: effectiveMfg,
-      searchQuery: customQuery,
-    });
-
-    const activeItemName = resolvedTitle || effectiveName || 'Product';
-    const activeItemDesc = resolvedDesc || effectiveDesc || activeItemName;
-
-    const kentSearchQuery = primarySearchTerm;
-    const hdSearchQuery = primarySearchTerm;
-
-    console.log(`[Competitive Pricing DEEP DIVE SEARCH] SKU: "${product.sku}" | Desc: "${activeItemDesc}" | Name: "${activeItemName}" | Kent Q: "${kentSearchQuery}" | HD Q: "${hdSearchQuery}"`);
-    
-    const diagnosticLogs: string[] = [
-      `[Init] Target SKU: ${product.sku || 'N/A'}, Unit Price: $${Number(product.yourPrice || 0).toFixed(2)}`,
-      `[Init] Primary Search Query (Priority: DESCRIPTION/DIMENSIONS): "${primarySearchTerm}"`,
-    ];
-
-    let freshKent: number | null = null;
-    let freshHd: number | null = null;
-    let kentConf = 'NOT_FOUND';
-    let hdConf = 'NOT_FOUND';
-    let kentMethod = (activeItemDesc || activeItemName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
-    let hdMethod = (activeItemDesc || activeItemName) ? 'DESCRIPTION' : (effectiveUpc ? 'UPC' : (effectiveMfg ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION'));
-    let kentTitle = activeItemDesc || activeItemName;
-    let hdTitle = activeItemDesc || activeItemName;
-    let kentSku = effectiveMfg || '';
-    let hdSku = effectiveMfg || '';
-    let kentUrl = buildCompetitorSearchUrl('kent', primarySearchTerm);
-    let hdUrl = buildCompetitorSearchUrl('homeDepot', primarySearchTerm);
-
-
-    // Production Competitor Scraping Engine (Playwright Headless + Direct Store API Resolvers)
-    try {
-      const { getPlaywrightBrowser, findBestProductMatch, COMPETITORS } = await import('./src/services/playwright-scraper.js');
-      let page: any = null;
-      let homeDepotPage: any = null;
-      let browser: any = null;
-      let context: any = null;
-
-      try {
-        browser = await getPlaywrightBrowser();
-        context = await browser.newContext({
-          viewport: { width: 1920, height: 1080 },
-          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        });
-        page = await context.newPage();
-        homeDepotPage = await context.newPage();
-      } catch (launchErr: any) {
-        diagnosticLogs.push(`[Scraper Notice] Headless browser unavailable; utilizing direct high-speed store scrapers.`);
-      }
-
-      const invItem = {
-        sku: product.sku,
-        name: product.productName,
-        description: product.description,
-        short_description: product.shortDescription || product.short_description,
-        brand: product.brand,
-        search_keywords: product.searchKeywords || product.search_keywords,
-        attributes: product.attributes,
-        mfg: product.mfgPartNumber,
-        upc: product.upc,
-        category: product.category,
-        dimensions: product.description || product.productName,
-        unit_price: product.yourPrice ? (product.yourPrice > 100 ? product.yourPrice / 100 : product.yourPrice) : 0
-      };
-
-      diagnosticLogs.push(`[Scraper] Starting live competitor search for: ${primarySearchTerm}`);
-
-      const addStoreCookies = async (competitor: typeof COMPETITORS.kent) => {
-        if (!context || !competitor.cookies?.length) return;
-        await context.addCookies(competitor.cookies.map(cookie => ({
-          name: cookie.name,
-          value: cookie.value,
-          domain: cookie.domain,
-          path: "/"
-        })));
-      };
-      const cookieResults = await Promise.allSettled([
-        addStoreCookies(COMPETITORS.kent),
-        addStoreCookies(COMPETITORS.homeDepot)
-      ]);
-      if (cookieResults[0].status === 'rejected') {
-        diagnosticLogs.push(`[Kent Cookie Setup Error] ${cookieResults[0].reason?.message || cookieResults[0].reason}`);
-      }
-      if (cookieResults[1].status === 'rejected') {
-        diagnosticLogs.push(`[Home Depot Cookie Setup Error] ${cookieResults[1].reason?.message || cookieResults[1].reason}`);
-      }
-
-      const scrapeKent = async () => {
-        try {
-          const kentMatch = await findBestProductMatch(page, COMPETITORS.kent, invItem);
-          if (kentMatch?.matchFound && kentMatch.price != null && kentMatch.price > 0) {
-            freshKent = kentMatch.price;
-            kentTitle = kentMatch.candidate.title;
-            kentUrl = kentMatch.candidate.url;
-            kentSku = kentUrl.split('/').pop() || '';
-            kentMethod = kentMatch.matchMethod || 'AUTOMATED_SCRAPER';
-            kentConf = kentMatch.confidenceLevel || (kentMatch.score >= 80 ? 'EXACT' : kentMatch.score >= 45 ? 'HIGH' : 'MEDIUM');
-            diagnosticLogs.push(`[Kent Live Scraper] Found match: ${kentTitle} at $${freshKent} (Score: ${kentMatch.score}, Conf: ${kentConf})`);
-          } else {
-            diagnosticLogs.push(`[Kent Live Scraper] No qualified match found (Score: ${kentMatch ? kentMatch.score : 0})`);
-          }
-        } catch (err: any) {
-          diagnosticLogs.push(`[Kent Scraper Error] ${err.message}`);
-        }
-      };
-
-      const scrapeHomeDepot = async () => {
-        try {
-          const hdMatch = await findBestProductMatch(homeDepotPage, COMPETITORS.homeDepot, invItem);
-          if (hdMatch?.matchFound && hdMatch.price != null && hdMatch.price > 0) {
-            freshHd = hdMatch.price;
-            hdTitle = hdMatch.candidate.title;
-            hdUrl = hdMatch.candidate.url;
-            hdSku = hdUrl.split('/').pop() || '';
-            hdMethod = hdMatch.matchMethod || 'AUTOMATED_SCRAPER';
-            hdConf = hdMatch.confidenceLevel || (hdMatch.score >= 80 ? 'EXACT' : hdMatch.score >= 45 ? 'HIGH' : 'MEDIUM');
-            diagnosticLogs.push(`[Home Depot Live Scraper] Found match: ${hdTitle} at $${freshHd} (Score: ${hdMatch.score}, Conf: ${hdConf})`);
-          } else {
-            diagnosticLogs.push(`[Home Depot Live Scraper] No qualified match found (Score: ${hdMatch ? hdMatch.score : 0})`);
-          }
-        } catch (err: any) {
-          diagnosticLogs.push(`[Home Depot Scraper Error] ${err.message}`);
-        }
-      };
-
-      await Promise.all([scrapeKent(), scrapeHomeDepot()]);
-
-      if (page) {
-        try { await page.close(); } catch (e) {}
-      }
-      if (homeDepotPage) {
-        try { await homeDepotPage.close(); } catch (e) {}
-      }
-      if (context) {
-        try { await context.close(); } catch (e) {}
-      }
-    } catch (err: any) {
-      diagnosticLogs.push(`[Scraper General Notice] ${err.message}`);
-    }
-
-    const baseP = Number(product.yourPrice || 0);
-
-    const checkTime = new Date().toISOString();
-    const competitorsData: any[] = [
-      {
-        competitorId: 1,
-        competitorName: 'KENT Building Supplies',
-        websiteUrl: 'https://kent.ca',
-        productUrl: kentUrl,
-        productName: kentTitle,
-        price: freshKent,
-        regularPrice: freshKent,
-        salePrice: null,
-        currency: 'CAD',
-        unitOfMeasure: product.unitOfMeasure || 'EA',
-        packQuantity: 1,
-        normalizedUnitPrice: freshKent,
-        matchConfidence: kentConf,
-        matchMethod: kentMethod,
-        sku: kentSku,
-        availability: freshKent != null ? 'IN_STOCK' : 'OUT_OF_STOCK',
-        checkedAt: checkTime,
-      },
-      {
-        competitorId: 2,
-        competitorName: 'The Home Depot',
-        websiteUrl: 'https://www.homedepot.ca',
-        productUrl: hdUrl,
-        productName: hdTitle,
-        price: freshHd,
-        regularPrice: freshHd,
-        salePrice: null,
-        currency: 'CAD',
-        unitOfMeasure: product.unitOfMeasure || 'EA',
-        packQuantity: 1,
-        normalizedUnitPrice: freshHd,
-        matchConfidence: hdConf,
-        matchMethod: hdMethod,
-        sku: hdSku,
-        availability: freshHd != null ? 'IN_STOCK' : 'OUT_OF_STOCK',
-        checkedAt: checkTime,
-      }
-    ];
-
-    const diagnostics = {
-      timestamp: checkTime,
-      sku: product.sku,
-      primarySearchTerm,
-      effectiveDesc,
-      effectiveName,
-      basePrice: baseP,
-      kent: {
-        price: freshKent,
-        title: kentTitle,
-        method: kentMethod,
-        confidence: kentConf,
-        url: kentUrl,
-      },
-      homeDepot: {
-        price: freshHd,
-        title: hdTitle,
-        method: hdMethod,
-        confidence: hdConf,
-        url: hdUrl,
-      },
-      logs: diagnosticLogs,
-    };
-
-    (competitorsData as any).diagnostics = diagnostics;
-
-    // Save to in-memory cache
-    latestCompetitorResultsByProduct.set(String(product.productId), competitorsData);
-
-    // Sync to Supabase DB tables if available (only if product.productId is a valid UUID)
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(product.productId));
-    if (isUUID) {
-      try {
-        const { data: allMatches } = await supabase
-          .from('product_matches')
-          .select('*, competitor_products(*)')
-          .eq('product_id', String(product.productId));
-
-        for (const entry of competitorsData) {
-          if (entry.price == null || entry.price <= 0) continue;
-          const compId = entry.competitorId;
-          const price = entry.price;
-          const existingMatch = (allMatches || []).find(
-            (m: any) => m.competitor_products && m.competitor_products.competitor_id === compId
-          );
-
-          if (existingMatch && existingMatch.competitor_product_id) {
-            const targetCompProdId = existingMatch.competitor_product_id;
-            await supabase
-              .from('product_matches')
-              .update({
-                match_confidence: entry.matchConfidence,
-                match_method: entry.matchMethod,
-              })
-              .eq('id', existingMatch.id);
-
-            await supabase
-              .from('competitor_products')
-              .update({
-                product_name: entry.productName,
-                product_url: entry.productUrl,
-                external_product_id: entry.sku || null,
-                availability: price > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
-              })
-              .eq('id', targetCompProdId);
-
-            const { data: existingPrice } = await supabase
-              .from('competitor_prices')
-              .select('id')
-              .eq('competitor_product_id', targetCompProdId)
-              .maybeSingle();
-
-            if (existingPrice?.id) {
-              await supabase
-                .from('competitor_prices')
-                .update({
-                  current_price: price,
-                  normalized_unit_price: price,
-                  checked_at: checkTime,
-                  availability: price > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
-                })
-                .eq('id', existingPrice.id);
-            } else {
-              await supabase
-                .from('competitor_prices')
-                .insert({
-                  competitor_product_id: targetCompProdId,
-                  current_price: price,
-                  normalized_unit_price: price,
-                  currency: 'CAD',
-                  unit_of_measure: product.unitOfMeasure || 'EA',
-                  availability: price > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
-                  checked_at: checkTime,
-                });
-            }
-
-            try {
-              await supabase.from('price_history').insert({
-                product_id: String(product.productId),
-                competitor_id: compId,
-                competitor_product_id: targetCompProdId,
-                price: price,
-                normalized_unit_price: price,
-                currency: 'CAD',
-                checked_at: checkTime,
-              });
-            } catch (hErr) {}
-
-            inMemoryHistory.unshift({
-              id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              productId: String(product.productId),
-              competitorId: compId,
-              competitorName: entry.competitorName,
-              price: price,
-              normalizedUnitPrice: price,
-              currency: 'CAD',
-              checkedAt: checkTime,
-              availability: 'IN_STOCK',
-            });
-          } else {
-            const { data: newCompProd } = await supabase
-              .from('competitor_products')
-              .insert({
-                competitor_id: compId,
-                product_name: entry.productName,
-                manufacturer_part_number: product.mfgPartNumber || null,
-                upc: product.upc || null,
-                description: product.description || null,
-                product_url: entry.productUrl,
-                external_product_id: entry.sku || null,
-                unit_of_measure: product.unitOfMeasure || 'EA',
-                pack_quantity: 1,
-                availability: price > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
-              })
-              .select()
-              .single();
-
-            if (newCompProd) {
-              await supabase.from('product_matches').insert({
-                product_id: String(product.productId),
-                competitor_product_id: newCompProd.id,
-                match_confidence: entry.matchConfidence,
-                match_method: entry.matchMethod,
-                approved: true,
-              });
-
-              if (price > 0) {
-                await supabase.from('competitor_prices').insert({
-                  competitor_product_id: newCompProd.id,
-                  current_price: price,
-                  normalized_unit_price: price,
-                  currency: 'CAD',
-                  unit_of_measure: product.unitOfMeasure || 'EA',
-                  availability: 'IN_STOCK',
-                  checked_at: checkTime,
-                });
-
-                try {
-                  await supabase.from('price_history').insert({
-                    product_id: String(product.productId),
-                    competitor_id: compId,
-                    competitor_product_id: newCompProd.id,
-                    price: price,
-                    normalized_unit_price: price,
-                    currency: 'CAD',
-                    checked_at: checkTime,
-                  });
-                } catch (hErr) {}
-
-                inMemoryHistory.unshift({
-                  id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                  productId: String(product.productId),
-                  competitorId: compId,
-                  competitorName: entry.competitorName,
-                  price: price,
-                  normalizedUnitPrice: price,
-                  currency: 'CAD',
-                  checkedAt: checkTime,
-                  availability: 'IN_STOCK',
-                });
-              }
-            }
-          }
-        }
-      } catch (dbErr) {
-        console.error('[Competitive Pricing Refresh] DB Sync Error:', dbErr);
-      }
-    }
-
-    return competitorsData;
-  }
-
-  // 1. GET /api/products/:productId/competitive-pricing
-  app.get('/api/products/:productId/competitive-pricing', async (req, res) => {
-    try {
-      const { productId } = req.params;
-      const product = await resolveProductRecord(productId);
-      const actualProductId = String(product.productId);
-
-      // Try reading from database if competitor tables exist
-      let competitorsData: any[] = [];
-      try {
-        const { data: matches } = await supabase
-          .from('product_matches')
-          .select('*, competitor_products(*, competitor_prices(*), competitors(*))')
-          .eq('product_id', actualProductId);
-
-        if (matches && matches.length > 0) {
-          competitorsData = matches.map((m: any) => {
-            const cp = m.competitor_products || {};
-            const comp = cp.competitors || {};
-            const priceRecord = Array.isArray(cp.competitor_prices) ? cp.competitor_prices[0] : (cp.competitor_prices || {});
-            const compId = comp.id || (m.competitor_product_id === 1 ? 1 : 2);
-            return {
-              competitorId: compId,
-              competitorName: comp.name || (compId === 1 ? 'KENT Building Supplies' : 'The Home Depot'),
-              websiteUrl: comp.website_url || (compId === 1 ? 'https://kent.ca' : 'https://www.homedepot.ca'),
-              productUrl: cp.product_url || '',
-              productName: cp.product_name || product.productName,
-              price: Number(priceRecord.current_price || 0),
-              regularPrice: priceRecord.regular_price ? Number(priceRecord.regular_price) : null,
-              salePrice: priceRecord.sale_price ? Number(priceRecord.sale_price) : null,
-              currency: priceRecord.currency || 'CAD',
-              unitOfMeasure: priceRecord.unit_of_measure || product.unitOfMeasure,
-              packQuantity: cp.pack_quantity || 1,
-              normalizedUnitPrice: Number(priceRecord.normalized_unit_price || priceRecord.current_price || 0),
-              matchConfidence: m.match_confidence || 'HIGH',
-              matchMethod: m.match_method || (product.upc ? 'UPC' : (product.mfgPartNumber ? 'MANUFACTURER_PART_NUMBER' : 'DESCRIPTION')),
-              availability: priceRecord.availability || 'IN_STOCK',
-              checkedAt: priceRecord.checked_at || new Date().toISOString(),
-            };
-          });
-        }
-      } catch (dbErr) {
-        // Table may not exist yet, fallback gracefully
-      }
-
-      // Check in-memory fresh cache (populated by recent live search or background refresh jobs)
-      const cached = latestCompetitorResultsByProduct.get(actualProductId);
-      if (cached && cached.length > 0) {
-        if (competitorsData.length === 0) {
-          competitorsData = cached;
-        } else {
-          // Merge: if in-memory cache has freshly refreshed competitor pricing, prefer it over older db records
-          competitorsData = competitorsData.map((dbEntry: any) => {
-            const freshEntry = cached.find((c: any) => c.competitorId === dbEntry.competitorId);
-            if (freshEntry && (freshEntry.price > 0 || !dbEntry.price || (freshEntry.checkedAt && dbEntry.checkedAt && new Date(freshEntry.checkedAt) >= new Date(dbEntry.checkedAt)))) {
-              return freshEntry;
-            }
-            return dbEntry;
-          });
-          // Also include any competitor in cache not present in db
-          for (const c of cached) {
-            if (!competitorsData.some((dbEntry: any) => dbEntry.competitorId === c.competitorId)) {
-              competitorsData.push(c);
-            }
-          }
-        }
-      }
-
-      // Only execute dynamic competitor search if explicitly requested via query parameter (?refresh=true)
-      // Do not refresh by default when opening the Inventory Edit or Inspect screen
-      const isExplicitRefresh = req.query.refresh === 'true' || req.query.autoRefresh === 'true';
-      const hasCompleteValidPrices = competitorsData.length >= 2 && competitorsData.every((c: any) => c.price && Number(c.price) > 0);
-      if (isExplicitRefresh && !hasCompleteValidPrices && (product.description || product.productName || product.mfgPartNumber || product.upc || req.query.description || req.query.name || req.query.productName || req.query.searchQuery)) {
-        const freshData = await executeDynamicCompetitorSearch(product, req.query);
-        if (freshData && freshData.length > 0) {
-          competitorsData = freshData;
-        }
-      }
-
-      res.json({
-        productId: product.productId,
-        sku: product.sku,
-        productName: product.productName,
-        description: product.description,
-        category: product.category,
-        yourPrice: product.yourPrice,
-        currency: 'CAD',
-        unitOfMeasure: product.unitOfMeasure,
-        mfgPartNumber: product.mfgPartNumber,
-        upc: product.upc,
-        matchingCriteria: {
-          upc: product.upc,
-          mfgPartNumber: product.mfgPartNumber,
-          productName: product.productName,
-          description: product.description,
-        },
-        competitors: competitorsData,
-        diagnostics: (competitorsData as any)?.diagnostics || null,
-      });
-    } catch (err: any) {
-      console.error('[Competitive Pricing] Error:', err);
-      res.status(500).json({ error: err.message || 'Failed to fetch competitive pricing' });
-    }
-  });
-
-  // Direct live competitor scraper endpoint (accepts both GET and POST to prevent 405 Method Not Allowed errors)
-  const inFlightLiveScrapes = new Map<string, Promise<any[]>>();
-  let liveScrapeRequestSequence = 0;
-  const handleScrapeLive = async (req: any, res: any) => {
-    const requestId = ++liveScrapeRequestSequence;
-    const requestStartedAt = Date.now();
-    res.setHeader('Content-Type', 'application/json');
-    res.once('finish', () => {
-      console.info(`[Scrape-Live ${requestId}] HTTP ${res.statusCode} completed in ${Date.now() - requestStartedAt}ms`);
-    });
-    try {
-      const payload = { ...(req.method === 'GET' ? req.query : req.body), ...(req.query || {}) };
-      const { productId, sku, name, productName, description, category, yourPrice, unitPrice, upc, mfgPartNumber, searchQuery } = payload;
-      const targetId = productId || sku || `item_${Date.now()}`;
-      
-      let product: any = { productId: targetId, sku: targetId, productName: productName || name || `Product ${targetId}`, description: '', yourPrice: 19.99 };
-      try {
-        product = await resolveProductRecord(targetId);
-      } catch (e) {}
-
-      const resolved = resolveInventoryTitles(
-        productName || name || product.productName || '',
-        description || product.description || '',
-        category || product.category || ''
-      );
-
-      const mergedProduct = {
-        productId: String(product.productId || targetId),
-        sku: String(sku || product.sku || targetId),
-        productName: resolved.title,
-        description: resolved.description,
-        yourPrice: Number(yourPrice ?? unitPrice ?? product.yourPrice ?? 19.99),
-        category: category || product.category || 'General',
-        unitOfMeasure: product.unitOfMeasure || 'EA',
-        mfgPartNumber: String(mfgPartNumber || product.mfgPartNumber || ''),
-        upc: String(upc || product.upc || ''),
-      };
-
-      const primarySearch = extractRealProductSearchTerm({
-        description: mergedProduct.description,
-        name: mergedProduct.productName,
-        productName: mergedProduct.productName,
-        category: mergedProduct.category,
-        sku: mergedProduct.sku,
-        mfgPartNumber: mergedProduct.mfgPartNumber,
-        searchQuery,
-      });
-
-      const criteria = {
-        upc: mergedProduct.upc,
-        mfgPartNumber: mergedProduct.mfgPartNumber,
-        supplierSku: mergedProduct.mfgPartNumber,
-        description: mergedProduct.description,
-        name: mergedProduct.productName,
-        productName: mergedProduct.productName,
-        searchQuery: primarySearch,
-      };
-
-      let competitors: any[] = [];
-      try {
-        const normalizeKeyPart = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
-        const scrapeKey = JSON.stringify([
-          normalizeKeyPart(mergedProduct.productId),
-          normalizeKeyPart(mergedProduct.sku),
-          normalizeKeyPart(criteria.upc),
-          normalizeKeyPart(criteria.mfgPartNumber),
-          normalizeKeyPart(criteria.description),
-          normalizeKeyPart(criteria.productName),
-          normalizeKeyPart(criteria.searchQuery),
-        ]);
-        let scrapePromise = inFlightLiveScrapes.get(scrapeKey);
-        if (scrapePromise) {
-          console.info(`[Scrape-Live ${requestId}] Joining in-flight scrape`);
-        } else {
-          scrapePromise = executeDynamicCompetitorSearch(mergedProduct, criteria);
-          inFlightLiveScrapes.set(scrapeKey, scrapePromise);
-          void scrapePromise.then(
-            () => {
-              if (inFlightLiveScrapes.get(scrapeKey) === scrapePromise) inFlightLiveScrapes.delete(scrapeKey);
-            },
-            () => {
-              if (inFlightLiveScrapes.get(scrapeKey) === scrapePromise) inFlightLiveScrapes.delete(scrapeKey);
-            }
-          );
-        }
-        competitors = await scrapePromise;
-      } catch (execErr: any) {
-        console.warn('[Scrape-Live Execution Warning]:', execErr.message);
-        competitors = [
-          {
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            websiteUrl: 'https://kent.ca',
-            productUrl: 'https://kent.ca',
-            productName: `${mergedProduct.productName} (Live Stock Unavailable)`,
-            price: null,
-            regularPrice: null,
-            currency: 'CAD',
-            availability: 'OUT_OF_STOCK',
-            matchConfidence: 'UNAVAILABLE',
-            matchMethod: 'NOT_FOUND',
-            sku: mergedProduct.sku ? `KENT-${mergedProduct.sku}` : 'KENT-UNKNOWN',
-          },
-          {
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            websiteUrl: 'https://www.homedepot.ca',
-            productUrl: 'https://www.homedepot.ca',
-            productName: `${mergedProduct.productName} (Live Stock Unavailable)`,
-            price: null,
-            regularPrice: null,
-            currency: 'CAD',
-            availability: 'OUT_OF_STOCK',
-            matchConfidence: 'UNAVAILABLE',
-            matchMethod: 'NOT_FOUND',
-            sku: mergedProduct.sku ? `HD-${mergedProduct.sku}` : 'HD-UNKNOWN',
-          }
-        ];
-      }
-
-      return res.status(200).json({
-        success: true,
-        productId: mergedProduct.productId,
-        sku: mergedProduct.sku,
-        productName: mergedProduct.productName,
-        competitors: competitors || [],
-        diagnostics: (competitors as any)?.diagnostics || null,
-      });
-    } catch (err: any) {
-      console.error('[Competitive Pricing Scrape-Live] Fatal Error:', err);
-      return res.status(200).json({
-        success: true,
-        productId: 'item_fallback',
-        sku: 'FALLBACK',
-        productName: 'Product',
-        competitors: [
-          {
-            competitorId: 1,
-            competitorName: 'KENT Building Supplies',
-            websiteUrl: 'https://kent.ca',
-            productUrl: 'https://kent.ca',
-            productName: 'Live Stock Unavailable',
-            price: null,
-            regularPrice: null,
-            currency: 'CAD',
-            availability: 'OUT_OF_STOCK',
-            matchConfidence: 'UNAVAILABLE',
-            matchMethod: 'NOT_FOUND',
-            sku: 'KENT-UNKNOWN'
-          },
-          {
-            competitorId: 2,
-            competitorName: 'The Home Depot',
-            websiteUrl: 'https://www.homedepot.ca',
-            productUrl: 'https://www.homedepot.ca',
-            productName: 'Live Stock Unavailable',
-            price: null,
-            regularPrice: null,
-            currency: 'CAD',
-            availability: 'OUT_OF_STOCK',
-            matchConfidence: 'UNAVAILABLE',
-            matchMethod: 'NOT_FOUND',
-            sku: 'HD-UNKNOWN'
-          }
-        ],
-        error: err.message
-      });
-    }
-  };
-
-  app.all('/api/scrape-competitor-live', handleScrapeLive);
-  app.all('/api/competitive-pricing/scrape-live', handleScrapeLive);
-
-  // Retail Price Comparison Agent endpoint
-  app.post('/api/price-comparison', async (req, res) => {
-    try {
-      const { searchTerm } = req.body || {};
-      if (!searchTerm) {
-        return res.status(400).json({ matchesFound: false, reason: "Missing searchTerm in request body." });
-      }
-      const result = await runRetailPriceComparison(searchTerm);
-      return res.json(result);
-    } catch (err: any) {
-      return res.status(500).json({ matchesFound: false, reason: err?.message || 'Internal error during price comparison.' });
-    }
-  });
-
-  // 2. POST /api/products/:productId/competitive-pricing/refresh
-  app.post('/api/products/:productId/competitive-pricing/refresh', async (req, res) => {
-    try {
-      const { productId } = req.params;
-      const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-      const jobRecord = {
-        jobId,
-        productId,
-        status: 'QUEUED',
-        startedAt: new Date().toISOString(),
-        retryCount: 0,
-      };
-
-      inMemoryJobs.set(jobId, jobRecord);
-
-      // Try persisting to DB
-      try {
-        await supabase.from('pricing_jobs').insert({
-          id: jobId,
-          product_id: String(productId),
-          status: 'QUEUED',
-          started_at: new Date().toISOString(),
-        });
-      } catch (e) {
-        // Fallback
-      }
-
-      // Capture request body criteria (UPC, Supplier SKU / MFG #, Description)
-      const bodyCriteria = { ...(req.body?.criteria || {}), ...(req.body || {}) };
-
-      // Trigger background worker process asynchronously
-      setTimeout(async () => {
-        try {
-          jobRecord.status = 'RUNNING';
-          inMemoryJobs.set(jobId, { ...jobRecord });
-
-          const product = await resolveProductRecord(productId);
-          const mergedProduct = {
-            ...product,
-            sku: bodyCriteria.sku || product.sku,
-            productName: bodyCriteria.name || bodyCriteria.productName || product.productName,
-            description: bodyCriteria.description || product.description,
-            yourPrice: Number(bodyCriteria.yourPrice ?? bodyCriteria.unitPrice ?? product.yourPrice ?? 0),
-            category: bodyCriteria.category || product.category,
-            mfgPartNumber: bodyCriteria.mfgPartNumber || product.mfgPartNumber,
-            upc: bodyCriteria.upc || product.upc,
-          };
-          await executeDynamicCompetitorSearch(mergedProduct, bodyCriteria);
-
-          jobRecord.status = 'COMPLETED';
-          jobRecord.completedAt = new Date().toISOString();
-          inMemoryJobs.set(jobId, { ...jobRecord });
-        } catch (workerErr: any) {
-          console.error('[Competitive Pricing Refresh] Worker exception:', workerErr);
-          jobRecord.status = 'FAILED';
-          jobRecord.errorMessage = workerErr.message || 'Scraping timeout';
-          inMemoryJobs.set(jobId, { ...jobRecord });
-        }
-      }, 100);
-
-      res.json({ jobId, status: 'QUEUED' });
-    } catch (err: any) {
-      console.error('[Competitive Pricing Refresh] Error:', err);
-      res.status(500).json({ error: err.message || 'Failed to start refresh job' });
-    }
-  });
-
-  // PUT /api/products/:productId/competitive-pricing
-  app.put('/api/products/:productId/competitive-pricing', async (req, res) => {
-    try {
-      const { productId } = req.params;
-      const { competitorId, price, productName, productUrl, notes, matchConfidence, matchMethod } = req.body || {};
-      const numPrice = Number(price || 0);
-
-      // Update in-memory cache
-      const cached = latestCompetitorResultsByProduct.get(String(productId)) || [];
-      const updated = cached.map((c: any) => {
-        if (c.competitorId === Number(competitorId)) {
-          return {
-            ...c,
-            price: numPrice,
-            normalizedUnitPrice: numPrice,
-            productName: productName || c.productName,
-            productUrl: productUrl || c.productUrl,
-            matchConfidence: matchConfidence || 'EXACT',
-            matchMethod: matchMethod || 'MANUAL_OVERRIDE',
-            availability: numPrice > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
-            checkedAt: new Date().toISOString(),
-          };
-        }
-        return c;
-      });
-      latestCompetitorResultsByProduct.set(String(productId), updated);
-
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to update competitive price' });
-    }
-  });
-
-  // 3. GET /api/pricing-jobs/:jobId
-  app.get('/api/pricing-jobs/:jobId', async (req, res) => {
-    try {
-      const { jobId } = req.params;
-      const memJob = inMemoryJobs.get(jobId);
-      if (memJob) {
-        return res.json(memJob);
-      }
-
-      try {
-        const { data: dbJob } = await supabase
-          .from('pricing_jobs')
-          .select('*')
-          .eq('id', jobId)
-          .maybeSingle();
-
-        if (dbJob) {
-          return res.json({
-            jobId: dbJob.id,
-            productId: dbJob.product_id,
-            status: dbJob.status,
-            startedAt: dbJob.started_at,
-            completedAt: dbJob.completed_at,
-            errorMessage: dbJob.error_message,
-          });
-        }
-      } catch (e) {
-        // Ignore
-      }
-
-      res.json({ jobId, status: 'COMPLETED' });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to check job status' });
-    }
-  });
-
-  // 4. GET /api/products/:productId/competitive-pricing/history
-  app.get('/api/products/:productId/competitive-pricing/history', async (req, res) => {
-    try {
-      const { productId } = req.params;
-
-      // Try database
-      try {
-        const { data: dbHistory } = await supabase
-          .from('price_history')
-          .select('*, competitors(name)')
-          .eq('product_id', String(productId))
-          .order('checked_at', { ascending: false });
-
-        if (dbHistory && dbHistory.length > 0) {
-          return res.json(
-            dbHistory.map((h: any) => ({
-              id: String(h.id),
-              productId: h.product_id,
-              competitorId: h.competitor_id,
-              competitorName: h.competitors?.name || 'Competitor',
-              price: Number(h.price || 0),
-              normalizedUnitPrice: Number(h.normalized_unit_price || h.price || 0),
-              currency: h.currency || 'CAD',
-              checkedAt: h.checked_at,
-              availability: 'IN_STOCK',
-            }))
-          );
-        }
-      } catch (e) {
-        // Ignore
-      }
-
-      // Memory or generated series fallback
-      const matchingMem = inMemoryHistory.filter((h) => String(h.productId) === String(productId));
-      if (matchingMem.length > 0) {
-        return res.json(matchingMem);
-      }
-
-      res.json([]);
-    } catch (err: any) {
-      console.error('[Competitive Pricing History] Error:', err);
-      res.status(500).json({ error: err.message || 'Failed to fetch history' });
-    }
-  });
-
-  // 5. GET /api/competitive-pricing/dashboard
-  app.get(['/api/competitive-pricing/dashboard', '/api/competitive-pricing/dashboard/'], async (req, res) => {
-    try {
-      const { category, varianceFilter, confidenceFilter, search, page = '1', limit = '150' } = req.query;
-      const pageNum = parseInt(page as string, 10) || 1;
-      const limitNum = parseInt(limit as string, 10) || 150;
-
-      // 1. Get exact total inventory count matching filters across the entire catalog
-      const searchStr = typeof search === 'string' ? search.trim() : '';
-      let searchClause = '';
-      if (searchStr) {
-        searchClause = buildInventoryAndSearchClause(searchStr);
-      }
-
-      let countQuery = supabase
-        .from('inventory')
-        .select('*', { count: 'exact', head: true });
-
-      if (searchClause) {
-        countQuery = countQuery.or(searchClause);
-      }
-      if (category && category !== 'all') {
-        countQuery = countQuery.ilike('category', category as string);
-      }
-
-      let { count: exactTotalCount, error: countErr } = await countQuery;
-
-      // Progressive relaxation fallback: If strict conjunction returned 0, try relaxed clause
-      if ((exactTotalCount === 0 || exactTotalCount === null) && searchStr) {
-        const relaxed = buildInventoryRelaxedSearchClause(searchStr);
-        if (relaxed && relaxed !== searchClause) {
-          let relCountQuery = supabase
-            .from('inventory')
-            .select('*', { count: 'exact', head: true })
-            .or(relaxed);
-          if (category && category !== 'all') {
-            relCountQuery = relCountQuery.ilike('category', category as string);
-          }
-          const { count: relCount, error: relErr } = await relCountQuery;
-          if (!relErr && relCount && relCount > 0) {
-            searchClause = relaxed;
-            exactTotalCount = relCount;
-          }
-        }
-      }
-
-      const isFiltered = !!searchStr || (category && category !== 'all');
-      const totalMonitored = isFiltered ? (exactTotalCount || 0) : Math.max(20543, exactTotalCount || 20543);
-
-      // 2. Fetch inventory products for current page
-      let itemsQuery = supabase
-        .from('inventory')
-        .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
-        .order('name', { ascending: true });
-
-      if (searchClause) {
-        itemsQuery = itemsQuery.or(searchClause);
-      }
-      if (category && category !== 'all') {
-        itemsQuery = itemsQuery.ilike('category', category as string);
-      }
-
-      const pageOffset = (pageNum - 1) * limitNum;
-      let { data: invRows, error: invErr } = await itemsQuery.range(pageOffset, pageOffset + limitNum - 1);
-      if (invErr) {
-        console.warn('[Competitive Pricing] Supabase inventory fetch error with search clause:', invErr);
-        if (searchStr) {
-          // Fallback to direct name/sku/description matching to never fail completely
-          const safeQuery = supabase
-            .from('inventory')
-            .select('id, sku, name, description, category, unit_price, cost, supplier_sku, upc')
-            .order('name', { ascending: true })
-            .or(`name.ilike.%${searchStr}%,sku.ilike.%${searchStr}%,description.ilike.%${searchStr}%`)
-            .range(pageOffset, pageOffset + limitNum - 1);
-          const { data: fallbackRows, error: fallbackErr } = await safeQuery;
-          if (!fallbackErr && fallbackRows) {
-            invRows = fallbackRows;
-            invErr = null;
-          }
-        }
-      }
-
-      if (invErr) {
-        console.warn('[Competitive Pricing] Supabase inventory fetch failed completely:', invErr);
-        return res.json({
-          metrics: { totalMonitored: 0, withCompetitivePricing: 0, noMatch: 0, ronaHigher: 0, ronaLower: 0, outdatedPrices: 0, lastSuccessfulUpdate: null },
-          items: [],
-          pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 1 }
-        });
-      }
-
-      const products = (invRows && invRows.length > 0) ? invRows : [];
-      const productIds = products.map((p: any) => String(p.id));
-
-      let matchesMap = new Map();
-      let pricesMap = new Map();
-      let competitorsMap = new Map();
-
-      if (productIds.length > 0) {
-        try {
-          const { data: comps } = await supabase.from('competitors').select('*');
-          if (comps) {
-            comps.forEach((c) => competitorsMap.set(c.id, c.name));
-          }
-        } catch (e) {
-          // Table may not exist yet
-        }
-
-        let matches = [];
-        try {
-          const { data: matchesById } = await supabase
-            .from('product_matches')
-            .select('*, competitor_products(*)')
-            .in('product_id', productIds);
-          matches = matchesById || [];
-        } catch (e) {
-          // Table may not exist yet
-        }
-
-        // Merge in-memory cached results
-        for (const p of products) {
-          const pid = String(p.id);
-          const pSku = String(p.sku || '');
-          const pSuppSku = String(p.supplier_sku || '');
-          
-          let cached = latestCompetitorResultsByProduct.get(pid) || 
-                       latestCompetitorResultsByProduct.get(pSku) || 
-                       latestCompetitorResultsByProduct.get(pSuppSku) || [];
-
-          if (cached && cached.length > 0) {
-            for (const c of cached) {
-              const exists = matches.some(m => String(m.product_id) === pid && m.competitor_products?.competitor_id === c.competitorId);
-              if (!exists) {
-                matches.push({
-                  product_id: pid,
-                  competitor_product_id: `mem_${pid}_${c.competitorId}`,
-                  match_confidence: c.matchConfidence || 'HIGH',
-                  match_method: c.matchMethod || 'CACHED',
-                  competitor_products: {
-                    id: `mem_${pid}_${c.competitorId}`,
-                    competitor_id: c.competitorId,
-                    product_name: c.productName,
-                    product_url: c.productUrl,
-                    competitor_prices: [{
-                      current_price: c.price,
-                      checked_at: c.checkedAt || new Date().toISOString()
-                    }]
-                  }
-                });
-              }
-            }
-          }
-        }
-
-        if (matches) {
-          for (const m of matches) {
-            const prodId = String(m.product_id);
-            if (!matchesMap.has(prodId)) {
-              matchesMap.set(prodId, []);
-            }
-            matchesMap.get(prodId).push(m);
-          }
-        }
-
-        const compProductIds = matches ? matches.map((m) => m.competitor_product_id).filter(Boolean) : [];
-        if (compProductIds.length > 0) {
-          try {
-            const { data: cpList } = await supabase
-              .from('competitor_prices')
-              .select('*')
-              .in('competitor_product_id', compProductIds);
-            if (cpList) {
-              for (const cp of cpList) {
-                pricesMap.set(cp.competitor_product_id, cp);
-              }
-            }
-          } catch (e) {
-            // Table may not exist yet
-          }
-        }
-      }
-
-      // Map products on this page to dashboard items
-      let dashboardItems = products.map((p) => {
-        const { title, description } = resolveInventoryTitles(p.name, p.description, p.category);
-        const rawUnitPrice = Number(p.unit_price || 0);
-        const yourPrice = rawUnitPrice > 0 && Number.isInteger(rawUnitPrice) ? rawUnitPrice / 100 : rawUnitPrice;
-
-        const prodMatches = matchesMap.get(String(p.id)) || matchesMap.get(p.sku) || matchesMap.get(p.supplier_sku) || [];
-        let lowestCompPrice = null;
-        let compName = undefined;
-        let conf = prodMatches.length > 0 ? (prodMatches[0].match_confidence || 'HIGH') : 'NOT_FOUND';
-        let lastCheckedAt = null;
-        let competitorCount = prodMatches.length;
-
-        for (const m of prodMatches) {
-          const cpId = m.competitor_product_id;
-          const priceRec = pricesMap.get(cpId);
-          if (priceRec && priceRec.current_price) {
-            const pVal = Number(priceRec.current_price);
-            if (lowestCompPrice === null || pVal < lowestCompPrice) {
-              lowestCompPrice = pVal;
-              const compId = m.competitor_products?.competitor_id;
-              compName = competitorsMap.get(compId) || 'Competitor';
-              lastCheckedAt = priceRec.checked_at || priceRec.created_at || null;
-            }
-          }
-        }
-
-        const diff = lowestCompPrice !== null ? yourPrice - lowestCompPrice : null;
-        const varPct = (diff !== null && lowestCompPrice && lowestCompPrice > 0) ? Number(((diff / lowestCompPrice) * 100).toFixed(1)) : null;
-        const isOutdated = lastCheckedAt ? (Date.now() - new Date(lastCheckedAt).getTime() > 1000 * 60 * 60 * 24) : (lowestCompPrice !== null);
-
-        return {
-          productId: p.id,
-          sku: p.sku || String(p.id),
-          name: title,
-          description: description,
-          category: p.category || 'General',
-          yourPrice,
-          lowestCompetitorPrice: lowestCompPrice,
-          lowestCompetitorName: compName,
-          priceDifference: diff,
-          variancePct: varPct,
-          matchConfidence: conf,
-          competitorCount,
-          lastCheckedAt,
-          isOutdated,
-        };
-      });
-
-      // Query global match counts for high-accuracy KPI metrics across entire inventory
-      let withCompetitivePricing = 0;
-      let ronaHigher = 0;
-      let ronaLower = 0;
-      let outdatedPrices = 0;
-      let lastSuccessfulUpdate: string | null = null;
-
-      try {
-        const { count: matchCount } = await supabase
-          .from('product_matches')
-          .select('*', { count: 'exact', head: true });
-        withCompetitivePricing = matchCount || 0;
-      } catch (cntErr) {}
-
-      // Calculate sample variances from page items or matches
-      const pageMatched = dashboardItems.filter((i) => i.lowestCompetitorPrice !== null);
-      if (pageMatched.length > 0) {
-        const higherInSample = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference > 0).length;
-        const lowerInSample = dashboardItems.filter((i) => i.priceDifference !== null && i.priceDifference < 0).length;
-        const outdatedInSample = dashboardItems.filter((i) => i.isOutdated).length;
-        
-        // When viewing the overall catalog (not filtering), scale to the total matched count
-        if (!search && (!category || category === 'all') && withCompetitivePricing > pageMatched.length) {
-          const ratio = withCompetitivePricing / pageMatched.length;
-          ronaHigher = Math.round(higherInSample * ratio);
-          ronaLower = Math.round(lowerInSample * ratio);
-          outdatedPrices = Math.round(outdatedInSample * ratio);
-        } else {
-          ronaHigher = higherInSample;
-          ronaLower = lowerInSample;
-          outdatedPrices = outdatedInSample;
-        }
-
-        lastSuccessfulUpdate = dashboardItems.reduce((latest, i) => {
-          if (!i.lastCheckedAt) return latest;
-          return !latest || new Date(i.lastCheckedAt) > new Date(latest) ? i.lastCheckedAt : latest;
-        }, null as string | null);
-      }
-
-      const noMatch = Math.max(0, totalMonitored - withCompetitivePricing);
-      const totalFiltered = totalMonitored;
-
-      res.json({
-        metrics: {
-          totalMonitored,
-          withCompetitivePricing,
-          noMatch,
-          ronaHigher,
-          ronaLower,
-          outdatedPrices,
-          lastSuccessfulUpdate,
-        },
-        items: dashboardItems,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total: totalFiltered,
-          totalPages: Math.ceil(totalFiltered / limitNum) || 1
-        }
-      });
-    } catch (err: any) {
-      console.error('[Competitive Pricing Dashboard] Error:', err);
-      res.status(500).json({ error: err.message || 'Failed to fetch competitive pricing dashboard' });
-    }
-  });
-
-  let activeAgentChild: any = null;
-
-  let isPricingAgentRunningInProcess = false;
-
-  app.post('/api/competitive-pricing/agent/start', async (req, res) => {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
-      const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
-      if (fs.existsSync(stopSignalPath)) {
-        try { fs.unlinkSync(stopSignalPath); } catch (e) {}
-      }
-
-      // Query total inventory count across entire catalog
-      let totalItemsCount = 20561;
-      try {
-        const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
-        if (count && count > 0) totalItemsCount = count;
-      } catch (cntErr) {}
-
-      // Get resume index if previous progress exists
-      let resumeCurrent = 0;
-      let existingMatches = 8742;
-      if (fs.existsSync(statusPath)) {
-        try {
-          const prev = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-          if (prev?.progress?.current && prev.progress.current < totalItemsCount - 50) {
-            resumeCurrent = prev.progress.current;
-          }
-          if (prev?.progress?.matchesFound) {
-            existingMatches = prev.progress.matchesFound;
-          }
-        } catch (e) {}
-      }
-
-      const initialStatus = {
-        isRunning: true,
-        pid: process.pid,
-        progress: {
-          current: resumeCurrent,
-          total: totalItemsCount,
-          percent: Number(((resumeCurrent / totalItemsCount) * 100).toFixed(1)),
-          matchesFound: existingMatches,
-          currentSku: 'Starting...',
-          currentName: `Active catalog sweep initialized (${totalItemsCount} SKUs)`,
-          startedAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString()
-        }
-      };
-
-      try {
-        fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2));
-      } catch (e) {}
-
-      try {
-        await supabase.from('kv_store_8405be07').upsert({
-          key: 'pricing_agent:status',
-          value: initialStatus
-        });
-        await supabase.from('kv_store_8405be07').upsert({
-          key: 'pricing_agent:control',
-          value: { action: 'start', timestamp: new Date().toISOString() }
-        });
-      } catch (kvErr) {}
-
-      // Record the request before launching the detached work so the diagnostic
-      // panel proves the button reached the server even when the scraper fails.
-      try {
-        fs.appendFileSync(
-          path.join(process.cwd(), 'pricing-agent-diagnostic.log'),
-          `[${new Date().toISOString()}] [Agent] Background sweep requested; starting in-process runner. Playwright is loaded by the runner with a direct-scraper fallback.\n`
-        );
-      } catch (logErr) {
-        console.warn('[Pricing Agent] Could not write start diagnostic:', logErr);
-      }
-
-      // Execute in-process: runs synchronously in the same Node engine across Dev and Live!
-      isPricingAgentRunningInProcess = true;
-      runCompetitivePricing()
-        .then(() => {
-          isPricingAgentRunningInProcess = false;
-          try {
-            fs.appendFileSync(
-              path.join(process.cwd(), 'pricing-agent-diagnostic.log'),
-              `[${new Date().toISOString()}] [Agent] Background sweep runner finished.\n`
-            );
-          } catch (logErr) {}
-          console.log('[Pricing Agent] Background run finished successfully.');
-        })
-        .catch((err: any) => {
-          isPricingAgentRunningInProcess = false;
-          try {
-            fs.appendFileSync(
-              path.join(process.cwd(), 'pricing-agent-diagnostic.log'),
-              `[${new Date().toISOString()}] [Agent Error] ${err?.stack || err?.message || String(err)}\n`
-            );
-          } catch (logErr) {}
-          console.error('[Pricing Agent] Run error:', err);
-        });
-
-      return res.json({ success: true, message: 'Pricing agent sweep started in background.', status: initialStatus });
-    } catch (e: any) {
-      console.error('[Pricing Agent Start Error]:', e);
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // GET /api/competitive-pricing/live-kent-price
-  app.get('/api/competitive-pricing/live-kent-price', async (req, res) => {
-    try {
-      const url = req.query.url as string;
-      if (!url) return res.status(400).json({ error: 'Missing url parameter' });
-      const { fetchLiveKentStorePrice } = await import('./src/services/playwright-scraper');
-      const price = await fetchLiveKentStorePrice(url);
-      res.json({ url, price, success: price !== null });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // GET /api/competitive-pricing/agent/status
-  app.get('/api/competitive-pricing/agent/status', async (req, res) => {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
-
-      let statusData: any = null;
-
-      // 1. In-process progress first
-      const inProc = getInProcessAgentStatus();
-      if (inProc && inProc.progress) {
-        statusData = inProc;
-      }
-
-      // 2. Local status file
-      if (!statusData && fs.existsSync(statusPath)) {
-        try {
-          const content = fs.readFileSync(statusPath, 'utf8');
-          statusData = JSON.parse(content);
-        } catch (e) {}
-      }
-
-      // 3. Fall back to shared Supabase kv_store
-      if (!statusData) {
-        try {
-          const { data, error } = await supabase
-            .from('kv_store_8405be07')
-            .select('value')
-            .eq('key', 'pricing_agent:status')
-            .maybeSingle();
-
-          if (!error && data?.value) {
-            statusData = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-          }
-        } catch (e) {}
-      }
-
-      if (!statusData) {
-        statusData = {
-          isRunning: false,
-          progress: {
-            current: 0,
-            total: 20561,
-            percent: 0,
-            matchesFound: 1174,
-            currentSku: 'Ready',
-            currentName: 'Catalog monitor synchronized (20,561 SKUs)',
-            startedAt: new Date().toISOString(),
-            lastUpdated: new Date().toISOString()
-          }
-        };
-      }
-
-      // Automatic staleness detection:
-      // If status says isRunning === true, but no heartbeat update for > 300 seconds,
-      // it means the background sweep has stopped or process died. Auto-clear isRunning!
-      if (statusData.isRunning) {
-        const lastUpdatedMs = statusData.progress?.lastUpdated
-          ? new Date(statusData.progress.lastUpdated).getTime()
-          : 0;
-        const diffMs = Date.now() - lastUpdatedMs;
-
-        let fileRecent = false;
-        try {
-          const stats = fs.statSync(statusPath);
-          if (Date.now() - stats.mtimeMs < 300000) {
-            fileRecent = true;
-          }
-        } catch (e) {}
-
-        if (!isPricingAgentRunningInProcess && !fileRecent && diffMs > 300000) {
-          statusData.isRunning = false;
-          if (statusData.progress) {
-            statusData.progress.currentSku = statusData.progress.current >= statusData.progress.total ? 'Completed' : 'Stopped';
-            statusData.progress.currentName = statusData.progress.current >= statusData.progress.total ? 'Catalog sweep complete' : 'Sweep idle';
-          }
-          try {
-            fs.writeFileSync(statusPath, JSON.stringify(statusData, null, 2));
-            await supabase.from('kv_store_8405be07').upsert({ key: 'pricing_agent:status', value: statusData });
-          } catch (e) {}
-        }
-      }
-
-      return res.json(statusData);
-    } catch (e: any) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // POST /api/competitive-pricing/agent/stop
-  app.post('/api/competitive-pricing/agent/stop', async (req, res) => {
-    try {
-      isPricingAgentRunningInProcess = false;
-      requestStopPricingAgent();
-
-      const fs = await import('fs');
-      const path = await import('path');
-      const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
-      const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
-
-      try { fs.writeFileSync(stopSignalPath, 'stop'); } catch (e) {}
-
-      let stoppedData: any = { isRunning: false, stoppedAt: new Date().toISOString() };
-      if (fs.existsSync(statusPath)) {
-        try {
-          const content = fs.readFileSync(statusPath, 'utf8');
-          stoppedData = JSON.parse(content);
-        } catch (e) {}
-      }
-      stoppedData.isRunning = false;
-      stoppedData.stoppedAt = new Date().toISOString();
-      if (stoppedData.progress) {
-        stoppedData.progress.currentSku = 'Stopped';
-        stoppedData.progress.currentName = 'Catalog sweep paused';
-        stoppedData.progress.lastUpdated = new Date().toISOString();
-      }
-      try {
-        fs.writeFileSync(statusPath, JSON.stringify(stoppedData, null, 2));
-      } catch (e) {}
-
-      try {
-        await supabase.from('kv_store_8405be07').upsert({
-          key: 'pricing_agent:status',
-          value: stoppedData
-        });
-        await supabase.from('kv_store_8405be07').upsert({
-          key: 'pricing_agent:control',
-          value: { action: 'stop', timestamp: new Date().toISOString() }
-        });
-      } catch (kvErr) {}
-
-      return res.json({ success: true, message: 'Pricing agent stopped.', status: stoppedData });
-    } catch (e: any) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // POST /api/competitive-pricing/agent/reset
-  app.post('/api/competitive-pricing/agent/reset', async (req, res) => {
-    try {
-      isPricingAgentRunningInProcess = false;
-      resetPricingAgentState();
-
-      const fs = await import('fs');
-      const path = await import('path');
-      const statusPath = path.join(process.cwd(), 'pricing-agent-status.json');
-      const stopSignalPath = path.join(process.cwd(), 'pricing-agent-stop.signal');
-      if (fs.existsSync(stopSignalPath)) {
-        try { fs.unlinkSync(stopSignalPath); } catch (e) {}
-      }
-
-      let totalItemsCount = 20561;
-      try {
-        const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
-        if (count && count > 0) totalItemsCount = count;
-      } catch (cntErr) {}
-
-      const resetStatus = {
-        isRunning: false,
-        progress: {
-          current: 0,
-          total: totalItemsCount,
-          percent: 0,
-          matchesFound: 8742,
-          currentSku: 'Ready',
-          currentName: `Catalog monitor synchronized (${totalItemsCount} SKUs)`,
-          startedAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString()
-        }
-      };
-
-      try {
-        fs.writeFileSync(statusPath, JSON.stringify(resetStatus, null, 2));
-      } catch (e) {}
-
-      await supabase.from('kv_store_8405be07').upsert({
-        key: 'pricing_agent:status',
-        value: resetStatus
-      });
-      await supabase.from('kv_store_8405be07').upsert({
-        key: 'pricing_agent:control',
-        value: { action: 'stop', timestamp: new Date().toISOString() }
-      });
-
-      return res.json({ success: true, message: 'Pricing agent status reset successfully.', status: resetStatus });
-    } catch (e: any) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
-  // GET /api/competitive-pricing/agent/logs
-  app.get('/api/competitive-pricing/agent/logs', async (req, res) => {
-    try {
-      const inProcLogs = getInProcessRecentLogs();
-      if (inProcLogs && inProcLogs.trim().length > 50) {
-        return res.json({ logs: inProcLogs });
-      }
-
-      const fs = await import('fs');
-      const path = await import('path');
-      const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
-      
-      if (fs.existsSync(logPath)) {
-        const stats = fs.statSync(logPath);
-        if (stats.size > 0) {
-          const MAX_BYTES = 50 * 1024;
-          const startPos = Math.max(0, stats.size - MAX_BYTES);
-          const stream = fs.createReadStream(logPath, { start: startPos, encoding: 'utf-8' });
-          let data = '';
-          for await (const chunk of stream) {
-            data += chunk;
-          }
-          if (startPos > 0) {
-            data = '[...TRUNCATED - SHOWING LAST 50KB...]\n' + data;
-          }
-          if (data.trim()) {
-            return res.json({ logs: data });
-          }
-        }
-      }
-
-      // Check Supabase kv_store
-      const { data: kvData } = await supabase
-        .from('kv_store_8405be07')
-        .select('value')
-        .eq('key', 'pricing_agent:logs')
-        .maybeSingle();
-
-      if (kvData?.value) {
-        const logs = typeof kvData.value === 'string' ? kvData.value : (kvData.value.logs || JSON.stringify(kvData.value));
-        return res.json({ logs });
-      }
-      
-      res.json({ logs: `[Competitive Pricing Direct Monitor] Status: Active\nDirect Supabase connection verified (20,543 catalog items).\nReady to run agent sweep.\nLast check: ${new Date().toLocaleTimeString()}` });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // DELETE /api/competitive-pricing/agent/logs
-  app.delete('/api/competitive-pricing/agent/logs', async (req, res) => {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const logPath = path.join(process.cwd(), 'pricing-agent-diagnostic.log');
-      
-      if (fs.existsSync(logPath)) {
-        fs.writeFileSync(logPath, '');
-      }
-      
-      res.json({ success: true, message: 'Logs cleared successfully.' });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // AI CATALOG ENRICHMENT AGENT - BACKGROUND MEMORY & PERFORMANCE OPTIMIZED
   // ═══════════════════════════════════════════════════════════════════════════
   let activeCatalogAgentChild: any = null;
@@ -6408,22 +4428,6 @@ Return JSON matching this schema:
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
-  });
-
-  // 6. GET /api/competitive-pricing/admin/competitors
-  app.get('/api/competitive-pricing/admin/competitors', (req, res) => {
-    res.json(inMemoryCompetitors);
-  });
-
-  // 7. PUT /api/competitive-pricing/admin/competitors/:id
-  app.put('/api/competitive-pricing/admin/competitors/:id', (req, res) => {
-    const { id } = req.params;
-    const idx = inMemoryCompetitors.findIndex((c) => String(c.id) === String(id));
-    if (idx >= 0) {
-      inMemoryCompetitors[idx] = { ...inMemoryCompetitors[idx], ...req.body, updatedAt: new Date().toISOString() };
-      return res.json(inMemoryCompetitors[idx]);
-    }
-    res.status(404).json({ error: 'Competitor not found' });
   });
 
 

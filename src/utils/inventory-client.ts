@@ -125,6 +125,8 @@ async function performRobustQuery(
           stripColumn('search_keywords');
           stripColumn('keywords_generated_at');
           stripColumn('keyword_version');
+        } else if (errMsg.includes('last_date_updated')) {
+          stripColumn('last_date_updated');
         }
       }
       
@@ -135,7 +137,8 @@ async function performRobustQuery(
           'location', 'status', 'quantity_on_hand',
           'price_tier_1', 'price_tier_2', 'price_tier_3', 
           'price_tier_4', 'price_tier_5',
-          'search_keywords', 'keywords_generated_at', 'keyword_version'
+          'search_keywords', 'keywords_generated_at', 'keyword_version',
+          'last_date_updated'
         ];
         for (const col of defaultToStrip) {
           stripColumn(col);
@@ -533,6 +536,7 @@ export async function createInventoryClient(itemData: any) {
         cleanData.price_levels = itemData.price_levels;
       }
     }
+    cleanData.last_date_updated = itemData.last_date_updated || itemData.lastDateUpdated || new Date().toISOString();
 
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 or undefined then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
@@ -660,6 +664,7 @@ export async function updateInventoryClient(id: string, itemData: any) {
         cleanData.price_levels = itemData.price_levels;
       }
     }
+    cleanData.last_date_updated = itemData.last_date_updated || itemData.lastDateUpdated || new Date().toISOString();
 
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
@@ -846,6 +851,9 @@ export async function upsertInventoryBySKUClient(itemData: any) {
     const supplierSkuRaw = itemData.supplier_sku !== undefined ? itemData.supplier_sku : (itemData.supplierSKU !== undefined ? itemData.supplierSKU : (itemData.SupplierSKU !== undefined ? itemData.SupplierSKU : undefined));
     if (supplierSkuRaw !== undefined) cleanData.supplier_sku = supplierSkuRaw;
 
+    const lastDateUpdatedRaw = itemData.last_date_updated ?? itemData.lastDateUpdated ?? itemData.LastDateUpdated;
+    cleanData.last_date_updated = lastDateUpdatedRaw || new Date().toISOString();
+
     // Maintain pricing structure: If Tier2,Tier3,Tier4,Tier5 are 0 then let them be Tier1
     const fallbackT1 = cleanData.price_tier_1 !== undefined 
       ? cleanData.price_tier_1 
@@ -978,11 +986,13 @@ export async function bulkUpsertInventoryBySKUClient(itemsData: any[]) {
     // Bulk upsert inventory items for organization
 
     // Clean all items data
+    const importRunTimestamp = new Date().toISOString();
     const cleanItems = itemsData.map(itemData => {
       const cleanData: any = {
         name: itemData.name !== undefined ? itemData.name : (itemData.ItemName !== undefined ? itemData.ItemName : (itemData.Name !== undefined ? itemData.Name : undefined)),
         sku: itemData.sku !== undefined ? itemData.sku : (itemData.SKU !== undefined ? itemData.SKU : undefined),
         organization_id: organizationId,
+        last_date_updated: itemData.last_date_updated || itemData.lastDateUpdated || itemData.LastDateUpdated || importRunTimestamp,
       };
 
       // Add optional fields only if they exist
@@ -1667,5 +1677,6 @@ function mapInventoryItem(dbItem: any): any {
     searchKeywords: Array.isArray(getCaseInsensitive(dbItem, 'search_keywords')) ? getCaseInsensitive(dbItem, 'search_keywords') : [],
     keywordVersion: getCaseInsensitive(dbItem, 'keyword_version', null),
     keywordsGeneratedAt: getCaseInsensitive(dbItem, 'keywords_generated_at', null),
+    lastDateUpdated: getCaseInsensitive(dbItem, 'last_date_updated', null) || getCaseInsensitive(dbItem, 'lastDateUpdated', null),
   };
 }

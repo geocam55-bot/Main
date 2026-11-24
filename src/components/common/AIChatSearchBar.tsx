@@ -7,7 +7,7 @@ import { Badge } from '../ui/badge';
 import { normalizeInventorySearchQuery } from '../../utils/inventory-keywords';
 
 interface AIChatSearchBarProps {
-  moduleName: 'inventory' | 'shopping-list' | 'competitive-pricing';
+  moduleName: 'inventory';
   onApplyFilters: (filters: any) => void;
   placeholder?: string;
 }
@@ -31,7 +31,7 @@ export function AIChatSearchBar({
     "Show me all products that have Spruce and 2x4 in the description",
     "Show low stock lumber items",
     "Find electrical supplies under $50",
-    "Show items with competitive price variances"
+    "Show framing materials 2x6 12ft"
   ];
 
   const handleSearch = async (textToSend?: string) => {
@@ -174,11 +174,6 @@ export function AIChatSearchBar({
                       {m.filters.category && m.filters.category !== 'all' && (
                         <Badge variant="outline" className="text-xs bg-purple-950/30 text-purple-300 border-purple-500/30">
                           Category: {m.filters.category}
-                        </Badge>
-                      )}
-                      {m.filters.varianceFilter && m.filters.varianceFilter !== 'all' && (
-                        <Badge variant="outline" className="text-xs bg-purple-950/30 text-purple-300 border-purple-500/30">
-                          Variance: {m.filters.varianceFilter}
                         </Badge>
                       )}
                     </div>
