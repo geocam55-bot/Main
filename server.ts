@@ -460,6 +460,211 @@ async function scanFolderRecursiveServer(accessToken: string, folderId: string, 
   return null;
 }
 
+interface MicrosoftCredentialPair {
+  clientId: string;
+  clientSecret: string;
+  tenantId: string;
+  source: string;
+}
+
+async function getMicrosoftCredentialPairs(): Promise<MicrosoftCredentialPair[]> {
+  const pairs: MicrosoftCredentialPair[] = [];
+  const seen = new Set<string>();
+
+  const addPair = (clientId?: string, clientSecret?: string, tenantId?: string, source = 'env') => {
+    const cid = (clientId || '').trim();
+    const cs = (clientSecret || '').trim();
+    const tid = (tenantId || 'common').trim() || 'common';
+    if (!cid || !cs) return;
+    const key = `${cid}:${tid}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    pairs.push({ clientId: cid, clientSecret: cs, tenantId: tid, source });
+  };
+
+  try {
+    const { data: msSecretRow } = await supabase
+      .from('kv_store_8405be07')
+      .select('value')
+      .eq('key', 'secrets:microsoft')
+      .maybeSingle() as any;
+
+    const msVal = msSecretRow?.value;
+    if (msVal?.isCustom && msVal?.clientId && msVal?.clientSecret) {
+      addPair(msVal.clientId, msVal.clientSecret, msVal.tenantId, 'kv_custom');
+    }
+    addPair(process.env.AZURE_CLIENT_ID, process.env.AZURE_CLIENT_SECRET, msVal?.tenantId || 'common', 'env');
+    if (msVal?.clientId && msVal?.clientSecret) {
+      addPair(msVal.clientId, msVal.clientSecret, msVal.tenantId, 'kv_default');
+    }
+  } catch {
+    addPair(process.env.AZURE_CLIENT_ID, process.env.AZURE_CLIENT_SECRET, 'common', 'env');
+  }
+
+  return pairs;
+}
+
+async function resolveMicrosoftAccessToken(
+  candidateAccounts: any[],
+  modeLabel: string
+): Promise<{
+  accessToken: string;
+  selectedAccount: any;
+  lastErrorMsg: string;
+  primaryClientId: string;
+  primaryClientSecret: string;
+}> {
+  const credentialPairs = await getMicrosoftCredentialPairs();
+  const primaryClientId = credentialPairs[0]?.clientId || process.env.AZURE_CLIENT_ID || '';
+  const primaryClientSecret = credentialPairs[0]?.clientSecret || process.env.AZURE_CLIENT_SECRET || '';
+
+  if (credentialPairs.length === 0) {
+    throw new Error(
+      'Microsoft API credentials (AZURE_CLIENT_ID/AZURE_CLIENT_SECRET) are not configured as environment variables or saved in database settings.'
+    );
+  }
+
+  const activeClientIdsKey = credentialPairs.map((c) => c.clientId).join(',');
+  const attemptedTokens = new Set<string>();
+  let accessToken = '';
+  let selectedAccount: any = null;
+  let lastErrorMsg = '';
+
+  for (const account of candidateAccounts) {
+    const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
+    const isAccessTokenValid = Boolean(
+      account.access_token && expiresAt && expiresAt.getTime() - Date.now() >= 5 * 60 * 1000
+    );
+
+    if (isAccessTokenValid) {
+      console.log(`[${modeLabel}] Existing token for ${account.email} is still valid.`);
+      accessToken = account.access_token;
+      selectedAccount = account;
+      break;
+    }
+
+    if (!account.refresh_token) {
+      continue;
+    }
+
+    // Skip accounts whose refresh token already permanently failed with AADSTS70000 for these exact client IDs
+    const alreadyFailedInvalidGrant =
+      account.status === 'reauth_required' &&
+      account.last_auth_error === 'AADSTS70000' &&
+      account.auth_error_client_ids === activeClientIdsKey &&
+      (!account.connectedAt || !account.auth_error_connected_at || account.connectedAt === account.auth_error_connected_at);
+
+    if (alreadyFailedInvalidGrant) {
+      lastErrorMsg =
+        'AADSTS70000: invalid_grant (Stored refresh token is invalid or issued for a different client ID; awaiting account reconnect).';
+      continue;
+    }
+
+    // Avoid re-hitting Microsoft in the same run if duplicate account rows carry the exact same refresh token
+    if (attemptedTokens.has(account.refresh_token)) {
+      continue;
+    }
+    attemptedTokens.add(account.refresh_token);
+
+    console.log(
+      `[${modeLabel}] Attempting to authorize using connected account: ${account.email} (Connected: ${account.connectedAt || 'unknown'}, ID: ${account.id || 'unknown'})`
+    );
+
+    let refreshed = false;
+    let sawInvalidGrant = false;
+
+    for (const creds of credentialPairs) {
+      try {
+        console.log(`[${modeLabel}] Fetching fresh OAuth access token for ${account.email} (source: ${creds.source})`);
+        const tokenResp = await fetchWithRetry(
+          `https://login.microsoftonline.com/${creds.tenantId}/oauth2/v2.0/token`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: creds.clientId,
+              client_secret: creds.clientSecret,
+              refresh_token: account.refresh_token,
+              grant_type: 'refresh_token',
+            }),
+          }
+        );
+
+        if (!tokenResp.ok) {
+          const respText = await tokenResp.text();
+          throw new Error(`Token endpoint responded with status: ${tokenResp.status} - ${respText}`);
+        }
+
+        const tokenJson: any = await tokenResp.json();
+        account.access_token = tokenJson.access_token;
+        if (tokenJson.refresh_token) {
+          account.refresh_token = tokenJson.refresh_token;
+        }
+        account.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
+        account.status = 'active';
+        delete account.last_auth_error;
+        delete account.auth_error_client_ids;
+        delete account.auth_error_connected_at;
+
+        const kvValue = { ...account };
+        delete kvValue.kvKey;
+        await supabase.from('kv_store_8405be07').upsert({
+          key: account.kvKey,
+          value: kvValue,
+        });
+
+        console.log(`[${modeLabel}] Re-authorized OneDrive access successfully for ${account.email}.`);
+        accessToken = account.access_token;
+        selectedAccount = account;
+        refreshed = true;
+        break;
+      } catch (refreshErr: any) {
+        const errMsg = refreshErr?.message || String(refreshErr);
+        lastErrorMsg = errMsg;
+        if (errMsg.includes('invalid_grant') || errMsg.includes('AADSTS70000')) {
+          sawInvalidGrant = true;
+        } else {
+          console.error(`[${modeLabel}] Token refresh failed for ${account.email} (${creds.source}):`, errMsg);
+        }
+      }
+    }
+
+    if (refreshed) {
+      break;
+    }
+
+    if (sawInvalidGrant && account.kvKey) {
+      console.warn(
+        `[${modeLabel}] Marking stale OneDrive token as reauth_required for ${account.email} (AADSTS70000). Reconnect Microsoft account to resume live sync.`
+      );
+      try {
+        const kvValue = { ...account };
+        delete kvValue.kvKey;
+        await supabase.from('kv_store_8405be07').upsert({
+          key: account.kvKey,
+          value: {
+            ...kvValue,
+            status: 'reauth_required',
+            last_auth_error: 'AADSTS70000',
+            auth_error_client_ids: activeClientIdsKey,
+            auth_error_connected_at: account.connectedAt || null,
+          },
+        });
+      } catch {
+        // Non-fatal metadata update
+      }
+    }
+  }
+
+  return {
+    accessToken,
+    selectedAccount,
+    lastErrorMsg,
+    primaryClientId,
+    primaryClientSecret,
+  };
+}
+
 // Helper to automatically pull fresh file content from OneDrive during unattended task execution
 export async function syncOneDriveFileOnBackend(task: any) {
   const fileName = task.action.fileName;
@@ -497,70 +702,13 @@ export async function syncOneDriveFileOnBackend(task: any) {
   // Use matching accounts if available, otherwise fallback to all accounts
   const candidateAccounts = matchingAccounts.length > 0 ? matchingAccounts : accounts;
 
-  const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
-  const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
-
-  if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
-    throw new Error("Microsoft API credentials (AZURE_CLIENT_ID/AZURE_CLIENT_SECRET) are not configured as environment variables in this tournament.");
-  }
-
-  let accessToken = '';
-    let selectedAccount: any = null;
-    let lastErrorMsg = '';
-
-  for (const account of candidateAccounts) {
-    console.log(`[OneDrive Background Sync] Attempting to authorize using connected account: ${account.email} (Connected: ${account.connectedAt || 'unknown'}, ID: ${account.id || 'unknown'})`);
-    let currentAccessToken = account.access_token;
-    const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
-    const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
-
-    if (needsRefresh && account.refresh_token) {
-      console.log(`[OneDrive Background Sync] Fetching fresh OAuth access token for ${account.email}`);
-      try {
-        const tokenResp = await fetchWithRetry('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            client_id: AZURE_CLIENT_ID,
-            client_secret: AZURE_CLIENT_SECRET,
-            refresh_token: account.refresh_token,
-            grant_type: 'refresh_token'
-          })
-        });
-
-        if (!tokenResp.ok) {
-          throw new Error(`Token endpoint responded with status: ${tokenResp.status} - ${await tokenResp.text()}`);
-        }
-
-        const tokenJson: any = await tokenResp.json();
-        currentAccessToken = tokenJson.access_token;
-        account.access_token = tokenJson.access_token;
-        if (tokenJson.refresh_token) {
-          account.refresh_token = tokenJson.refresh_token;
-        }
-        account.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
-
-        await supabase.from('kv_store_8405be07').upsert({
-          key: account.kvKey,
-          value: account
-        });
-        console.log(`[OneDrive Background Sync] Re-authorized OneDrive access successfully for ${account.email}.`);
-        accessToken = currentAccessToken;
-        selectedAccount = account;
-        break; // Successfully authorized! Exit loop.
-      } catch (refreshErr: any) {
-        const errMsg = refreshErr?.message || String(refreshErr);
-        console.error(`[OneDrive Background Sync] Token refresh failed for ${account.email}:`, errMsg);
-        lastErrorMsg = errMsg;
-        // Continue to the next candidate account in the loop
-      }
-    } else if (currentAccessToken) {
-      console.log(`[OneDrive Background Sync] Existing token for ${account.email} is still valid.`);
-      accessToken = currentAccessToken;
-      selectedAccount = account;
-      break; // Token is valid! Exit loop.
-    }
-  }
+  const {
+    accessToken,
+    selectedAccount,
+    lastErrorMsg,
+    primaryClientId: AZURE_CLIENT_ID,
+    primaryClientSecret: AZURE_CLIENT_SECRET,
+  } = await resolveMicrosoftAccessToken(candidateAccounts, 'OneDrive Background Sync');
 
   if (!accessToken || !selectedAccount) {
     // If we failed all accounts, provide a comprehensive explanation using the last encountered error
@@ -577,7 +725,9 @@ export async function syncOneDriveFileOnBackend(task: any) {
     } else if (lastErrorMsg.includes("invalid_grant") || lastErrorMsg.includes("AADSTS70000")) {
       friendlyError = `[Azure/OneDrive Auth Error] AADSTS70000: The refresh token is invalid or was issued for a different client ID. This can happen if the client ID was changed, or if the token is too old. Please reconnect your Microsoft account under the connected Microsoft OneDrive panel.`;
     }
-    throw new Error(`OneDrive login/refresh failed: ${friendlyError}`);
+    const authErr: any = new Error(`OneDrive login/refresh failed: ${friendlyError}`);
+    authErr.isReauthRequired = lastErrorMsg.includes("invalid_grant") || lastErrorMsg.includes("AADSTS70000");
+    throw authErr;
   }
 
   if (!accessToken) {
@@ -674,66 +824,18 @@ async function uploadOneDriveFileFromBackend(task: any, base64Content: string) {
   // Use matching accounts if available, otherwise fallback to all accounts
   const candidateAccounts = matchingAccounts.length > 0 ? matchingAccounts : accounts;
 
-  const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
-  const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
-
-  if (!AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) return;
-    let accessToken = '';
-    let selectedAccount: any = null;
-
-  for (const account of candidateAccounts) {
-    console.log(`[OneDrive Background Export] Attempting to authorize using connected account: ${account.email} (Connected: ${account.connectedAt || 'unknown'}, ID: ${account.id || 'unknown'})`);
-    let currentAccessToken = account.access_token;
-    const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
-    const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
-
-    if (needsRefresh && account.refresh_token) {
-      console.log(`[OneDrive Background Export] Fetching fresh OAuth access token for ${account.email}`);
-      try {
-        const tokenResp = await fetchWithRetry('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            client_id: AZURE_CLIENT_ID,
-            client_secret: AZURE_CLIENT_SECRET,
-            refresh_token: account.refresh_token,
-            grant_type: 'refresh_token'
-          })
-        });
-
-        if (tokenResp.ok) {
-          const tokenJson: any = await tokenResp.json();
-          currentAccessToken = tokenJson.access_token;
-          account.access_token = tokenJson.access_token;
-          if (tokenJson.refresh_token) {
-            account.refresh_token = tokenJson.refresh_token;
-          }
-          account.token_expires_at = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString();
-
-          await supabase.from('kv_store_8405be07').upsert({
-            key: account.kvKey,
-            value: account
-          });
-          console.log(`[OneDrive Background Export] Re-authorized OneDrive access successfully for ${account.email}.`);
-          accessToken = currentAccessToken;
-          selectedAccount = account;
-          break; // Successfully authorized! Exit loop.
-        } else {
-          console.error(`[OneDrive Background Export] Token refresh response failed for ${account.email}: ${tokenResp.status}`);
-        }
-      } catch (refreshErr) {
-        console.error(`[OneDrive Background Export] Token refresh error for ${account.email}:`, refreshErr);
-      }
-    } else if (currentAccessToken) {
-      console.log(`[OneDrive Background Export] Existing token for ${account.email} is still valid.`);
-      accessToken = currentAccessToken;
-      selectedAccount = account;
-      break; // Token is valid! Exit loop.
-    }
-  }
+  const { accessToken, lastErrorMsg } = await resolveMicrosoftAccessToken(
+    candidateAccounts,
+    'OneDrive Background Export'
+  ).catch((err: any) => ({
+    accessToken: '',
+    lastErrorMsg: err?.message || String(err),
+  }));
 
   if (!accessToken) {
-    console.error(`[OneDrive Background Export] Could not authorize any OneDrive session for task.`);
+    console.warn(
+      `[OneDrive Background Export] Skipped upload for "${fileName}" — Microsoft OneDrive needs reconnection (${lastErrorMsg || 'no valid token'}).`
+    );
     return;
   }
 
@@ -839,7 +941,12 @@ async function executeScheduledTask(task: any) {
             console.log(`[Scheduler] Unattended OneDrive Import: Successfully pulled a fresh copy of "${task.action.fileName}" to local workspace.`);
           }
         } catch (syncErr: any) {
-          console.error(`[Scheduler] Unattended OneDrive Import refresh failure:`, syncErr.message || syncErr);
+          const msg = syncErr?.message || String(syncErr);
+          if (syncErr?.isReauthRequired || msg.includes('AADSTS70000') || msg.includes('invalid_grant')) {
+            console.warn(`[Scheduler] Unattended OneDrive Import using cached copy (${msg})`);
+          } else {
+            console.error(`[Scheduler] Unattended OneDrive Import refresh failure:`, msg);
+          }
         }
       }
 
@@ -1270,7 +1377,12 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
             console.warn(`[Scheduler Supabase] Unattended OneDrive Import sync fetched empty or invalid response.`);
           }
         } catch (syncErr: any) {
-          console.error(`[Scheduler Supabase] Unattended OneDrive Import refresh failure:`, syncErr.message || syncErr);
+          const msg = syncErr?.message || String(syncErr);
+          if (syncErr?.isReauthRequired || msg.includes('AADSTS70000') || msg.includes('invalid_grant')) {
+            console.warn(`[Scheduler Supabase] Unattended OneDrive Import falling back to cached copy (${msg})`);
+          } else {
+            console.error(`[Scheduler Supabase] Unattended OneDrive Import refresh failure:`, msg);
+          }
         }
       }
 
