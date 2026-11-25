@@ -26,6 +26,9 @@ import {
   FolderOpen,
   FileText,
   Folders,
+  Sparkles,
+  Wand2,
+  Loader2,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -62,6 +65,7 @@ import { PermissionGate } from './PermissionGate';
 import { canAdd, canDelete } from '../utils/permissions';
 import { useDebounce } from '../utils/useDebounce';
 import { getPreloadedAccounts, clearPreloadedAccounts } from '../utils/email-preloader';
+import { runEmailWriter, type EmailTone } from '../utils/ai-client';
 
 // Cache backend availability check to avoid repeated failed requests
 // This prevents console spam from 404 errors when Edge Functions aren't deployed
@@ -165,6 +169,102 @@ export function Email({ user }: EmailProps) {
     body: '',
     linkTo: '',
   });
+
+  // Gemini AI Email Writer & Summary states
+  const [aiWriterPrompt, setAiWriterPrompt] = useState('');
+  const [aiWriterTone, setAiWriterTone] = useState<EmailTone>('professional');
+  const [isAiWriting, setIsAiWriting] = useState(false);
+  const [emailSummary, setEmailSummary] = useState<{ emailId: string; body: string; points: string[] } | null>(null);
+  const [isSummarizingEmail, setIsSummarizingEmail] = useState(false);
+
+  const handleRunEmailWriter = async (mode: 'draft' | 'followup' | 'rewrite') => {
+    if (mode === 'rewrite' && !composeEmail.body.trim() && !composeEmail.subject.trim()) {
+      toast.error('Enter some draft text first before rewriting tone.');
+      return;
+    }
+    if (mode === 'draft' && !aiWriterPrompt.trim() && !composeEmail.subject.trim()) {
+      toast.error('Describe what you want the email to say.');
+      return;
+    }
+    setIsAiWriting(true);
+    try {
+      const res = await runEmailWriter({
+        mode,
+        tone: aiWriterTone,
+        prompt: aiWriterPrompt.trim(),
+        currentSubject: composeEmail.subject,
+        currentBody: composeEmail.body,
+        recipientName: composeEmail.to,
+        contextSummary: composeEmail.linkTo ? `Linked CRM record: ${composeEmail.linkTo}` : '',
+      });
+      setComposeEmail((prev) => ({
+        ...prev,
+        subject: res.subject || prev.subject,
+        body: res.body || prev.body,
+      }));
+      toast.success('AI draft generated!');
+    } catch (err: any) {
+      toast.error(err?.message || 'AI Email Writer failed.');
+    } finally {
+      setIsAiWriting(false);
+    }
+  };
+
+  const handleSummarizeSelectedEmail = async () => {
+    if (!selectedEmail) return;
+    setIsSummarizingEmail(true);
+    try {
+      const plain = stripHtml(selectedEmail.body || '');
+      const res = await runEmailWriter({
+        mode: 'summarize',
+        currentSubject: selectedEmail.subject,
+        currentBody: plain,
+        recipientName: selectedEmail.from,
+      });
+      setEmailSummary({
+        emailId: selectedEmail.id,
+        body: res.body,
+        points: res.summaryPoints || [],
+      });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to summarize email.');
+    } finally {
+      setIsSummarizingEmail(false);
+    }
+  };
+
+  const handleAiDraftReply = async () => {
+    if (!selectedEmail) return;
+    const plain = stripHtml(selectedEmail.body || '');
+    setComposeEmail({
+      to: selectedEmail.from,
+      subject: selectedEmail.subject?.startsWith('Re:') ? selectedEmail.subject : `Re: ${selectedEmail.subject}`,
+      body: '',
+      linkTo: selectedEmail.linkedTo || '',
+    });
+    setIsComposeOpen(true);
+    setIsAiWriting(true);
+    try {
+      const res = await runEmailWriter({
+        mode: 'followup',
+        tone: aiWriterTone,
+        prompt: 'Write a helpful, clear reply addressing the sender message.',
+        currentSubject: `Re: ${selectedEmail.subject}`,
+        recipientName: selectedEmail.from,
+        contextSummary: `Incoming email:\n${plain.slice(0, 1200)}`,
+      });
+      setComposeEmail((prev) => ({
+        ...prev,
+        subject: res.subject || prev.subject,
+        body: res.body || prev.body,
+      }));
+      toast.success('AI reply drafted!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to draft AI reply.');
+    } finally {
+      setIsAiWriting(false);
+    }
+  };
 
   // Close context menu on click outside
   useEffect(() => {
@@ -1669,6 +1769,34 @@ export function Email({ user }: EmailProps) {
                       </div>
                     </div>
                   )}
+                  {emailSummary && emailSummary.emailId === selectedEmail.id && (
+                    <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-800">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Gemini Email Summary
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-slate-500"
+                          onClick={() => setEmailSummary(null)}
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                      <p className="text-xs text-slate-800 leading-relaxed">{emailSummary.body}</p>
+                      {emailSummary.points.length > 0 && (
+                        <ul className="space-y-1 text-xs text-slate-700">
+                          {emailSummary.points.map((pt, i) => (
+                            <li key={i}>• {pt}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2 mt-6">
                     {canAdd('email', user.role) && (
                     <Button
@@ -1687,6 +1815,28 @@ export function Email({ user }: EmailProps) {
                       <span className="hidden sm:inline">Reply</span>
                     </Button>
                     )}
+                    {canAdd('email', user.role) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleAiDraftReply}
+                      disabled={isAiWriting}
+                      className="text-xs sm:text-sm border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                    >
+                      {isAiWriting ? <Loader2 className="h-4 w-4 animate-spin sm:mr-2" /> : <Sparkles className="h-4 w-4 sm:mr-2" />}
+                      <span className="hidden sm:inline">AI Reply</span>
+                    </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleSummarizeSelectedEmail}
+                      disabled={isSummarizingEmail}
+                      className="text-xs sm:text-sm"
+                    >
+                      {isSummarizingEmail ? <Loader2 className="h-4 w-4 animate-spin sm:mr-2" /> : <Wand2 className="h-4 w-4 sm:mr-2" />}
+                      <span className="hidden sm:inline">Summarize</span>
+                    </Button>
                     <Button variant="outline" className="text-xs sm:text-sm">
                       <Send className="h-4 w-4 sm:mr-2" />
                       <span className="hidden sm:inline">Forward</span>
@@ -1796,6 +1946,67 @@ export function Email({ user }: EmailProps) {
                 className="text-sm"
               />
             </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-800">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI Email Writer
+                </span>
+                <Select value={aiWriterTone} onValueChange={(val) => setAiWriterTone(val as EmailTone)}>
+                  <SelectTrigger className="h-8 w-[140px] bg-white text-xs">
+                    <SelectValue placeholder="Tone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="friendly">Friendly</SelectItem>
+                    <SelectItem value="concise">Concise</SelectItem>
+                    <SelectItem value="persuasive">Persuasive</SelectItem>
+                    <SelectItem value="direct">Direct</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={aiWriterPrompt}
+                  onChange={(e) => setAiWriterPrompt(e.target.value)}
+                  placeholder="Describe your email (e.g. 'Follow up on quote #1042 and confirm delivery window')..."
+                  className="bg-white text-xs h-9"
+                />
+                <div className="flex flex-wrap gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isAiWriting}
+                    onClick={() => handleRunEmailWriter('draft')}
+                    className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
+                  >
+                    {isAiWriting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 mr-1" />}
+                    Draft
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={isAiWriting}
+                    onClick={() => handleRunEmailWriter('followup')}
+                    className="h-9 bg-white text-xs"
+                  >
+                    Follow-up
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={isAiWriting}
+                    onClick={() => handleRunEmailWriter('rewrite')}
+                    className="h-9 bg-white text-xs"
+                  >
+                    Rewrite Tone
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="body" className="text-sm">Message</Label>
               <Textarea

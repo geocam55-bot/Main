@@ -19,6 +19,7 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { GoogleGenAI, Type } from "@google/genai";
 import { registerLogisticsServer, sendSystemEmail, getSmtpConfig, resolveTenantBranding, buildTenantDeliveryEmailHtml } from "./src/server/logistics-server";
+import { registerAIRoutes } from "./src/server/ai-routes";
 import {
   extractFieldsWithCoordinatesAndHeuristics,
   groupItemsIntoLines,
@@ -3508,7 +3509,7 @@ Result:
 `;
 
       const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-4-hydrogen',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -3585,7 +3586,7 @@ Return JSON matching this schema:
 }`;
 
       const response = await client.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-4-hydrogen',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -5597,6 +5598,8 @@ self.addEventListener('activate', (event) => {
       return res.status(500).json({ error: err.message || 'Process all pending failed' });
     }
   });
+
+  registerAIRoutes(app, { supabase, supabaseUrl, publicAnonKey });
 
   // --- FALLBACK CATCH-ALL FOR ALL UNHANDLED API ROUTES ---
   app.all('/api/*all', (req, res) => {

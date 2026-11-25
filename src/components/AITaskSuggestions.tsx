@@ -50,7 +50,8 @@ import {
   Award,
   Rocket,
   Brain,
-  TrendingDown
+  TrendingDown,
+  Loader2
 } from 'lucide-react';
 import type { User } from '../App';
 import { PermissionGate } from './PermissionGate';
@@ -58,6 +59,7 @@ import { createClient } from '../utils/supabase/client';
 import { toast } from 'sonner@2.0.3';
 import { useAISuggestions, type Suggestion } from '../hooks/useAISuggestions';
 import { getAIPrefsClient, upsertAIPrefsClient } from '../utils/ai-prefs-client';
+import { runCRMIntelligence, type FollowupAssistantResponse } from '../utils/ai-client';
 
 // ─── Daily Tips Pool ───
 const DAILY_TIPS = [
@@ -158,6 +160,29 @@ export function AITaskSuggestions({ user, onNavigate }: AITaskSuggestionsProps) 
     lastActiveDate: '',
   });
   const [showCompletedExpanded, setShowCompletedExpanded] = useState(false);
+  const [geminiBrief, setGeminiBrief] = useState<FollowupAssistantResponse | null>(null);
+  const [isLoadingGeminiBrief, setIsLoadingGeminiBrief] = useState(false);
+  const [geminiBriefError, setGeminiBriefError] = useState<string | null>(null);
+
+  const handleLoadGeminiBrief = async () => {
+    setIsLoadingGeminiBrief(true);
+    setGeminiBriefError(null);
+    try {
+      const res = await runCRMIntelligence<FollowupAssistantResponse>({
+        mode: 'followup',
+        scope: ['admin', 'super_admin', 'director', 'manager'].includes(String(user?.role || '').toLowerCase())
+          ? 'team'
+          : 'personal',
+      });
+      setGeminiBrief(res);
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to load Gemini Follow-up Brief.';
+      setGeminiBriefError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoadingGeminiBrief(false);
+    }
+  };
 
   // ─── Load persisted state ───
   useEffect(() => {
@@ -688,6 +713,74 @@ export function AITaskSuggestions({ user, onNavigate }: AITaskSuggestionsProps) 
       {/* ═══════════ TAB: DAILY BRIEFING ═══════════ */}
       {activeTab === 'briefing' && (
         <div className="space-y-4 sm:space-y-6">
+          {/* Gemini AI Follow-up Assistant Brief */}
+          <Card className="border-indigo-200 bg-gradient-to-r from-indigo-50/70 via-white to-purple-50/40">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-600" />
+                  <div>
+                    <CardTitle className="text-base">Gemini Follow-up Assistant</CardTitle>
+                    <CardDescription className="text-xs">
+                      Recommends who to contact right now, best outreach timing, and next steps across your CRM records
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleLoadGeminiBrief}
+                  disabled={isLoadingGeminiBrief}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0 gap-1.5"
+                >
+                  {isLoadingGeminiBrief ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {geminiBrief ? 'Refresh AI Brief' : 'Generate AI Follow-up Brief'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            {(geminiBriefError || geminiBrief) && (
+              <CardContent className="space-y-3">
+                {geminiBriefError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                    {geminiBriefError}
+                  </div>
+                )}
+                {geminiBrief && (
+                  <>
+                    <p className="text-sm text-slate-800 bg-white rounded-lg border border-indigo-100 p-3">
+                      {geminiBrief.summary}
+                    </p>
+                    {geminiBrief.prioritizedFollowups?.length > 0 && (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {geminiBrief.prioritizedFollowups.slice(0, 4).map((item, idx) => (
+                          <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3 text-xs space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-slate-900">{item.contactName}</span>
+                              <Badge variant="outline" className="text-[10px] uppercase">{item.urgency}</Badge>
+                            </div>
+                            <p className="text-slate-700">{item.suggestedAction}</p>
+                            <p className="text-[11px] text-indigo-700">
+                              {item.recommendedChannel} • {item.bestTimeHint}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
           {/* Daily Progress & Streaks Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Today's Progress */}

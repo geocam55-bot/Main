@@ -6,7 +6,7 @@
   "dependencies": {
     "@babel/parser": "^7.26.9",
     "@capacitor/cli": "^7.0.1",
-    "@google/genai": "^2.19.0",
+    "@google/genai": "^3.6.1",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-aspect-ratio": "^1.1.2",

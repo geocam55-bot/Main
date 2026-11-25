@@ -32,6 +32,8 @@ import { CustomerModuleHelp } from './CustomerModuleHelp';
 import { AttioSidePeekDrawer } from './attio/AttioSidePeekDrawer';
 import { AttioPipelineBoard } from './attio/AttioPipelineBoard';
 import { Columns3, LayoutGrid, Kanban, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { AICustomerInsightsPanel } from './crm/AICustomerInsightsPanel';
+import { runCRMIntelligence, type SmartSearchResponse } from '../utils/ai-client';
 
 interface Contact {
   id: string;
@@ -98,6 +100,14 @@ export function Contacts({ user }: ContactsProps) {
   // ⚡ Performance: Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+
+  // Gemini AI Smart Search & Customer Intelligence state
+  const [showAIIntelligencePanel, setShowAIIntelligencePanel] = useState(false);
+  const [isSmartSearching, setIsSmartSearching] = useState(false);
+  const [smartSearchActiveQuery, setSmartSearchActiveQuery] = useState('');
+  const [smartSearchReply, setSmartSearchReply] = useState<string | null>(null);
+  const [smartSearchMatchReasons, setSmartSearchMatchReasons] = useState<Record<string, string> | null>(null);
+  const [smartSearchOrderedIds, setSmartSearchOrderedIds] = useState<string[] | null>(null);
   
   // Load predefined audience segments
   const { segments: audienceSegments } = useAudienceSegments(user.organizationId);
@@ -588,8 +598,17 @@ export function Contacts({ user }: ContactsProps) {
         });
       }
       
+      // Apply Gemini AI Smart Search matches when active
+      if (smartSearchOrderedIds !== null) {
+        const orderIndex = new Map<string, number>();
+        smartSearchOrderedIds.forEach((id, idx) => orderIndex.set(id, idx));
+        filtered = filtered
+          .filter((contact) => orderIndex.has(contact.id))
+          .sort((a, b) => (orderIndex.get(a.id) ?? 9999) - (orderIndex.get(b.id) ?? 9999));
+      }
+
       return filtered;
-    }, [contacts, debouncedSearchQuery, selectedTagFilter]);
+    }, [contacts, debouncedSearchQuery, selectedTagFilter, smartSearchOrderedIds]);
 
   // ⚡ Performance: Paginate filtered contacts - only render current page
   const paginatedContacts = useMemo(() => {
@@ -1694,6 +1713,16 @@ export function Contacts({ user }: ContactsProps) {
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
                   {metrics.prospects} prospects
                 </span>
+                <Button
+                  type="button"
+                  variant={showAIIntelligencePanel ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowAIIntelligencePanel((prev) => !prev)}
+                  className={showAIIntelligencePanel ? 'bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5' : 'border-indigo-200 text-indigo-700 hover:bg-indigo-50 gap-1.5'}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {showAIIntelligencePanel ? 'Hide AI Insights' : 'AI Insights & Follow-ups'}
+                </Button>
                 <CustomerModuleHelp
                   userId={user.id}
                   totalContacts={contacts.length}
@@ -1713,6 +1742,16 @@ export function Contacts({ user }: ContactsProps) {
                 />
               </div>
             </div>
+
+            {showAIIntelligencePanel && (
+              <div className="pt-2">
+                <AICustomerInsightsPanel
+                  contacts={contacts}
+                  scope={currentScope}
+                  onOpenContact={(c) => openContactDetail(c)}
+                />
+              </div>
+            )}
 
             {/* 🎯 Attio CRM View Ribbon: Quick View Presets & Mode Toggle */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 mt-2">
@@ -1853,14 +1892,95 @@ export function Contacts({ user }: ContactsProps) {
           <div className="border-b border-slate-200 px-4 py-3 sm:px-6">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
-                <div data-tour="contacts-search" className="relative min-w-0 flex-1 lg:max-w-md">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    placeholder="Search contacts by name, email, company, phone, or status..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-11 border-slate-200 bg-white pl-10"
-                  />
+                <div data-tour="contacts-search" className="flex flex-1 items-center gap-2 min-w-0 lg:max-w-xl">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      placeholder="Search or ask AI (e.g. 'inactive contractors with open quotes')..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        if (smartSearchOrderedIds !== null && e.target.value.trim() === '') {
+                          setSmartSearchOrderedIds(null);
+                          setSmartSearchMatchReasons(null);
+                          setSmartSearchReply(null);
+                          setSmartSearchActiveQuery('');
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && searchQuery.trim().split(/\s+/).length >= 3) {
+                          e.preventDefault();
+                          (async () => {
+                            const q = searchQuery.trim();
+                            if (!q || isSmartSearching) return;
+                            setIsSmartSearching(true);
+                            try {
+                              const res = await runCRMIntelligence<SmartSearchResponse>({
+                                mode: 'smart-search',
+                                query: q,
+                                scope: currentScope,
+                              });
+                              const reasonMap: Record<string, string> = {};
+                              const ids: string[] = [];
+                              for (const m of res.matchedContacts || []) {
+                                reasonMap[m.contactId] = m.reason;
+                                ids.push(m.contactId);
+                              }
+                              setSmartSearchMatchReasons(reasonMap);
+                              setSmartSearchOrderedIds(ids);
+                              setSmartSearchReply(res.reply);
+                              setSmartSearchActiveQuery(q);
+                              setSearchQuery('');
+                              setCurrentPage(1);
+                            } catch (err: any) {
+                              toast.error(err?.message || 'AI Smart Search failed.');
+                            } finally {
+                              setIsSmartSearching(false);
+                            }
+                          })();
+                        }
+                      }}
+                      className="h-11 border-slate-200 bg-white pl-10"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSmartSearching || !searchQuery.trim()}
+                    onClick={async () => {
+                      const q = searchQuery.trim();
+                      if (!q || isSmartSearching) return;
+                      setIsSmartSearching(true);
+                      try {
+                        const res = await runCRMIntelligence<SmartSearchResponse>({
+                          mode: 'smart-search',
+                          query: q,
+                          scope: currentScope,
+                        });
+                        const reasonMap: Record<string, string> = {};
+                        const ids: string[] = [];
+                        for (const m of res.matchedContacts || []) {
+                          reasonMap[m.contactId] = m.reason;
+                          ids.push(m.contactId);
+                        }
+                        setSmartSearchMatchReasons(reasonMap);
+                        setSmartSearchOrderedIds(ids);
+                        setSmartSearchReply(res.reply);
+                        setSmartSearchActiveQuery(q);
+                        setSearchQuery('');
+                        setCurrentPage(1);
+                      } catch (err: any) {
+                        toast.error(err?.message || 'AI Smart Search failed.');
+                      } finally {
+                        setIsSmartSearching(false);
+                      }
+                    }}
+                    className="h-11 shrink-0 border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 gap-1.5"
+                    title="Search customer records using natural language & purchasing patterns"
+                  >
+                    {isSmartSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    <span className="hidden sm:inline">AI Search</span>
+                  </Button>
                 </div>
 
                 {/* Scope selector */}
@@ -1949,18 +2069,41 @@ export function Contacts({ user }: ContactsProps) {
               </div>
             </div>
 
-            {selectedTagFilter && selectedTagFilter !== 'all' && (
-              <div className="mt-3 flex items-center gap-2">
-                <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700">
-                  <Tag className="h-3 w-3" />
-                  Filtered by: {selectedTagFilter.startsWith('status:') ? selectedTagFilter.replace('status:', '') : selectedTagFilter.replace('tag:', '')}
-                  <button
-                    onClick={() => setSelectedTagFilter('all')}
-                    className="ml-1 hover:text-red-600"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
+            {(selectedTagFilter && selectedTagFilter !== 'all' || smartSearchOrderedIds !== null) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {selectedTagFilter && selectedTagFilter !== 'all' && (
+                  <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700">
+                    <Tag className="h-3 w-3" />
+                    Filtered by: {selectedTagFilter.startsWith('status:') ? selectedTagFilter.replace('status:', '') : selectedTagFilter.replace('tag:', '')}
+                    <button
+                      onClick={() => setSelectedTagFilter('all')}
+                      className="ml-1 hover:text-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {smartSearchOrderedIds !== null && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-1.5 text-xs text-indigo-900">
+                    <Sparkles className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                    <span>
+                      <strong>AI Search ({smartSearchActiveQuery}):</strong> {smartSearchReply}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSmartSearchOrderedIds(null);
+                        setSmartSearchMatchReasons(null);
+                        setSmartSearchReply(null);
+                        setSmartSearchActiveQuery('');
+                      }}
+                      className="ml-1 inline-flex items-center gap-0.5 font-semibold text-indigo-700 hover:text-red-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -67,7 +67,7 @@ interface ScheduledTask {
   };
   action: {
     type: "import" | "export";
-    module: "contacts" | "inventory" | "deals";
+    module: "contacts" | "inventory" | "deals" | "purchases";
     fileStorage: "local" | "onedrive";
     fileName: string;
     format: "csv" | "json" | "xml";
@@ -105,6 +105,7 @@ interface CrmStats {
   contacts: number;
   inventory: number;
   deals: number;
+  purchases: number;
 }
 
 const readFileAsBase64 = (file: File): Promise<string> => {
@@ -376,6 +377,22 @@ const SCHEMA_GUIDES = {
       { name: "ExpectedCloseDate", req: false, desc: "Estimated closure date (YYYY-MM-DD)." },
       { name: "Stage", req: false, desc: "Opportunity state index (Proposal Sent, Under Review, Closed Won)." },
       { name: "Description", req: false, desc: "Estimator notes, project details or scopes." }
+    ]
+  },
+  purchases: {
+    title: "Customer Purchases & Line Items",
+    description: "Map historical customer purchase invoices, line items, SKU purchases, pricing, and gross profit tracking for AI buying habit analytics.",
+    fields: [
+      { name: "invoice_number", req: true, desc: "Unique invoice or order receipt number (e.g., INV-2026-001)." },
+      { name: "customer_name", req: true, desc: "Customer name matching CRM contacts." },
+      { name: "purchase_date", req: false, desc: "Transaction timestamp or date (YYYY-MM-DD)." },
+      { name: "total_amount", req: false, desc: "Total invoice amount." },
+      { name: "sku", req: false, desc: "Purchased item SKU part number." },
+      { name: "item_name", req: false, desc: "Name of item purchased." },
+      { name: "category", req: false, desc: "Product category (e.g., 'BUILDING MATERIALS', 'LUMBER', 'HARDWARE')." },
+      { name: "quantity", req: false, desc: "Quantity purchased." },
+      { name: "unit_price", req: false, desc: "Unit selling price." },
+      { name: "line_total", req: false, desc: "Line total amount." }
     ]
   }
 };
@@ -4383,6 +4400,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     <option value="contacts">CRM Customer & Team Contacts</option>
                     <option value="inventory">Product Inventory Materials</option>
                     <option value="deals">Sales Contracts / Deals Estimations</option>
+                    <option value="purchases">Customer Purchases & Line Items</option>
                   </select>
                 </div>
 
@@ -4584,6 +4602,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     <option value="contacts">CRM Customer & Team Contacts</option>
                     <option value="inventory">Product Inventory Materials</option>
                     <option value="deals">Sales Contracts / Deals Estimations</option>
+                    <option value="purchases">Customer Purchases & Line Items</option>
                   </select>
                 </div>
 
@@ -5098,6 +5117,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                       <option value="contacts">CRM Customer & Team Contacts</option>
                       <option value="inventory">Product Inventory Materials</option>
                       <option value="deals">Sales Contracts / Deals Estimations</option>
+                      <option value="purchases">Customer Purchases & Line Items</option>
                     </select>
                   </div>
 

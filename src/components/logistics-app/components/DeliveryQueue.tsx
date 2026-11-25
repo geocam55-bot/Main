@@ -6,11 +6,14 @@ import {
   Search, MapPin, Eye, Clock, User, Phone, CheckCircle2, 
   AlertTriangle, ChevronDown, ChevronUp, FileText, 
   Truck as TruckIcon, MoreVertical, Edit, Trash2, Plus, X, ExternalLink,
-  List, LayoutGrid, Mail, Package
+  List, LayoutGrid, Mail, Package, Sparkles, Loader2, Copy
 } from 'lucide-react';
 import DragDropFreightBoard from './DragDropFreightBoard';
 import { PhysicalDocumentModal } from './PhysicalDocumentModal';
 import { CargoManifestModal } from './CargoManifestModal';
+import { LogisticsAICopilot } from './LogisticsAICopilot';
+import { runLogisticsAI } from '../../../utils/ai-client';
+import { copyToClipboard } from '../../../utils/clipboard';
 
 interface DeliveryQueueProps {
   deliveries: DeliveryRecord[];
@@ -482,6 +485,54 @@ export default function DeliveryQueue({
     details?: string;
     type: 'success' | 'error';
   } | null>(null);
+  const [isDraftingEtaId, setIsDraftingEtaId] = useState<string | null>(null);
+  const [aiEtaModal, setAiEtaModal] = useState<{
+    delivery: DeliveryRecord;
+    subject: string;
+    emailBody: string;
+    smsText: string;
+  } | null>(null);
+
+  const handleDraftCustomerEta = async (delivery: DeliveryRecord) => {
+    setIsDraftingEtaId(delivery.id);
+    try {
+      const res = await runLogisticsAI(
+        {
+          mode: 'customer-eta',
+          deliveryId: delivery.id,
+          delivery: {
+            id: delivery.id,
+            customerName: delivery.customerName,
+            deliveryAddress: delivery.deliveryAddress,
+            originBranch: delivery.originBranch,
+            status: delivery.status,
+            assignedTruck: delivery.assignedTruck,
+            assignedDriver: delivery.assignedDriver,
+            scheduledDate: delivery.scheduledDate,
+            scheduledSlot: delivery.scheduledSlot,
+            returnReason: delivery.returnReason,
+            destinationNotes: delivery.destinationNotes,
+          },
+          tenantId: currentTenant?.id,
+        },
+        {
+          userId: currentUser?.id,
+          userEmail: currentUser?.email,
+          tenantId: currentTenant?.id,
+        }
+      );
+      setAiEtaModal({
+        delivery,
+        subject: res.emailSubject || `Delivery Update for ${delivery.id}`,
+        emailBody: res.emailBody || '',
+        smsText: res.smsText || '',
+      });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to draft AI ETA update.');
+    } finally {
+      setIsDraftingEtaId(null);
+    }
+  };
 
   const handleResendEmail = async (delivery: DeliveryRecord) => {
     try {
@@ -1220,6 +1271,20 @@ export default function DeliveryQueue({
         </div>
       </div>
 
+      {/* Logistics AI Dispatch & Route Copilot */}
+      <LogisticsAICopilot
+        deliveries={deliveries}
+        trucks={trucks}
+        currentUser={currentUser}
+        currentTenant={currentTenant}
+        onHighlightDelivery={(deliveryId) => {
+          setBoardViewMode('standard');
+          setActiveTab('ALL');
+          setSearchQuery(deliveryId);
+          setExpandedRecord(deliveryId);
+        }}
+      />
+
       {/* Main Freight Board View (Drag & Drop or Standard List) */}
       {boardViewMode === 'dragdrop' ? (
         <DragDropFreightBoard
@@ -1601,6 +1666,25 @@ export default function DeliveryQueue({
                       >
                         <Mail className="h-3 w-3 text-amber-600" />
                         <span className="hidden md:inline">Resend Email</span>
+                      </button>
+
+                      {/* AI Customer ETA Draft button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDraftCustomerEta(delivery);
+                        }}
+                        disabled={isDraftingEtaId === delivery.id}
+                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center space-x-1 transition shadow-2xs cursor-pointer disabled:opacity-60"
+                        title="Draft Customer ETA / Delay Update with Gemini"
+                      >
+                        {isDraftingEtaId === delivery.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-indigo-600" />
+                        ) : (
+                          <Sparkles className="h-3 w-3 text-indigo-600" />
+                        )}
+                        <span className="hidden lg:inline">AI ETA</span>
                       </button>
 
                       {/* Action Menu dropdown trigger */}
@@ -2835,6 +2919,76 @@ export default function DeliveryQueue({
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {/* AI Customer ETA Draft Modal */}
+      {aiEtaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setAiEtaModal(null)}>
+          <div
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-indigo-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">AI Customer ETA Update</h3>
+                  <p className="text-[11px] text-slate-500">
+                    {aiEtaModal.delivery.id} • {aiEtaModal.delivery.customerName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiEtaModal(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Email Draft</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await copyToClipboard(`Subject: ${aiEtaModal.subject}\n\n${aiEtaModal.emailBody}`);
+                    toast.success('Email draft copied!');
+                  }}
+                  className="inline-flex items-center gap-1 text-indigo-600 font-semibold hover:underline cursor-pointer"
+                >
+                  <Copy className="h-3 w-3" />
+                  Copy Email
+                </button>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+                <p className="font-semibold text-slate-900">Subject: {aiEtaModal.subject}</p>
+                <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{aiEtaModal.emailBody}</p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">SMS / Text Update</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await copyToClipboard(aiEtaModal.smsText);
+                    toast.success('SMS text copied!');
+                  }}
+                  className="inline-flex items-center gap-1 text-indigo-600 font-semibold hover:underline cursor-pointer"
+                >
+                  <Copy className="h-3 w-3" />
+                  Copy SMS
+                </button>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-700">
+                {aiEtaModal.smsText}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

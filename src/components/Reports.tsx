@@ -14,6 +14,7 @@ import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { BidProposalReports } from './reports/BidProposalReports';
 import { ManagerSummaryReports } from './reports/ManagerSummaryReports';
+import { AISalesAnalysisCard } from './reports/AISalesAnalysisCard';
 import { ReportsModuleHelp } from './ReportsModuleHelp';
 import type { User } from '../App';
 import { PermissionGate } from './PermissionGate';
@@ -61,6 +62,8 @@ export function Reports({ user }: ReportsProps) {
           </div>
         </div>
       </div>
+
+      <AISalesAnalysisCard showCost={showCost} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">

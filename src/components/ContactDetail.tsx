@@ -38,7 +38,9 @@ import {
   ShoppingCart,
   Search,
   RefreshCw,
-  StickyNote
+  StickyNote,
+  Sparkles,
+  Wand2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -65,6 +67,13 @@ import { appointmentsAPI } from '../utils/api';
 import { CustomerModuleHelp } from './CustomerModuleHelp';
 import { buildServerFunctionUrl } from '../utils/server-function-url';
 import { getServerHeaders } from '../utils/server-headers';
+import {
+  askCustomerAssistant,
+  runEmailWriter,
+  plainTextToSafeEditorHtml,
+  type CustomerAssistantResponse,
+  type EmailTone,
+} from '../utils/ai-client';
 
 interface Contact {
   id: string;
@@ -220,6 +229,16 @@ export function ContactDetail({
   const [selectedEmailAccount, setSelectedEmailAccount] = useState('');
   const [isLoadingEmailAccounts, setIsLoadingEmailAccounts] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  // Gemini AI Customer Assistant & Email Writer states
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiAssistantResult, setAiAssistantResult] = useState<CustomerAssistantResponse | null>(null);
+  const [aiEmailPrompt, setAiEmailPrompt] = useState('');
+  const [aiEmailTone, setAiEmailTone] = useState<EmailTone>('professional');
+  const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   
   // Bids management state
   const [isBidsDialogOpen, setIsBidsDialogOpen] = useState(false);
@@ -1328,6 +1347,99 @@ export function ContactDetail({
     });
   };
 
+  const handleRunCustomerAssistant = async (mode: 'summary' | 'qa', customQ?: string) => {
+    const q = (customQ !== undefined ? customQ : aiQuestion).trim();
+    if (mode === 'qa' && !q) {
+      toast.error('Please enter a question about this customer.');
+      return;
+    }
+
+    setShowAIAssistant(true);
+    setIsLoadingAI(true);
+    setAiError(null);
+    try {
+      const res = await askCustomerAssistant({
+        contactId: contact.id,
+        mode,
+        question: mode === 'qa' ? q : undefined,
+        includeCostData: ['admin', 'super_admin', 'director', 'manager'].includes(String(user?.role || '').toLowerCase()),
+        recentDeals: bids.slice(0, 10).map((b) => ({
+          title: b.title,
+          status: b.status,
+          amount: Number(b.amount || b.total || 0),
+          date: b.created_at,
+          notes: b.notes || '',
+        })),
+      });
+      setAiAssistantResult(res);
+    } catch (err: any) {
+      const msg = err?.message || 'Unable to reach Gemini Customer Assistant.';
+      setAiError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoadingAI(false);
+    }
+  };
+
+  const handleGenerateContactEmail = async (mode: 'draft' | 'followup' | 'rewrite', overridePrompt?: string, overrideSubject?: string) => {
+    const promptVal = (overridePrompt !== undefined ? overridePrompt : aiEmailPrompt).trim();
+    const currentBodyText = emailEditorRef.current?.innerText || '';
+    if (mode === 'rewrite' && !currentBodyText.trim() && !composeEmailSubject.trim()) {
+      toast.error('Write a quick email draft first before rewriting tone.');
+      return;
+    }
+    if (mode === 'draft' && !promptVal && !composeEmailSubject.trim()) {
+      toast.error('Describe what you want the email to say.');
+      return;
+    }
+
+    setIsGeneratingEmail(true);
+    try {
+      const res = await runEmailWriter({
+        mode,
+        tone: aiEmailTone,
+        prompt: promptVal || overrideSubject,
+        currentSubject: overrideSubject || composeEmailSubject,
+        currentBody: currentBodyText,
+        recipientName: displayName,
+        recipientCompany: displayCompany,
+        contactId: contact.id,
+        contextSummary: `Deals: ${bids.length} (${formatMoney(totalDealValue)}), Status: ${contact.status || 'Active'}`,
+      });
+
+      if (res.subject) {
+        setComposeEmailSubject(res.subject);
+      }
+      if (res.body) {
+        const safeHtml = plainTextToSafeEditorHtml(res.body);
+        setComposeEmailBody(safeHtml);
+        if (emailEditorRef.current) {
+          emailEditorRef.current.innerHTML = safeHtml;
+        }
+      }
+      toast.success('Email draft ready!');
+    } catch (err: any) {
+      toast.error(err?.message || 'AI Email Writer failed.');
+    } finally {
+      setIsGeneratingEmail(false);
+    }
+  };
+
+  const handleOpenEmailFromAISuggestion = async (suggestedSubject?: string, reason?: string) => {
+    if (!contact.email?.trim()) {
+      toast.error('This contact does not have an email address yet.');
+      return;
+    }
+    setComposeEmailTo(contact.email.trim());
+    setComposeEmailSubject(suggestedSubject || `Follow-up: ${displayCompany}`);
+    setComposeEmailBody('<p></p>');
+    setAiEmailPrompt(reason || '');
+    setSelectedEmailQuoteId('none');
+    setIsComposeEmailOpen(true);
+    await loadEmailAccounts();
+    await handleGenerateContactEmail('followup', reason || suggestedSubject, suggestedSubject);
+  };
+
   const syncComposeEmailBody = () => {
     if (emailEditorRef.current) {
       setComposeEmailBody(emailEditorRef.current.innerHTML);
@@ -1570,11 +1682,148 @@ export function ContactDetail({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="ghost" className="h-10 gap-2 px-3 text-[15px] text-slate-700">
-              <TrendingUp className="h-4 w-4" />
+            <Button
+              type="button"
+              variant={showAIAssistant ? 'secondary' : 'ghost'}
+              onClick={() => handleRunCustomerAssistant('summary')}
+              disabled={isLoadingAI}
+              className="h-10 gap-2 px-3 text-[15px] text-indigo-700 hover:bg-indigo-50"
+            >
+              {isLoadingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               Summarize
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setShowAIAssistant((prev) => !prev)}
+              className="h-10 gap-2 px-3 text-[14px] text-slate-600 hover:bg-slate-100"
+            >
+              <TrendingUp className="h-4 w-4 text-cyan-600" />
+              {showAIAssistant ? 'Hide AI Assistant' : 'Ask AI Assistant'}
+            </Button>
           </div>
+
+          {showAIAssistant && (
+            <div className="border-b border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-cyan-50/50 p-4 sm:p-5 space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-indigo-600" />
+                  <span className="text-sm font-semibold text-slate-900">Gemini Customer Assistant</span>
+                  {aiAssistantResult?.relationshipStatus && (
+                    <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 text-xs">
+                      {aiAssistantResult.relationshipStatus}
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleRunCustomerAssistant('summary')}
+                  disabled={isLoadingAI}
+                  className="h-8 text-xs"
+                >
+                  <RefreshCw className={`h-3 w-3 mr-1.5 ${isLoadingAI ? 'animate-spin' : ''}`} />
+                  Summarize History
+                </Button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={aiQuestion}
+                  onChange={(e) => setAiQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleRunCustomerAssistant('qa');
+                    }
+                  }}
+                  placeholder={`Ask about ${displayName}'s purchase history, open quotes, or past notes...`}
+                  className="bg-white text-sm"
+                />
+                <Button
+                  type="button"
+                  onClick={() => handleRunCustomerAssistant('qa')}
+                  disabled={isLoadingAI}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
+                >
+                  {isLoadingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ask AI'}
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Summarize recent interactions and purchase history',
+                  'What open deals or quotes need follow-up?',
+                  'How do YTD sales compare to last year?',
+                ].map((sampleQ) => (
+                  <button
+                    key={sampleQ}
+                    type="button"
+                    onClick={() => {
+                      setAiQuestion(sampleQ);
+                      handleRunCustomerAssistant('qa', sampleQ);
+                    }}
+                    className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs text-indigo-700 hover:bg-indigo-50"
+                  >
+                    {sampleQ}
+                  </button>
+                ))}
+              </div>
+
+              {aiError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  {aiError}
+                </div>
+              )}
+
+              {aiAssistantResult && !isLoadingAI && (
+                <div className="space-y-3 rounded-xl border border-indigo-100 bg-white p-4 shadow-xs">
+                  <p className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">{aiAssistantResult.answer}</p>
+
+                  {aiAssistantResult.keyHighlights?.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Key Highlights</p>
+                      <ul className="space-y-1 text-xs text-slate-700">
+                        {aiAssistantResult.keyHighlights.map((h, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
+                            <span>{h}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {aiAssistantResult.suggestedNextActions?.length > 0 && (
+                    <div className="space-y-2 border-t border-slate-100 pt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Recommended Next Actions</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {aiAssistantResult.suggestedNextActions.map((act, i) => (
+                          <div key={i} className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-xs flex flex-col justify-between gap-2">
+                            <div>
+                              <p className="font-semibold text-slate-900">{act.title}</p>
+                              <p className="mt-0.5 text-slate-600">{act.reason}</p>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs w-fit"
+                              onClick={() => handleOpenEmailFromAISuggestion(act.suggestedSubject || act.title, act.reason)}
+                            >
+                              <Mail className="h-3 w-3 mr-1" />
+                              Draft Follow-up Email
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-4 bg-slate-50/70 p-4 sm:p-5">
             {activityFeed.length === 0 ? (
@@ -2377,6 +2626,67 @@ export function ContactDetail({
                   </Select>
                 </div>
               )}
+
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-800">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    AI Email Writer
+                  </div>
+                  <Select value={aiEmailTone} onValueChange={(v) => setAiEmailTone(v as EmailTone)}>
+                    <SelectTrigger className="h-8 w-[150px] bg-white text-xs">
+                      <SelectValue placeholder="Tone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="professional">Professional</SelectItem>
+                      <SelectItem value="friendly">Friendly</SelectItem>
+                      <SelectItem value="concise">Concise</SelectItem>
+                      <SelectItem value="persuasive">Persuasive</SelectItem>
+                      <SelectItem value="direct">Direct</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    value={aiEmailPrompt}
+                    onChange={(e) => setAiEmailPrompt(e.target.value)}
+                    placeholder="Tell AI what to write (e.g. 'Follow up on quote and offer Friday delivery')..."
+                    className="bg-white text-xs h-9"
+                  />
+                  <div className="flex flex-wrap gap-1.5 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isGeneratingEmail}
+                      onClick={() => handleGenerateContactEmail('draft')}
+                      className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
+                    >
+                      {isGeneratingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 mr-1" />}
+                      Draft
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isGeneratingEmail}
+                      onClick={() => handleGenerateContactEmail('followup')}
+                      className="h-9 bg-white text-xs"
+                    >
+                      Follow-up
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isGeneratingEmail}
+                      onClick={() => handleGenerateContactEmail('rewrite')}
+                      className="h-9 bg-white text-xs"
+                    >
+                      Rewrite Tone
+                    </Button>
+                  </div>
+                </div>
+              </div>
 
               <div className="space-y-2">
                 <Label>Body</Label>
