@@ -1,6 +1,7 @@
 
 import {
   buildInventoryAndSearchClause,
+  buildInventoryExactPhraseClause,
   buildInventoryRelaxedSearchClause,
 } from './src/utils/inventory-keywords';
 // Deployment: Vercel redeploy with env vars active (2026-08-18)
@@ -3388,11 +3389,11 @@ Return structured results in required JSON format.`;
       cleanQuery = cleanQuery.replace(/low stock/gi, ' ');
     }
 
-    // 3. Extract categories - map known domains to catalog categories or keep in searchTerms
+    // 3. Extract categories - only map explicit top-level catalog category phrases
+    // so item-level words like "drywall", "roofing", "lumber" don't exclude items in TOOLS/HARDWARE/UNDEFINED
     let matchedCategory: string | null = null;
-    if (/\b(building materials|timber|lumber|framing|planks|decking|drywall|insulation|roofing|siding)\b/i.test(cleanQuery)) {
+    if (/\b(building materials)\b/i.test(cleanQuery)) {
       matchedCategory = 'BUILDING MATERIALS';
-      // Keep specific terms in search query for attribute/name matching, but clean generic category phrases
       cleanQuery = cleanQuery.replace(/\b(building materials)\b/gi, ' ');
     } else if (/\b(appliances?)\b/i.test(cleanQuery)) {
       matchedCategory = 'APPLIANCES';
@@ -3402,14 +3403,17 @@ Return structured results in required JSON format.`;
       cleanQuery = cleanQuery.replace(/\b(automobile|automotive)\b/gi, ' ');
     }
 
-    // 4. Clean search terms
-    const fluffWords = [
-      'show me', 'please', 'find me', 'i want', 'can you show', 'list', 'do you have',
-      'search for', 'who supplies', 'where is', 'is there', 'any', 'some', 'the', 'a', 'an', 'thanks'
-    ];
-    for (const word of fluffWords) {
-      const reg = new RegExp(`\\b${word}\\b`, 'gi');
-      cleanQuery = cleanQuery.replace(reg, ' ');
+    // 4. Clean conversational fluff words (preserve raw query if it looks like an exact product code/spec)
+    const looksLikeExactSpec = /[*"'()/\\]/.test(query);
+    if (!looksLikeExactSpec) {
+      const fluffWords = [
+        'show me', 'please', 'find me', 'i want', 'can you show', 'list', 'do you have',
+        'search for', 'who supplies', 'where is', 'is there', 'any', 'some', 'the', 'a', 'an', 'thanks'
+      ];
+      for (const word of fluffWords) {
+        const reg = new RegExp(`\\b${word}\\b`, 'gi');
+        cleanQuery = cleanQuery.replace(reg, ' ');
+      }
     }
     
     // Clean extra spaces
@@ -3461,8 +3465,8 @@ Return structured results in required JSON format.`;
 
 Extract structured search parameters.
 Valid top-level database categories are ONLY: "BUILDING MATERIALS", "APPLIANCES", "AUTOMOBILE".
-For specific items, materials, tools, dimensions, species, or hardware (e.g., SPF, 2x4x8, 2x4, lumber, stud, screws, nails, tools, drill, paint, siding, roofing, decking), ALWAYS keep or place them in "searchTerms".
-If the query mentions lumber, wood, framing, timber, decking, drywall, or roofing, set category to "BUILDING MATERIALS" or null, and preserve the item descriptors in searchTerms.
+For specific items, materials, tools, dimensions, species, or hardware (e.g., SPF, 2x4x8, 2x4, lumber, stud, screws, nails, tools, drill, paint, siding, roofing, decking), ALWAYS keep or place them verbatim in "searchTerms".
+Only set "category" if the user explicitly asks to filter by that top-level category (e.g. "building materials", "appliances", "automobile"); otherwise set "category" to null so items in TOOLS, HARDWARE, PAINT & SUNDRIES, or UNDEFINED are not excluded.
 Return a JSON object matching the requested schema.
 
 If a field is not specified or implied by the query, make it null.
@@ -3656,6 +3660,7 @@ Return JSON matching this schema:
         query = query.ilike('sku', `%${sku}%`);
       }
 
+      let priorityQuery: any = null;
       if (searchQuery) {
         const andClause = buildInventoryAndSearchClause(searchQuery);
         if (andClause) {
@@ -3663,23 +3668,80 @@ Return JSON matching this schema:
         } else {
           query = query.eq('id', '00000000-0000-0000-0000-000000000000');
         }
+
+        const exactPhraseClause = buildInventoryExactPhraseClause(searchQuery);
+        if (exactPhraseClause) {
+          priorityQuery = supabase
+            .from('inventory')
+            .select('*')
+            .or(exactPhraseClause);
+          if (orgId) priorityQuery = priorityQuery.eq('organization_id', orgId);
+          if (category && category.toLowerCase() !== 'all') priorityQuery = priorityQuery.ilike('category', `%${category}%`);
+          if (sku) priorityQuery = priorityQuery.ilike('sku', `%${sku}%`);
+          priorityQuery = priorityQuery.limit(Math.max(limit, 100));
+        }
       }
 
       query = query
         .order('name', { ascending: true })
         .range(offset, offset + limit - 1);
 
-      const { data, count, error } = await query;
+      const [{ data, count, error }, priorityRes] = await Promise.all([
+        query,
+        priorityQuery ? priorityQuery : Promise.resolve({ data: [], error: null })
+      ]);
 
       if (error) {
         throw error;
       }
 
-      const total = count || 0;
+      const scoreExact = (item: any) => {
+        if (!searchQuery) return 0;
+        const q = searchQuery.toLowerCase();
+        const name = String(item?.name || '').trim().toLowerCase();
+        const shortDesc = String(item?.short_description || '').trim().toLowerCase();
+        const itemSku = String(item?.sku || '').trim().toLowerCase();
+        const desc = String(item?.description || '').trim().toLowerCase();
+        if (name === q || shortDesc === q || itemSku === q) return 1000;
+        if (desc === q) return 900;
+        if (name.startsWith(q) || shortDesc.startsWith(q) || itemSku.startsWith(q)) return 800;
+        if (name.includes(q) || shortDesc.includes(q) || itemSku.includes(q)) return 700;
+        if (desc.includes(q)) return 500;
+        return 0;
+      };
+
+      const priorityRows = !priorityRes?.error && Array.isArray(priorityRes?.data)
+        ? [...priorityRes.data].sort((a, b) => scoreExact(b) - scoreExact(a) || String(a?.name || '').localeCompare(String(b?.name || '')))
+        : [];
+
+      let finalItems = data || [];
+      let total = count || 0;
+      if (searchQuery && priorityRows.length > 0) {
+        const priorityIds = new Set(priorityRows.map((r: any) => r.id));
+        if (page === 1) {
+          const merged = [...priorityRows.slice(0, limit)];
+          for (const row of finalItems) {
+            if (merged.length >= limit) break;
+            if (!priorityIds.has(row.id)) merged.push(row);
+          }
+          finalItems = merged;
+        } else if (offset < priorityRows.length) {
+          const slice = priorityRows.slice(offset, offset + limit);
+          for (const row of finalItems) {
+            if (slice.length >= limit) break;
+            if (!priorityIds.has(row.id)) slice.push(row);
+          }
+          finalItems = slice;
+        } else {
+          finalItems = finalItems.filter((row: any) => !priorityIds.has(row.id));
+        }
+        total = Math.max(total, priorityRows.length);
+      }
+
       res.json({
         success: true,
-        items: data || [],
-        data: data || [],
+        items: finalItems,
+        data: finalItems,
         totalCount: total,
         total: total,
         page,

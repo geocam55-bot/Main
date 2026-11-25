@@ -312,33 +312,84 @@ export function generateInventoryKeywords(input: InventoryKeywordInput): Generat
 function sanitizeSearchToken(token: string): string {
   return token
     .toLowerCase()
-    .replace(/[%,()]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-export function expandInventorySearchTerms(query: string): string[] {
-  const baseTokens = safeSplit(query);
-  const generated = generateInventoryKeywords({ productName: query, productDescription: query });
+function quotePostgrestFilterValue(value: string): string {
+  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
 
+function stripOuterWrapperPunctuation(token: string): string {
+  return token
+    .replace(/^[*,'"`([{]+|[*,'"`)\]}]+$/g, '')
+    .trim();
+}
+
+function tokenizeSearchQuery(query: string): string[] {
+  return query
+    .trim()
+    .split(/\s+/)
+    .map((t) => t.toLowerCase().trim())
+    .filter((t) => {
+      if (!t) return false;
+      const outer = stripOuterWrapperPunctuation(t);
+      const norm = normalizeToken(outer || t);
+      if (STOP_WORDS.has(t) || (outer && STOP_WORDS.has(outer)) || (norm && STOP_WORDS.has(norm))) {
+        return false;
+      }
+      return t.length >= 1;
+    });
+}
+
+export function expandInventorySearchTerms(query: string): string[] {
+  const rawTokens = tokenizeSearchQuery(query);
   const expanded = new Set<string>();
-  for (const token of baseTokens) {
-    expanded.add(sanitizeSearchToken(token));
-    for (const syn of extractDimensionSynonyms(token)) {
-      expanded.add(sanitizeSearchToken(syn));
+
+  for (const rawToken of rawTokens) {
+    const cleanRaw = sanitizeSearchToken(rawToken);
+    if (cleanRaw) {
+      expanded.add(cleanRaw);
+    }
+
+    const outerTrimmed = stripOuterWrapperPunctuation(cleanRaw);
+    if (outerTrimmed && outerTrimmed !== cleanRaw) {
+      expanded.add(outerTrimmed);
+    }
+
+    // Only apply punctuation-stripping normalization/synonyms when it doesn't
+    // destructively mash internal symbols together (e.g. avoid turning 1/2"x4'x8'(12.5mm) into 1/2x4x812.5mm)
+    const basis = outerTrimmed || cleanRaw;
+    const hasInternalSymbolMash = /["'()]/.test(basis);
+    if (!hasInternalSymbolMash) {
+      const normalized = normalizeToken(basis);
+      if (normalized) {
+        expanded.add(normalized);
+        for (const syn of extractDimensionSynonyms(normalized)) {
+          const cleanSyn = sanitizeSearchToken(syn);
+          if (cleanSyn) expanded.add(cleanSyn);
+        }
+        for (const syn of getSynonymsForToken(normalized)) {
+          const cleanSyn = sanitizeSearchToken(syn);
+          if (cleanSyn) expanded.add(cleanSyn);
+        }
+      }
     }
   }
 
-  for (const token of generated.all) {
-    expanded.add(sanitizeSearchToken(token));
+  // Only run full keyword expansion when query has no complex internal punctuation
+  if (!/["'()]/.test(query)) {
+    const generated = generateInventoryKeywords({ productName: query, productDescription: query });
+    for (const token of generated.all) {
+      const cleanGen = sanitizeSearchToken(token);
+      if (cleanGen) expanded.add(cleanGen);
+    }
   }
 
   const normalizedQuery = sanitizeSearchToken(query);
   if (normalizedQuery.length >= 1 && normalizedQuery.split(' ').length <= 6) {
     expanded.add(normalizedQuery);
-    for (const syn of extractDimensionSynonyms(normalizedQuery)) {
-      expanded.add(sanitizeSearchToken(syn));
-    }
   }
 
   return Array.from(expanded)
@@ -371,14 +422,15 @@ export function buildTermSubClauses(term: string): string[] {
   const clean = sanitizeSearchToken(term);
   if (!clean) return [];
 
+  const quotedLikePattern = quotePostgrestFilterValue(`%${clean}%`);
   const clauses: string[] = [];
 
   for (const field of INVENTORY_SEARCH_TEXT_FIELDS) {
-    clauses.push(`${field}.ilike.%${clean}%`);
+    clauses.push(`${field}.ilike.${quotedLikePattern}`);
   }
 
   for (const attr of INVENTORY_SEARCH_ATTRIBUTE_FIELDS) {
-    clauses.push(`${attr}.ilike.%${clean}%`);
+    clauses.push(`${attr}.ilike.${quotedLikePattern}`);
   }
 
   if (/^[a-z0-9-]+$/i.test(clean)) {
@@ -386,6 +438,30 @@ export function buildTermSubClauses(term: string): string[] {
   }
 
   return clauses;
+}
+
+/**
+ * Builds a fast PostgREST OR clause for exact / phrase matching on primary identity & text fields.
+ */
+export function buildInventoryExactPhraseClause(rawQuery: string): string {
+  const clean = sanitizeSearchToken(rawQuery);
+  if (!clean) return '';
+
+  const exactVal = quotePostgrestFilterValue(clean);
+  const likeVal = quotePostgrestFilterValue(`%${clean}%`);
+
+  return [
+    `name.ilike.${exactVal}`,
+    `short_description.ilike.${exactVal}`,
+    `sku.ilike.${exactVal}`,
+    `upc.ilike.${exactVal}`,
+    `name.ilike.${likeVal}`,
+    `short_description.ilike.${likeVal}`,
+    `sku.ilike.${likeVal}`,
+    `description.ilike.${likeVal}`,
+    `supplier_sku.ilike.${likeVal}`,
+    `upc.ilike.${likeVal}`,
+  ].join(',');
 }
 
 export function buildInventoryOrSearchClause(terms: string[]): string {
@@ -404,9 +480,9 @@ export function buildInventoryAndSearchClause(query: string): string {
   if (!trimmed) return '';
 
   const sanitized = sanitizeSearchToken(trimmed);
-  const tokens = safeSplit(trimmed);
+  const tokens = tokenizeSearchQuery(trimmed);
 
-  // If query is short or dimension like "2 x" or "2x4"
+  // If query only consisted of stop words or is a single raw symbol
   if (tokens.length === 0) {
     if (sanitized) {
       const subClauses = buildTermSubClauses(sanitized);
@@ -424,7 +500,7 @@ export function buildInventoryAndSearchClause(query: string): string {
       subClauses.push(...buildTermSubClauses(term));
     }
     if (subClauses.length > 0) {
-      orClauses.push(`or(${subClauses.join(',')})`);
+      orClauses.push(`or(${Array.from(new Set(subClauses)).join(',')})`);
     }
   }
 
@@ -449,7 +525,7 @@ export function buildInventoryRelaxedSearchClause(query: string): string {
   const trimmed = query.trim();
   if (!trimmed) return '';
 
-  const tokens = safeSplit(trimmed);
+  const tokens = tokenizeSearchQuery(trimmed);
   if (tokens.length <= 1) {
     return buildInventoryAndSearchClause(query);
   }

@@ -2,6 +2,7 @@
 import { createClient } from './supabase/client';
 import {
   buildInventoryAndSearchClause,
+  buildInventoryExactPhraseClause,
   buildInventoryRelaxedSearchClause
 } from './inventory-keywords';
 
@@ -74,6 +75,45 @@ function parseSearchQuery(query: string): {
   return { searchTerms, priceFilter };
 }
 
+function scoreExactMatchPriority(item: any, rawQuery: string): number {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return 0;
+
+  const name = String(item?.name || '').trim().toLowerCase();
+  const shortDesc = String(item?.short_description || '').trim().toLowerCase();
+  const sku = String(item?.sku || '').trim().toLowerCase();
+  const upc = String(item?.upc || '').trim().toLowerCase();
+  const supplierSku = String(item?.supplier_sku || '').trim().toLowerCase();
+  const desc = String(item?.description || '').trim().toLowerCase();
+
+  if (name === q || shortDesc === q || sku === q || upc === q || supplierSku === q) {
+    return 1000;
+  }
+  if (desc === q) {
+    return 900;
+  }
+  if (
+    (name && name.startsWith(q)) ||
+    (shortDesc && shortDesc.startsWith(q)) ||
+    (sku && sku.startsWith(q))
+  ) {
+    return 800;
+  }
+  if (
+    name.includes(q) ||
+    shortDesc.includes(q) ||
+    sku.includes(q) ||
+    upc.includes(q) ||
+    supplierSku.includes(q)
+  ) {
+    return 700;
+  }
+  if (desc.includes(q)) {
+    return 500;
+  }
+  return 0;
+}
+
 /**
  * ⚡ Optimized server-side paginated inventory loader
  * Only loads the current page of items - MUCH faster than loading all 35k+ items
@@ -89,6 +129,9 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
     
     const PRIMARY_ORG_ID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
     const activeOrgId = (organizationId && organizationId !== 'default-org') ? organizationId : PRIMARY_ORG_ID;
+    const rawSearch = (searchQuery || '').trim();
+    const hasSearch = rawSearch.length > 0;
+    const hasCategoryFilter = Boolean(categoryFilter && categoryFilter !== 'all');
 
     // Build queries
     let query = supabase
@@ -102,12 +145,12 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
       .eq('organization_id', activeOrgId)
       .lte('quantity', 0);
 
+    let priorityQuery: any = null;
     let aiExplanation = '';
+    let parsedParams: any = null;
 
     // If search is active, parse and apply filters
-    if (searchQuery && searchQuery.trim()) {
-      let parsedParams: any = null;
-
+    if (hasSearch) {
       if (useAdvancedSearch) {
         try {
           const res = await fetch('/api/search/conversational', {
@@ -115,7 +158,7 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
             headers: {
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ query: searchQuery })
+            body: JSON.stringify({ query: rawSearch })
           });
           if (res.ok) {
             const data = await res.json();
@@ -128,6 +171,53 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
           console.error("Failed to fetch conversational search from backend:", fetchErr);
         }
       }
+
+      const applyNumericAndMetaFilters = (q: any, isLowStockCheck: boolean) => {
+        if (!parsedParams) return q;
+
+        // Price Filter
+        if (parsedParams.priceFilter) {
+          const priceInCents = Math.round(parsedParams.priceFilter.value * 100);
+          if (parsedParams.priceFilter.operator === 'lt') {
+            q = q.lt('unit_price', priceInCents);
+          } else if (parsedParams.priceFilter.operator === 'gt') {
+            q = q.gt('unit_price', priceInCents);
+          } else if (parsedParams.priceFilter.operator === 'lte') {
+            q = q.lte('unit_price', priceInCents);
+          } else if (parsedParams.priceFilter.operator === 'gte') {
+            q = q.gte('unit_price', priceInCents);
+          } else if (parsedParams.priceFilter.operator === 'eq') {
+            q = q.eq('unit_price', priceInCents);
+          }
+        }
+
+        // Quantity Filter (skip lte 0 constraints on lowStockCheck to avoid logic conflicts)
+        if (parsedParams.quantityFilter && !isLowStockCheck) {
+          if (parsedParams.quantityFilter.operator === 'lt') {
+            q = q.lt('quantity', parsedParams.quantityFilter.value);
+          } else if (parsedParams.quantityFilter.operator === 'gt') {
+            q = q.gt('quantity', parsedParams.quantityFilter.value);
+          } else if (parsedParams.quantityFilter.operator === 'lte') {
+            q = q.lte('quantity', parsedParams.quantityFilter.value);
+          } else if (parsedParams.quantityFilter.operator === 'gte') {
+            q = q.gte('quantity', parsedParams.quantityFilter.value);
+          } else if (parsedParams.quantityFilter.operator === 'eq') {
+            q = q.eq('quantity', parsedParams.quantityFilter.value);
+          }
+        }
+
+        // Supplier
+        if (parsedParams.supplier) {
+          q = q.ilike('supplier', `%${parsedParams.supplier}%`);
+        }
+
+        // Location
+        if (parsedParams.location) {
+          q = q.ilike('location', `%${parsedParams.location}%`);
+        }
+
+        return q;
+      };
 
       // Helper function to apply a parsed filter set to a given query builder
       const applyFilters = (q: any, isLowStockCheck: boolean) => {
@@ -146,11 +236,10 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
           if (parsedParams.category) {
             const normCat = parsedParams.category.toUpperCase().trim();
             const validCategories = ['BUILDING MATERIALS', 'APPLIANCES', 'AUTOMOBILE'];
-            const matched = validCategories.find(c => c === normCat || (c === 'BUILDING MATERIALS' && ['TIMBER', 'PLANKS', 'LUMBER', 'FRAMING', 'DECKING'].includes(normCat)));
+            const matched = validCategories.find(c => c === normCat);
             if (matched) {
               q = q.eq('category', matched);
             } else {
-              // If domain term (e.g. Tools, Paint, Fasteners), ensure it is searched across text/attributes
               if (!parsedParams.searchTerms || !parsedParams.searchTerms.toLowerCase().includes(parsedParams.category.toLowerCase())) {
                 const combined = `${parsedParams.searchTerms || ''} ${parsedParams.category}`.trim();
                 const andClause = buildInventoryAndSearchClause(combined);
@@ -161,54 +250,10 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
             }
           }
 
-          // 3. Price Filter
-          if (parsedParams.priceFilter) {
-            const priceInCents = Math.round(parsedParams.priceFilter.value * 100);
-            if (parsedParams.priceFilter.operator === 'lt') {
-              q = q.lt('unit_price', priceInCents);
-            } else if (parsedParams.priceFilter.operator === 'gt') {
-              q = q.gt('unit_price', priceInCents);
-            } else if (parsedParams.priceFilter.operator === 'lte') {
-              q = q.lte('unit_price', priceInCents);
-            } else if (parsedParams.priceFilter.operator === 'gte') {
-              q = q.gte('unit_price', priceInCents);
-            } else if (parsedParams.priceFilter.operator === 'eq') {
-              q = q.eq('unit_price', priceInCents);
-            }
-          }
-
-          // 4. Quantity Filter (skip lte 0 constraints on lowStockCheck to avoid logic conflicts)
-          if (parsedParams.quantityFilter && !isLowStockCheck) {
-            if (parsedParams.quantityFilter.operator === 'lt') {
-              q = q.lt('quantity', parsedParams.quantityFilter.value);
-            } else if (parsedParams.quantityFilter.operator === 'gt') {
-              q = q.gt('quantity', parsedParams.quantityFilter.value);
-            } else if (parsedParams.quantityFilter.operator === 'lte') {
-              q = q.lte('quantity', parsedParams.quantityFilter.value);
-            } else if (parsedParams.quantityFilter.operator === 'gte') {
-              q = q.gte('quantity', parsedParams.quantityFilter.value);
-            } else if (parsedParams.quantityFilter.operator === 'eq') {
-              q = q.eq('quantity', parsedParams.quantityFilter.value);
-            }
-          }
-
-          // 5. Supplier
-          if (parsedParams.supplier) {
-            q = q.ilike('supplier', `%${parsedParams.supplier}%`);
-          }
-
-          // 6. Location
-          if (parsedParams.location) {
-            q = q.ilike('location', `%${parsedParams.location}%`);
-          }
-
-          // 7. Status
-          if (parsedParams.status) {
-            q = q.eq('status', parsedParams.status);
-          }
+          q = applyNumericAndMetaFilters(q, isLowStockCheck);
         } else {
           // Standard regex-based/basic parsing
-          const { searchTerms, priceFilter } = parseSearchQuery(searchQuery);
+          const { searchTerms, priceFilter } = parseSearchQuery(rawSearch);
           
           if (searchTerms) {
             const andClause = buildInventoryAndSearchClause(searchTerms);
@@ -232,16 +277,31 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
 
       query = applyFilters(query, false);
       lowStockQuery = applyFilters(lowStockQuery, true);
+
+      // Build exact/phrase priority query using untouched rawSearch so exact Item Names & SKUs always rank first
+      const exactPhraseClause = buildInventoryExactPhraseClause(rawSearch);
+      if (exactPhraseClause) {
+        priorityQuery = supabase
+          .from('inventory')
+          .select('*')
+          .eq('organization_id', activeOrgId)
+          .or(exactPhraseClause);
+
+        priorityQuery = applyNumericAndMetaFilters(priorityQuery, false);
+
+        if (hasCategoryFilter) {
+          priorityQuery = priorityQuery.eq('category', categoryFilter);
+        }
+
+        priorityQuery = priorityQuery
+          .limit(Math.max(itemsPerPage, 100));
+      }
     }
 
-    // Apply UI Category filtering (if not overridden/supplied by AI or as fallback)
-    if (categoryFilter && categoryFilter !== 'all') {
+    // Apply UI Category filtering
+    if (hasCategoryFilter) {
       query = query.eq('category', categoryFilter);
       lowStockQuery = lowStockQuery.eq('category', categoryFilter);
-    }
-    if (statusFilter && statusFilter !== 'all') {
-      query = query.eq('status', statusFilter);
-      lowStockQuery = lowStockQuery.eq('status', statusFilter);
     }
 
     // Apply sorting and pagination to the main query
@@ -249,18 +309,61 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
       .order('name', { ascending: true })
       .range(from, to);
 
-    // Execute main query and low-stock count concurrently to reduce latency and prevent timeouts
-    const [mainResult, lowStockResult] = await Promise.allSettled([
+    // Execute main query and exact-phrase priority query concurrently (avoiding 3-way contention)
+    const [mainResult, priorityResult] = await Promise.allSettled([
       query,
-      lowStockQuery
+      priorityQuery || Promise.resolve({ data: [], error: null })
     ]);
 
+    const priorityRawData =
+      priorityResult.status === 'fulfilled' && !priorityResult.value?.error && Array.isArray(priorityResult.value?.data)
+        ? priorityResult.value.data
+        : [];
+
+    const priorityData = [...priorityRawData].sort((a, b) => {
+      const scoreDiff = scoreExactMatchPriority(b, rawSearch) - scoreExactMatchPriority(a, rawSearch);
+      if (scoreDiff !== 0) return scoreDiff;
+      return String(a?.name || '').localeCompare(String(b?.name || ''));
+    });
+
+    let data: any[] | null = null;
+    let count: number | null = 0;
+
     if (mainResult.status === 'rejected') {
-      throw mainResult.reason;
+      if (priorityData.length === 0) {
+        throw mainResult.reason;
+      }
+    } else {
+      const mainVal = mainResult.value;
+      if (mainVal.error) {
+        // If main query timed out but priority exact/phrase query succeeded, surface priority matches instead of failing
+        if (priorityData.length > 0) {
+          data = [];
+          count = priorityData.length;
+        } else {
+          throw new Error(`Database error: ${mainVal.error.message} (Code: ${mainVal.error.code || 'unknown'})`);
+        }
+      } else {
+        data = mainVal.data;
+        count = mainVal.count;
+      }
     }
 
-    let { data, error, count } = mainResult.value;
-    if (error || !data || data.length === 0) {
+    // Fetch low-stock count separately only when results exist (avoids competing with main search on Postgres)
+    let lowStockCount = 0;
+    if ((count && count > 0) || priorityData.length > 0) {
+      try {
+        const lowStockRes = await lowStockQuery;
+        if (!lowStockRes.error && typeof lowStockRes.count === 'number') {
+          lowStockCount = lowStockRes.count;
+        }
+      } catch {
+        // Non-critical count
+      }
+    }
+
+    // Only allow cross-org fallback when browsing unfiltered default-org inventory with 0 rows
+    if ((!data || data.length === 0) && !hasSearch && !hasCategoryFilter && (!statusFilter || statusFilter === 'all') && organizationId === 'default-org') {
       const fallbackRes = await supabase
         .from('inventory')
         .select('*', { count: 'exact' })
@@ -269,25 +372,22 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
       if (fallbackRes.data && fallbackRes.data.length > 0) {
         data = fallbackRes.data;
         count = fallbackRes.count || fallbackRes.data.length;
-      } else if (error) {
-        throw new Error(`Database error: ${error.message} (Code: ${error.code || 'unknown'})`);
       }
     }
 
-    const lowStockCount = lowStockResult.status === 'fulfilled' && lowStockResult.value?.count ? lowStockResult.value.count : 0;
-
-    // Progressive relaxation fallback: If strict conjunction returned 0 rows on a human query,
-    // execute relaxed disjunction across keywords, attributes, and text columns
-    if ((!data || data.length === 0) && searchQuery && searchQuery.trim()) {
-      const relaxedClause = buildInventoryRelaxedSearchClause(searchQuery.trim());
+    // Progressive relaxation fallback: If strict conjunction AND exact-phrase returned 0 rows on a human query,
+    // execute relaxed disjunction across keywords, attributes, and text columns within activeOrgId
+    if ((!data || data.length === 0) && priorityData.length === 0 && hasSearch) {
+      const relaxedSource = parsedParams?.searchTerms?.trim() || rawSearch;
+      const relaxedClause = buildInventoryRelaxedSearchClause(relaxedSource);
       if (relaxedClause) {
         let fallbackQuery = supabase
           .from('inventory')
           .select('*', { count: 'exact' })
-          .eq('organization_id', organizationId)
+          .eq('organization_id', activeOrgId)
           .or(relaxedClause);
 
-        if (categoryFilter && categoryFilter !== 'all') {
+        if (hasCategoryFilter) {
           fallbackQuery = fallbackQuery.eq('category', categoryFilter);
         }
 
@@ -296,14 +396,44 @@ export async function loadInventoryPage(options: LoadInventoryOptions): Promise<
           .range(from, to);
 
         const fallbackRes = await fallbackQuery;
-        if (fallbackRes.data && fallbackRes.data.length > 0) {
+        if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
           data = fallbackRes.data;
           count = fallbackRes.count || fallbackRes.data.length;
           if (!aiExplanation) {
-            aiExplanation = `Showing relevant items for "${searchQuery.trim()}"`;
+            aiExplanation = `Showing relevant items for "${rawSearch}"`;
           }
         }
       }
+    }
+
+    // Merge prioritized exact/phrase matches at the top while deduplicating
+    if (hasSearch && priorityData.length > 0) {
+      const priorityIds = new Set(priorityData.map((item: any) => item.id));
+      const baseData = Array.isArray(data) ? data : [];
+
+      if (currentPage === 1) {
+        const merged = [...priorityData.slice(0, itemsPerPage)];
+        for (const item of baseData) {
+          if (merged.length >= itemsPerPage) break;
+          if (!priorityIds.has(item.id)) {
+            merged.push(item);
+          }
+        }
+        data = merged;
+      } else if (from < priorityData.length) {
+        const slice = priorityData.slice(from, to + 1);
+        for (const item of baseData) {
+          if (slice.length >= itemsPerPage) break;
+          if (!priorityIds.has(item.id)) {
+            slice.push(item);
+          }
+        }
+        data = slice;
+      } else {
+        data = baseData.filter((item: any) => !priorityIds.has(item.id));
+      }
+
+      count = Math.max(count || 0, priorityData.length);
     }
 
     const endTime = performance.now();

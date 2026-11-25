@@ -901,6 +901,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
             'CREATE INDEX IF NOT EXISTS idx_inventory_org_sku ON public.inventory(organization_id, sku);',
             'CREATE EXTENSION IF NOT EXISTS pg_trgm;',
             'CREATE INDEX IF NOT EXISTS idx_inventory_name_trgm ON public.inventory USING gin(name gin_trgm_ops);',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_short_description_trgm ON public.inventory USING gin(short_description gin_trgm_ops);',
             'CREATE INDEX IF NOT EXISTS idx_inventory_description_trgm ON public.inventory USING gin(description gin_trgm_ops);',
             'CREATE INDEX IF NOT EXISTS idx_inventory_sku_trgm ON public.inventory USING gin(sku gin_trgm_ops);',
             'ANALYZE public.inventory;'
@@ -2105,6 +2106,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                       value={searchQuery}
                       onChange={(e) => {
                         setSearchQuery(e.target.value);
+                        setCurrentPage(1);
                         setShowSuggestions(true);
                       }}
                       onFocus={() => setShowSuggestions(true)}
@@ -2121,6 +2123,7 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
                             className="w-full px-4 py-2 text-left text-sm hover:bg-muted first:rounded-t-md last:rounded-b-md"
                             onClick={() => {
                               setSearchQuery(suggestion);
+                              setCurrentPage(1);
                               setShowSuggestions(false);
                             }}
                           >
