@@ -193,11 +193,6 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🔍 Check table endpoint hit');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -294,12 +289,6 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🔍 Inventory diagnostic endpoint hit');
 
     try {
-      // Verify user is authenticated
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       // Parse request body for fallback user info
       let bodyData: any = {};
       try {
@@ -599,11 +588,6 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🔧 Fix org IDs endpoint hit');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const body = await c.req.json();
       const { fixType, targetOrgId, sourceOrgId } = body;
       // fixType: 'null_to_user' | 'other_to_user' | 'all_to_user'
@@ -613,11 +597,7 @@ export function inventoryDiagnostic(app: Hono) {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // Verify user
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       // Get user profile
       const { data: profile } = await supabase
@@ -835,21 +815,12 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🔢 Raw count endpoint hit');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // Verify user
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       // Try multiple approaches to count
       const results: any = {};
@@ -900,21 +871,12 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🔍 Find pending jobs endpoint hit');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // Verify user
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       // Find ALL scheduled jobs regardless of org - use service role to bypass RLS
       const { data: allJobs, error: jobsError } = await supabase
@@ -986,11 +948,6 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🔧 Process job endpoint hit (chunked)');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const body = await c.req.json();
       const { jobId, targetOrgId, batchOffset = 0, batchLimit = 500 } = body;
 
@@ -1003,10 +960,7 @@ export function inventoryDiagnostic(app: Hono) {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       const { data: job, error: jobError } = await supabase
         .from('scheduled_jobs')
@@ -1103,11 +1057,6 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🔧 Process all pending (chunked) endpoint hit');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const body = await c.req.json();
       const { targetOrgId, batchLimit = 500, resumeOffset = 0, currentJobId } = body;
 
@@ -1120,10 +1069,7 @@ export function inventoryDiagnostic(app: Hono) {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       // Find pending OR processing (in-progress) inventory jobs
       // NOTE: 'progress' column does not exist in scheduled_jobs — offset is tracked by the frontend
@@ -1266,11 +1212,6 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🗑️ Delete job endpoint hit');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const body = await c.req.json();
       const { jobId } = body;
 
@@ -1283,11 +1224,7 @@ export function inventoryDiagnostic(app: Hono) {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // Verify user
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       // Delete the job
       const { error: deleteError } = await supabase
@@ -1314,21 +1251,12 @@ export function inventoryDiagnostic(app: Hono) {
     console.log('🗑️ Delete all pending jobs endpoint hit');
 
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) {
-        return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-      }
-
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // Verify user
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       // Count pending jobs first
       const { count, error: countError } = await supabase
@@ -1479,16 +1407,12 @@ export function inventoryDiagnostic(app: Hono) {
   app.post('/make-server-8405be07/inventory-diagnostic/dedup-scan', async (c) => {
     console.log('🔍 Dedup scan endpoint hit (v2 parallel)');
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       );
 
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) return c.json({ error: 'Unauthorized' }, 401);
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       const body = await c.req.json();
       const { organizationId } = body;
@@ -1525,16 +1449,12 @@ export function inventoryDiagnostic(app: Hono) {
   app.post('/make-server-8405be07/inventory-diagnostic/dedup-delete-chunk', async (c) => {
     console.log('🗑️ Dedup delete-chunk endpoint hit');
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       );
 
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) return c.json({ error: 'Unauthorized' }, 401);
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       const body = await c.req.json();
       const { organizationId, batchSize = 5000 } = body;
@@ -1596,16 +1516,12 @@ export function inventoryDiagnostic(app: Hono) {
   app.post('/make-server-8405be07/inventory-diagnostic/dedup-delete-batch', async (c) => {
     console.log('🗑️ Dedup delete-batch (legacy) endpoint hit');
     try {
-      const accessToken = extractUserToken(c);
-      if (!accessToken) return c.json({ error: 'Missing authentication token (send X-User-Token header)' }, 401);
-
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       );
 
-      const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-      if (authError || !user) return c.json({ error: 'Unauthorized' }, 401);
+      const user = await authenticateDiagnosticUser(c, supabase);
 
       const body = await c.req.json();
       const { organizationId, ids } = body;

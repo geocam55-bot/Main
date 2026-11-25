@@ -87,7 +87,7 @@ export async function getUserAccessToken(): Promise<string | null> {
       return _cachedToken;
     }
 
-    if (now - _lastRefreshAttemptMs >= REFRESH_COOLDOWN_MS) {
+    if (_cachedToken && isExpiredOrStale && now - _lastRefreshAttemptMs >= REFRESH_COOLDOWN_MS) {
       _lastRefreshAttemptMs = now;
       try {
         const refreshPromise = supabase.auth.refreshSession();

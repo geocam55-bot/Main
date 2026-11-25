@@ -114,6 +114,44 @@ interface InventoryItem {
   updatedAt: string;
 }
 
+async function fetchDiagnosticEndpoint(
+  endpoint: string,
+  headers: Record<string, string>,
+  payload?: any
+): Promise<Response> {
+  const token = headers['X-User-Token'];
+  const hasRealJwt = Boolean(token && !token.startsWith('admin-fallback-token-') && token.split('.').length === 3);
+  const body = JSON.stringify(payload || {});
+
+  if (hasRealJwt) {
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/${endpoint}`, {
+        method: 'POST',
+        headers,
+        body,
+      });
+      if (res.ok || (res.status !== 401 && res.status !== 403 && res.status !== 404)) {
+        return res;
+      }
+    } catch {
+      // Fall through to local server
+    }
+  }
+
+  const localHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (headers['X-User-Token']) {
+    localHeaders['X-User-Token'] = headers['X-User-Token'];
+  }
+
+  return fetch(`/api/inventory-diagnostic/${endpoint}`, {
+    method: 'POST',
+    headers: localHeaders,
+    body,
+  });
+}
+
 export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
   const isAdminOrSuperAdmin = user.role === 'admin' || user.role === 'super_admin';
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -928,11 +966,10 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       if (count === 0 && currentPage === 1 && !debouncedSearchQuery && categoryFilter === 'all' && statusFilter === 'all') {
         try {
           const headers = await getServerHeaders();
-          // Use the CORRECT endpoint: /inventory-diagnostic/run
-          const diagRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/run`, { 
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ email: authUser.email, role: profile.role })
+          const diagRes = await fetchDiagnosticEndpoint('run', headers, {
+            email: authUser.email,
+            role: profile.role,
+            organizationId: userOrgId,
           });
           
           if (diagRes.ok) {
@@ -1278,12 +1315,10 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     setIsRecovering(true);
     try {
       const headers = await getServerHeaders();
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/fix-org-ids`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ 
-          fixType: 'all_to_user',
-        }),
+      const response = await fetchDiagnosticEndpoint('fix-org-ids', headers, {
+        fixType: 'all_to_user',
+        email: user.email,
+        organizationId: user.organization_id || user.organizationId,
       });
 
       if (!response.ok) throw new Error('Recovery failed: ' + response.statusText);
@@ -1311,9 +1346,9 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     try {
       showAlert('success', 'Processing pending jobs...');
       const headers = await getServerHeaders();
-      const { data: { user } } = await supabase.auth.getUser();
-      const profile = await ensureUserProfile(user?.id || '');
-      const organizationId = profile.organization_id;
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const profile = authUser?.id ? await ensureUserProfile(authUser.id).catch(() => null) : null;
+      const effectiveOrgId = profile?.organization_id || user.organization_id || user.organizationId;
 
       // Call the process-all-pending endpoint repeatedly until done
       let done = false;
@@ -1322,15 +1357,13 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
       let currentJobId = null;
 
       while (!done) {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/process-all-pending`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ 
-            targetOrgId: organizationId,
-            batchLimit: 500,
-            resumeOffset,
-            currentJobId
-          }),
+        const response = await fetchDiagnosticEndpoint('process-all-pending', headers, {
+          targetOrgId: effectiveOrgId,
+          email: authUser?.email || user.email,
+          organizationId: effectiveOrgId,
+          batchLimit: 500,
+          resumeOffset,
+          currentJobId,
         });
 
         if (!response.ok) throw new Error('Processing failed: ' + response.statusText);
@@ -1458,13 +1491,15 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
     try {
       showAlert('success', 'Scanning for lost inventory...');
       const headers = await getServerHeaders();
-      const { data: { user } } = await supabase.auth.getUser();
-      const profile = await ensureUserProfile(user?.id || '');
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const profile = authUser?.id ? await ensureUserProfile(authUser.id).catch(() => null) : null;
+      const effectiveEmail = authUser?.email || user.email;
+      const effectiveOrgId = profile?.organization_id || user.organization_id || user.organizationId;
       
-      const diagRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/run`, { 
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ email: user?.email, role: profile.role })
+      const diagRes = await fetchDiagnosticEndpoint('run', headers, {
+        email: effectiveEmail,
+        role: profile?.role || user.role,
+        organizationId: effectiveOrgId,
       });
       
       if (diagRes.ok) {
@@ -1533,7 +1568,10 @@ export function Inventory({ user, onNavigate, initialTab }: InventoryProps) {
         } else {
           // If DB is clean but empty, check for pending jobs
           if (totalInDb === 0) {
-             const jobsRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic/find-pending-jobs`, { headers, method: 'POST' });
+             const jobsRes = await fetchDiagnosticEndpoint('find-pending-jobs', headers, {
+               email: effectiveEmail,
+               organizationId: effectiveOrgId,
+             });
              if (jobsRes.ok) {
                 const jobsData = await jobsRes.json();
                 

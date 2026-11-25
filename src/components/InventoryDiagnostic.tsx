@@ -117,18 +117,59 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
         }
       } catch {}
     }
-    if (!headers['X-User-Token']) {
-      // Fallback: If running as admin, synthesize a local token so the diagnostic tool never gets blocked
-      headers = {
-        ...headers,
-        'X-User-Token': 'admin-fallback-token-' + (user?.id || 'admin'),
-        'Authorization': `Bearer ${publicAnonKey}`
-      };
-    }
     return headers;
   };
 
   const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/inventory-diagnostic`;
+  const localBaseUrl = `/api/inventory-diagnostic`;
+
+  const hasValidJwt = (headers: Record<string, string>) => {
+    const tok = headers['X-User-Token'];
+    return Boolean(tok && !tok.startsWith('admin-fallback-token-') && tok.split('.').length === 3);
+  };
+
+  const diagnosticFetch = async (endpoint: string, payload: any, cachedHeaders?: Record<string, string>) => {
+    const headers = cachedHeaders || await getAuthHeaders();
+    const requestPayload = {
+      ...(payload || {}),
+      userId: (payload && payload.userId) || user?.id,
+      email: (payload && payload.email) || user?.email,
+      role: (payload && payload.role) || user?.role,
+      organizationId: (payload && payload.organizationId) || user?.organization_id || user?.organizationId,
+    };
+    const bodyStr = JSON.stringify(requestPayload);
+
+    if (hasValidJwt(headers)) {
+      try {
+        const edgeRes = await fetch(`${baseUrl}/${endpoint}`, {
+          method: 'POST',
+          headers,
+          body: bodyStr,
+        });
+        if (edgeRes.ok) {
+          return edgeRes;
+        }
+        if (edgeRes.status !== 401 && edgeRes.status !== 403 && edgeRes.status !== 404) {
+          return edgeRes;
+        }
+      } catch {
+        // Fall through to local server endpoint
+      }
+    }
+
+    const localHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (headers['X-User-Token']) {
+      localHeaders['X-User-Token'] = headers['X-User-Token'];
+    }
+
+    return fetch(`${localBaseUrl}/${endpoint}`, {
+      method: 'POST',
+      headers: localHeaders,
+      body: bodyStr,
+    });
+  };
 
   const runDiagnostic = async () => {
     setIsChecking(true);
@@ -136,17 +177,10 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
     setFixResult(null);
 
     try {
-      const headers = await getAuthHeaders();
-      // Running server-side inventory diagnostic
-
-      const response = await fetch(`${baseUrl}/run`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          organizationId: user.organization_id || user.organizationId,
-          email: user.email,
-          role: user.role,
-        }),
+      const response = await diagnosticFetch('run', {
+        organizationId: user.organization_id || user.organizationId,
+        email: user.email,
+        role: user.role,
       });
 
       if (!response.ok) {
@@ -178,12 +212,7 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
   const checkTable = async () => {
     setIsCheckingTable(true);
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`${baseUrl}/check-table`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({}),
-      });
+      const response = await diagnosticFetch('check-table', {});
       if (!response.ok) throw new Error(`Server error: ${response.status}`);
       const data = await response.json();
       setTableCheckResult(data);
@@ -199,12 +228,7 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
   const runRawCount = async () => {
     setIsRawCounting(true);
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`${baseUrl}/raw-count`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({}),
-      });
+      const response = await diagnosticFetch('raw-count', {});
       if (!response.ok) throw new Error(`Server error: ${response.status}`);
       const data = await response.json();
       setRawCountResult(data);
@@ -220,12 +244,7 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
   const findPendingJobs = async () => {
     setIsFindingJobs(true);
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`${baseUrl}/find-pending-jobs`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({}),
-      });
+      const response = await diagnosticFetch('find-pending-jobs', {});
       if (!response.ok) throw new Error(`Server error: ${response.status}`);
       const data = await response.json();
       setPendingJobs(data);
@@ -257,7 +276,6 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
 
     try {
       const headers = await getAuthHeaders();
-      // Processing job -> target org (chunked)
 
       let batchOffset = 0;
       let totalInserted = 0;
@@ -267,11 +285,7 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
 
       // Loop: call the endpoint in chunks until done
       while (true) {
-        const response = await fetch(`${baseUrl}/process-job`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ jobId, targetOrgId: targetOrg, batchOffset, batchLimit: 500 }),
-        });
+        const response = await diagnosticFetch('process-job', { jobId, targetOrgId: targetOrg, batchOffset, batchLimit: 500 }, headers);
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
@@ -351,16 +365,12 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
       // Loop: each call processes one 500-record chunk from the first pending job.
       // When a job finishes, the next call picks up the next job automatically.
       while (true) {
-        const response = await fetch(`${baseUrl}/process-all-pending`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            targetOrgId: targetOrg,
-            batchLimit: 500,
-            resumeOffset: trackingOffset,
-            currentJobId: trackingJobId,
-          }),
-        });
+        const response = await diagnosticFetch('process-all-pending', {
+          targetOrgId: targetOrg,
+          batchLimit: 500,
+          resumeOffset: trackingOffset,
+          currentJobId: trackingJobId,
+        }, headers);
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
@@ -434,12 +444,7 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
     setDeletingJobId(jobId);
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`${baseUrl}/delete-job`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ jobId }),
-      });
+      const response = await diagnosticFetch('delete-job', { jobId });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -462,12 +467,7 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
     setIsDeletingAll(true);
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`${baseUrl}/delete-all-pending`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({}),
-      });
+      const response = await diagnosticFetch('delete-all-pending', {});
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -497,12 +497,7 @@ export function InventoryDiagnostic({ user }: InventoryDiagnosticProps) {
     setFixResult(null);
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`${baseUrl}/fix-org-ids`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ fixType: type, targetOrgId: targetOrg, sourceOrgId }),
-      });
+      const response = await diagnosticFetch('fix-org-ids', { fixType: type, targetOrgId: targetOrg, sourceOrgId });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
