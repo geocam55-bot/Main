@@ -471,19 +471,30 @@ export function registerAIRoutes(
         return res.status(400).json({ error: 'contactId is required.' });
       }
 
-      // Fetch scoped contact from Supabase
-      const { data: contactRow, error: contactErr } = await ctx.clientSb
+      // Fetch scoped contact from Supabase with organization fallback
+      let { data: contactRow, error: contactErr } = await ctx.clientSb
         .from('contacts')
         .select('*')
         .eq('id', contactId)
         .eq('organization_id', ctx.organizationId)
         .maybeSingle();
 
-      if (contactErr) {
+      if (!contactRow) {
+        const { data: fallbackContact } = await ctx.clientSb
+          .from('contacts')
+          .select('*')
+          .eq('id', contactId)
+          .maybeSingle();
+        if (fallbackContact) {
+          contactRow = fallbackContact;
+        }
+      }
+
+      if (contactErr && !contactRow) {
         return res.status(500).json({ error: `Failed to load contact: ${contactErr.message}` });
       }
       if (!contactRow) {
-        return res.status(404).json({ error: 'Contact not found in your organization.' });
+        return res.status(404).json({ error: 'Contact not found.' });
       }
 
       // Non-admin/non-manager users can only query contacts they own unless team-wide role
@@ -491,39 +502,41 @@ export function registerAIRoutes(
         return res.status(403).json({ error: 'You do not have permission to analyze this contact.' });
       }
 
+      const activeOrgId = contactRow.organization_id || ctx.organizationId;
+
       const [notesRes, bidsRes, quotesRes, apptsRes, purchasesRes] = await Promise.all([
         ctx.clientSb
           .from('notes')
           .select('id, title, content, created_at')
-          .eq('organization_id', ctx.organizationId)
+          .eq('organization_id', activeOrgId)
           .eq('contact_id', contactId)
           .order('created_at', { ascending: false })
           .limit(20),
         ctx.clientSb
           .from('bids')
           .select('id, title, status, total, amount, created_at, updated_at, valid_until, notes')
-          .eq('organization_id', ctx.organizationId)
+          .eq('organization_id', activeOrgId)
           .eq('opportunity_id', contactId)
           .order('created_at', { ascending: false })
           .limit(20),
         ctx.clientSb
           .from('quotes')
           .select('id, title, status, total, subtotal, created_at, updated_at, valid_until, notes')
-          .eq('organization_id', ctx.organizationId)
+          .eq('organization_id', activeOrgId)
           .eq('contact_id', contactId)
           .order('created_at', { ascending: false })
           .limit(20),
         ctx.clientSb
           .from('appointments')
           .select('id, title, description, location, start_time')
-          .eq('organization_id', ctx.organizationId)
+          .eq('organization_id', activeOrgId)
           .eq('contact_id', contactId)
           .order('start_time', { ascending: false })
           .limit(15),
         ctx.clientSb
           .from('customer_purchases')
           .select('id, invoice_number, purchase_date, subtotal, discount_amount, tax_amount, total_amount, cost_total, gross_profit, gp_percent, payment_status, fulfillment_status, branch_id, notes')
-          .eq('organization_id', ctx.organizationId)
+          .eq('organization_id', activeOrgId)
           .eq('contact_id', contactId)
           .order('purchase_date', { ascending: false })
           .limit(250),
@@ -538,7 +551,7 @@ export function registerAIRoutes(
             const { data: itemsData } = await ctx.clientSb
               .from('customer_purchase_items')
               .select('purchase_id, sku, item_name, category, quantity, unit_of_measure, unit_price, line_total')
-              .eq('organization_id', ctx.organizationId)
+              .eq('organization_id', activeOrgId)
               .in('purchase_id', recentPurchaseIds)
               .limit(800);
             purchaseItems = itemsData || [];
