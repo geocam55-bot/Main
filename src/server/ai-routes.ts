@@ -453,6 +453,7 @@ export function registerAIRoutes(
 
   // ── 1. AI CUSTOMER ASSISTANT (Per-Customer Q&A + Activity Summary) ──
   app.post('/api/ai/customer-assistant', async (req: Request, res: Response) => {
+    console.log(`[AI Customer Assistant] Received POST /api/ai/customer-assistant. Body:`, JSON.stringify(req.body || {}));
     try {
       const ctx = await resolveCRMAuthContext(req);
       if (!ctx) {

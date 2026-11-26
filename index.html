@@ -160,25 +160,7 @@
     </script>
   </head>
   <body>
-    <div id="root">
-      <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0A0F1D; color: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 20px;">
-        <div style="width: 48px; height: 48px; border: 4px solid rgba(59, 130, 246, 0.3); border-top-color: #3B82F6; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
-        <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Loading ProSpaces CRM...</h2>
-        <p style="font-size: 14px; color: #94A3B8; max-width: 320px;">Preparing your workspace and modules...</p>
-        <style>
-          @keyframes spin { to { transform: rotate(360deg); } }
-        </style>
-      </div>
-    </div>
-    <script>
-      setTimeout(function() {
-        var root = document.getElementById('root');
-        if (root && root.children.length > 0 && root.querySelector('h2') && !sessionStorage.getItem('boot_reload_tried')) {
-          sessionStorage.setItem('boot_reload_tried', '1');
-          window.location.reload();
-        }
-      }, 7000);
-    </script>
+    <div id="root"></div>
     <script>
       (function() {
         function sendError(msg, extra) {

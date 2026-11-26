@@ -5993,7 +5993,7 @@ self.addEventListener('activate', (event) => {
     }
   });
 
-  app.all('/functions/v1/make-server-8405be07/*', express.json(), async (req, res) => {
+  app.all('/functions/v1/make-server-8405be07/*all', express.json(), async (req, res) => {
     return res.json({ success: true, data: [], message: 'Handled by local ProSpaces backend server' });
   });
 
@@ -6226,7 +6226,12 @@ self.addEventListener('activate', (event) => {
       }
     });
   } else {
-    app.use(express.static(distPath));
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/functions')) {
+        return next();
+      }
+      express.static(distPath)(req, res, next);
+    });
     app.get('*all', (req, res, next) => {
       const url = req.originalUrl || req.url;
 
