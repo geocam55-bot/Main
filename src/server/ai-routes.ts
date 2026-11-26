@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 
 const AI_MODEL = 'gemini-4-hydrogen';
+const AI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
 
 class AIConfigError extends Error {
   statusCode: number;
@@ -16,14 +17,68 @@ class AIConfigError extends Error {
 let cachedClient: GoogleGenAI | null = null;
 let cachedApiKey = '';
 
-function requireGeminiClient(): GoogleGenAI {
-  const key = (process.env.GEMINI_API_KEY || '').trim();
+function isValidApiKeyCandidate(value: unknown): string {
+  const key = String(value || '').trim();
   if (!key || key === 'MY_GEMINI_API_KEY' || key === 'undefined' || key === 'null') {
+    return '';
+  }
+  return key;
+}
+
+async function requireGeminiClient(
+  sbClients: Array<SupabaseClient | null | undefined> = [],
+  organizationId?: string | null
+): Promise<GoogleGenAI> {
+  let key = isValidApiKeyCandidate(process.env.GEMINI_API_KEY);
+
+  if (!key) {
+    const targetKeys = ['GEMINI_API_KEY', 'GOOGLE_GEMINI_API_KEY'];
+    const seen = new Set<SupabaseClient>();
+
+    for (const client of sbClients) {
+      if (!client || seen.has(client)) continue;
+      seen.add(client);
+
+      try {
+        const { data: appVars } = await client
+          .from('app_env_vars')
+          .select('key, value')
+          .in('key', targetKeys);
+        const foundApp = (appVars || []).find((row: any) => isValidApiKeyCandidate(row?.value));
+        if (foundApp) {
+          key = isValidApiKeyCandidate(foundApp.value);
+          break;
+        }
+      } catch {}
+
+      if (organizationId && organizationId !== 'default-org') {
+        try {
+          const { data: tenantVars } = await client
+            .from('tenant_env_vars')
+            .select('key, value')
+            .eq('organization_id', organizationId)
+            .in('key', targetKeys);
+          const foundTenant = (tenantVars || []).find((row: any) => isValidApiKeyCandidate(row?.value));
+          if (foundTenant) {
+            key = isValidApiKeyCandidate(foundTenant.value);
+            break;
+          }
+        } catch {}
+      }
+    }
+
+    if (key) {
+      process.env.GEMINI_API_KEY = key;
+    }
+  }
+
+  if (!key) {
     throw new AIConfigError(
-      'GEMINI_API_KEY is not configured. Open Settings > Secrets in your AI Studio workspace, set GEMINI_API_KEY, and restart the server.',
+      'GEMINI_API_KEY is not configured. Add GEMINI_API_KEY in Super Admin > Settings > System Variables or Settings > Secrets.',
       503
     );
   }
+
   if (!cachedClient || cachedApiKey !== key) {
     cachedClient = new GoogleGenAI({
       apiKey: key,
@@ -38,12 +93,87 @@ function requireGeminiClient(): GoogleGenAI {
   return cachedClient;
 }
 
+function extractReadableErrorMessage(raw: string): string {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  if (text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text);
+      const inner = parsed?.error?.message || parsed?.message;
+      if (typeof inner === 'string' && inner.trim()) {
+        return extractReadableErrorMessage(inner);
+      }
+    } catch {}
+  }
+  return text;
+}
+
+function isTransientCapacityError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err || '');
+  return /\b(503|502|504|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|overloaded|try again/i.test(msg);
+}
+
+function parseModelJsonObject(rawText: string | undefined): Record<string, any> {
+  const cleaned = String(rawText || '')
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (!cleaned) {
+    throw new Error('Gemini returned an empty response. Please try again.');
+  }
+  const parsed = JSON.parse(cleaned);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Gemini returned an unexpected response format. Please try again.');
+  }
+  return parsed as Record<string, any>;
+}
+
+async function generateGeminiJSONWithRetry(
+  client: GoogleGenAI,
+  contents: string,
+  config: Record<string, any>,
+  requiredNonEmptyField?: string
+): Promise<Record<string, any>> {
+  const attempts: Array<{ model: string; delayMs: number }> = [
+    { model: AI_MODEL, delayMs: 0 },
+    { model: AI_MODEL, delayMs: 650 },
+    { model: AI_FALLBACK_MODEL, delayMs: 400 },
+  ];
+
+  let lastErr: unknown;
+  for (const attempt of attempts) {
+    if (attempt.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, attempt.delayMs));
+    }
+    try {
+      const response = await client.models.generateContent({
+        model: attempt.model,
+        contents,
+        config,
+      });
+      const parsed = parseModelJsonObject(response.text);
+      if (requiredNonEmptyField && !String(parsed[requiredNonEmptyField] || '').trim()) {
+        throw new Error(`Gemini response was missing ${requiredNonEmptyField}.`);
+      }
+      return parsed;
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientCapacityError(err) && !(err instanceof Error && /empty response|missing /i.test(err.message))) {
+        throw err;
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr || 'AI request failed.'));
+}
+
 function handleGeminiRouteError(res: Response, err: unknown, fallbackMessage: string) {
   if (err instanceof AIConfigError) {
     return res.status(err.statusCode).json({ error: err.message });
   }
-  const msg = err instanceof Error ? err.message : String(err || fallbackMessage);
-  const statusMatch = msg.match(/\b(400|401|403|404|429|500|502|503)\b/);
+  const rawMsg = err instanceof Error ? err.message : String(err || fallbackMessage);
+  const msg = extractReadableErrorMessage(rawMsg) || fallbackMessage;
+  const statusMatch = rawMsg.match(/\b(400|401|403|404|429|500|502|503)\b/);
   const statusCode = statusMatch ? Number(statusMatch[1]) : 500;
   if (statusCode === 400 || statusCode === 403 || /api key/i.test(msg)) {
     return res.status(statusCode === 400 || statusCode === 403 ? statusCode : 400).json({
@@ -53,6 +183,11 @@ function handleGeminiRouteError(res: Response, err: unknown, fallbackMessage: st
   if (statusCode === 429) {
     return res.status(429).json({
       error: 'Gemini API rate limit reached. Please wait a moment and try again.',
+    });
+  }
+  if (statusCode === 503 || /high demand|UNAVAILABLE/i.test(msg)) {
+    return res.status(503).json({
+      error: 'Gemini AI is temporarily busy due to high demand. Please click Ask AI again in a few seconds.',
     });
   }
   return res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
@@ -172,6 +307,33 @@ export function registerAIRoutes(
         } catch {}
       }
 
+      if (!organizationId && userEmail) {
+        try {
+          const { data: kvEmail } = await supabase
+            .from('kv_store_8405be07')
+            .select('value')
+            .eq('key', `user:email:${userEmail.toLowerCase().trim()}`)
+            .maybeSingle();
+          if (kvEmail?.value) {
+            const { data: kvUser } = await supabase
+              .from('kv_store_8405be07')
+              .select('value')
+              .eq('key', `user:${kvEmail.value}`)
+              .maybeSingle();
+            if (kvUser?.value && typeof kvUser.value === 'object') {
+              const val = kvUser.value as Record<string, any>;
+              userRole = userRole || String(val.role || '');
+              organizationId = val.organizationId || val.organization_id || organizationId;
+            }
+          }
+        } catch {}
+      }
+
+      const bodyOrg = clampText(req.body?.organizationId || req.body?.organization_id || req.headers['x-organization-id'], 120);
+      if (!organizationId && bodyOrg && bodyOrg !== 'default-org') {
+        organizationId = bodyOrg;
+      }
+
       return {
         clientSb,
         userId,
@@ -184,13 +346,38 @@ export function registerAIRoutes(
 
     const bodyData = req.body || {};
     const fallbackEmail = String(bodyData.email || req.headers['x-user-email'] || 'geocam55@gmail.com').trim().toLowerCase();
-    const fallbackOrgId = String(bodyData.organizationId || bodyData.organization_id || req.headers['x-organization-id'] || 'default-org').trim();
+    let fallbackUserId = 'admin-fallback-user';
+    let fallbackRole = 'admin';
+    let fallbackOrgId = String(bodyData.organizationId || bodyData.organization_id || req.headers['x-organization-id'] || '').trim();
+
+    if (!fallbackOrgId || fallbackOrgId === 'default-org') {
+      try {
+        const { data: kvEmail } = await supabase
+          .from('kv_store_8405be07')
+          .select('value')
+          .eq('key', `user:email:${fallbackEmail}`)
+          .maybeSingle();
+        if (kvEmail?.value) {
+          fallbackUserId = String(kvEmail.value);
+          const { data: kvUser } = await supabase
+            .from('kv_store_8405be07')
+            .select('value')
+            .eq('key', `user:${kvEmail.value}`)
+            .maybeSingle();
+          if (kvUser?.value && typeof kvUser.value === 'object') {
+            const val = kvUser.value as Record<string, any>;
+            fallbackOrgId = String(val.organizationId || val.organization_id || fallbackOrgId || '');
+            fallbackRole = String(val.role || fallbackRole);
+          }
+        }
+      } catch {}
+    }
 
     return {
       clientSb: supabase,
-      userId: 'admin-fallback-user',
+      userId: fallbackUserId,
       userEmail: fallbackEmail,
-      userRole: 'admin',
+      userRole: fallbackRole,
       organizationId: fallbackOrgId || 'default-org',
       authMode: 'logistics-session',
     };
@@ -304,7 +491,7 @@ export function registerAIRoutes(
         return res.status(403).json({ error: 'You do not have permission to analyze this contact.' });
       }
 
-      const [notesRes, bidsRes, quotesRes, apptsRes] = await Promise.all([
+      const [notesRes, bidsRes, quotesRes, apptsRes, purchasesRes] = await Promise.all([
         ctx.clientSb
           .from('notes')
           .select('id, title, content, created_at')
@@ -333,7 +520,119 @@ export function registerAIRoutes(
           .eq('contact_id', contactId)
           .order('start_time', { ascending: false })
           .limit(15),
+        ctx.clientSb
+          .from('customer_purchases')
+          .select('id, invoice_number, purchase_date, subtotal, discount_amount, tax_amount, total_amount, cost_total, gross_profit, gp_percent, payment_status, fulfillment_status, branch_id, notes')
+          .eq('organization_id', ctx.organizationId)
+          .eq('contact_id', contactId)
+          .order('purchase_date', { ascending: false })
+          .limit(250),
       ]);
+
+      const purchaseRows = purchasesRes.data || [];
+      let purchaseItems: any[] = [];
+      if (purchaseRows.length > 0) {
+        const recentPurchaseIds = purchaseRows.slice(0, 100).map((p: any) => p.id).filter(Boolean);
+        if (recentPurchaseIds.length > 0) {
+          try {
+            const { data: itemsData } = await ctx.clientSb
+              .from('customer_purchase_items')
+              .select('purchase_id, sku, item_name, category, quantity, unit_of_measure, unit_price, line_total')
+              .eq('organization_id', ctx.organizationId)
+              .in('purchase_id', recentPurchaseIds)
+              .limit(800);
+            purchaseItems = itemsData || [];
+          } catch {}
+        }
+      }
+
+      const itemsByPurchaseId = new Map<string, any[]>();
+      for (const item of purchaseItems) {
+        const pid = String(item.purchase_id || '');
+        if (!pid) continue;
+        const list = itemsByPurchaseId.get(pid) || [];
+        list.push(item);
+        itemsByPurchaseId.set(pid, list);
+      }
+
+      const sixMonthsAgoMs = Date.now() - 183 * 24 * 60 * 60 * 1000;
+      const last6MonthsPurchases = purchaseRows.filter((p: any) => {
+        const ts = p.purchase_date ? new Date(p.purchase_date).getTime() : NaN;
+        return !Number.isNaN(ts) && ts >= sixMonthsAgoMs;
+      });
+      const last6MonthsIds = new Set(last6MonthsPurchases.map((p: any) => String(p.id)));
+      const last6MonthsItems = purchaseItems.filter((it) => last6MonthsIds.has(String(it.purchase_id)));
+
+      const sumTotal = (rows: any[]) => Number(rows.reduce((s, r) => s + Number(r.total_amount || 0), 0).toFixed(2));
+      const positiveSpend6M = Number(
+        last6MonthsPurchases
+          .filter((r: any) => Number(r.total_amount || 0) > 0)
+          .reduce((s, r) => s + Number(r.total_amount || 0), 0)
+          .toFixed(2)
+      );
+      const creditsOrReturns6M = Number(
+        last6MonthsPurchases
+          .filter((r: any) => Number(r.total_amount || 0) < 0)
+          .reduce((s, r) => s + Number(r.total_amount || 0), 0)
+          .toFixed(2)
+      );
+
+      const categoryMap = new Map<string, { category: string; lineCount: number; totalQty: number; netSpend: number }>();
+      const itemMap = new Map<string, { sku: string; itemName: string; category: string; orderCount: number; totalQty: number; netSpend: number }>();
+      const sourceItemsForHabits = last6MonthsItems.length > 0 ? last6MonthsItems : purchaseItems;
+
+      for (const it of sourceItemsForHabits) {
+        const cat = String(it.category || 'UNCATEGORIZED').trim() || 'UNCATEGORIZED';
+        const prevCat = categoryMap.get(cat) || { category: cat, lineCount: 0, totalQty: 0, netSpend: 0 };
+        prevCat.lineCount += 1;
+        prevCat.totalQty = Number((prevCat.totalQty + Number(it.quantity || 0)).toFixed(2));
+        prevCat.netSpend = Number((prevCat.netSpend + Number(it.line_total || 0)).toFixed(2));
+        categoryMap.set(cat, prevCat);
+
+        const itemKey = String(it.sku || it.item_name || '').trim().toLowerCase();
+        if (itemKey) {
+          const prevItem = itemMap.get(itemKey) || {
+            sku: String(it.sku || ''),
+            itemName: String(it.item_name || ''),
+            category: cat,
+            orderCount: 0,
+            totalQty: 0,
+            netSpend: 0,
+          };
+          prevItem.orderCount += 1;
+          prevItem.totalQty = Number((prevItem.totalQty + Number(it.quantity || 0)).toFixed(2));
+          prevItem.netSpend = Number((prevItem.netSpend + Number(it.line_total || 0)).toFixed(2));
+          itemMap.set(itemKey, prevItem);
+        }
+      }
+
+      const categoryBreakdown = Array.from(categoryMap.values())
+        .sort((a, b) => Math.abs(b.netSpend) - Math.abs(a.netSpend))
+        .slice(0, 12);
+      const topPurchasedItems = Array.from(itemMap.values())
+        .sort((a, b) => b.orderCount - a.orderCount || Math.abs(b.netSpend) - Math.abs(a.netSpend))
+        .slice(0, 15);
+
+      const recentInvoices = purchaseRows.slice(0, 25).map((p: any) => ({
+        invoiceNumber: p.invoice_number,
+        purchaseDate: p.purchase_date,
+        totalAmount: Number(p.total_amount || 0),
+        paymentStatus: p.payment_status,
+        ...(includeCostData
+          ? {
+              costTotal: Number(p.cost_total || 0),
+              grossProfit: Number(p.gross_profit || 0),
+              gpPercent: Number(p.gp_percent || 0),
+            }
+          : {}),
+        items: (itemsByPurchaseId.get(String(p.id)) || []).slice(0, 10).map((it: any) => ({
+          sku: it.sku || '',
+          itemName: clampText(it.item_name, 80),
+          category: it.category || '',
+          quantity: Number(it.quantity || 0),
+          lineTotal: Number(it.line_total || 0),
+        })),
+      }));
 
       const snapshotDeals = Array.isArray(req.body?.recentDeals) ? req.body.recentDeals.slice(0, 15) : [];
       const allDeals = [
@@ -351,6 +650,7 @@ export function registerAIRoutes(
       const customerPayload = {
         name: contactRow.name,
         company: contactRow.company,
+        legacyAccountNumber: contactRow.legacy_number || null,
         trade: contactRow.trade,
         status: contactRow.status,
         priceLevel: contactRow.price_level || contactRow.priceLevel,
@@ -372,6 +672,21 @@ export function registerAIRoutes(
               }
             : {}),
         },
+        purchaseHistory: {
+          totalInvoicesRecorded: purchaseRows.length,
+          allRecordedNetSpend: sumTotal(purchaseRows),
+          last6MonthsSummary: {
+            invoiceCount: last6MonthsPurchases.length,
+            netSpend: sumTotal(last6MonthsPurchases),
+            grossPurchasesTotal: positiveSpend6M,
+            returnsOrCreditsTotal: creditsOrReturns6M,
+            mostRecentPurchaseDate: purchaseRows[0]?.purchase_date || null,
+            earliestIn6MonthsDate: last6MonthsPurchases[last6MonthsPurchases.length - 1]?.purchase_date || null,
+          },
+          categoryBreakdown,
+          topPurchasedItems,
+          recentInvoices,
+        },
         linkedNotes: (notesRes.data || []).map((n: any) => ({
           title: clampText(n.title, 100),
           content: clampText(n.content, 300),
@@ -385,16 +700,16 @@ export function registerAIRoutes(
         dealsAndQuotes: dealsForPrompt,
       };
 
-      const client = requireGeminiClient();
+      const client = await requireGeminiClient([ctx.clientSb, supabase], ctx.organizationId);
       const prompt =
         mode === 'qa' && question
-          ? `You are the ProSpaces CRM Customer Assistant. Answer the user's question accurately using ONLY the grounded customer record below. If something is missing from the record, state clearly that it is not recorded.\n\nUser Question: "${question}"\n\nCustomer Record JSON:\n${JSON.stringify(customerPayload)}`
-          : `You are the ProSpaces CRM Customer Assistant. Summarize this customer's relationship, interaction history, purchasing patterns, open quote/deal momentum, and recommend 2-3 concrete next actions grounded ONLY in the customer record below.\n\nCustomer Record JSON:\n${JSON.stringify(customerPayload)}`;
+          ? `You are the ProSpaces CRM Customer Assistant. Answer the user's question accurately using ONLY the grounded customer record below (including purchaseHistory, invoices, line-item categories, top items, salesMetrics, notes, and deals). Note: negative invoice amounts represent customer returns or credit memos. If something is missing from the record, state clearly that it is not recorded.\n\nUser Question: "${question}"\n\nCustomer Record JSON:\n${JSON.stringify(customerPayload)}`
+          : `You are the ProSpaces CRM Customer Assistant. Summarize this customer's relationship, granular purchase history & buying habits (categories, frequent items, recent invoices, returns vs net spend), interaction history, open quote/deal momentum, and recommend 2-3 concrete next actions grounded ONLY in the customer record below.\n\nCustomer Record JSON:\n${JSON.stringify(customerPayload)}`;
 
-      const response = await client.models.generateContent({
-        model: AI_MODEL,
-        contents: prompt,
-        config: {
+      const parsed = await generateGeminiJSONWithRetry(
+        client,
+        prompt,
+        {
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: {
@@ -423,9 +738,9 @@ export function registerAIRoutes(
             required: ['answer', 'relationshipStatus', 'keyHighlights', 'suggestedNextActions'],
           },
         },
-      });
+        'answer'
+      );
 
-      const parsed = JSON.parse((response.text || '{}').trim());
       return res.json({ success: true, ...parsed });
     } catch (err) {
       return handleGeminiRouteError(res, err, 'Customer Assistant request failed.');
@@ -470,7 +785,7 @@ export function registerAIRoutes(
         } catch {}
       }
 
-      const client = requireGeminiClient();
+      const client = await requireGeminiClient([ctx.clientSb, supabase], ctx.organizationId);
       let instruction = '';
       if (mode === 'summarize') {
         if (!currentBody) {
@@ -491,10 +806,10 @@ export function registerAIRoutes(
         instruction = `Draft a ${tone} business email for a ProSpaces CRM user (building supplies / construction materials / B2B & contractor CRM).\nRecipient: ${recipientName || 'Customer'} ${recipientCompany ? `(${recipientCompany})` : ''}\nTopic / Instructions: ${promptText || currentSubject}\nExtra Context: ${contextSummary}${groundedContactContext}\nReturn plain text paragraphs (no HTML tags, no markdown asterisks).`;
       }
 
-      const response = await client.models.generateContent({
-        model: AI_MODEL,
-        contents: instruction,
-        config: {
+      const parsed = await generateGeminiJSONWithRetry(
+        client,
+        instruction,
+        {
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: {
@@ -510,9 +825,9 @@ export function registerAIRoutes(
             required: ['subject', 'body', 'summaryPoints'],
           },
         },
-      });
+        'body'
+      );
 
-      const parsed = JSON.parse((response.text || '{}').trim());
       return res.json({ success: true, ...parsed });
     } catch (err) {
       return handleGeminiRouteError(res, err, 'Email Writer request failed.');
@@ -551,7 +866,7 @@ export function registerAIRoutes(
         contactsQuery = contactsQuery.eq('owner_id', ctx.userId);
       }
 
-      const [contactsRes, bidsRes, quotesRes] = await Promise.all([
+      const [contactsRes, bidsRes, quotesRes, purchasesRes, purchaseItemsRes] = await Promise.all([
         contactsQuery,
         ctx.clientSb
           .from('bids')
@@ -565,6 +880,19 @@ export function registerAIRoutes(
           .eq('organization_id', ctx.organizationId)
           .order('updated_at', { ascending: false })
           .limit(300),
+        ctx.clientSb
+          .from('customer_purchases')
+          .select('id, contact_id, purchase_date, total_amount')
+          .eq('organization_id', ctx.organizationId)
+          .order('purchase_date', { ascending: false })
+          .limit(2000),
+        mode === 'insights' || mode === 'sales-analysis'
+          ? ctx.clientSb
+              .from('customer_purchase_items')
+              .select('category, quantity, line_total')
+              .eq('organization_id', ctx.organizationId)
+              .limit(1500)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
 
       if (contactsRes.error) {
@@ -578,6 +906,7 @@ export function registerAIRoutes(
       ];
 
       const nowMs = Date.now();
+      const sixMonthsAgoMs = nowMs - 183 * 24 * 60 * 60 * 1000;
       const daysBetween = (iso?: string | null) => {
         if (!iso) return 999;
         const ts = new Date(iso).getTime();
@@ -594,8 +923,37 @@ export function registerAIRoutes(
         dealsByContact.set(key, list);
       }
 
+      const purchasesByContact = new Map<string, { count: number; spend6M: number; latestDate: string | null }>();
+      for (const p of purchasesRes.data || []) {
+        const cid = String(p.contact_id || '');
+        if (!cid) continue;
+        const entry = purchasesByContact.get(cid) || { count: 0, spend6M: 0, latestDate: null };
+        entry.count += 1;
+        const ts = p.purchase_date ? new Date(p.purchase_date).getTime() : NaN;
+        if (!Number.isNaN(ts) && ts >= sixMonthsAgoMs) {
+          entry.spend6M += Number(p.total_amount || 0);
+        }
+        if (p.purchase_date && (!entry.latestDate || new Date(p.purchase_date).getTime() > new Date(entry.latestDate).getTime())) {
+          entry.latestDate = p.purchase_date;
+        }
+        purchasesByContact.set(cid, entry);
+      }
+
+      const orgCategoryMap = new Map<string, { category: string; lineCount: number; netSpend: number }>();
+      for (const it of (purchaseItemsRes as any).data || []) {
+        const cat = String(it.category || 'UNCATEGORIZED').trim() || 'UNCATEGORIZED';
+        const curr = orgCategoryMap.get(cat) || { category: cat, lineCount: 0, netSpend: 0 };
+        curr.lineCount += 1;
+        curr.netSpend = Number((curr.netSpend + Number(it.line_total || 0)).toFixed(2));
+        orgCategoryMap.set(cat, curr);
+      }
+      const topPurchaseCategories = Array.from(orgCategoryMap.values())
+        .sort((a, b) => Math.abs(b.netSpend) - Math.abs(a.netSpend))
+        .slice(0, 12);
+
       const enriched = contacts.map((c: any) => {
         const cDeals = dealsByContact.get(String(c.id)) || [];
+        const cPurch = purchasesByContact.get(String(c.id));
         const openDeals = cDeals.filter((d) =>
           !['won', 'accepted', 'approved', 'lost', 'rejected', 'declined', 'cancelled', 'closed', 'completed'].includes(
             String(d.status || '').toLowerCase()
@@ -610,7 +968,8 @@ export function registerAIRoutes(
         }, null);
         const lastActivityDays = Math.min(
           daysBetween(c.updated_at || c.created_at),
-          latestDealDate ? daysBetween(latestDealDate) : 999
+          latestDealDate ? daysBetween(latestDealDate) : 999,
+          cPurch?.latestDate ? daysBetween(cPurch.latestDate) : 999
         );
         const ytd = Number(c.ytd_sales || 0);
         const lyr = Number(c.lyr_sales || 0);
@@ -629,6 +988,9 @@ export function registerAIRoutes(
           lyrSales: lyr,
           ptdSales: ptd,
           salesDelta: ytd - lyr,
+          recentPurchaseCount: cPurch?.count || 0,
+          last6MonthsPurchaseSpend: Number((cPurch?.spend6M || 0).toFixed(2)),
+          lastPurchaseDate: cPurch?.latestDate || null,
           ...(includeCostData
             ? {
                 ytdGpPercent: c.ytd_gp_percent ?? null,
@@ -653,7 +1015,7 @@ export function registerAIRoutes(
         totalOpenPipelineValue: Math.round(enriched.reduce((s, c) => s + c.openDealValue, 0)),
       };
 
-      const client = requireGeminiClient();
+      const client = await requireGeminiClient([ctx.clientSb, supabase], ctx.organizationId);
 
       if (mode === 'smart-search') {
         // Send compact records (up to 160 most relevant/highest value/recent) so Gemini stays fast and accurate
@@ -667,10 +1029,10 @@ User Query: "${query}"
 Customer Records JSON:
 ${JSON.stringify(compactForSearch)}`;
 
-        const response = await client.models.generateContent({
-          model: AI_MODEL,
-          contents: prompt,
-          config: {
+        const parsed = await generateGeminiJSONWithRetry(
+          client,
+          prompt,
+          {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             responseMimeType: 'application/json',
             responseSchema: {
@@ -693,9 +1055,8 @@ ${JSON.stringify(compactForSearch)}`;
               required: ['reply', 'matchedContacts'],
             },
           },
-        });
-
-        const parsed = JSON.parse((response.text || '{}').trim());
+          'reply'
+        );
         const validIds = new Set(enriched.map((c) => c.id));
         const filteredMatches = (Array.isArray(parsed.matchedContacts) ? parsed.matchedContacts : []).filter(
           (m: any) => m && validIds.has(String(m.contactId))
@@ -727,10 +1088,10 @@ Summary Totals: ${JSON.stringify(totals)}
 Candidate Accounts JSON:
 ${JSON.stringify(candidates)}`;
 
-        const response = await client.models.generateContent({
-          model: AI_MODEL,
-          contents: prompt,
-          config: {
+        const parsed = await generateGeminiJSONWithRetry(
+          client,
+          prompt,
+          {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             responseMimeType: 'application/json',
             responseSchema: {
@@ -766,9 +1127,8 @@ ${JSON.stringify(candidates)}`;
               required: ['summary', 'prioritizedFollowups'],
             },
           },
-        });
-
-        const parsed = JSON.parse((response.text || '{}').trim());
+          'summary'
+        );
         return res.json({ success: true, mode, totals, ...parsed });
       }
 
@@ -796,13 +1156,14 @@ ${JSON.stringify(candidates)}`;
 Analyze the organization's sales data, purchasing trends, segment breakdown, and pipeline value. Highlight real sales trends, revenue expansion opportunities, top performers, and at-risk revenue using ONLY the grounded metrics below.${includeCostData ? ' Gross Profit (GP%) fields are authorized and included.' : ' Do not speculate about cost or GP%.'}
 
 Organization Totals: ${JSON.stringify(totals)}
+Top Purchased Categories: ${JSON.stringify(topPurchaseCategories)}
 Trade Breakdown: ${JSON.stringify(tradeBreakdown)}
 Top/Key Accounts Sample: ${JSON.stringify(topAccounts)}`;
 
-        const response = await client.models.generateContent({
-          model: AI_MODEL,
-          contents: prompt,
-          config: {
+        const parsed = await generateGeminiJSONWithRetry(
+          client,
+          prompt,
+          {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             responseMimeType: 'application/json',
             responseSchema: {
@@ -823,9 +1184,8 @@ Top/Key Accounts Sample: ${JSON.stringify(topAccounts)}`;
               ],
             },
           },
-        });
-
-        const parsed = JSON.parse((response.text || '{}').trim());
+          'executiveSummary'
+        );
         return res.json({ success: true, mode, totals, tradeBreakdown, ...parsed });
       }
 
@@ -838,13 +1198,14 @@ Top/Key Accounts Sample: ${JSON.stringify(topAccounts)}`;
 Analyze customer buying habits, identify inactive customers who need re-engagement, and highlight upsell / cross-sell / open-quote sales opportunities using ONLY the grounded CRM data below.
 
 Organization Totals: ${JSON.stringify(totals)}
+Top Purchased Categories: ${JSON.stringify(topPurchaseCategories)}
 Accounts Sample JSON:
 ${JSON.stringify(sampleAccounts)}`;
 
-      const response = await client.models.generateContent({
-        model: AI_MODEL,
-        contents: prompt,
-        config: {
+      const parsed = await generateGeminiJSONWithRetry(
+        client,
+        prompt,
+        {
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: {
@@ -878,9 +1239,8 @@ ${JSON.stringify(sampleAccounts)}`;
             ],
           },
         },
-      });
-
-      const parsed = JSON.parse((response.text || '{}').trim());
+        'headline'
+      );
       return res.json({ success: true, mode, totals, ...parsed });
     } catch (err) {
       return handleGeminiRouteError(res, err, 'CRM Intelligence request failed.');
@@ -930,17 +1290,17 @@ ${JSON.stringify(sampleAccounts)}`;
         status: clampText(t.status, 30),
       }));
 
-      const client = requireGeminiClient();
+      const client = await requireGeminiClient([ctx.clientSb, supabase], ctx.organizationId);
 
       if (mode === 'polish-pod') {
         if (!rawNotes) {
           return res.status(400).json({ error: 'Please enter driver field notes to polish.' });
         }
         const prompt = `You are the ProSpaces Logistics Proof-of-Delivery Assistant. Rewrite the raw driver field note below into a clear, factual, professional delivery note for customer records and dispatchers. Do NOT invent facts.\n\nRaw Driver Notes: "${rawNotes}"`;
-        const response = await client.models.generateContent({
-          model: AI_MODEL,
-          contents: prompt,
-          config: {
+        const parsed = await generateGeminiJSONWithRetry(
+          client,
+          prompt,
+          {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             responseMimeType: 'application/json',
             responseSchema: {
@@ -953,8 +1313,8 @@ ${JSON.stringify(sampleAccounts)}`;
               required: ['summary', 'polishedNote', 'recommendedActions'],
             },
           },
-        });
-        const parsed = JSON.parse((response.text || '{}').trim());
+          'polishedNote'
+        );
         return res.json({ success: true, mode, ...parsed });
       }
 
@@ -964,10 +1324,10 @@ ${JSON.stringify(sampleAccounts)}`;
           return res.status(400).json({ error: 'Delivery details are required to draft a customer ETA message.' });
         }
         const prompt = `You are the ProSpaces Logistics Customer Update Writer. Draft a clear, polite customer ETA / delivery status update email/SMS based strictly on this delivery record and optional dispatcher note.\n\nDispatcher Note: "${question || 'Provide proactive status and ETA update.'}"\nDelivery Record JSON:\n${JSON.stringify(target)}`;
-        const response = await client.models.generateContent({
-          model: AI_MODEL,
-          contents: prompt,
-          config: {
+        const parsed = await generateGeminiJSONWithRetry(
+          client,
+          prompt,
+          {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             responseMimeType: 'application/json',
             responseSchema: {
@@ -981,8 +1341,8 @@ ${JSON.stringify(sampleAccounts)}`;
               required: ['summary', 'emailSubject', 'emailBody', 'smsText'],
             },
           },
-        });
-        const parsed = JSON.parse((response.text || '{}').trim());
+          'summary'
+        );
         return res.json({ success: true, mode, ...parsed });
       }
 
@@ -997,10 +1357,10 @@ Use ONLY the IDs, names, branches, and trucks present in the JSON below.
 Fleet Trucks JSON: ${JSON.stringify(compactTrucks)}
 Deliveries Queue JSON: ${JSON.stringify(compactDeliveries)}`;
 
-        const response = await client.models.generateContent({
-          model: AI_MODEL,
-          contents: prompt,
-          config: {
+        const parsed = await generateGeminiJSONWithRetry(
+          client,
+          prompt,
+          {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             responseMimeType: 'application/json',
             responseSchema: {
@@ -1026,9 +1386,8 @@ Deliveries Queue JSON: ${JSON.stringify(compactDeliveries)}`;
               required: ['summary', 'warnings', 'recommendations'],
             },
           },
-        });
-
-        const parsed = JSON.parse((response.text || '{}').trim());
+          'summary'
+        );
         return res.json({ success: true, mode, ...parsed });
       }
 
@@ -1043,10 +1402,10 @@ Dispatcher Question: "${question}"
 Fleet Trucks JSON: ${JSON.stringify(compactTrucks)}
 Deliveries Queue JSON: ${JSON.stringify(compactDeliveries)}`;
 
-      const response = await client.models.generateContent({
-        model: AI_MODEL,
-        contents: prompt,
-        config: {
+      const parsed = await generateGeminiJSONWithRetry(
+        client,
+        prompt,
+        {
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: {
@@ -1059,9 +1418,8 @@ Deliveries Queue JSON: ${JSON.stringify(compactDeliveries)}`;
             required: ['answer', 'highlightedDeliveryIds', 'recommendedActions'],
           },
         },
-      });
-
-      const parsed = JSON.parse((response.text || '{}').trim());
+        'answer'
+      );
       return res.json({ success: true, mode, ...parsed });
     } catch (err) {
       return handleGeminiRouteError(res, err, 'Logistics AI Copilot request failed.');

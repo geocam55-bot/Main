@@ -1,5 +1,5 @@
-import ImportExport from '../ImportExport';
 import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
+import ErrorBoundary from '../ErrorBoundary';
 import {
   Monitor,
   UserCog,
@@ -52,7 +52,7 @@ const Tenants = lazyNamed(() => import('../Tenants'), 'Tenants');
 const SettingsComponent = lazyNamed(() => import('../Settings'), 'Settings');
 const Security = lazyNamed(() => import('../Security'), 'Security');
 const AuditLog = lazyNamed(() => import('../AuditLog'), 'AuditLog');
-// const ImportExport = lazyNamed(() => import('../ImportExport'), 'ImportExport');
+const ImportExport = lazyNamed(() => import('../ImportExport'), 'ImportExport');
 const ScheduledJobs = lazyNamed(() => import('../ScheduledJobs'), 'ScheduledJobs');
 const SubscriptionBilling = lazyNamed(() => import('../subscription/SubscriptionBilling'), 'SubscriptionBilling');
 const SubscriptionAgreement = lazyNamed(() => import('../SubscriptionAgreement'), 'SubscriptionAgreement');
@@ -175,7 +175,7 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
 
   // Load organization on mount
   useEffect(() => {
-    const orgId = user.organization_id || user.organizationId;
+    const orgId = user?.organization_id || user?.organizationId;
     if (!orgId) return;
     const supabase = createClient();
     supabase
@@ -183,10 +183,13 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
       .select('*')
       .eq('id', orgId)
       .single()
-      .then(({ data }) => {
-        if (data) setOrganization(data);
-      });
-  }, [user.organization_id, user.organizationId]);
+      .then(
+        ({ data }) => {
+          if (data) setOrganization(data);
+        },
+        () => {}
+      );
+  }, [user?.organization_id, user?.organizationId]);
 
   const handleNavigate = useCallback((view: ITView) => {
     setCurrentView(view);
@@ -324,20 +327,22 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
           <HomeView user={currentUser} navItems={visibleNavItems} onNavigate={handleNavigate} />
         )}
 
-        <Suspense fallback={<ModuleLoading />}>
-          {currentView === 'contacts' && <Contacts user={currentUser} />}
-          {currentView === 'users' && <Users user={currentUser} organization={organization} onOrganizationUpdate={setOrganization} />}
-          {currentView === 'tenants' && <Tenants user={currentUser} organization={organization} />}
-          {currentView === 'security' && <Security user={currentUser} />}
-          {currentView === 'audit-log' && <AuditLog user={currentUser} />}
-          {currentView === 'settings' && <SettingsComponent user={currentUser} organization={organization} onUserUpdate={setCurrentUser} onOrganizationUpdate={setOrganization} />}
-          {currentView === 'import-export' && <ImportExport user={currentUser} onNavigate={handleNavigate} />}
-          {currentView === 'scheduled-jobs' && <ScheduledJobs user={currentUser} onNavigate={handleNavigate} />}
-          {currentView === 'billing' && <SubscriptionBilling user={currentUser} />}
-          {currentView === 'agreement' && <SubscriptionAgreement organization={organization} onBack={() => handleNavigate('home')} />}
-          {currentView === 'portal-admin' && <PortalMessagesAdmin user={currentUser} />}
-          {currentView === 'fix-users' && <AdminFixUsers />}
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<ModuleLoading />}>
+            {currentView === 'contacts' && <Contacts user={currentUser} />}
+            {currentView === 'users' && <Users user={currentUser} organization={organization} onOrganizationUpdate={setOrganization} />}
+            {currentView === 'tenants' && <Tenants user={currentUser} organization={organization} />}
+            {currentView === 'security' && <Security user={currentUser} />}
+            {currentView === 'audit-log' && <AuditLog user={currentUser} />}
+            {currentView === 'settings' && <SettingsComponent user={currentUser} organization={organization} onUserUpdate={setCurrentUser} onOrganizationUpdate={setOrganization} />}
+            {currentView === 'import-export' && <ImportExport user={currentUser} onNavigate={handleNavigate} />}
+            {currentView === 'scheduled-jobs' && <ScheduledJobs user={currentUser} onNavigate={handleNavigate} />}
+            {currentView === 'billing' && <SubscriptionBilling user={currentUser} />}
+            {currentView === 'agreement' && <SubscriptionAgreement organization={organization} onBack={() => handleNavigate('home')} />}
+            {currentView === 'portal-admin' && <PortalMessagesAdmin user={currentUser} />}
+            {currentView === 'fix-users' && <AdminFixUsers />}
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   );

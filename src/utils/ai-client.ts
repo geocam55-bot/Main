@@ -122,22 +122,35 @@ async function postAI<T>(
   payload: Record<string, any>,
   extraHeaders?: Record<string, string>
 ): Promise<T> {
-  const headers = await getServerHeaders(extraHeaders);
+  const nextPayload = { ...payload };
   try {
-    const rawUser = localStorage.getItem('prospaces_current_user') || localStorage.getItem('prospaces_user');
+    const rawUser =
+      localStorage.getItem('prospaces_current_user') ||
+      localStorage.getItem('prospaces_user') ||
+      localStorage.getItem('currentUser');
     if (rawUser) {
       const parsed = JSON.parse(rawUser);
-      if (parsed?.email && !payload.email) payload.email = parsed.email;
-      if ((parsed?.organizationId || parsed?.organization_id) && !payload.organizationId) {
-        payload.organizationId = parsed.organizationId || parsed.organization_id;
+      if (parsed?.email && !nextPayload.email) nextPayload.email = parsed.email;
+      if ((parsed?.organizationId || parsed?.organization_id) && !nextPayload.organizationId) {
+        nextPayload.organizationId = parsed.organizationId || parsed.organization_id;
       }
     }
+    const storedOrgId = localStorage.getItem('currentOrgId');
+    if (storedOrgId && !nextPayload.organizationId) {
+      nextPayload.organizationId = storedOrgId;
+    }
   } catch {}
+
+  const contextHeaders: Record<string, string> = { ...(extraHeaders || {}) };
+  if (nextPayload.email) contextHeaders['X-User-Email'] = String(nextPayload.email);
+  if (nextPayload.organizationId) contextHeaders['X-Organization-Id'] = String(nextPayload.organizationId);
+
+  const headers = await getServerHeaders(contextHeaders);
 
   const res = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify(nextPayload),
   });
 
   const data = await res.json().catch(() => ({}));
@@ -153,6 +166,8 @@ export function askCustomerAssistant(params: {
   question?: string;
   includeCostData?: boolean;
   recentDeals?: any[];
+  organizationId?: string;
+  email?: string;
 }) {
   return postAI<CustomerAssistantResponse>('/api/ai/customer-assistant', params);
 }
@@ -167,6 +182,8 @@ export function runEmailWriter(params: {
   recipientCompany?: string;
   contextSummary?: string;
   contactId?: string;
+  organizationId?: string;
+  email?: string;
 }) {
   return postAI<EmailWriterResponse>('/api/ai/email-writer', params);
 }
@@ -182,6 +199,8 @@ export function runCRMIntelligence<
   query?: string;
   scope?: 'personal' | 'team';
   includeCostData?: boolean;
+  organizationId?: string;
+  email?: string;
 }) {
   return postAI<T>('/api/ai/crm-intelligence', params);
 }

@@ -20,12 +20,15 @@ function ITApp() {
       const cached = localStorage.getItem('prospaces_active_user') || localStorage.getItem('prospaces_cached_user');
       if (cached) {
         const parsed = JSON.parse(cached);
-        const orgId = parsed.organizationId || parsed.organization_id || localStorage.getItem('currentOrgId') || 'rona_atlantic';
-        return {
-          ...parsed,
-          organization_id: orgId,
-          organizationId: orgId,
-        };
+        if (parsed && typeof parsed === 'object') {
+          const orgId = parsed.organizationId || parsed.organization_id || localStorage.getItem('currentOrgId') || 'rona_atlantic';
+          return {
+            ...parsed,
+            role: parsed.role || ('admin' as UserRole),
+            organization_id: orgId,
+            organizationId: orgId,
+          };
+        }
       }
     } catch {}
     return {
@@ -55,6 +58,7 @@ function ITApp() {
   }, [user]);
 
   useEffect(() => {
+    (window as any).__IT_SPACE_MOUNTED__ = true;
     unregisterServiceWorker().catch(() => {});
 
     const loadSafetyTimer = setTimeout(() => {
@@ -125,6 +129,9 @@ function ITApp() {
         profile = data;
       } catch (err) {
         console.warn('Profile fetch failed, using fallback from session or cache:', err);
+      }
+
+      if (!profile) {
         profile = {
           id: session.user.id,
           email: session.user.email,

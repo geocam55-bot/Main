@@ -1357,12 +1357,15 @@ export function ContactDetail({
     setShowAIAssistant(true);
     setIsLoadingAI(true);
     setAiError(null);
+    setAiAssistantResult(null);
     try {
       const res = await askCustomerAssistant({
         contactId: contact.id,
         mode,
         question: mode === 'qa' ? q : undefined,
         includeCostData: ['admin', 'super_admin', 'director', 'manager'].includes(String(user?.role || '').toLowerCase()),
+        organizationId: user?.organizationId || (user as any)?.organization_id,
+        email: user?.email,
         recentDeals: bids.slice(0, 10).map((b) => ({
           title: b.title,
           status: b.status,
@@ -1371,6 +1374,14 @@ export function ContactDetail({
           notes: b.notes || '',
         })),
       });
+      const hasAnswer = Boolean(String(res?.answer || '').trim());
+      const hasDetails = Boolean(res?.keyHighlights?.length || res?.suggestedNextActions?.length);
+      if (!hasAnswer && !hasDetails) {
+        const emptyMsg = 'Gemini returned an empty response. Please try again.';
+        setAiError(emptyMsg);
+        toast.error(emptyMsg);
+        return;
+      }
       setAiAssistantResult(res);
     } catch (err: any) {
       const msg = err?.message || 'Unable to reach Gemini Customer Assistant.';
@@ -1704,13 +1715,13 @@ export function ContactDetail({
           </div>
 
           {showAIAssistant && (
-            <div className="border-b border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-cyan-50/50 p-4 sm:p-5 space-y-3">
+            <div className="border-b border-indigo-100 dark:border-slate-800 bg-gradient-to-br from-indigo-50/70 via-white to-cyan-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/60 p-4 sm:p-5 space-y-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-indigo-600" />
-                  <span className="text-sm font-semibold text-slate-900">Gemini Customer Assistant</span>
+                  <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Gemini Customer Assistant</span>
                   {aiAssistantResult?.relationshipStatus && (
-                    <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 text-xs">
+                    <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-200 text-xs">
                       {aiAssistantResult.relationshipStatus}
                     </Badge>
                   )}
@@ -1739,7 +1750,7 @@ export function ContactDetail({
                     }
                   }}
                   placeholder={`Ask about ${displayName}'s purchase history, open quotes, or past notes...`}
-                  className="bg-white text-sm"
+                  className="bg-white dark:bg-slate-950 text-sm"
                 />
                 <Button
                   type="button"
@@ -1764,7 +1775,7 @@ export function ContactDetail({
                       setAiQuestion(sampleQ);
                       handleRunCustomerAssistant('qa', sampleQ);
                     }}
-                    className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs text-indigo-700 hover:bg-indigo-50"
+                    className="rounded-full border border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-indigo-700 dark:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-slate-800"
                   >
                     {sampleQ}
                   </button>
@@ -1772,19 +1783,21 @@ export function ContactDetail({
               </div>
 
               {aiError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <div className="rounded-xl border border-red-400/50 bg-red-500/15 p-3 text-xs font-medium text-red-700 dark:text-red-200">
                   {aiError}
                 </div>
               )}
 
-              {aiAssistantResult && !isLoadingAI && (
-                <div className="space-y-3 rounded-xl border border-indigo-100 bg-white p-4 shadow-xs">
-                  <p className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">{aiAssistantResult.answer}</p>
+              {aiAssistantResult && !isLoadingAI && (aiAssistantResult.answer?.trim() || aiAssistantResult.keyHighlights?.length > 0 || aiAssistantResult.suggestedNextActions?.length > 0) && (
+                <div className="space-y-3 rounded-xl border border-indigo-100 dark:border-slate-700/80 bg-white dark:bg-slate-950/80 p-4 shadow-xs">
+                  {aiAssistantResult.answer?.trim() && (
+                    <p className="text-sm leading-relaxed text-slate-800 dark:text-slate-100 whitespace-pre-wrap">{aiAssistantResult.answer}</p>
+                  )}
 
                   {aiAssistantResult.keyHighlights?.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Key Highlights</p>
-                      <ul className="space-y-1 text-xs text-slate-700">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Key Highlights</p>
+                      <ul className="space-y-1 text-xs text-slate-700 dark:text-slate-200">
                         {aiAssistantResult.keyHighlights.map((h, i) => (
                           <li key={i} className="flex items-start gap-2">
                             <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
@@ -1796,14 +1809,14 @@ export function ContactDetail({
                   )}
 
                   {aiAssistantResult.suggestedNextActions?.length > 0 && (
-                    <div className="space-y-2 border-t border-slate-100 pt-3">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Recommended Next Actions</p>
+                    <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recommended Next Actions</p>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {aiAssistantResult.suggestedNextActions.map((act, i) => (
-                          <div key={i} className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-xs flex flex-col justify-between gap-2">
+                          <div key={i} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/70 p-2.5 text-xs flex flex-col justify-between gap-2">
                             <div>
-                              <p className="font-semibold text-slate-900">{act.title}</p>
-                              <p className="mt-0.5 text-slate-600">{act.reason}</p>
+                              <p className="font-semibold text-slate-900 dark:text-slate-100">{act.title}</p>
+                              <p className="mt-0.5 text-slate-600 dark:text-slate-300">{act.reason}</p>
                             </div>
                             <Button
                               type="button"

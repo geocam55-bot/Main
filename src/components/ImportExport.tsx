@@ -318,6 +318,43 @@ const DEALS_TEMPLATE_SAMPLE = [
   }
 ];
 
+const PURCHASES_TEMPLATE_SAMPLE = [
+  {
+    "invoice_number": "INV-2026-1001",
+    "customer_name": "Acme Builders Support",
+    "purchase_date": "2026-11-15",
+    "sku": "DEC-OAK-01",
+    "item_name": "Premium Oak Decking Tile",
+    "category": "LUMBER",
+    "quantity": 40,
+    "unit_price": 12.50,
+    "unit_cost": 7.20,
+    "line_total": 500.00,
+    "subtotal": 500.00,
+    "tax_amount": 75.00,
+    "total_amount": 575.00,
+    "payment_status": "paid",
+    "fulfillment_status": "fulfilled"
+  },
+  {
+    "invoice_number": "INV-2026-1001",
+    "customer_name": "Acme Builders Support",
+    "purchase_date": "2026-11-15",
+    "sku": "ANC-CON-04",
+    "item_name": "Stainless Concrete Anchors 4x",
+    "category": "HARDWARE",
+    "quantity": 100,
+    "unit_price": 1.80,
+    "unit_cost": 0.90,
+    "line_total": 180.00,
+    "subtotal": 680.00,
+    "tax_amount": 102.00,
+    "total_amount": 782.00,
+    "payment_status": "paid",
+    "fulfillment_status": "fulfilled"
+  }
+];
+
 const SCHEMA_GUIDES = {
   contacts: {
     title: "CRM Customer Contacts",
@@ -442,49 +479,102 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  // Helper function to save a virtual file on Supabase DB kv_store_8405be07 table with robust localStorage fallback
-  const saveVirtualFile = async (fileName: string, base64Content: string, target: "local" | "onedrive" = "local") => {
+  // Helper function to save a virtual file via Express disk storage + lightweight Supabase directory metadata (avoids Postgres statement_timeout on large files)
+  const saveVirtualFile = async (
+    fileName: string,
+    base64Content: string,
+    target: "local" | "onedrive" = "local",
+    rawFile?: File
+  ) => {
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const isBinary = ["xlsx", "xls", "zip", "pdf", "png", "jpg", "jpeg", "gif"].includes(ext);
-
-    let textContent = "";
-    if (!isBinary) {
-      textContent = decodeBase64Robust(base64Content);
-    }
+    const byteSize = rawFile
+      ? rawFile.size
+      : Math.round(base64Content.length * 0.75);
 
     const fileMeta = {
       name: fileName,
-      size: isBinary ? Math.round(base64Content.length * 0.75) : textContent.length,
+      size: byteSize,
       lastModified: new Date().toISOString(),
       extension: ext
     };
 
-    const filePayload = { 
-      content: textContent, 
-      base64: base64Content,
-      isBinary: isBinary
-    };
-
-    // Always update local fallback storage
+    // 1. Upload to local Express backend disk storage first (supports up to 100MB with zero Postgres timeout)
+    let savedToServerDisk = false;
     try {
-      localStorage.setItem(`fallback_file_${fileName}`, JSON.stringify(filePayload));
+      if (rawFile) {
+        const formData = new FormData();
+        formData.append("file", rawFile);
+        const uploadRes = await safeFetch(`/api/import-export/storage/${target}/upload`, {
+          method: "POST",
+          body: formData
+        }, 120000);
+        if (uploadRes.ok) {
+          const uploadData = await parseResponseJson(uploadRes);
+          if (uploadData?.success) {
+            savedToServerDisk = true;
+          }
+        }
+      }
+
+      if (!savedToServerDisk && base64Content) {
+        const uploadRes = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName, fileContent: base64Content })
+        }, 120000);
+        if (uploadRes.ok) {
+          const uploadData = await parseResponseJson(uploadRes);
+          if (uploadData?.success) {
+            savedToServerDisk = true;
+          }
+        }
+      }
+    } catch (serverErr) {
+      console.warn("Express disk upload unavailable, falling back to direct Supabase KV storage:", serverErr);
+    }
+
+    // 2. Keep lightweight local fallback metadata in sync (skip huge content caching in localStorage)
+    try {
       const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
       const existingCat = JSON.parse(localStorage.getItem(`fallback_cat_${catKey}`) || '[]');
       const updatedCat = existingCat.filter((f: any) => f.name !== fileName);
       updatedCat.push(fileMeta);
       localStorage.setItem(`fallback_cat_${catKey}`, JSON.stringify(updatedCat));
+
+      if (byteSize <= 512 * 1024 && base64Content) {
+        localStorage.setItem(`fallback_file_${fileName}`, JSON.stringify({
+          base64: base64Content,
+          isBinary
+        }));
+      }
     } catch (e) {
       console.warn("Local storage fallback write warning:", e);
     }
 
+    // 3. Mirror content into kv_store_8405be07 only for small files OR when server disk upload wasn't available
     try {
       const supabase = createClient();
-      const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
-        key: `import_export_file_content:${fileName}`,
-        value: filePayload
-      });
-      if (upsertErr) {
-        throw new Error(`Could not save "${fileName}" to Supabase storage: ${upsertErr.message}`);
+      const shouldStoreBlobInKv = !savedToServerDisk || byteSize <= 750 * 1024;
+      if (shouldStoreBlobInKv && base64Content) {
+        const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
+          key: `import_export_file_content:${fileName}`,
+          value: {
+            base64: base64Content,
+            isBinary,
+            size: byteSize
+          }
+        });
+        if (upsertErr) {
+          if (!savedToServerDisk) {
+            const msg = upsertErr.message || "";
+            if (msg.toLowerCase().includes("statement timeout")) {
+              throw new Error(`"${fileName}" is too large for direct Supabase KV storage and the local backend server could not be reached. Please verify Backend: Connected and retry.`);
+            }
+            throw new Error(`Could not save "${fileName}" to Supabase storage: ${msg}`);
+          }
+          console.warn(`Non-fatal KV content cache skip for ${fileName}:`, upsertErr.message);
+        }
       }
 
       const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
@@ -507,28 +597,31 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       if (saveCategoryError) throw saveCategoryError;
     } catch (err: any) {
       console.error("Supabase virtual file save failed:", err?.message || err);
-      throw err;
+      if (!savedToServerDisk) {
+        throw err;
+      }
     }
   };
 
   // Helper function to delete a virtual file on Supabase DB kv_store_8405be07 table
-  const deleteVirtualFile = async (fileName: string) => {
+  const deleteVirtualFile = async (fileName: string, target: "local" | "onedrive" = "local") => {
+    const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
     try {
       localStorage.removeItem(`fallback_file_${fileName}`);
-      const existingCat = JSON.parse(localStorage.getItem(`fallback_cat_import_export_local_files`) || '[]');
-      localStorage.setItem(`fallback_cat_import_export_local_files`, JSON.stringify(existingCat.filter((f: any) => f.name !== fileName)));
+      const existingCat = JSON.parse(localStorage.getItem(`fallback_cat_${catKey}`) || '[]');
+      localStorage.setItem(`fallback_cat_${catKey}`, JSON.stringify(existingCat.filter((f: any) => f.name !== fileName)));
     } catch {}
 
     try {
       const supabase = createClient();
       await supabase.from('kv_store_8405be07').delete().eq('key', `import_export_file_content:${fileName}`);
       
-      const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
+      const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', catKey).maybeSingle();
       let currentFiles = catData?.value || [];
       if (Array.isArray(currentFiles)) {
         currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
         await supabase.from('kv_store_8405be07').upsert({
-          key: 'import_export_local_files',
+          key: catKey,
           value: currentFiles
         });
       }
@@ -848,9 +941,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [onedriveFolderId, setOnedriveFolderId] = useState<string | null>(null);
   const [onedriveFolderPath, setOnedriveFolderPath] = useState<{ id: string; name: string }[]>([]);
   const [syncingFileId, setSyncingFileId] = useState<string | null>(null);
-  const [crmStats, setCrmStats] = useState<CrmStats>({ contacts: 0, inventory: 0, deals: 0 });
+  const [crmStats, setCrmStats] = useState<CrmStats>({ contacts: 0, inventory: 0, deals: 0, purchases: 0 });
   const [crmRecords, setCrmRecords] = useState<any[]>([]);
-  const [previewModule, setPreviewModule] = useState<"contacts" | "inventory" | "deals">("contacts");
+  const [previewModule, setPreviewModule] = useState<"contacts" | "inventory" | "deals" | "purchases">("contacts");
 
   // Loading indicator states
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -858,6 +951,13 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [explorerUploading, setExplorerUploading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
+  const [confirmProcessing, setConfirmProcessing] = useState(false);
 
   // Form State for creating/editing scheduled tasks
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -879,7 +979,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
   // Action form values
   const [actionType, setActionType] = useState<"import" | "export">("export");
-  const [actionModule, setActionModule] = useState<"contacts" | "inventory" | "deals">("contacts");
+  const [actionModule, setActionModule] = useState<"contacts" | "inventory" | "deals" | "purchases">("contacts");
   const [actionStorage, setActionStorage] = useState<"local" | "onedrive">("local");
   const [actionFileName, setActionFileName] = useState("");
   const [actionFormat, setActionFormat] = useState<"csv" | "json" | "xml">("csv");
@@ -891,14 +991,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   const [runWhetherComputerOff, setRunWhetherComputerOff] = useState(true);
 
   // Manual execution interactive states
-  const [manualModule, setManualModule] = useState<"contacts" | "inventory" | "deals">("contacts");
+  const [manualModule, setManualModule] = useState<"contacts" | "inventory" | "deals" | "purchases">("contacts");
   const [manualType, setManualType] = useState<"import" | "export">("export");
 
   // Layout template download states and helpers
-  const [selectedLayoutModule, setSelectedLayoutModule] = useState<"contacts" | "inventory" | "deals">("contacts");
+  const [selectedLayoutModule, setSelectedLayoutModule] = useState<"contacts" | "inventory" | "deals" | "purchases">("contacts");
   const [showLayoutGuide, setShowLayoutGuide] = useState(false);
 
-  const handleDownloadTemplate = (moduleName: "contacts" | "inventory" | "deals", format: "xlsx" | "csv" | "json") => {
+  const handleDownloadTemplate = (moduleName: "contacts" | "inventory" | "deals" | "purchases", format: "xlsx" | "csv" | "json") => {
     let sampleData: any[] = [];
     let fileName = "";
     
@@ -908,6 +1008,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     } else if (moduleName === "inventory") {
       sampleData = INVENTORY_TEMPLATE_SAMPLE;
       fileName = "inventory_template";
+    } else if (moduleName === "purchases") {
+      sampleData = PURCHASES_TEMPLATE_SAMPLE;
+      fileName = "purchases_template";
     } else {
       sampleData = DEALS_TEMPLATE_SAMPLE;
       fileName = "deals_template";
@@ -1726,28 +1829,37 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
         let contactsQuery = supabase.from("contacts").select("id", { count: "exact", head: true });
         let inventoryQuery = supabase.from("inventory").select("id", { count: "exact", head: true });
         let opportunitiesQuery = supabase.from("opportunities").select("id", { count: "exact", head: true });
+        let purchasesQuery = supabase.from("customer_purchases").select("id", { count: "exact", head: true });
 
         if (resolvedOrgId) {
           contactsQuery = contactsQuery.eq("organization_id", resolvedOrgId);
           inventoryQuery = inventoryQuery.eq("organization_id", resolvedOrgId);
           opportunitiesQuery = opportunitiesQuery.eq("organization_id", resolvedOrgId);
+          purchasesQuery = purchasesQuery.eq("organization_id", resolvedOrgId);
         }
 
-        const [{ count: cCount }, { count: iCount }, { count: dCount }] = await Promise.all([
+        const [{ count: cCount }, { count: iCount }, { count: dCount }, purchasesRes] = await Promise.all([
           contactsQuery,
           inventoryQuery,
-          opportunitiesQuery
+          opportunitiesQuery,
+          purchasesQuery.then(res => res, () => ({ count: 0 }))
         ]);
 
         setCrmStats({
           contacts: cCount || 0,
           inventory: iCount || 0,
-          deals: dCount || 0
+          deals: dCount || 0,
+          purchases: purchasesRes?.count || 0
         });
       } else {
         const res = await safeFetch("/api/import-export/crm-stats");
         const data = await res.json();
-        setCrmStats(data);
+        setCrmStats({
+          contacts: data?.contacts || 0,
+          inventory: data?.inventory || 0,
+          deals: data?.deals || 0,
+          purchases: data?.purchases || 0
+        });
       }
     } catch (e: any) {
       console.error("Failed to load live CRM stats:", e);
@@ -1814,9 +1926,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           if (drive === "local") {
             const supabase = createClient();
             const { data } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_local_files').maybeSingle();
-            let filesList = data?.value || [];
-            if (!Array.isArray(filesList) || filesList.length === 0) {
-              // Populate standard default sample file if directory is blank
+            let filesList = Array.isArray(data?.value) ? data.value : [];
+            if (data === null || data?.value === undefined) {
+              // Populate standard default sample file only if key has never been initialized
               filesList = [
                 { name: "sample_contacts_import.csv", size: 385, lastModified: new Date().toISOString(), extension: "csv" },
                 { name: "quick_crm_export.csv", size: 512, lastModified: new Date().toISOString(), extension: "csv" }
@@ -1835,9 +1947,9 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           } else {
             const supabase = createClient();
             const { data } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'import_export_onedrive_files').maybeSingle();
-            let filesList = data?.value || [];
-            if (!Array.isArray(filesList) || filesList.length === 0) {
-              // Populate default standard sample file if blank
+            let filesList = Array.isArray(data?.value) ? data.value : [];
+            if (data === null || data?.value === undefined) {
+              // Populate default standard sample file only if key has never been initialized
               filesList = [
                 { name: "Customer_Export_List.xlsx", size: 127078, lastModified: new Date().toISOString(), extension: "xlsx" }
               ];
@@ -1976,22 +2088,55 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     }
   };
 
-  const fetchCrmRecords = async (mod: "contacts" | "inventory" | "deals") => {
+  const fetchCrmRecords = async (mod: "contacts" | "inventory" | "deals" | "purchases") => {
     try {
       if (connectionMode === "supabase") {
         const supabase = createClient();
         const authCtx = await getAuthContext(supabase);
         const resolvedOrgId = authCtx.organizationId || user?.organizationId || user?.organization_id;
-        const table = mod === "deals" ? "opportunities" : mod;
+        const table = mod === "deals" ? "opportunities" : mod === "purchases" ? "customer_purchases" : mod;
 
-        let query = supabase.from(table).select("*");
+        let query = mod === "purchases"
+          ? supabase
+              .from(table)
+              .select("*, contacts(legacy_number, name, company)")
+              .order("purchase_date", { ascending: false })
+              .limit(250)
+          : supabase.from(table).select("*");
         if (resolvedOrgId) {
           query = query.eq("organization_id", resolvedOrgId);
         }
 
         const { data, error } = await query;
         if (error) throw error;
-        setCrmRecords(data || []);
+        if (mod === "purchases") {
+          const formatted = (data || []).map((row: any) => {
+            const { contacts: linkedContact, ...rest } = row;
+            return {
+              id: rest.id,
+              invoice_number: rest.invoice_number,
+              account_number: linkedContact?.legacy_number || "—",
+              customer_name: rest.customer_name,
+              purchase_date: rest.purchase_date,
+              total_amount: rest.total_amount,
+              subtotal: rest.subtotal,
+              discount_amount: rest.discount_amount,
+              tax_amount: rest.tax_amount,
+              cost_total: rest.cost_total,
+              gross_profit: rest.gross_profit,
+              gp_percent: rest.gp_percent,
+              payment_status: rest.payment_status,
+              fulfillment_status: rest.fulfillment_status,
+              branch_id: rest.branch_id,
+              contact_id: rest.contact_id,
+              organization_id: rest.organization_id,
+              notes: rest.notes,
+            };
+          });
+          setCrmRecords(formatted);
+        } else {
+          setCrmRecords(data || []);
+        }
       } else {
         const res = await safeFetch(`/api/import-export/crm-data/${mod}`);
         const data = await res.json();
@@ -2125,7 +2270,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           headers: {
             "Authorization": `Bearer ${accessToken}`
           }
-        }, 120000); // 120 seconds timeout for large dataset parse & OneDrive network synchronization
+        }, 300000); // 300 seconds timeout for large dataset parse & synchronization
 
         if (!res.ok) {
           const errorData = await res.json().catch(() => ({}));
@@ -2271,23 +2416,19 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setExplorerUploading(true);
     const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
     try {
-      const base64Data = await readFileAsBase64(file);
+      const base64Data = file.size <= 2 * 1024 * 1024 ? await readFileAsBase64(file) : "";
       if (connectionMode === "supabase") {
-        await saveVirtualFile(file.name, base64Data, target);
+        await saveVirtualFile(file.name, base64Data, target, file);
         toast.dismiss(uploadToastId);
-        toast.success(`Uploaded "${file.name}" successfully to virtual storage!`);
+        toast.success(`Uploaded "${file.name}" successfully to storage!`);
         setExplorerUploading(false);
         await fetchFiles(target, true);
       } else {
-        const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await safeFetch(`/api/import-export/storage/${target}/upload`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileContent: base64Data
-          })
+          body: formData
         }, 120000);
         const data = await parseResponseJson(res);
         toast.dismiss(uploadToastId);
@@ -2304,6 +2445,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       console.error("File upload failed:", e);
       toast.error(`File upload failed: ${e.message || e}`);
       setExplorerUploading(false);
+    } finally {
+      event.target.value = "";
     }
   };
 
@@ -2314,24 +2457,20 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
     setModalUploading(true);
     const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
     try {
-      const base64Data = await readFileAsBase64(file);
+      const base64Data = file.size <= 2 * 1024 * 1024 ? await readFileAsBase64(file) : "";
       if (connectionMode === "supabase") {
-        await saveVirtualFile(file.name, base64Data, target);
+        await saveVirtualFile(file.name, base64Data, target, file);
         toast.dismiss(uploadToastId);
-        toast.success(`Uploaded & mapped "${file.name}" to virtual storage successfully!`);
+        toast.success(`Uploaded & mapped "${file.name}" to storage successfully!`);
         setActionFileName(file.name);
         setModalUploading(false);
         fetchFiles(target);
       } else {
-        const res = await safeFetch(`/api/import-export/storage/${target}/upload-base64`, {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await safeFetch(`/api/import-export/storage/${target}/upload`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileContent: base64Data
-          })
+          body: formData
         }, 120000);
         const data = await parseResponseJson(res);
         toast.dismiss(uploadToastId);
@@ -2349,33 +2488,53 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
       console.error("Modal file upload failed:", e);
       toast.error(`File upload failed: ${e.message || e}`);
       setModalUploading(false);
+    } finally {
+      event.target.value = "";
     }
   };
 
   // Delete handles from storage
-  const handleFileDelete = async (fileName: string, target: "local" | "onedrive") => {
-    if (!confirm(`Are you sure you want to permanently delete ${fileName} from ${target === 'local' ? 'Local Drive' : 'OneDrive'}?`)) return;
+  const handleFileDelete = (fileName: string, target: "local" | "onedrive") => {
+    setPendingConfirm({
+      title: "Delete File",
+      message: `Are you sure you want to permanently delete "${fileName}" from ${target === 'local' ? 'Local Drive' : 'OneDrive'}?`,
+      confirmLabel: "Delete File",
+      onConfirm: async () => {
+        try {
+          if (target === "local") {
+            setLocalFiles((prev) => prev.filter((f) => f.name !== fileName));
+          } else {
+            setOnedriveFiles((prev) => prev.filter((f) => f.name !== fileName));
+          }
 
-    try {
-      if (connectionMode === "supabase") {
-        await deleteVirtualFile(fileName);
-        toast.success(`${fileName} deleted successfully from virtual storage.`);
-        fetchFiles(target);
-      } else {
-        const res = await safeFetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
-          method: "DELETE"
-        });
-        const data = await res.json();
-        if (data.success) {
-          toast.success(`${fileName} deleted successfully.`);
-          fetchFiles(target);
-        } else {
-          toast.error("Deletion failed");
+          if (connectionMode === "supabase") {
+            await deleteVirtualFile(fileName, target);
+            // Best-effort cleanup of local Express disk mirror if server is reachable
+            safeFetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
+              method: "DELETE"
+            }).catch(() => {});
+            toast.success(`${fileName} deleted successfully from virtual storage.`);
+            await fetchFiles(target, true);
+          } else {
+            const res = await safeFetch(`/api/import-export/storage/${target}/${encodeURIComponent(fileName)}`, {
+              method: "DELETE"
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+              await deleteVirtualFile(fileName, target);
+              toast.success(`${fileName} deleted successfully.`);
+              await fetchFiles(target, true);
+            } else {
+              toast.error(data.error || "Deletion failed");
+              await fetchFiles(target, true);
+            }
+          }
+        } catch (e) {
+          toast.error("Network error deleting file");
+          await fetchFiles(target, true);
         }
       }
-    } catch (e) {
-      toast.error("Network error deleting file");
-    }
+    });
   };
 
   // Download handle from backend
@@ -2521,7 +2680,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             headers: session?.access_token ? {
               "Authorization": `Bearer ${session.access_token}`
             } : {}
-          }, 120000);
+          }, 300000);
           const data = await res.json();
           if (data.success) {
             toast.success(`Job run completed: status "${data.logResult.status}"`, { id: "job-run" });
@@ -2559,31 +2718,36 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
   };
 
   // Clears unattended history logs
-  const handleClearHistory = async () => {
-    if (!confirm("Are you sure you want to clear all scheduler logs history?")) return;
-
-    try {
-      if (connectionMode === "supabase") {
-        const supabase = createClient();
-        await supabase.from('kv_store_8405be07').upsert({
-          key: 'import_export_history',
-          value: []
-        });
-        toast.success("Execution logs cleared.");
-        fetchHistory();
-      } else {
-        const res = await safeFetch("/api/import-export/history/clear", {
-          method: "POST"
-        });
-        const data = await res.json();
-        if (data.success) {
-          toast.success("Execution logs cleared.");
-          fetchHistory();
+  const handleClearHistory = () => {
+    setPendingConfirm({
+      title: "Clear Execution Logs",
+      message: "Are you sure you want to clear all scheduler logs history?",
+      confirmLabel: "Clear Logs",
+      onConfirm: async () => {
+        try {
+          if (connectionMode === "supabase") {
+            const supabase = createClient();
+            await supabase.from('kv_store_8405be07').upsert({
+              key: 'import_export_history',
+              value: []
+            });
+            toast.success("Execution logs cleared.");
+            fetchHistory();
+          } else {
+            const res = await safeFetch("/api/import-export/history/clear", {
+              method: "POST"
+            });
+            const data = await res.json();
+            if (data.success) {
+              toast.success("Execution logs cleared.");
+              fetchHistory();
+            }
+          }
+        } catch (e) {
+          toast.error("Could not clear logs");
         }
       }
-    } catch (e) {
-      toast.error("Could not clear logs");
-    }
+    });
   };
 
   // Delete scheduled task
@@ -2962,7 +3126,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               headers: session?.access_token ? {
                 "Authorization": `Bearer ${session.access_token}`
               } : {}
-            }, 120000);
+            }, 300000);
             if (!runRes.ok) {
               const errBody = await runRes.json().catch(() => ({}));
               throw new Error(errBody?.error || `HTTP ${runRes.status}`);
@@ -2995,7 +3159,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
             headers: session?.access_token ? {
             "Authorization": `Bearer ${session.access_token}`
             } : {}
-          }, 120000);
+          }, 300000);
           runData = await parseResponseJson(runRes);
         }
 
@@ -3108,7 +3272,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           <div className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs">
             <Database className="h-3.5 w-3.5 text-slate-400" />
             <span className="font-medium text-slate-600">
-              CRM Storage: <span className="font-mono text-slate-900 font-semibold">{crmStats.contacts}</span> Contacts · <span className="font-mono text-slate-900 font-semibold">{crmStats.inventory}</span> Inventory · <span className="font-mono text-slate-900 font-semibold">{crmStats.deals}</span> Deals
+              CRM Storage: <span className="font-mono text-slate-900 font-semibold">{crmStats.contacts}</span> Contacts · <span className="font-mono text-slate-900 font-semibold">{crmStats.inventory}</span> Inventory · <span className="font-mono text-slate-900 font-semibold">{crmStats.deals}</span> Deals · <span className="font-mono text-slate-900 font-semibold">{crmStats.purchases}</span> Purchases
             </span>
           </div>
 
@@ -4049,20 +4213,25 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
 
                                 {(dbMsClientId || dbMsClientSecret) && (
                                   <button
-                                    onClick={async () => {
-                                      if (confirm("Are you sure you want to clear your custom overrides and revert to system standard credentials?")) {
-                                        try {
-                                          const supabase = createClient();
-                                          await supabase.from('kv_store_8405be07').delete().eq('key', 'secrets:microsoft');
-                                          setDbMsClientId('');
-                                          setDbMsClientSecret('');
-                                          setDbMsRedirectUri('');
-                                          setDbMsTenantId('');
-                                          toast.success("Custom overrides cleared. Default credentials restored.");
-                                        } catch (err: any) {
-                                          toast.error("Error clearing settings: " + err.message);
+                                    onClick={() => {
+                                      setPendingConfirm({
+                                        title: "Clear Custom Overrides",
+                                        message: "Are you sure you want to clear your custom overrides and revert to system standard credentials?",
+                                        confirmLabel: "Clear Override",
+                                        onConfirm: async () => {
+                                          try {
+                                            const supabase = createClient();
+                                            await supabase.from('kv_store_8405be07').delete().eq('key', 'secrets:microsoft');
+                                            setDbMsClientId('');
+                                            setDbMsClientSecret('');
+                                            setDbMsRedirectUri('');
+                                            setDbMsTenantId('');
+                                            toast.success("Custom overrides cleared. Default credentials restored.");
+                                          } catch (err: any) {
+                                            toast.error("Error clearing settings: " + err.message);
+                                          }
                                         }
-                                      }
+                                      });
                                     }}
                                     className="p-2 border border-slate-250 text-slate-500 hover:bg-slate-50 hover:text-slate-700 rounded-lg text-xs outline-none transition-all cursor-pointer font-medium"
                                   >
@@ -4477,23 +4646,24 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                             const uploadToastId = toast.loading(`Uploading "${file.name}" to directory...`);
                             
                             try {
-                              const base64Data = await readFileAsBase64(file);
+                              const base64Data = file.size <= 2 * 1024 * 1024 ? await readFileAsBase64(file) : "";
                               if (connectionMode === "supabase") {
-                                await saveVirtualFile(file.name, base64Data, manualStorage);
+                                await saveVirtualFile(file.name, base64Data, manualStorage, file);
                                 toast.dismiss(uploadToastId);
-                                toast.success(`Uploaded & loaded "${file.name}" to virtual ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
+                                toast.success(`Uploaded & loaded "${file.name}" to ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
                                 setManualFileName(file.name);
+                                const lower = file.name.toLowerCase();
+                                if (lower.includes("purchase")) setManualModule("purchases");
+                                else if (lower.includes("contact")) setManualModule("contacts");
+                                else if (lower.includes("inventory")) setManualModule("inventory");
+                                else if (lower.includes("deal")) setManualModule("deals");
                                 fetchFiles(manualStorage);
                               } else {
-                                const res = await safeFetch(`/api/import-export/storage/${manualStorage}/upload-base64`, {
+                                const formData = new FormData();
+                                formData.append("file", file);
+                                const res = await safeFetch(`/api/import-export/storage/${manualStorage}/upload`, {
                                   method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json"
-                                  },
-                                  body: JSON.stringify({
-                                    fileName: file.name,
-                                    fileContent: base64Data
-                                  })
+                                  body: formData
                                 }, 120000);
                                 
                                 const data = await parseResponseJson(res);
@@ -4502,6 +4672,11 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                                 if (data.success) {
                                   toast.success(`Uploaded & loaded "${file.name}" to ${manualStorage === "onedrive" ? "OneDrive" : "Local Drive"} successfully!`);
                                   setManualFileName(file.name);
+                                  const lower = file.name.toLowerCase();
+                                  if (lower.includes("purchase")) setManualModule("purchases");
+                                  else if (lower.includes("contact")) setManualModule("contacts");
+                                  else if (lower.includes("inventory")) setManualModule("inventory");
+                                  else if (lower.includes("deal")) setManualModule("deals");
                                   fetchFiles(manualStorage);
                                 } else {
                                   throw new Error(data.error || "File upload response was not successful");
@@ -4513,6 +4688,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                               toast.error(`File upload failed: ${err.message || err}`);
                             } finally {
                               setManualUploading(false);
+                              e.target.value = "";
                             }
                           }} 
                           className="hidden" 
@@ -4677,7 +4853,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           </div>
 
           {/* Right Side live database view */}
-          <div className="lg:col-span-2 space-y-4 max-w-full text-left font-normal">
+          <div className="lg:col-span-2 min-w-0 space-y-4 max-w-full text-left font-normal">
               <div className="bg-white border rounded-xl overflow-hidden shadow-2xs">
                 
                 {/* Header preview filter */}
@@ -4687,8 +4863,8 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                     <p className="text-2xs text-slate-400 font-normal">Interactive preview panel reflecting upserts run by either background unattended logs or loaders.</p>
                   </div>
 
-                  <div className="flex gap-1.5">
-                    {["contacts", "inventory", "deals"].map((m) => (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {["contacts", "inventory", "deals", "purchases"].map((m) => (
                       <button
                         key={m}
                         onClick={() => {
@@ -4707,21 +4883,28 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                 </div>
 
                 {/* Grid records contents */}
-                <div className="p-4 overflow-y-auto max-h-[400px]">
+                <div className="p-4">
                   {crmRecords.length === 0 ? (
                     <div className="text-center py-12 text-slate-400">
                       <Database className="w-10 h-10 mx-auto text-slate-200 mb-2" />
                       <p className="text-xs font-semibold">Table contains no records</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto text-xs">
-                      <table className="min-w-full text-left border rounded border-collapse">
-                        <thead>
+                    <div className="overflow-auto max-h-[420px] border rounded text-xs">
+                      <table className="min-w-max w-full text-left border-collapse">
+                        <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
                           <tr className="bg-slate-50 border-b font-semibold text-slate-600">
                             {Object.keys(crmRecords[0]).map((key) => {
                               if (key === "id") return null;
-                              const label = key === "last_date_updated" ? "Last Date Updated" : key.replace(/_/g, " ");
-                              return <th key={key} className="p-2 border font-bold capitalize">{label}</th>;
+                              const label =
+                                key === "last_date_updated"
+                                  ? "Last Date Updated"
+                                  : key === "account_number"
+                                    ? "Account #"
+                                    : key === "contact_id"
+                                      ? "Contact Id (UUID)"
+                                      : key.replace(/_/g, " ");
+                              return <th key={key} className="p-2 border font-bold capitalize whitespace-nowrap">{label}</th>;
                             })}
                           </tr>
                         </thead>
@@ -4731,13 +4914,14 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
                               {Object.entries(rec).map(([key, val]: any) => {
                                 if (key === "id") return null;
                                 const displayVal =
-                                  key === "last_date_updated" && val
+                                  (key === "last_date_updated" || key === "purchase_date") && val
                                     ? (() => {
                                         const d = new Date(val);
-                                        return isNaN(d.getTime()) ? String(val) : d.toLocaleString();
+                                        if (isNaN(d.getTime())) return String(val);
+                                        return key === "purchase_date" ? d.toLocaleDateString() : d.toLocaleString();
                                       })()
                                     : String(val ?? '');
-                                return <td key={key} className="p-2 border max-w-xs truncate">{displayVal}</td>;
+                                return <td key={key} title={displayVal} className="p-2 border whitespace-nowrap max-w-[240px] truncate">{displayVal}</td>;
                               })}
                             </tr>
                           ))}
@@ -4844,6 +5028,7 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
           if (file.name.toLowerCase().includes("contacts")) setManualModule("contacts");
           else if (file.name.toLowerCase().includes("inventory")) setManualModule("inventory");
           else if (file.name.toLowerCase().includes("deals")) setManualModule("deals");
+          else if (file.name.toLowerCase().includes("purchase")) setManualModule("purchases");
           
           if (currentDrive === "onedrive" && msAccounts.length > 0 && file.id) {
             try {
@@ -5409,6 +5594,50 @@ export function ImportExport({ user, onNavigate }: { user?: any; onNavigate?: (v
               </div>
             </div>
           </motion.div>
+        </div>
+      )}
+
+      {/* ==================== IN-APP CONFIRMATION MODAL (IFRAME SAFE) ==================== */}
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4 text-left">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-red-50 text-red-600 shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-900">{pendingConfirm.title}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">{pendingConfirm.message}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={confirmProcessing}
+                onClick={() => setPendingConfirm(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={confirmProcessing}
+                onClick={async () => {
+                  setConfirmProcessing(true);
+                  try {
+                    await pendingConfirm.onConfirm();
+                  } finally {
+                    setConfirmProcessing(false);
+                    setPendingConfirm(null);
+                  }
+                }}
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {confirmProcessing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{pendingConfirm.confirmLabel || "Confirm"}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

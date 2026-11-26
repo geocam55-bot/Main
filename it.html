@@ -103,7 +103,65 @@
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="it-boot-loader" style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;color:#cbd5e1;padding:24px;">
+        <div style="text-align:center;max-width:360px;">
+          <div style="width:44px;height:44px;border-radius:9999px;border:3px solid rgba(139,92,246,0.22);border-top-color:#8b5cf6;margin:0 auto 16px;animation:itspin 0.8s linear infinite;"></div>
+          <p id="it-boot-status" style="font-size:14px;font-weight:500;margin:0;color:#94a3b8;">Loading IT Space...</p>
+          <div id="it-boot-actions" style="display:none;margin-top:16px;">
+            <button type="button" onclick="window.location.reload()" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;">Reload IT Space</button>
+          </div>
+        </div>
+      </div>
+      <style>@keyframes itspin{to{transform:rotate(360deg)}}</style>
+    </div>
+    <script>
+      (function() {
+        var showBootRecovery = function(reason) {
+          if (window.__IT_SPACE_MOUNTED__) return;
+          var isModuleError = /dynamically imported module|importing a module script|failed to fetch|outdated optimize dep|unexpected token/i.test(String(reason || ''));
+          if (isModuleError) {
+            try {
+              var last = Number(sessionStorage.getItem('it_boot_reload_at') || '0');
+              if (!last || Date.now() - last > 15000) {
+                sessionStorage.setItem('it_boot_reload_at', String(Date.now()));
+                window.location.reload();
+                return;
+              }
+            } catch (e) {}
+          }
+          var statusEl = document.getElementById('it-boot-status');
+          var actionsEl = document.getElementById('it-boot-actions');
+          if (statusEl) {
+            statusEl.textContent = reason ? ('Unable to load IT Space: ' + reason) : 'IT Space is taking longer than expected to load.';
+            statusEl.style.color = '#fca5a5';
+          }
+          if (actionsEl) {
+            actionsEl.style.display = 'block';
+          }
+        };
+
+        window.addEventListener('error', function(event) {
+          if (window.__IT_SPACE_MOUNTED__) return;
+          var msg = (event && event.message) || (event && event.error && event.error.message) || '';
+          if (!msg || /websocket/i.test(msg) || /closed without opened/i.test(msg)) return;
+          showBootRecovery(msg);
+        });
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (window.__IT_SPACE_MOUNTED__) return;
+          var msg = (event && event.reason && (event.reason.message || String(event.reason))) || '';
+          if (!msg || /websocket/i.test(msg) || /closed without opened/i.test(msg)) return;
+          showBootRecovery(msg);
+        });
+
+        setTimeout(function() {
+          if (!window.__IT_SPACE_MOUNTED__) {
+            showBootRecovery('');
+          }
+        }, 15000);
+      })();
+    </script>
     <script type="module" src="/src/it-entry.tsx"></script>
   </body>
 </html>

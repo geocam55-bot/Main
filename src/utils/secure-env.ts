@@ -1,4 +1,5 @@
 import { createClient } from './supabase/client';
+import { getServerHeaders } from './server-headers';
 
 const supabase = createClient();
 
@@ -98,9 +99,10 @@ export async function getAppEnv(key: string, fallback: string = ''): Promise<str
 export async function setAppEnv(key: string, value: string, description?: string): Promise<boolean> {
   // 1. Prioritize server endpoint (bypasses RLS issues via service role key)
   try {
+    const headers = await getServerHeaders();
     const resp = await fetch('/api/secure-env/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ scope: 'system', key, value, description })
     });
     if (resp.ok) {
@@ -182,9 +184,10 @@ export async function setTenantEnv(organizationId: string, key: string, value: s
 
   // 1. Prioritize server endpoint (bypasses RLS via service role)
   try {
+    const headers = await getServerHeaders();
     const resp = await fetch('/api/secure-env/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ scope: 'tenant', organizationId: targetOrgId, key, value, description })
     });
     if (resp.ok) {

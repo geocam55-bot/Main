@@ -46,36 +46,116 @@ const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || publicAnonKey).trim().replace(/^['"\s]+|['"\s]+$/g, '');
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function saveVirtualFileServer(fileName: string, base64Content: string) {
+async function saveVirtualFileServer(fileName: string, base64Content: string, target: "local" | "onedrive" = "local") {
   try {
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const isBinary = ["xlsx", "xls", "zip", "pdf", "png", "jpg", "jpeg", "gif"].includes(ext);
-    let textContent = "";
-    if (!isBinary) {
-      try {
-        textContent = Buffer.from(base64Content, 'base64').toString('utf8');
-      } catch {
-        textContent = base64Content;
+    const byteSize = Buffer.from(base64Content, 'base64').length;
+
+    // Only mirror file content into kv_store_8405be07 for files <= 1.5MB to avoid Postgres statement_timeout
+    // Larger files are served directly from LOCAL_DRIVE_DIR / ONEDRIVE_DIR on disk via loadVirtualFileServer.
+    if (byteSize <= 1.5 * 1024 * 1024) {
+      const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
+        key: `import_export_file_content:${fileName}`,
+        value: {
+          name: fileName,
+          base64: base64Content,
+          isBinary,
+          size: byteSize,
+          lastModified: new Date().toISOString()
+        }
+      });
+
+      if (upsertErr) {
+        console.warn(`[Server] Supabase KV cache skipped for ${fileName}:`, upsertErr.message);
       }
+    } else {
+      console.log(`[Server] Skipping KV content blob mirror for large file ${fileName} (${(byteSize / 1024 / 1024).toFixed(2)} MB); stored on server disk.`);
     }
 
-    const { error: upsertErr } = await supabase.from('kv_store_8405be07').upsert({
-      key: `import_export_file_content:${fileName}`,
-      value: {
-        name: fileName,
-        base64: base64Content,
-        textContent: textContent,
-        size: Buffer.from(base64Content, 'base64').length,
-        lastModified: new Date().toISOString()
-      }
+    // Always keep lightweight directory listing metadata in sync
+    const catKey = target === "onedrive" ? "import_export_onedrive_files" : "import_export_local_files";
+    const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', catKey).maybeSingle();
+    let currentFiles = Array.isArray(catData?.value) ? catData.value : [];
+    currentFiles = currentFiles.filter((f: any) => f.name !== fileName);
+    currentFiles.push({
+      name: fileName,
+      size: byteSize,
+      lastModified: new Date().toISOString(),
+      extension: ext
     });
-
-    if (upsertErr) {
-      console.error(`[Server] Supabase fail saving virtual file ${fileName}:`, upsertErr.message);
-    }
+    await supabase.from('kv_store_8405be07').upsert({
+      key: catKey,
+      value: currentFiles
+    });
   } catch (err: any) {
-    console.error(`[Server] Error saving virtual file ${fileName}:`, err?.message || err);
+    console.warn(`[Server] Non-fatal error updating virtual file metadata for ${fileName}:`, err?.message || err);
   }
+}
+
+function parseCsvRecordsServer(rawText: string): any[] {
+  const cleanText = rawText.replace(/^\uFEFF/g, "");
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let entry = "";
+  let insideQuote = false;
+
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const nextChar = cleanText[i + 1];
+
+    if (insideQuote) {
+      if (char === '"') {
+        if (nextChar === '"') {
+          entry += '"';
+          i++;
+        } else {
+          insideQuote = false;
+        }
+      } else {
+        entry += char;
+      }
+    } else {
+      if (char === '"') {
+        insideQuote = true;
+      } else if (char === ',') {
+        row.push(entry);
+        entry = "";
+      } else if (char === '\r' || char === '\n') {
+        row.push(entry);
+        entry = "";
+        if (row.some(val => val !== "")) {
+          rows.push(row);
+        }
+        row = [];
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+      } else {
+        entry += char;
+      }
+    }
+  }
+
+  if (row.length > 0 || entry !== "") {
+    row.push(entry);
+    if (row.some(val => val !== "")) {
+      rows.push(row);
+    }
+  }
+
+  if (rows.length <= 1) return [];
+  const headers = rows[0].map(h => h.trim());
+  const records: any[] = [];
+  for (let r = 1; r < rows.length; r++) {
+    const vals = rows[r];
+    const obj: any = {};
+    headers.forEach((h, idx) => {
+      if (h) obj[h] = vals[idx] !== undefined ? vals[idx] : '';
+    });
+    records.push(obj);
+  }
+  return records;
 }
 
 async function loadVirtualFileServer(fileName: string) {
@@ -184,7 +264,8 @@ const initialCrmDb = {
   deals: [
     { id: '1', ClientName: 'Acme Corp', ProjectName: 'Corporate Deck Expansion', DealValue: 24500, Stage: 'Negotiation', CloseDate: '2026-06-15', Notes: 'Pending custom board approval' },
     { id: '2', ClientName: 'Jenkins Family', ProjectName: 'Pool House Framing', DealValue: 12800, Stage: 'Proposal Sent', CloseDate: '2026-07-02', Notes: 'Includes hardware kits supply' }
-  ]
+  ],
+  purchases: []
 };
 
 // Seed storage files if empty so it feels alive right away
@@ -977,24 +1058,8 @@ async function executeScheduledTask(task: any) {
       if (fileExtension === '.json') {
         importedRecords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else if (fileExtension === '.csv') {
-        const rawText = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/g, "");
-        const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
-        if (lines.length > 1) {
-          // simple CSV parser
-          const parseCsvLine = (line: string) => {
-            const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-            return matches.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
-          };
-          const headers = parseCsvLine(lines[0]);
-          for (let i = 1; i < lines.length; i++) {
-            const values = parseCsvLine(lines[i]);
-            const row: any = {};
-            headers.forEach((h, idx) => {
-              row[h] = values[idx] || '';
-            });
-            importedRecords.push(row);
-          }
-        }
+        const rawText = fs.readFileSync(filePath, 'utf8');
+        importedRecords = parseCsvRecordsServer(rawText);
       } else {
         // Excel using xlsx read
         const workbook = XLSX.readFile(filePath);
@@ -1026,13 +1091,22 @@ async function executeScheduledTask(task: any) {
       const hasEmail = lowerHeaderKeys.some(k => k === "email" || k === "emailaddress" || k === "email_address");
       const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber" || k === "phone_number" || k === "telephone");
       const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno" || k === "legacy_number");
+      const hasInvoiceNumber = lowerHeaderKeys.some(k => k === "invoicenumber" || k === "invoice_number" || k === "invoiceno" || k === "receiptnumber" || k === "ordernumber");
+      const hasPurchaseDate = lowerHeaderKeys.some(k => k === "purchasedate" || k === "purchase_date" || k === "orderdate" || k === "invoicedate");
+      const hasLineTotal = lowerHeaderKeys.some(k => k === "linetotal" || k === "line_total" || k === "totalamount" || k === "total_amount");
     let resolvedModule = moduleKey;
-      if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
+      if (hasInvoiceNumber || (hasPurchaseDate && hasLineTotal)) {
+        resolvedModule = "purchases";
+      } else if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
         resolvedModule = "inventory";
-      } else if (hasProjectName || hasClientName || hasDealValue) {
-        resolvedModule = "deals";
       } else if (hasEmail || hasPhone || hasLegacyNumber) {
         resolvedModule = "contacts";
+      } else if (hasProjectName || hasDealValue) {
+        resolvedModule = "deals";
+      } else if (moduleKey === "purchases") {
+        resolvedModule = "purchases";
+      } else if (hasClientName) {
+        resolvedModule = "deals";
       }
 
       if (resolvedModule !== moduleKey) {
@@ -1181,7 +1255,7 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
   try {
     const mType = task.action.type;
     let mModule = task.action.module;
-    let table = mModule === "deals" ? "opportunities" : mModule;
+    let table = mModule === "deals" ? "opportunities" : mModule === "purchases" ? "customer_purchases" : mModule;
     const fileName = task.action.fileName;
     const format = task.action.format;
 
@@ -1432,31 +1506,11 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           throw new Error(`Excel workbook parsing failed: ${xlsxErr.message}`);
         }
       } else {
-        // csv parser
+        // csv parser (RFC-4180 compliant)
         try {
-          console.log(`[Scheduler Supabase] [Import Mode] Splitting CSV lines...`);
-          const rawText = fileContent.replace(/^\uFEFF/g, "");
-          const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          console.log(`[Scheduler Supabase] [Import Mode] Total CSV source text lines: ${lines.length}`);
-          if (lines.length > 1) {
-            const parseCsvLine = (line: string) => {
-              const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-              return matches.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
-            };
-            const headers = parseCsvLine(lines[0]);
-            console.log(`[Scheduler Supabase] [Import Mode] Extracted headers: ${JSON.stringify(headers)}`);
-            parsedRecords = lines.slice(1).map(line => {
-              const values = parseCsvLine(line);
-              const row: any = {};
-              headers.forEach((h, idx) => {
-                row[h] = values[idx] || '';
-              });
-              return row;
-            });
-            console.log(`[Scheduler Supabase] [Import Mode] Extracted CSV records array count: ${parsedRecords.length}`);
-          } else {
-            console.warn(`[Scheduler Supabase] [Import Mode] CSV file has insufficient lines (fewer than 2, including headers).`);
-          }
+          console.log(`[Scheduler Supabase] [Import Mode] Parsing CSV with RFC-4180 state machine parser...`);
+          parsedRecords = parseCsvRecordsServer(fileContent);
+          console.log(`[Scheduler Supabase] [Import Mode] Extracted CSV records array count: ${parsedRecords.length}`);
         } catch (csvErr: any) {
           console.error(`[Scheduler Supabase] [Import Mode] ❌ CSV parser failed:`, csvErr);
           throw new Error(`CSV parsing failed: ${csvErr.message}`);
@@ -1488,15 +1542,28 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         const hasPhone = lowerHeaderKeys.some(k => k === "phone" || k === "phonenumber" || k === "phone_number" || k === "telephone");
         const hasLegacyNumber = lowerHeaderKeys.some(k => k === "legacy" || k === "legacynumber" || k === "legacyno" || k === "legacy_number");
 
-        if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
+        const hasInvoiceNumber = lowerHeaderKeys.some(k => k === "invoicenumber" || k === "invoice_number" || k === "invoiceno" || k === "receiptnumber" || k === "ordernumber");
+        const hasPurchaseDate = lowerHeaderKeys.some(k => k === "purchasedate" || k === "purchase_date" || k === "orderdate" || k === "invoicedate");
+        const hasLineTotal = lowerHeaderKeys.some(k => k === "linetotal" || k === "line_total" || k === "totalamount" || k === "total_amount");
+
+        if (hasInvoiceNumber || (hasPurchaseDate && hasLineTotal)) {
+          activeTable = "customer_purchases";
+          activeModule = "purchases";
+        } else if (hasSku || (hasItemName && (hasCost || hasPriceTiers || lowerHeaderKeys.includes("quantity")))) {
           activeTable = "inventory";
           activeModule = "inventory";
-        } else if (hasProjectName || hasClientName || hasDealValue) {
-          activeTable = "opportunities";
-          activeModule = "deals";
         } else if (hasEmail || hasPhone || hasLegacyNumber) {
           activeTable = "contacts";
           activeModule = "contacts";
+        } else if (hasProjectName || hasDealValue) {
+          activeTable = "opportunities";
+          activeModule = "deals";
+        } else if (mModule === "purchases") {
+          activeTable = "customer_purchases";
+          activeModule = "purchases";
+        } else if (hasClientName) {
+          activeTable = "opportunities";
+          activeModule = "deals";
         }
 
         console.log(`[Scheduler Supabase] Intended target: ${mModule} (${table}). Differentiated destination: ${activeModule} (${activeTable})`);
@@ -1512,7 +1579,8 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           const fallbackCols: Record<string, string[]> = {
             contacts: ["id", "organization_id", "owner_id", "name", "email", "phone", "company", "trade", "status", "price_level", "legacy_number", "account_owner_number", "address", "city", "province", "postal_code", "notes", "tags", "ptd_sales", "ptd_gp_percent", "ytd_sales", "ytd_gp_percent", "lyr_sales", "lyr_gp_percent"],
             inventory: ["id", "organization_id", "sku", "name", "description", "unit_price", "cost", "quantity", "quantity_on_order", "image_url", "category", "location", "price_tier_1", "price_tier_2", "price_tier_3", "price_tier_4", "price_tier_5", "unit_of_measure", "department_code", "reorder_level", "upc", "supplier", "supplier_sku", "min_stock", "max_stock", "lead_time_days", "notes", "tags", "price_levels", "last_date_updated"],
-            opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"]
+            opportunities: ["id", "organization_id", "owner_id", "title", "description", "customer_id", "value", "expected_close_date", "status", "stage"],
+            customer_purchases: ["id", "organization_id", "contact_id", "customer_name", "invoice_number", "purchase_date", "subtotal", "discount_amount", "tax_amount", "total_amount", "cost_total", "gross_profit", "gp_percent", "payment_status", "fulfillment_status", "branch_id", "salesperson_id", "notes"]
           };
           (fallbackCols[table] || []).forEach(k => existingDbCols.add(k));
         }
@@ -1560,8 +1628,11 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
         }
 
         const contactsLegacyMap = new Map<string, string>();
+        const contactsLegacyTrimMap = new Map<string, string>();
         const contactsNameMap = new Map<string, string>();
+        const contactsCompanyMap = new Map<string, string>();
         const contactsEmailMap = new Map<string, string>();
+        const contactsIdSet = new Set<string>();
         const existingContactsMap = new Map<string, any>();
         hasMore = true;
         offset = 0;
@@ -1575,8 +1646,14 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
             hasMore = false;
           } else {
             cData.forEach((c: any) => {
-              if (c.legacy_number) contactsLegacyMap.set(String(c.legacy_number).trim(), c.id);
+              contactsIdSet.add(c.id);
+              if (c.legacy_number) {
+                const leg = String(c.legacy_number).trim();
+                contactsLegacyMap.set(leg, c.id);
+                contactsLegacyTrimMap.set(leg.replace(/^0+/, ''), c.id);
+              }
               if (c.name) contactsNameMap.set(c.name.toLowerCase().trim(), c.id);
+              if (c.company) contactsCompanyMap.set(c.company.toLowerCase().trim(), c.id);
               if (c.email) contactsEmailMap.set(c.email.toLowerCase().trim(), c.id);
               existingContactsMap.set(c.id, c);
             });
@@ -2034,13 +2111,230 @@ export async function executeSupabaseScheduledTask(task: any, customSupabase?: a
           cleanedRecordsMap.set(targetId, mergedRec);
         }
 
-        const cleanedRecordsList = Array.from(cleanedRecordsMap.values());
-
-        // Exec chunked self-healing upserts
         const chunkSize = 150;
-    let insertCount = 0;
-    let errorCount = 0;
-    let lastErrDetail = "";
+        let insertCount = 0;
+        let errorCount = 0;
+        let lastErrDetail = "";
+
+        if (table === "customer_purchases") {
+          const existingPurchasesMap = new Map<string, string>();
+          try {
+            let pOffset = 0;
+            let pMore = true;
+            while (pMore) {
+              const { data: existingPurchases, error: epErr } = await db
+                .from("customer_purchases")
+                .select("id, invoice_number")
+                .range(pOffset, pOffset + 999);
+              if (epErr || !existingPurchases || existingPurchases.length === 0) {
+                pMore = false;
+              } else {
+                existingPurchases.forEach((p: any) => {
+                  if (p.invoice_number) existingPurchasesMap.set(String(p.invoice_number).trim(), p.id);
+                });
+                pOffset += 1000;
+              }
+            }
+          } catch {}
+
+          const headersByInvoice = new Map<string, any>();
+          const itemsByInvoice = new Map<string, any[]>();
+          const numVal = (v: any, fallback = 0) => {
+            if (v === undefined || v === null || v === "") return fallback;
+            const n = parseFloat(String(v).replace(/[^0-9.-]/g, ""));
+            return isNaN(n) ? fallback : n;
+          };
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+          parsedRecords.forEach((rawRec: any, rowIdx: number) => {
+            const norm: Record<string, any> = {};
+            for (const [k, v] of Object.entries(rawRec)) {
+              const lk = k.toLowerCase().replace(/^\uFEFF|\uFEFF/g, "").replace(/[\s\-_#/()]/g, "");
+              norm[lk] = typeof v === "string" ? v.trim() : v;
+            }
+
+            const invoiceNum = String(
+              norm.invoicenumber || norm.invoiceno || norm.receiptnumber || norm.ordernumber || `IMP-${Date.now()}-${rowIdx + 1}`
+            ).trim();
+            const custName = String(norm.customername || norm.customer || norm.clientname || norm.name || "").trim();
+            const custEmail = String(norm.customeremail || norm.email || "").toLowerCase().trim();
+            const rawContactId = String(norm.contactid || "").trim();
+            const custLegacy = String(norm.legacynumber || norm.customercode || norm.accountcode || (!uuidRegex.test(rawContactId) ? rawContactId : "")).trim();
+
+            const matchedContactId =
+              (uuidRegex.test(rawContactId) && contactsIdSet.has(rawContactId) ? rawContactId : null) ||
+              (custLegacy && (contactsLegacyMap.get(custLegacy) || contactsLegacyTrimMap.get(custLegacy.replace(/^0+/, '')))) ||
+              (custEmail && contactsEmailMap.get(custEmail)) ||
+              (custName && (contactsNameMap.get(custName.toLowerCase()) || contactsCompanyMap.get(custName.toLowerCase()))) ||
+              null;
+
+            const matchedContactObj = matchedContactId ? existingContactsMap.get(matchedContactId) : null;
+            const resolvedCustomerName = custName || matchedContactObj?.company || matchedContactObj?.name || "Walk-in / Unmatched Customer";
+
+            const existingHeader = headersByInvoice.get(invoiceNum);
+            const qty = numVal(norm.quantity ?? norm.qty, 1);
+            const unitPrice = numVal(norm.unitprice ?? norm.price, 0);
+            const unitCost = numVal(norm.unitcost ?? norm.cost, 0);
+            const lineTotal = numVal(norm.linetotal ?? norm.extprice, qty * unitPrice);
+            const lineCost = qty * unitCost;
+            const hasExplicitSubtotal = norm.subtotal !== undefined && norm.subtotal !== "";
+            const hasExplicitTotal = (norm.totalamount !== undefined && norm.totalamount !== "") || (norm.total !== undefined && norm.total !== "");
+
+            if (!existingHeader) {
+              const purchaseId = existingPurchasesMap.get(invoiceNum) || crypto.randomUUID();
+              const rawDate = norm.purchasedate || norm.orderdate || norm.invoicedate || norm.date;
+              let purchaseDateIso = new Date().toISOString();
+              if (rawDate) {
+                const parsedDate = new Date(rawDate);
+                if (!isNaN(parsedDate.getTime())) purchaseDateIso = parsedDate.toISOString();
+              }
+
+              const subtotalVal = hasExplicitSubtotal ? numVal(norm.subtotal, 0) : lineTotal;
+              const discountVal = numVal(norm.discountamount ?? norm.discount, 0);
+              const taxVal = numVal(norm.taxamount ?? norm.tax, 0);
+              const totalVal = hasExplicitTotal ? numVal(norm.totalamount ?? norm.total, 0) : subtotalVal - discountVal + taxVal;
+              const costTotalVal = numVal(norm.costtotal, lineCost);
+              const gpVal = norm.grossprofit !== undefined && norm.grossprofit !== "" ? numVal(norm.grossprofit, 0) : totalVal - costTotalVal;
+              const gpPctVal = norm.gppercent !== undefined && norm.gppercent !== ""
+                ? numVal(norm.gppercent, 0)
+                : totalVal !== 0 ? Number(((gpVal / Math.abs(totalVal)) * 100).toFixed(2)) : 0;
+
+              headersByInvoice.set(invoiceNum, {
+                id: purchaseId,
+                organization_id: organizationId,
+                contact_id: matchedContactId,
+                customer_name: resolvedCustomerName,
+                invoice_number: invoiceNum,
+                purchase_date: purchaseDateIso,
+                subtotal: Number(subtotalVal.toFixed(2)),
+                discount_amount: Number(discountVal.toFixed(2)),
+                tax_amount: Number(taxVal.toFixed(2)),
+                total_amount: Number(totalVal.toFixed(2)),
+                cost_total: Number(costTotalVal.toFixed(2)),
+                gross_profit: Number(gpVal.toFixed(2)),
+                gp_percent: Math.max(-999.99, Math.min(999.99, gpPctVal)),
+                payment_status: String(norm.paymentstatus || "paid").toLowerCase(),
+                fulfillment_status: String(norm.fulfillmentstatus || "fulfilled").toLowerCase(),
+                branch_id: norm.branchid || norm.branch || null,
+                notes: norm.notes || null,
+                updated_at: new Date().toISOString()
+              });
+            } else {
+              // Accumulate line totals onto the invoice header when explicit invoice totals are not supplied per row
+              if (!existingHeader.contact_id && matchedContactId) {
+                existingHeader.contact_id = matchedContactId;
+              }
+              if ((!existingHeader.customer_name || existingHeader.customer_name === "Walk-in / Unmatched Customer") && resolvedCustomerName) {
+                existingHeader.customer_name = resolvedCustomerName;
+              }
+              if (!hasExplicitSubtotal) {
+                existingHeader.subtotal = Number((existingHeader.subtotal + lineTotal).toFixed(2));
+              }
+              if (norm.costtotal === undefined || norm.costtotal === "") {
+                existingHeader.cost_total = Number((existingHeader.cost_total + lineCost).toFixed(2));
+              }
+              if (!hasExplicitTotal) {
+                existingHeader.total_amount = Number((existingHeader.subtotal - existingHeader.discount_amount + existingHeader.tax_amount).toFixed(2));
+              }
+              if (norm.grossprofit === undefined || norm.grossprofit === "") {
+                existingHeader.gross_profit = Number((existingHeader.total_amount - existingHeader.cost_total).toFixed(2));
+              }
+              if (norm.gppercent === undefined || norm.gppercent === "") {
+                const gpPct = existingHeader.total_amount !== 0
+                  ? Number(((existingHeader.gross_profit / Math.abs(existingHeader.total_amount)) * 100).toFixed(2))
+                  : 0;
+                existingHeader.gp_percent = Math.max(-999.99, Math.min(999.99, gpPct));
+              }
+            }
+
+            const itemName = String(norm.itemname || norm.productname || norm.description || norm.item || "").trim();
+            const sku = String(norm.sku || norm.skucode || norm.partnumber || "").trim();
+            if (itemName || sku) {
+              const list = itemsByInvoice.get(invoiceNum) || [];
+              list.push({
+                id: crypto.randomUUID(),
+                organization_id: organizationId,
+                purchase_id: headersByInvoice.get(invoiceNum).id,
+                item_id: (sku && inventorySkuMap.get(sku.toLowerCase())) || null,
+                sku: sku || null,
+                item_name: itemName || `Item ${sku}`,
+                category: norm.category || null,
+                quantity: qty,
+                unit_of_measure: String(norm.unitofmeasure || norm.uom || norm.unit || "EA").toUpperCase(),
+                unit_price: unitPrice,
+                unit_cost: unitCost,
+                discount_percent: numVal(norm.discountpercent, 0),
+                line_total: lineTotal
+              });
+              itemsByInvoice.set(invoiceNum, list);
+            }
+          });
+
+          const headerList = Array.from(headersByInvoice.values());
+          console.log(`[Scheduler Supabase] [Purchases] Upserting ${headerList.length} unique invoices (existing matched: ${existingPurchasesMap.size})...`);
+          const headerChunks: any[][] = [];
+          for (let i = 0; i < headerList.length; i += 300) {
+            headerChunks.push(headerList.slice(i, i + 300));
+          }
+          for (let i = 0; i < headerChunks.length; i += 5) {
+            const wave = headerChunks.slice(i, i + 5);
+            await Promise.all(wave.map(async (chunk) => {
+              const { error: pErr } = await db.from("customer_purchases").upsert(chunk);
+              if (pErr) {
+                errorCount += chunk.length;
+                lastErrDetail = pErr.message;
+              } else {
+                insertCount += chunk.length;
+              }
+            }));
+          }
+
+          const allItems: any[] = [];
+          const purchaseIdsToRefresh: string[] = [];
+          for (const [inv, items] of itemsByInvoice.entries()) {
+            const hdr = headersByInvoice.get(inv);
+            if (hdr?.id && items.length > 0) {
+              purchaseIdsToRefresh.push(hdr.id);
+              allItems.push(...items);
+            }
+          }
+
+          if (purchaseIdsToRefresh.length > 0) {
+            const deleteIdChunks: string[][] = [];
+            for (let i = 0; i < purchaseIdsToRefresh.length; i += 150) {
+              deleteIdChunks.push(purchaseIdsToRefresh.slice(i, i + 150));
+            }
+            for (let i = 0; i < deleteIdChunks.length; i += 5) {
+              const wave = deleteIdChunks.slice(i, i + 5);
+              await Promise.all(wave.map((idChunk) =>
+                db.from("customer_purchase_items").delete().in("purchase_id", idChunk)
+              ));
+            }
+
+            const itemChunks: any[][] = [];
+            for (let i = 0; i < allItems.length; i += 400) {
+              itemChunks.push(allItems.slice(i, i + 400));
+            }
+            for (let i = 0; i < itemChunks.length; i += 5) {
+              const wave = itemChunks.slice(i, i + 5);
+              await Promise.all(wave.map(async (itemChunk) => {
+                const { error: itemErr } = await db.from("customer_purchase_items").insert(itemChunk);
+                if (itemErr) {
+                  console.warn("[Scheduler Supabase] Purchase line item insert warning:", itemErr.message);
+                }
+              }));
+            }
+          }
+
+          if (errorCount > 0) {
+            console.error(`[Scheduler Supabase] [Purchases] Completed ${insertCount} invoice headers and ${allItems.length} line items with ${errorCount} failed rows.`);
+          } else {
+            console.log(`[Scheduler Supabase] [Purchases] Completed ${insertCount} invoice headers and ${allItems.length} line items cleanly.`);
+          }
+          cleanedRecordsMap.clear();
+        }
+
+        const cleanedRecordsList = Array.from(cleanedRecordsMap.values());
 
         console.log(`[Scheduler Supabase] [Import Mode] Prepared ${cleanedRecordsList.length} normalized records for UPSERT query into table "${table}"`);
         console.log(`[Scheduler Supabase] [Import Mode] Starting chunked self-healing upsert for ${cleanedRecordsList.length} rows (Chunk size: ${chunkSize})...`);
@@ -2764,10 +3058,22 @@ Return structured results in required JSON format.`;
         process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY = cleanVal;
         process.env.GOOGLE_MAPS_API_KEY = cleanVal;
       }
+      if (cleanKey === 'GEMINI_API_KEY' || cleanKey === 'GOOGLE_GEMINI_API_KEY') {
+        process.env.GEMINI_API_KEY = cleanVal;
+      }
+
+      const rawUserToken = req.headers['x-user-token'];
+      const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
+      const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY);
+      const dbClient = (!hasServiceRole && xUserToken && String(xUserToken).split('.').length === 3)
+        ? createClient(supabaseUrl, publicAnonKey, {
+            global: { headers: { Authorization: `Bearer ${xUserToken}` } }
+          })
+        : supabase;
 
       if (scope === 'tenant') {
         const orgId = organizationId || 'default_org';
-        const { error } = await supabase
+        const { error } = await dbClient
           .from('tenant_env_vars')
           .upsert({
             organization_id: orgId,
@@ -2783,7 +3089,7 @@ Return structured results in required JSON format.`;
         }
         return res.json({ success: true, message: `Saved ${cleanKey} to tenant_env_vars` });
       } else {
-        const { error } = await supabase
+        const { error } = await dbClient
           .from('app_env_vars')
           .upsert({
             key: cleanKey,
@@ -3026,13 +3332,13 @@ Return structured results in required JSON format.`;
     }
 
     try {
-      const destPath = path.join(targetDir, fileName);
+      const destPath = path.join(targetDir, path.basename(fileName));
       // Decodes the base64 string to a binary buffer
       const buffer = Buffer.from(fileContent, 'base64');
       fs.writeFileSync(destPath, buffer);
       
-      // Dual-write: upload copy to Supabase kv_store database 
-      await saveVirtualFileServer(fileName, fileContent);
+      // Dual-write: upload copy/metadata to Supabase kv_store database (non-fatal on large files)
+      await saveVirtualFileServer(path.basename(fileName), fileContent, target === 'onedrive' ? 'onedrive' : 'local');
 
       const logLine = `[${new Date().toISOString()}] [API BASE64 SUCCESS] Saved ${fileName} (${buffer.length} bytes) to ${destPath} and uploaded copy to virtual storage\n`;
       try {
@@ -3093,12 +3399,13 @@ Return structured results in required JSON format.`;
     }
 
     try {
-      const destPath = path.join(targetDir, req.file.originalname);
+      const safeName = path.basename(req.file.originalname);
+      const destPath = path.join(targetDir, safeName);
       fs.copyFileSync(req.file.path, destPath);
       
-      // Dual-write uploaded file content as base64 backup to DB
+      // Dual-write uploaded file metadata / small content backup to DB
       const fileContentBase64 = fs.readFileSync(destPath).toString('base64');
-      await saveVirtualFileServer(req.file.originalname, fileContentBase64);
+      await saveVirtualFileServer(safeName, fileContentBase64, target === 'onedrive' ? 'onedrive' : 'local');
 
       fs.unlinkSync(req.file.path); // remove temp multer file
       
@@ -3117,17 +3424,45 @@ Return structured results in required JSON format.`;
     }
   });
 
-  app.delete('/api/import-export/storage/:target/:fileName', (req, res) => {
+  app.delete('/api/import-export/storage/:target/:fileName', async (req, res) => {
     const { target, fileName } = req.params;
+    const safeFileName = path.basename(fileName);
     const targetDir = target === 'onedrive' ? ONEDRIVE_DIR : LOCAL_DRIVE_DIR;
 
     try {
-      const filePath = path.join(targetDir, fileName);
+      let deletedAny = false;
+      const filePath = path.join(targetDir, safeFileName);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
+        deletedAny = true;
+      }
+
+      // Also clean up virtual KV store entry if present
+      try {
+        const catKey = target === 'onedrive' ? 'import_export_onedrive_files' : 'import_export_local_files';
+        const { data: contentRow } = await supabase
+          .from('kv_store_8405be07')
+          .select('key')
+          .eq('key', `import_export_file_content:${safeFileName}`)
+          .maybeSingle();
+        if (contentRow) {
+          await supabase.from('kv_store_8405be07').delete().eq('key', `import_export_file_content:${safeFileName}`);
+          deletedAny = true;
+        }
+        const { data: catData } = await supabase.from('kv_store_8405be07').select('value').eq('key', catKey).maybeSingle();
+        if (Array.isArray(catData?.value) && catData.value.some((f: any) => f.name === safeFileName)) {
+          const updated = catData.value.filter((f: any) => f.name !== safeFileName);
+          await supabase.from('kv_store_8405be07').upsert({ key: catKey, value: updated });
+          deletedAny = true;
+        }
+      } catch (kvErr) {
+        console.warn('[Server] Virtual KV delete cleanup warning:', kvErr);
+      }
+
+      if (deletedAny) {
         res.json({ success: true });
       } else {
-        res.status(404).json({ error: 'File not found' });
+        res.status(404).json({ success: false, error: 'File not found' });
       }
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -3150,9 +3485,10 @@ Return structured results in required JSON format.`;
   app.get('/api/import-export/crm-stats', (req, res) => {
     const crm = loadJson(CRM_DB_FILE, initialCrmDb);
     res.json({
-      contacts: crm.contacts.length,
-      inventory: crm.inventory.length,
-      deals: crm.deals.length
+      contacts: (crm.contacts || []).length,
+      inventory: (crm.inventory || []).length,
+      deals: (crm.deals || []).length,
+      purchases: (crm.purchases || []).length
     });
   });
 
@@ -5802,7 +6138,10 @@ self.addEventListener('activate', (event) => {
           // The hosted preview proxies HTTP but not Vite's websocket endpoint. Remove any
           // injected HMR client so it cannot repeatedly report a failed socket connection.
           template = template.replace(/<script[^>]+src=["']\/@vite\/client["'][^>]*><\/script>/gi, '');
-          res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+          res.status(200).set({
+            'Content-Type': 'text/html',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+          }).end(template);
           return;
         } catch (e) {
           vite.ssrFixStacktrace(e as Error);
@@ -5816,7 +6155,11 @@ self.addEventListener('activate', (event) => {
         const fallbackPath = path.resolve(process.cwd(), 'index.html');
     let template = fs.readFileSync(fallbackPath, 'utf-8');
         template = await vite.transformIndexHtml(url, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        template = template.replace(/<script[^>]+src=["']\/@vite\/client["'][^>]*><\/script>/gi, '');
+        res.status(200).set({
+          'Content-Type': 'text/html',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        }).end(template);
       } catch (e) {
         vite.ssrFixStacktrace(e as Error);
         next(e);
