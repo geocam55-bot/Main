@@ -7,5 +7,5 @@ export function buildServerFunctionUrl(path = ''): string {
     ? (path.startsWith('/') ? path : `/${path}`)
     : '';
 
-  return `${getSupabaseUrl()}/functions/v1/${DEPLOYED_FUNCTION_ROUTE}${normalizedPath}`;
+  return `/functions/v1/make-server-8405be07${normalizedPath}`;
 }

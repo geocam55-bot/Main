@@ -5937,6 +5937,66 @@ self.addEventListener('activate', (event) => {
 
   registerAIRoutes(app, { supabase, supabaseUrl, publicAnonKey });
 
+  // --- LOCAL MOCK HANDLERS FOR SUPABASE EDGE FUNCTION ROUTES ---
+  app.get('/functions/v1/make-server-8405be07/subscriptions/current', async (req, res) => {
+    try {
+      const { data } = await supabase.from('kv_store_8405be07').select('value').eq('key', 'active_subscription').maybeSingle();
+      return res.json({
+        subscription: data?.value || {
+          plan_id: 'professional',
+          status: 'active',
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          amount: 49,
+          currency: 'CAD'
+        }
+      });
+    } catch (err: any) {
+      return res.json({
+        subscription: {
+          plan_id: 'professional',
+          status: 'active',
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          amount: 49,
+          currency: 'CAD'
+        }
+      });
+    }
+  });
+
+  app.get('/functions/v1/make-server-8405be07/quotes', async (req, res) => {
+    try {
+      const { data, error } = await supabase.from('quotes').select('*').limit(200);
+      if (error) throw error;
+      return res.json({ quotes: data || [] });
+    } catch (err: any) {
+      return res.json({ quotes: [] });
+    }
+  });
+
+  app.get('/functions/v1/make-server-8405be07/bids', async (req, res) => {
+    try {
+      const { data, error } = await supabase.from('bids').select('*').limit(200);
+      if (error) throw error;
+      return res.json({ bids: data || [] });
+    } catch (err: any) {
+      return res.json({ bids: [] });
+    }
+  });
+
+  app.get('/functions/v1/make-server-8405be07/contacts', async (req, res) => {
+    try {
+      const { data, error } = await supabase.from('contacts').select('*').limit(300);
+      if (error) throw error;
+      return res.json({ contacts: data || [] });
+    } catch (err: any) {
+      return res.json({ contacts: [] });
+    }
+  });
+
+  app.all('/functions/v1/make-server-8405be07/*', express.json(), async (req, res) => {
+    return res.json({ success: true, data: [], message: 'Handled by local ProSpaces backend server' });
+  });
+
   // --- FALLBACK CATCH-ALL FOR ALL UNHANDLED API ROUTES ---
   app.all('/api/*all', (req, res) => {
     console.warn(`[WARN] Unhandled API request: ${req.method} ${req.originalUrl || req.url}`);
