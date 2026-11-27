@@ -49,6 +49,7 @@ import {
   type TenantEnvVar 
 } from '../../utils/secure-env';
 import { createClient } from '../../utils/supabase/client';
+import { getServerHeaders, setAppSessionToken } from '../../utils/server-headers';
 
 interface EnvironmentSettingsPanelProps {
   scope: 'tenant' | 'system';
@@ -131,8 +132,29 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
   });
   const [verifyPassword, setVerifyPassword] = useState('');
   const [verifyingSession, setVerifyingSession] = useState(false);
+  const [superAdminClaimed, setSuperAdminClaimed] = useState<boolean>(true);
+  const [verifyError, setVerifyError] = useState<string>('');
 
   const orgId = organizationId || localStorage.getItem('currentOrgId') || '';
+
+  const checkServerSessionStatus = async () => {
+    try {
+      const headers = await getServerHeaders();
+      const resp = await fetch('/api/auth/session-status', {
+        method: 'GET',
+        headers,
+        credentials: 'same-origin',
+      });
+      if (resp.ok) {
+        const status = await resp.json().catch(() => ({}));
+        if (typeof status.superAdminClaimed === 'boolean') {
+          setSuperAdminClaimed(status.superAdminClaimed);
+        }
+        return status;
+      }
+    } catch {}
+    return null;
+  };
 
   const loadVariables = async () => {
     if (scope === 'tenant' && !orgId) {
@@ -151,8 +173,10 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
       setVars(data);
       if (getLastSecureEnvError()?.toLowerCase().includes('authentication required')) {
         setNeedsSessionVerify(true);
+        await checkServerSessionStatus();
       } else {
         setNeedsSessionVerify(false);
+        setVerifyError('');
       }
 
       // Populate SMTP fields from existing variables
@@ -176,34 +200,59 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
     loadVariables();
   }, [scope, orgId]);
 
-  const handleVerifySession = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerifySession = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const targetEmail = verifyEmail.trim();
     const targetPass = verifyPassword.trim();
     if (!targetEmail || !targetPass) {
-      toast.error('Please enter your account email and password.');
+      const msg = 'Please enter your account email and password.';
+      setVerifyError(msg);
+      toast.error(msg);
       return;
     }
 
     setVerifyingSession(true);
+    setVerifyError('');
     try {
       const supabase = createClient();
       let verified = false;
 
-      // 1. Try Supabase Auth first
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: targetEmail,
-        password: targetPass,
-      });
-      if (!signInErr && signInData?.session?.access_token) {
+      if (!superAdminClaimed && scope === 'system') {
+        const claimResp = await fetch('/api/auth/claim-superadmin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ email: targetEmail, password: targetPass }),
+        });
+        const claimResult = await claimResp.json().catch(() => ({}));
+        if (!claimResp.ok || !claimResult.success) {
+          throw new Error(claimResult?.error || 'Could not set Super Admin password.');
+        }
+        const appTok = claimResult.appToken || (typeof claimResult.token === 'string' && claimResult.token.startsWith('hs1.') ? claimResult.token : null);
+        if (appTok) {
+          setAppSessionToken(appTok);
+        }
+        setSuperAdminClaimed(true);
         verified = true;
       }
 
-      // 2. Fallback to /api/auth/login (issues verified Supabase session or hs1 signed token)
+      // 1. Try Supabase Auth first
+      if (!verified) {
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+          email: targetEmail,
+          password: targetPass,
+        });
+        if (!signInErr && signInData?.session?.access_token) {
+          verified = true;
+        }
+      }
+
+      // 2. Fallback to /api/auth/login (issues verified Supabase session or hs1 signed token + HttpOnly cookie)
       if (!verified) {
         const resp = await fetch('/api/auth/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          credentials: 'same-origin',
           body: JSON.stringify({ email: targetEmail, password: targetPass }),
         });
         const authResult = await resp.json().catch(() => ({}));
@@ -214,10 +263,15 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
               refresh_token: authResult.session.refresh_token,
             });
             verified = true;
-          } else if (typeof authResult.token === 'string' && authResult.token.startsWith('hs1.')) {
-            sessionStorage.setItem('prospaces_app_session_token', authResult.token);
+          }
+          const appTok = authResult.appToken || (typeof authResult.token === 'string' && authResult.token.startsWith('hs1.') ? authResult.token : null);
+          if (appTok) {
+            setAppSessionToken(appTok);
             verified = true;
           }
+        } else if (authResult?.needsClaim) {
+          setSuperAdminClaimed(false);
+          throw new Error(authResult.error || 'No Super Admin password is set yet. Enter a password (min 8 characters) to claim access.');
         } else if (authResult?.error) {
           throw new Error(authResult.error);
         }
@@ -229,6 +283,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
 
       setNeedsSessionVerify(false);
       setVerifyPassword('');
+      setVerifyError('');
       toast.success('Session verified!');
 
       // Automatically complete any pending variable save in the form
@@ -244,13 +299,16 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
           setDescription('');
           setIsEditing(false);
         } else {
+          if (saveRes.requiresAuth) setNeedsSessionVerify(true);
           toast.error(saveRes.error ? `Failed to save variable ${cleanKey}: ${saveRes.error}` : `Failed to save variable ${cleanKey}.`);
         }
       }
 
       await loadVariables();
     } catch (err: any) {
-      toast.error(err?.message || 'Session verification failed.');
+      const msg = err?.message || 'Session verification failed.';
+      setVerifyError(msg);
+      toast.error(msg);
     } finally {
       setVerifyingSession(false);
     }
@@ -265,6 +323,16 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
     }
     if (!smtpHost.trim() || !smtpUser.trim() || !smtpPassword.trim()) {
       toast.error('Host, User, and Password are required for SMTP configuration');
+      return;
+    }
+    if (needsSessionVerify) {
+      if (verifyEmail.trim() && verifyPassword.trim()) {
+        await handleVerifySession();
+        return;
+      }
+      toast.info('Please verify your Super Admin password in the Session Verification box above first.');
+      document.getElementById('verify-session-password')?.focus();
+      document.getElementById('verify-session-password')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -307,6 +375,16 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
     }
     if (!key.trim() || !value.trim()) {
       toast.error('Variable Key and Secret Value are required');
+      return;
+    }
+    if (needsSessionVerify) {
+      if (verifyEmail.trim() && verifyPassword.trim()) {
+        await handleVerifySession();
+        return;
+      }
+      toast.info('Please verify your Super Admin password in the Session Verification box above first.');
+      document.getElementById('verify-session-password')?.focus();
+      document.getElementById('verify-session-password')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -554,13 +632,17 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2 text-amber-800 dark:text-amber-300">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              Session Verification Required to Manage {scope === 'system' ? 'System' : 'Tenant'} Variables
+              {!superAdminClaimed && scope === 'system'
+                ? 'Set Your Super Admin Password (First-Time Server Setup)'
+                : `Session Verification Required to Manage ${scope === 'system' ? 'System' : 'Tenant'} Variables`}
             </CardTitle>
             <CardDescription className="text-xs text-amber-700/90 dark:text-amber-200/80">
-              Your current session was restored from local cache without an active server authentication token. Enter your Super Admin password below to verify and unlock saving.
+              {!superAdminClaimed && scope === 'system'
+                ? 'No Super Admin password has been saved on the server yet. Choose a password (at least 8 characters) to unlock managing System Variables.'
+                : 'Your browser session does not currently have an active server authentication token. Enter your password below to unlock saving.'}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <form onSubmit={handleVerifySession} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
               <div className="space-y-1">
                 <Label htmlFor="verify-session-email" className="text-xs font-semibold">Email</Label>
@@ -575,13 +657,18 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="verify-session-password" className="text-xs font-semibold">Password</Label>
+                <Label htmlFor="verify-session-password" className="text-xs font-semibold">
+                  {!superAdminClaimed && scope === 'system' ? 'New Super Admin Password' : 'Password'}
+                </Label>
                 <Input
                   id="verify-session-password"
                   type="password"
                   value={verifyPassword}
-                  onChange={(e) => setVerifyPassword(e.target.value)}
-                  placeholder="Enter your account password"
+                  onChange={(e) => {
+                    setVerifyPassword(e.target.value);
+                    setVerifyError('');
+                  }}
+                  placeholder={!superAdminClaimed && scope === 'system' ? 'Min 8 characters...' : 'Enter your account password'}
                   className="text-xs bg-background"
                   required
                 />
@@ -591,17 +678,22 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
                   {verifyingSession ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Verifying...
+                      {!superAdminClaimed && scope === 'system' ? 'Saving & Unlocking...' : 'Verifying...'}
                     </>
                   ) : (
                     <>
                       <Shield className="h-3.5 w-3.5" />
-                      {key.trim() && value.trim() ? 'Verify & Save Variable' : 'Verify Session'}
+                      {!superAdminClaimed && scope === 'system'
+                        ? (key.trim() && value.trim() ? 'Set Password & Save Variable' : 'Set Password & Unlock')
+                        : (key.trim() && value.trim() ? 'Verify & Save Variable' : 'Verify Session')}
                     </>
                   )}
                 </Button>
               </div>
             </form>
+            {verifyError && (
+              <p className="text-xs text-red-600 dark:text-red-400 font-medium">{verifyError}</p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -870,7 +962,9 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
                 {vars.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                      No tenant variables found for organization {orgId}.
+                      {scope === 'system'
+                        ? 'No system variables found.'
+                        : `No tenant variables found for organization ${orgId}.`}
                     </td>
                   </tr>
                 ) : (

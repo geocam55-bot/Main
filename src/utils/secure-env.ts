@@ -140,6 +140,7 @@ export async function setAppEnvResult(
     const resp = await fetch('/api/secure-env/save', {
       method: 'POST',
       headers,
+      credentials: 'same-origin',
       body: JSON.stringify({ scope: 'system', key: cleanKey, value, description }),
     });
     const json = await resp.json().catch(() => ({}));
@@ -269,6 +270,7 @@ export async function setTenantEnvResult(
     const resp = await fetch('/api/secure-env/save', {
       method: 'POST',
       headers,
+      credentials: 'same-origin',
       body: JSON.stringify({ scope: 'tenant', organizationId: targetOrgId, key: cleanKey, value, description }),
     });
     const json = await resp.json().catch(() => ({}));
@@ -367,10 +369,10 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
   // 1. Server API (Authoritative, enforces auth and uses service-role when configured)
   try {
     const headers = await getServerHeaders();
-    const resp = await fetch('/api/secure-env/list?scope=system', { headers });
+    const resp = await fetch('/api/secure-env/list?scope=system', { headers, credentials: 'same-origin' });
     const json = await resp.json().catch(() => ({}));
     if (resp.ok && json.success && Array.isArray(json.vars)) {
-      return json.vars;
+      return json.vars.filter((v: any) => !String(v?.key || '').startsWith('__'));
     }
     if (resp.status === 401) {
       lastSecureEnvError = json?.error || 'Authentication required';
@@ -385,14 +387,16 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
       .from('app_env_vars')
       .select('*')
       .order('key');
-    if (!error && data && data.length > 0) return data;
+    if (!error && data && data.length > 0) {
+      return data.filter((v: any) => !String(v?.key || '').startsWith('__'));
+    }
     if (error && isMissingTableErr(error)) {
       const { data: sysData, error: sysErr } = await supabase
         .from('system_settings')
         .select('setting_key, setting_value, updated_at');
       if (!sysErr && Array.isArray(sysData)) {
         return sysData
-          .filter((r: any) => r?.setting_key)
+          .filter((r: any) => r?.setting_key && !String(r.setting_key).startsWith('__'))
           .map((r: any) => ({
             key: r.setting_key,
             value: r.setting_value || '',
@@ -418,6 +422,7 @@ export async function listTenantEnv(organizationId: string): Promise<TenantEnvVa
     const headers = await getServerHeaders();
     const resp = await fetch(`/api/secure-env/list?scope=tenant&organizationId=${encodeURIComponent(targetOrgId)}`, {
       headers,
+      credentials: 'same-origin',
     });
     const json = await resp.json().catch(() => ({}));
     if (resp.ok && json.success && Array.isArray(json.vars)) {
@@ -474,6 +479,7 @@ export async function deleteAppEnvResult(key: string): Promise<SecureEnvActionRe
     const resp = await fetch('/api/secure-env/delete', {
       method: 'POST',
       headers,
+      credentials: 'same-origin',
       body: JSON.stringify({ scope: 'system', key: cleanKey }),
     });
     const data = await resp.json().catch(() => ({}));
@@ -544,6 +550,7 @@ export async function deleteTenantEnvResult(organizationId: string, key: string)
     const resp = await fetch('/api/secure-env/delete', {
       method: 'POST',
       headers,
+      credentials: 'same-origin',
       body: JSON.stringify({ scope: 'tenant', organizationId, key: cleanKey }),
     });
     const data = await resp.json().catch(() => ({}));

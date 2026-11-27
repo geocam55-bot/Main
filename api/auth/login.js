@@ -1,15 +1,13 @@
 import {
+  SUPER_ADMIN_EMAILS,
+  getClaimedSuperAdminRecord,
   getSupabaseEnv,
   parseJsonBody,
+  setAppSessionCookie,
   signAppSessionToken,
+  verifyPasswordScrypt,
 } from '../_lib/secureEnvHelper.js';
 import { deserializeFromPhone } from '../_lib/tenantHelper.js';
-
-const SUPER_ADMIN_EMAILS = new Set([
-  'superadmin@prospaces.com',
-  'george.campbell@prospaces.com',
-  'geocam55@gmail.com',
-]);
 
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
@@ -18,10 +16,11 @@ export default async function handler(req, res) {
   const origin = req.headers?.origin;
   if (origin && /^https?:\/\//i.test(String(origin))) {
     res.setHeader('Access-Control-Allow-Origin', String(origin));
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -76,8 +75,18 @@ export default async function handler(req, res) {
           }
         } catch {}
 
-        if (!userRole && SUPER_ADMIN_EMAILS.has(email)) {
+        if ((!userRole || userRole === 'standard_user' || userRole.toLowerCase() === 'admin') && SUPER_ADMIN_EMAILS.has(email)) {
           userRole = 'super_admin';
+        }
+
+        const appSessionToken = signAppSessionToken({
+          sub: authData.user.id,
+          email: authData.user.email || email,
+          role: userRole || 'standard_user',
+          organizationId,
+        });
+        if (appSessionToken) {
+          setAppSessionCookie(res, appSessionToken, req);
         }
 
         return res.status(200).json({
@@ -92,6 +101,7 @@ export default async function handler(req, res) {
             organization_id: organizationId,
           },
           token: authData.session.access_token,
+          appToken: appSessionToken || undefined,
           session: authData.session,
         });
       }
@@ -99,31 +109,77 @@ export default async function handler(req, res) {
 
     // 2. Super Admin env-configured password verification (if configured in environment)
     const configuredSuperPass = String(process.env.SUPERADMIN_PASSWORD || '').trim();
-    if (configuredSuperPass && SUPER_ADMIN_EMAILS.has(email) && password === configuredSuperPass) {
-      const userId = 'USR-SUPER-ADMIN-01';
-      const userObj = {
-        id: userId,
-        email,
-        name: email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell',
-        role: 'super_admin',
-        tenantId: 'rona_atlantic',
-        organization_id: 'rona_atlantic',
-      };
-      const signedToken = signAppSessionToken({
-        sub: userId,
-        email,
-        role: 'super_admin',
-        organizationId: 'rona_atlantic',
-      });
-      return res.status(200).json({
-        success: true,
+    if (configuredSuperPass && SUPER_ADMIN_EMAILS.has(email)) {
+      if (password === configuredSuperPass) {
+        const userId = 'USR-SUPER-ADMIN-01';
+        const userObj = {
+          id: userId,
+          email,
+          name: email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell',
+          role: 'super_admin',
+          tenantId: 'rona_atlantic',
+          organization_id: 'rona_atlantic',
+        };
+        const signedToken = signAppSessionToken({
+          sub: userId,
+          email,
+          role: 'super_admin',
+          organizationId: 'rona_atlantic',
+        });
+        if (signedToken) {
+          setAppSessionCookie(res, signedToken, req);
+        }
+        return res.status(200).json({
+          success: true,
+          found: true,
+          user: userObj,
+          token: signedToken || undefined,
+        });
+      }
+      return res.status(401).json({
+        success: false,
         found: true,
-        user: userObj,
-        token: signedToken || undefined,
+        error: 'Invalid email or password.',
       });
     }
 
-    // 3. Logistics / Tenant users table verification
+    // 3. Claimed Super Admin scrypt-hashed password verification
+    const claimedRecord = await getClaimedSuperAdminRecord(adminClient);
+    if (claimedRecord && SUPER_ADMIN_EMAILS.has(email)) {
+      if (verifyPasswordScrypt(password, claimedRecord.hash)) {
+        const userId = 'USR-SUPER-ADMIN-01';
+        const userObj = {
+          id: userId,
+          email,
+          name: email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell',
+          role: 'super_admin',
+          tenantId: 'rona_atlantic',
+          organization_id: 'rona_atlantic',
+        };
+        const signedToken = signAppSessionToken({
+          sub: userId,
+          email,
+          role: 'super_admin',
+          organizationId: 'rona_atlantic',
+        });
+        if (signedToken) {
+          setAppSessionCookie(res, signedToken, req);
+        }
+        return res.status(200).json({
+          success: true,
+          found: true,
+          user: userObj,
+          token: signedToken || undefined,
+        });
+      }
+      return res.status(401).json({
+        success: false,
+        found: true,
+        error: 'Invalid email or password.',
+      });
+    }
+
+    // 4. Logistics / Tenant users table verification
     try {
       const { data: rows } = await adminClient
         .from('users')
@@ -134,15 +190,22 @@ export default async function handler(req, res) {
       for (const rawRow of rows || []) {
         const userRow = deserializeFromPhone(rawRow);
         if (!userRow || userRow.status === 'Inactive') continue;
-        if (userRow.password && String(userRow.password) === password) {
+        const storedPass = String(userRow.password || '');
+        const passMatches = storedPass.startsWith('scrypt:')
+          ? verifyPasswordScrypt(password, storedPass)
+          : Boolean(storedPass && storedPass === password);
+        if (passMatches) {
           const tenantId = userRow.tenant_id || userRow.tenantId || 'rona_atlantic';
-          const role = userRow.role || 'User';
+          const role = SUPER_ADMIN_EMAILS.has(email) ? 'super_admin' : (userRow.role || 'User');
           const signedToken = signAppSessionToken({
             sub: String(userRow.id),
             email: String(userRow.email || email).toLowerCase(),
             role,
             organizationId: tenantId,
           });
+          if (signedToken) {
+            setAppSessionCookie(res, signedToken, req);
+          }
           return res.status(200).json({
             success: true,
             found: true,
@@ -163,6 +226,15 @@ export default async function handler(req, res) {
         }
       }
     } catch {}
+
+    if (SUPER_ADMIN_EMAILS.has(email) && !claimedRecord && !configuredSuperPass) {
+      return res.status(401).json({
+        success: false,
+        found: false,
+        needsClaim: true,
+        error: 'Super Admin password has not been set on the server yet. Set your Super Admin password to continue.',
+      });
+    }
 
     return res.status(401).json({
       success: false,

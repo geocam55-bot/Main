@@ -160,6 +160,23 @@ export async function getUserAccessToken(): Promise<string | null> {
   }
 }
 
+let _inMemoryAppSessionToken: string | null = null;
+
+export function setAppSessionToken(token: string | null) {
+  if (typeof token === 'string' && token.startsWith('hs1.')) {
+    _inMemoryAppSessionToken = token;
+  }
+}
+
+export function clearAppSessionToken() {
+  _inMemoryAppSessionToken = null;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem('prospaces_app_session_token');
+    }
+  } catch {}
+}
+
 /**
  * Build headers for a server API call.
  * Always includes Authorization with the anon key (for the gateway).
@@ -169,6 +186,7 @@ export async function getServerHeaders(extraHeaders?: Record<string, string>): P
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${publicAnonKey}`,
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
     ...extraHeaders,
   };
 
@@ -177,14 +195,9 @@ export async function getServerHeaders(extraHeaders?: Record<string, string>): P
     headers['X-User-Token'] = userToken;
   }
 
-  try {
-    if (typeof window !== 'undefined' && window.sessionStorage && !headers['X-App-Session']) {
-      const appSession = window.sessionStorage.getItem('prospaces_app_session_token');
-      if (appSession && appSession.startsWith('hs1.')) {
-        headers['X-App-Session'] = appSession;
-      }
-    }
-  } catch {}
+  if (!headers['X-App-Session'] && _inMemoryAppSessionToken && _inMemoryAppSessionToken.startsWith('hs1.')) {
+    headers['X-App-Session'] = _inMemoryAppSessionToken;
+  }
 
   return headers;
 }

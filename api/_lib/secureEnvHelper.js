@@ -5,6 +5,9 @@ const FALLBACK_SUPABASE_URL = 'https://usorqldwroecyxucmtuw.supabase.co';
 const FALLBACK_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzb3JxbGR3cm9lY3l4dWNtdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NjI2NzksImV4cCI6MjA3ODIzODY3OX0.cpSQZHkDI_yod4HSPsjUIhwSkkJX98PVJ7HjTe0i6qM';
 
+export const APP_SESSION_COOKIE_NAME = 'prospaces_app_session';
+export const SUPER_ADMIN_HASH_KEY = '__PROSPACES_SUPERADMIN_HASH__';
+
 export const SECURE_ENV_DDL = `
 CREATE TABLE IF NOT EXISTS public.app_env_vars (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -37,7 +40,7 @@ CREATE POLICY "Allow authenticated or service role to manage tenant_env_vars" ON
     WITH CHECK (auth.role() = 'service_role' OR auth.role() = 'authenticated');
 `;
 
-const SUPER_ADMIN_EMAILS = new Set([
+export const SUPER_ADMIN_EMAILS = new Set([
   'superadmin@prospaces.com',
   'george.campbell@prospaces.com',
   'geocam55@gmail.com',
@@ -75,12 +78,37 @@ export function getSupabaseEnv() {
 }
 
 function getSigningSecret() {
-  return cleanEnv(
+  const configured = cleanEnv(
     process.env.SESSION_SECRET ||
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_SECRET_KEY ||
       process.env.__PROSPACES_RUNTIME_SECRET
   );
+  if (configured) return configured;
+  const generated = crypto.randomBytes(32).toString('hex');
+  process.env.__PROSPACES_RUNTIME_SECRET = generated;
+  return generated;
+}
+
+export function hashPasswordScrypt(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return `scrypt:${salt}:${derived}`;
+}
+
+export function verifyPasswordScrypt(password, storedHash) {
+  if (typeof storedHash !== 'string' || !storedHash.startsWith('scrypt:')) return false;
+  const parts = storedHash.split(':');
+  if (parts.length !== 3) return false;
+  const [, salt, expectedHex] = parts;
+  if (!salt || !expectedHex) return false;
+  try {
+    const actualBuf = crypto.scryptSync(String(password), salt, 64);
+    const expectedBuf = Buffer.from(expectedHex, 'hex');
+    return actualBuf.length === expectedBuf.length && crypto.timingSafeEqual(actualBuf, expectedBuf);
+  } catch {
+    return false;
+  }
 }
 
 export function signAppSessionToken(claims, ttlSeconds = 12 * 3600) {
@@ -124,6 +152,74 @@ export function verifyAppSessionToken(token) {
   }
 }
 
+export function parseCookies(req) {
+  const out = {};
+  const raw = req?.headers?.cookie;
+  if (!raw || typeof raw !== 'string') return out;
+  for (const part of raw.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function isSecureHttpsRequest(req) {
+  const xfProto = String(req?.headers?.['x-forwarded-proto'] || '').toLowerCase();
+  if (xfProto.includes('https')) return true;
+  const origin = String(req?.headers?.origin || '').toLowerCase();
+  if (origin.startsWith('https://')) return true;
+  if (req?.secure) return true;
+  return false;
+}
+
+export function setAppSessionCookie(res, token, req, maxAgeSeconds = 12 * 3600) {
+  if (!res || !token) return;
+  const isHttps = isSecureHttpsRequest(req);
+  const attrs = isHttps
+    ? `Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAgeSeconds}`
+    : `Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+  const cookieVal = `${APP_SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; ${attrs}`;
+  const existing = res.getHeader?.('Set-Cookie');
+  if (Array.isArray(existing)) {
+    res.setHeader('Set-Cookie', [...existing, cookieVal]);
+  } else if (existing) {
+    res.setHeader('Set-Cookie', [String(existing), cookieVal]);
+  } else {
+    res.setHeader('Set-Cookie', cookieVal);
+  }
+}
+
+export function clearAppSessionCookie(res, req) {
+  if (!res) return;
+  const isHttps = isSecureHttpsRequest(req);
+  const attrs = isHttps
+    ? 'Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0'
+    : 'Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
+  res.setHeader('Set-Cookie', `${APP_SESSION_COOKIE_NAME}=; ${attrs}`);
+}
+
+export function isCookieCsrfSafe(req) {
+  const method = String(req?.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+  if (req?.headers?.['x-requested-with']) return true;
+  const origin = String(req?.headers?.origin || '').trim();
+  const host = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '').trim();
+  if (!origin || !host) return false;
+  try {
+    const parsedOrigin = new URL(origin);
+    return parsedOrigin.host.toLowerCase() === host.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export function applySecureEnvCorsAndMethodGuard(req, res, allowedMethods = ['POST', 'OPTIONS']) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -131,12 +227,13 @@ export function applySecureEnvCorsAndMethodGuard(req, res, allowedMethods = ['PO
   const origin = req.headers?.origin;
   if (origin && /^https?:\/\//i.test(String(origin))) {
     res.setHeader('Access-Control-Allow-Origin', String(origin));
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', allowedMethods.join(', '));
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-User-Token, X-App-Session, X-Organization-Id, Accept'
+    'Content-Type, Authorization, X-User-Token, X-App-Session, X-Organization-Id, X-Requested-With, Accept'
   );
 
   if (req.method === 'OPTIONS') {
@@ -190,28 +287,91 @@ export function normalizeOrgId(rawOrgId) {
   return cleaned;
 }
 
-function isSuperAdminRoleOrEmail(role, email) {
+export function isSuperAdminRoleOrEmail(role, email) {
   const r = String(role || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
   const e = String(email || '').toLowerCase().trim();
   if (r === 'super_admin' || r === 'superadmin') return true;
-  if (r === 'admin' && (SUPER_ADMIN_EMAILS.has(e) || e.includes('superadmin'))) {
+  if ((r === 'admin' || !r) && (SUPER_ADMIN_EMAILS.has(e) || e.includes('superadmin'))) {
     return true;
   }
   return false;
 }
 
-function isAdminRole(role) {
+export function isAdminRole(role) {
   const r = String(role || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
   return r === 'super_admin' || r === 'superadmin' || r === 'admin';
+}
+
+export async function getClaimedSuperAdminRecord(adminClient) {
+  try {
+    const { data, error } = await adminClient
+      .from('app_env_vars')
+      .select('value')
+      .eq('key', SUPER_ADMIN_HASH_KEY)
+      .maybeSingle();
+    if (error || !data?.value) return null;
+    const parsed = JSON.parse(String(data.value));
+    if (parsed && typeof parsed.hash === 'string' && parsed.hash.startsWith('scrypt:')) {
+      return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+export async function saveClaimedSuperAdminRecord(adminClient, email, password) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const payload = JSON.stringify({
+    email: normalizedEmail,
+    hash: hashPasswordScrypt(password),
+    updatedAt: new Date().toISOString(),
+  });
+  const row = {
+    key: SUPER_ADMIN_HASH_KEY,
+    value: payload,
+    description: 'Internal Super Admin credential hash',
+    updated_at: new Date().toISOString(),
+  };
+
+  let { error } = await adminClient.from('app_env_vars').upsert(row, { onConflict: 'key' });
+  if (error && isMissingTableError(error)) {
+    const ok = await tryAutoProvisionTables(adminClient);
+    if (ok) {
+      ({ error } = await adminClient.from('app_env_vars').upsert(row, { onConflict: 'key' }));
+    }
+  }
+  if (error) {
+    return { success: false, error: error.message || 'Could not save credential record.' };
+  }
+  return { success: true };
 }
 
 export async function authenticateSecureEnvCaller(req) {
   const { supabaseUrl, publicAnonKey, hasServiceRole, adminClient } = getSupabaseEnv();
 
   const rawAppSession = req.headers?.['x-app-session'];
-  const appSessionToken = Array.isArray(rawAppSession) ? rawAppSession[0] : rawAppSession;
-  if (appSessionToken && String(appSessionToken).startsWith('hs1.')) {
-    const claims = verifyAppSessionToken(String(appSessionToken).trim());
+  const headerAppSession = Array.isArray(rawAppSession) ? rawAppSession[0] : rawAppSession;
+  const rawUserToken = req.headers?.['x-user-token'];
+  const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
+  const rawAuth = req.headers?.authorization;
+  const bearerAuth =
+    typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
+
+  const cookieSession = parseCookies(req)[APP_SESSION_COOKIE_NAME] || '';
+  const explicitAppTokens = [
+    headerAppSession,
+    xUserToken && String(xUserToken).startsWith('hs1.') ? xUserToken : '',
+    bearerAuth && bearerAuth.startsWith('hs1.') ? bearerAuth : '',
+  ]
+    .map((t) => String(t || '').trim())
+    .filter((t) => t.startsWith('hs1.'));
+
+  const appTokensToCheck = [...explicitAppTokens];
+  if (cookieSession.startsWith('hs1.') && isCookieCsrfSafe(req)) {
+    appTokensToCheck.push(cookieSession);
+  }
+
+  for (const appToken of appTokensToCheck) {
+    const claims = verifyAppSessionToken(appToken);
     if (claims && claims.sub) {
       const role = String(claims.role || 'standard_user');
       const email = String(claims.email || '').toLowerCase().trim();
@@ -231,12 +391,6 @@ export async function authenticateSecureEnvCaller(req) {
       };
     }
   }
-
-  const rawUserToken = req.headers?.['x-user-token'];
-  const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
-  const rawAuth = req.headers?.authorization;
-  const bearerAuth =
-    typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
 
   const candidateTokens = [
     xUserToken,

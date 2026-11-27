@@ -90,7 +90,7 @@ export default async function handler(req, res) {
         .select('setting_key, setting_value, updated_at');
       if (!sysErr) {
         const mapped = (sysData || [])
-          .filter((row) => row?.setting_key)
+          .filter((row) => row?.setting_key && !String(row.setting_key).startsWith('__'))
           .map((row) => ({
             key: row.setting_key,
             value: row.setting_value || '',
@@ -105,7 +105,8 @@ export default async function handler(req, res) {
     if (error) {
       return res.status(500).json({ success: false, error: error.message, vars: [] });
     }
-    return res.status(200).json({ success: true, vars: data || [] });
+    const visibleVars = (data || []).filter((row) => !String(row?.key || '').startsWith('__'));
+    return res.status(200).json({ success: true, vars: visibleVars });
   } catch (err) {
     return res.status(500).json({
       success: false,

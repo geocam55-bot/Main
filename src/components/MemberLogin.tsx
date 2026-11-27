@@ -19,6 +19,7 @@ import { ChangePasswordDialog } from './ChangePasswordDialog';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import type { User, UserRole } from '../App';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { setAppSessionToken } from '../utils/server-headers';
 
 interface MemberLoginProps {
   onLogin: (user: User, token: string, session?: any) => void;
@@ -37,6 +38,51 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
   const [successMessage, setSuccessMessage] = useState('');
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [pendingUser, setPendingUser] = useState<{ user: User; token: string; session?: any } | null>(null);
+  const [needsSuperAdminClaim, setNeedsSuperAdminClaim] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+
+  const handleClaimSuperAdmin = async () => {
+    const targetEmail = email.trim();
+    const targetPass = password.trim();
+    if (!targetEmail || targetPass.length < 8) {
+      setError('Enter your authorized Super Admin email and choose a password of at least 8 characters.');
+      return;
+    }
+    setIsClaiming(true);
+    setError('');
+    try {
+      const resp = await fetch('/api/auth/claim-superadmin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: targetEmail, password: targetPass }),
+      });
+      const result = await resp.json().catch(() => ({}));
+      if (!resp.ok || !result.success || !result.user) {
+        throw new Error(result?.error || 'Could not set Super Admin password.');
+      }
+      if (typeof result.token === 'string' && result.token.startsWith('hs1.')) {
+        setAppSessionToken(result.token);
+      }
+      const loggedUser: User = {
+        id: result.user.id,
+        email: result.user.email || targetEmail,
+        role: (result.user.role || 'super_admin') as UserRole,
+        full_name: result.user.name || 'George Campbell',
+        organization_id: result.user.tenantId || result.user.organization_id || 'rona_atlantic',
+        organizationId: result.user.tenantId || result.user.organization_id || 'rona_atlantic',
+      };
+      localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_session_active', 'true');
+      setNeedsSuperAdminClaim(false);
+      onLogin(loggedUser, result.token || 'authenticated-token', null);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to claim Super Admin access.');
+    } finally {
+      setIsClaiming(false);
+    }
+  };
 
   const handlePasswordChanged = () => {
     setShowChangePassword(false);
@@ -114,88 +160,60 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
 
         // Secondary fallback to server-side enterprise authentication
         if (activeError) {
+          let serverErrorMsg = '';
+          let serverNeedsClaim = false;
           try {
             const authResp = await fetch('/api/auth/login', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+              credentials: 'same-origin',
               body: JSON.stringify({ email: email.trim(), password: password.trim() })
             });
-            if (authResp.ok) {
-              const authResult = await authResp.json();
-              if (authResult.found && authResult.user) {
-                const uRole = (authResult.user.role || 'Admin');
-                const loggedUser: User = {
-                  id: authResult.user.id,
-                  email: authResult.user.email || email,
-                  role: uRole as UserRole,
-                  full_name: authResult.user.name || email.split('@')[0],
-                  organization_id: authResult.user.tenantId || authResult.user.organization_id || 'rona_atlantic',
-                  organizationId: authResult.user.tenantId || authResult.user.organization_id || 'rona_atlantic',
-                };
-                if (authResult.session?.access_token && authResult.session?.refresh_token) {
-                  try {
-                    await supabase.auth.setSession({
-                      access_token: authResult.session.access_token,
-                      refresh_token: authResult.session.refresh_token,
-                    });
-                  } catch {}
-                }
-                if (typeof authResult.token === 'string' && authResult.token.startsWith('hs1.')) {
-                  sessionStorage.setItem('prospaces_app_session_token', authResult.token);
-                }
-                localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-                sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-                sessionStorage.setItem('prospaces_session_active', 'true');
-                onLogin(loggedUser, authResult.token || 'authenticated-token', authResult.session || null);
-                return;
+            const authResult = await authResp.json().catch(() => ({}));
+            if (authResp.ok && authResult.found && authResult.user && !authResult.error) {
+              const uRole = (authResult.user.role || 'Admin');
+              const loggedUser: User = {
+                id: authResult.user.id,
+                email: authResult.user.email || email,
+                role: uRole as UserRole,
+                full_name: authResult.user.name || email.split('@')[0],
+                organization_id: authResult.user.tenantId || authResult.user.organization_id || 'rona_atlantic',
+                organizationId: authResult.user.tenantId || authResult.user.organization_id || 'rona_atlantic',
+              };
+              if (authResult.session?.access_token && authResult.session?.refresh_token) {
+                try {
+                  await supabase.auth.setSession({
+                    access_token: authResult.session.access_token,
+                    refresh_token: authResult.session.refresh_token,
+                  });
+                } catch {}
               }
+              const appTok = authResult.appToken || (typeof authResult.token === 'string' && authResult.token.startsWith('hs1.') ? authResult.token : null);
+              if (appTok) {
+                setAppSessionToken(appTok);
+              }
+              localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+              sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+              sessionStorage.setItem('prospaces_session_active', 'true');
+              onLogin(loggedUser, authResult.token || appTok || 'authenticated-token', authResult.session || null);
+              return;
+            }
+            if (authResult?.needsClaim) {
+              serverNeedsClaim = true;
+            }
+            if (authResult?.error) {
+              serverErrorMsg = authResult.error;
             }
           } catch (serverAuthErr) {
             console.debug('Secondary auth check notice:', serverAuthErr);
           }
 
-          // Local verified fallback for SuperAdmin / Admin credentials
-          const normEmail = email.toLowerCase().trim();
-          const normPass = password.trim();
-          const isSuper = normEmail === 'superadmin@prospaces.com' || normEmail === 'george.campbell@prospaces.com' || normEmail === 'geocam55@gmail.com';
-          const isGeorge = normEmail.includes('geocam') || normEmail.includes('george.campbell') || normEmail.includes('george');
-          const isValidPass = normPass === 'tV3p&HP#' || normPass === 'ProSpaces2026!' || normPass === 'Password123!' || normPass === 'George2026!' || normPass === 'SuperAdmin2026!' || normPass.length >= 6;
-
-          if (isSuper && isValidPass) {
-            const superUser: User = {
-              id: 'a76eaaca-602f-4ffd-b4c0-642ea4516c22',
-              email: normEmail,
-              role: 'super_admin' as UserRole,
-              full_name: 'George Campbell',
-              organization_id: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
-              organizationId: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
-            };
-            localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-            sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-            sessionStorage.setItem('prospaces_session_active', 'true');
-            sessionStorage.setItem('prospaces_current_view', 'space-chooser');
-            setIsLoading(false);
-            onLogin(superUser, 'authenticated-token', null);
-            return;
+          if (serverNeedsClaim) {
+            setNeedsSuperAdminClaim(true);
+            throw new Error(serverErrorMsg || 'Super Admin password is not claimed on this server yet.');
           }
-
-          if (isGeorge && isValidPass) {
-            const georgeId = normEmail.includes('geocam') ? '390862a8-08e5-44d5-b214-32cafdf10296' : (normEmail.includes('ronadartmouth') ? 'f3e5b6f9-5770-41ef-8b16-a91a1d4b1a0b' : '390862a8-08e5-44d5-b214-32cafdf10296');
-            const georgeUser: User = {
-              id: georgeId,
-              email: email.trim(),
-              role: 'admin' as UserRole,
-              full_name: 'George Campbell',
-              organization_id: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
-              organizationId: '34638283-7b3d-47e2-bec8-a9e600e28c4a',
-            };
-            localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-            sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-            sessionStorage.setItem('prospaces_session_active', 'true');
-            sessionStorage.setItem('prospaces_current_view', 'space-chooser');
-            setIsLoading(false);
-            onLogin(georgeUser, 'authenticated-token', null);
-            return;
+          if (serverErrorMsg) {
+            throw new Error(serverErrorMsg);
           }
 
           if (activeError.message.toLowerCase().includes('email not confirmed')) {
@@ -272,7 +290,7 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
       // If profile is still not found, construct a safe default profile rather than throwing an error
       if (!profile) {
         const normEmail = (activeSignIn.user.email || email).toLowerCase();
-        const defaultRole = (normEmail === 'george.campbell@prospaces.com' || normEmail === 'superadmin@prospaces.com')
+        const defaultRole = (normEmail === 'george.campbell@prospaces.com' || normEmail === 'superadmin@prospaces.com' || normEmail === 'geocam55@gmail.com')
           ? 'super_admin'
           : (normEmail.includes('george') || normEmail.includes('geocam'))
           ? 'admin'
@@ -490,8 +508,19 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
             </div>
 
             {error && (
-              <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3">
+              <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 space-y-2">
                 <p className="text-sm text-red-300">{error}</p>
+                {needsSuperAdminClaim && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isClaiming}
+                    onClick={handleClaimSuperAdmin}
+                    className="w-full bg-amber-600 hover:bg-amber-500 text-white"
+                  >
+                    {isClaiming ? 'Setting Super Admin Password...' : 'Set This Password as Super Admin & Sign In'}
+                  </Button>
+                )}
               </div>
             )}
 

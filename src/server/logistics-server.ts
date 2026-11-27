@@ -7,7 +7,13 @@ import { DEFAULT_BRANCHES, DEFAULT_TRUCKS, DEFAULT_USERS, DEFAULT_DELIVERIES } f
 import { GoogleGenAI, Type } from "@google/genai";
 // dotenv removed
 import { createClient } from "@supabase/supabase-js";
-import { signAppSessionToken } from "../../api/_lib/secureEnvHelper.js";
+import {
+  SUPER_ADMIN_EMAILS,
+  getClaimedSuperAdminRecord,
+  setAppSessionCookie,
+  signAppSessionToken,
+  verifyPasswordScrypt,
+} from "../../api/_lib/secureEnvHelper.js";
 // dotenv config removed
 
 let aiClient: GoogleGenAI | null = null;
@@ -2186,45 +2192,100 @@ app.use((req, res, next) => {
         primaryColor: "blue"
       };
 
-      // Fast-path 1: Super Admin
+      const supabase = getSupabase(req);
+
+      // 0. Check Supabase Auth directly when email & password are provided
+      if (supabase && password) {
+        try {
+          const { data: sbAuth, error: sbErr } = await withTimeout(
+            supabase.auth.signInWithPassword({ email: normEmail, password: String(password).trim() }),
+            2500
+          ).catch(() => ({ data: null, error: true } as any));
+          if (!sbErr && sbAuth?.session?.access_token && sbAuth?.user) {
+            const isSuper = SUPER_ADMIN_EMAILS.has(normEmail);
+            const resolvedRole = isSuper ? "super_admin" : (sbAuth.user.user_metadata?.role || "Admin");
+            const orgId = sbAuth.user.user_metadata?.organization_id || sbAuth.user.user_metadata?.organizationId || "rona_atlantic";
+            const signedToken = signAppSessionToken({
+              sub: sbAuth.user.id,
+              email: normEmail,
+              role: String(resolvedRole),
+              organizationId: String(orgId),
+            });
+            if (signedToken) {
+              setAppSessionCookie(res, signedToken, req);
+            }
+            return res.json({
+              supabaseActive: true,
+              found: true,
+              user: {
+                id: sbAuth.user.id,
+                tenantId: orgId,
+                organization_id: orgId,
+                name: sbAuth.user.user_metadata?.name || sbAuth.user.user_metadata?.full_name || "George Campbell",
+                email: sbAuth.user.email || normEmail,
+                role: resolvedRole,
+                status: "Active",
+              },
+              token: sbAuth.session.access_token,
+              appToken: signedToken || undefined,
+              session: sbAuth.session,
+              tenant: defaultTenantObj,
+            });
+          }
+        } catch {}
+      }
+
+      // Fast-path 1: Super Admin (including geocam55@gmail.com)
       if (
-        normEmail === "superadmin@prospaces.com" || 
-        normEmail === "superadmin" || 
-        normEmail === "george.campbell@prospaces.com"
+        SUPER_ADMIN_EMAILS.has(normEmail) ||
+        normEmail === "superadmin"
       ) {
-        const superAdminPassword = process.env.SUPERADMIN_PASSWORD || "SuperAdmin2026!";
         const inputPassword = (password || "").trim();
-        const isValidSuperPass = (
-          inputPassword === "tV3p&HP#" ||
-          inputPassword === superAdminPassword ||
-          inputPassword === "SuperAdmin2026!" ||
-          inputPassword === "ProSpaces2026!" ||
-          inputPassword === "George2026!"
-        );
+        const configuredSuperPass = String(process.env.SUPERADMIN_PASSWORD || "").trim();
+        const claimedRecord = supabase ? await getClaimedSuperAdminRecord(supabase) : null;
+
+        let isValidSuperPass = false;
+        let needsClaim = false;
+
+        if (configuredSuperPass) {
+          isValidSuperPass = Boolean(inputPassword && inputPassword === configuredSuperPass);
+        } else if (claimedRecord) {
+          isValidSuperPass = Boolean(inputPassword && verifyPasswordScrypt(inputPassword, claimedRecord.hash));
+        } else {
+          isValidSuperPass = false;
+          needsClaim = true;
+        }
 
         if (!inputPassword || !isValidSuperPass) {
           return res.json({
             supabaseActive: true,
-            found: true,
-            error: "Invalid SuperAdmin password entry."
+            found: !needsClaim,
+            needsClaim,
+            error: needsClaim
+              ? "Super Admin password is not set yet or does not match. Use the setup form to claim your Super Admin password."
+              : "Invalid SuperAdmin password entry."
           });
         }
         const superUser = {
           id: "USR-SUPER-ADMIN-01",
-          tenantId: "system-admin-tenant",
-          name: normEmail === "george.campbell@prospaces.com" ? "George Campbell" : "ProSpaces Super Admin",
-          email: normEmail,
-          role: "SUPER_ADMIN",
+          tenantId: "rona_atlantic",
+          organization_id: "rona_atlantic",
+          name: normEmail === "superadmin@prospaces.com" ? "ProSpaces Super Admin" : "George Campbell",
+          email: normEmail === "superadmin" ? "superadmin@prospaces.com" : normEmail,
+          role: "super_admin",
           associatedStoreId: "RONA-03510",
           phone: "(902) 476-8800",
           status: "Active"
         };
         const signedToken = signAppSessionToken({
           sub: superUser.id,
-          email: normEmail,
+          email: superUser.email,
           role: "super_admin",
           organizationId: "rona_atlantic"
         });
+        if (signedToken) {
+          setAppSessionCookie(res, signedToken, req);
+        }
         return res.json({
           supabaseActive: true,
           found: true,
@@ -2312,7 +2373,6 @@ app.use((req, res, next) => {
         }
       };
 
-      const supabase = getSupabase(req);
       let foundUser: any = null;
 
       if (supabase) {
@@ -2442,6 +2502,9 @@ app.use((req, res, next) => {
           role: String(foundUser.role || "Admin"),
           organizationId: String(foundUser.tenantId || "rona_atlantic")
         });
+        if (signedToken) {
+          setAppSessionCookie(res, signedToken, req);
+        }
 
         return res.json({
           supabaseActive: true,

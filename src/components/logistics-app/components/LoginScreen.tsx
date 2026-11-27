@@ -5,6 +5,7 @@ import { getFrontendSupabase, deserializeFromPhone, serializeToPhone } from '../
 import { Shield, Key, CheckCircle2, ArrowRight, Mail, Lock, Building2, UserCheck, HelpCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PROSPACES_LOGISTICS_LOGO, PROSPACES_LOGISTICS_LOGO_DARK, LOGO_BASE64 } from '../../LogoBase64';
+import { setAppSessionToken } from '../../../utils/server-headers';
 
 const prospacesLogo = PROSPACES_LOGISTICS_LOGO || '/logistics-logo.png';
 const prospacesLogoDark = PROSPACES_LOGISTICS_LOGO_DARK || '/logistics-logo-dark.png';
@@ -177,8 +178,10 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
         const response = await customFetch('/api/auth/login', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
           },
+          credentials: 'same-origin',
           body: JSON.stringify({ email: email.trim(), password: password.trim() }),
           signal: controller.signal
         });
@@ -194,54 +197,11 @@ export default function LoginScreen({ onLoginSuccess, tenantsList, onBackToLandi
       }
 
       if (result && result.found && result.user && !result.error) {
+        const appTok = result.appToken || (typeof result.token === 'string' && result.token.startsWith('hs1.') ? result.token : null);
+        if (appTok) {
+          setAppSessionToken(appTok);
+        }
         handleCompleteLogin(result.tenant || resolvedTenant, result.user);
-        return;
-      }
-
-      // Fast fallback for known accounts if server response is unavailable or rejected
-      const normEmail = email.toLowerCase().trim();
-      const normPass = password.trim();
-      const isSuperAdmin = normEmail === 'superadmin@prospaces.com';
-      const isGeorge = normEmail.includes('geocam') || normEmail.includes('george.campbell') || normEmail.includes('george');
-      const isValidPass = normPass === 'tV3p&HP#' || normPass === 'ProSpaces2026!' || normPass === 'Password123!' || normPass === 'George2026!' || normPass === 'SuperAdmin2026!' || normPass.length >= 6;
-
-      if (isSuperAdmin && isValidPass) {
-        handleCompleteLogin(
-          {
-            id: "system-admin-tenant",
-            name: "System Control Space",
-            code: "SYS",
-            description: "Global Administration Management Space",
-            logoBadge: "⚙️",
-            regionalFocus: "Global Administration Management",
-            primaryColor: 'slate'
-          },
-          {
-            id: "USR-SUPER-ADMIN-01",
-            tenantId: "system-admin-tenant",
-            name: normEmail === 'george.campbell@prospaces.com' ? "George Campbell" : "ProSpaces Super Admin",
-            email: normEmail,
-            role: "SUPER_ADMIN",
-            associatedStoreId: "RONA-03510",
-            phone: "(902) 476-8800",
-            status: "Active"
-          }
-        );
-        return;
-      }
-
-      if (isGeorge && isValidPass) {
-        handleCompleteLogin(resolvedTenant, {
-          id: "USR-10524",
-          tenantId: resolvedTenant.id,
-          name: "George Campbell",
-          email: email.trim(),
-          role: "Admin",
-          associatedStoreId: "RONA-03510",
-          phone: "(902) 476-8800",
-          password: password.trim(),
-          status: "Active"
-        });
         return;
       }
 

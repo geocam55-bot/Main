@@ -21,8 +21,17 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { registerLogisticsServer, sendSystemEmail, getSmtpConfig, resolveTenantBranding, buildTenantDeliveryEmailHtml } from "./src/server/logistics-server";
 import { registerAIRoutes } from "./src/server/ai-routes";
 import {
+  APP_SESSION_COOKIE_NAME,
   SECURE_ENV_DDL,
+  SUPER_ADMIN_EMAILS,
+  clearAppSessionCookie,
+  getClaimedSuperAdminRecord,
+  isCookieCsrfSafe,
   isMissingTableError,
+  parseCookies,
+  saveClaimedSuperAdminRecord,
+  setAppSessionCookie,
+  signAppSessionToken,
   tryAutoProvisionTables,
   verifyAppSessionToken,
 } from "./api/_lib/secureEnvHelper.js";
@@ -2760,7 +2769,7 @@ async function startServer() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires', 'Upgrade-Insecure-Requests', 'X-User-Token']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires', 'Upgrade-Insecure-Requests', 'X-User-Token', 'X-App-Session']
   }));
 
   // Extra guard to ensure any direct OPTIONS request returns instantly
@@ -2779,7 +2788,7 @@ async function startServer() {
       if (requestHeaders) {
         res.setHeader('Access-Control-Allow-Headers', requestHeaders);
       } else {
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires, Upgrade-Insecure-Requests');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control, Pragma, Expires, Upgrade-Insecure-Requests, X-User-Token, X-App-Session');
       }
       res.status(200).end();
       return;
@@ -2799,6 +2808,79 @@ async function startServer() {
   });
 
   // Auth routes (/api/auth/login and /api/auth/register) are registered in registerLogisticsServer(app)
+  app.get('/api/auth/session-status', async (req, res) => {
+    try {
+      const hasConfiguredPasscode = Boolean(String(process.env.SUPERADMIN_PASSWORD || '').trim());
+      const claimedRecord = await getClaimedSuperAdminRecord(supabase);
+      const superAdminClaimed = hasConfiguredPasscode || Boolean(claimedRecord);
+      const auth = await resolveExpressSecureEnvAuth(req, 'system');
+      if (auth.error) {
+        return res.json({
+          success: true,
+          authenticated: false,
+          superAdminClaimed,
+          hasConfiguredPasscode,
+        });
+      }
+      return res.json({
+        success: true,
+        authenticated: true,
+        superAdminClaimed,
+        hasConfiguredPasscode,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, authenticated: false, error: err?.message || 'Status check failed' });
+    }
+  });
+
+  app.post('/api/auth/claim-superadmin', async (req, res) => {
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const password = String(req.body?.password || '').trim();
+      if (!email || !SUPER_ADMIN_EMAILS.has(email)) {
+        return res.status(403).json({ success: false, error: 'Only an authorized Super Admin email can complete first-run setup.' });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ success: false, error: 'Please choose a password of at least 8 characters.' });
+      }
+      if (String(process.env.SUPERADMIN_PASSWORD || '').trim()) {
+        return res.status(409).json({ success: false, error: 'A server Super Admin passcode is already configured.' });
+      }
+      const existing = await getClaimedSuperAdminRecord(supabase);
+      if (existing) {
+        return res.status(409).json({ success: false, error: 'Super Admin access has already been claimed. Please sign in with your password.' });
+      }
+      const saved = await saveClaimedSuperAdminRecord(supabase, email, password);
+      if (!saved.success) {
+        return res.status(500).json({ success: false, error: saved.error || 'Failed to save Super Admin credential.' });
+      }
+      const userObj = {
+        id: 'USR-SUPER-ADMIN-01',
+        email,
+        name: email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell',
+        role: 'super_admin',
+        tenantId: 'rona_atlantic',
+        organization_id: 'rona_atlantic',
+      };
+      const signedToken = signAppSessionToken({
+        sub: userObj.id,
+        email,
+        role: 'super_admin',
+        organizationId: 'rona_atlantic',
+      });
+      if (signedToken) {
+        setAppSessionCookie(res, signedToken, req);
+      }
+      return res.json({ success: true, found: true, user: userObj, token: signedToken || undefined });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Claim failed' });
+    }
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    clearAppSessionCookie(res, req);
+    return res.json({ success: true });
+  });
 
   // Guaranteed Top-Level OCR API Endpoint (Performs Gemini Vision OCR or precise RONA 300908 document extraction)
   app.post("/api/ocr", async (req, res) => {
@@ -3032,8 +3114,26 @@ Return structured results in required JSON format.`;
 
     const rawAppSession = req.headers['x-app-session'];
     const appSessionToken = Array.isArray(rawAppSession) ? rawAppSession[0] : rawAppSession;
-    if (appSessionToken && String(appSessionToken).startsWith('hs1.')) {
-      const claims = verifyAppSessionToken(String(appSessionToken).trim());
+    const rawUserToken = req.headers['x-user-token'];
+    const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
+    const rawAuth = req.headers.authorization;
+    const bearerAuth = typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
+    const cookieSession = parseCookies(req)[APP_SESSION_COOKIE_NAME] || '';
+
+    const appTokensToCheck = [
+      appSessionToken,
+      xUserToken && String(xUserToken).startsWith('hs1.') ? xUserToken : '',
+      bearerAuth && bearerAuth.startsWith('hs1.') ? bearerAuth : '',
+    ]
+      .map((t) => String(t || '').trim())
+      .filter((t) => t.startsWith('hs1.'));
+
+    if (cookieSession.startsWith('hs1.') && isCookieCsrfSafe(req)) {
+      appTokensToCheck.push(cookieSession);
+    }
+
+    for (const candidateAppToken of appTokensToCheck) {
+      const claims = verifyAppSessionToken(candidateAppToken);
       if (claims && claims.sub) {
         const scopeCheck = checkRoleScope(
           String(claims.role || 'standard_user'),
@@ -3050,10 +3150,6 @@ Return structured results in required JSON format.`;
       }
     }
 
-    const rawUserToken = req.headers['x-user-token'];
-    const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
-    const rawAuth = req.headers.authorization;
-    const bearerAuth = typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
     const candidateTokens = [
       xUserToken,
       bearerAuth && bearerAuth !== publicAnonKey ? bearerAuth : ''
@@ -3304,7 +3400,7 @@ Return structured results in required JSON format.`;
             .select('setting_key, setting_value, updated_at');
           if (!sysErr) {
             const mapped = (sysData || [])
-              .filter((r: any) => r?.setting_key)
+              .filter((r: any) => r?.setting_key && !String(r.setting_key).startsWith('__'))
               .map((r: any) => ({ key: r.setting_key, value: r.setting_value || '', description: null, updated_at: r.updated_at || null }))
               .sort((a: any, b: any) => a.key.localeCompare(b.key));
             return res.json({ success: true, vars: mapped });
@@ -3313,7 +3409,8 @@ Return structured results in required JSON format.`;
         if (error) {
           return res.status(500).json({ success: false, error: error.message, vars: [] });
         }
-        return res.json({ success: true, vars: data || [] });
+        const visibleVars = (data || []).filter((r: any) => !String(r?.key || '').startsWith('__'));
+        return res.json({ success: true, vars: visibleVars });
       }
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || 'Server error', vars: [] });

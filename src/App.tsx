@@ -14,6 +14,7 @@ import { Toaster } from './components/ui/sonner';
 import ErrorBoundary, { ErrorBoundaryFallback } from './components/ErrorBoundary';
 import { toast } from 'sonner';
 import { createClient, clearStaleAuthTokens, handleAuthError } from './utils/supabase/client';
+import { clearAppSessionToken } from './utils/server-headers';
 import { canAccessSpace, initializePermissions } from './utils/permissions';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -779,6 +780,12 @@ export function AppContent() {
     } catch (e) {}
 
     try {
+      clearAppSessionToken();
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      }).catch(() => {});
       await supabase.auth.signOut();
     } catch (error) {
       console.warn("Supabase signOut error on logout:", error);
