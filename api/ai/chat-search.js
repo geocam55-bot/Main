@@ -1,27 +1,23 @@
-import { GoogleGenAI, Type } from '@google/genai';
-
-const FALLBACK_API_KEY = process.env.GEMINI_API_KEY || '';
+import { Type } from '@google/genai';
+import {
+  applyAICorsAndMethodGuard,
+  parseRequestBody,
+  getSupabaseConfig,
+  requireGeminiClient,
+} from '../_lib/aiHelper.js';
 
 export default async function handler(req, res) {
-  res.setHeader("Content-Type", "application/json");
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (!applyAICorsAndMethodGuard(req, res)) return;
 
   try {
-    const { message, module = 'inventory' } = req.body || {};
+    const body = parseRequestBody(req);
+    const { message, module = 'inventory', organizationId } = body;
     if (!message) {
       return res.status(400).json({ error: 'Missing message parameter' });
     }
 
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY || FALLBACK_API_KEY,
-      httpOptions: {
-        headers: { 'User-Agent': 'aistudio-build' }
-      }
-    });
+    const { supabase } = getSupabaseConfig();
+    const ai = await requireGeminiClient([supabase], organizationId || null);
 
     const prompt = `You are an expert AI inventory and pricing assistant for ProSpaces CRM (managing building materials, hardware, lumber, tools, etc.).
 The user is asking in the "${module}" module: "${message}".

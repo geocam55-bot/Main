@@ -29,7 +29,7 @@ let _cachedToken: string | null = null;
 let _cachedTokenExpiresAtMs: number | null = null;
 let _tokenRequestInFlight: Promise<string | null> | null = null;
 let _lastRefreshAttemptMs = 0;
-const REFRESH_COOLDOWN_MS = 30_000;
+const REFRESH_COOLDOWN_MS = 5_000;
 
 // Keep the cache fresh whenever auth state changes (login, logout, refresh).
 // The very first event Supabase fires is INITIAL_SESSION — resolve the gate.
@@ -45,11 +45,29 @@ const { data: { subscription: _authSub } } = supabase.auth.onAuthStateChange(
 // Safety net: if onAuthStateChange never fires (edge case), unblock after 2s
 setTimeout(() => _authReady(), 2000);
 
+function readStoredSessionFallback(): { token: string; expiresAtMs: number | null } | null {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    const raw = window.localStorage.getItem('prospaces_main_auth_token');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const token = parsed?.access_token || parsed?.currentSession?.access_token;
+    const expSec = parsed?.expires_at || parsed?.currentSession?.expires_at;
+    if (typeof token === 'string' && token.split('.').length === 3) {
+      return {
+        token,
+        expiresAtMs: typeof expSec === 'number' ? expSec * 1000 : null,
+      };
+    }
+  } catch {}
+  return null;
+}
+
 /**
  * Get the current user's access token (session JWT).
  * Uses the cached auth state from Supabase's auth listener and refreshes only
  * when the cached token is missing or close to expiry.
- * Returns null if no session is available.
+ * Returns null if no valid session is available.
  */
 export async function getUserAccessToken(): Promise<string | null> {
   if (_tokenRequestInFlight) {
@@ -79,7 +97,16 @@ export async function getUserAccessToken(): Promise<string | null> {
       }
     }
 
+    if (!_cachedToken) {
+      const stored = readStoredSessionFallback();
+      if (stored) {
+        _cachedToken = stored.token;
+        _cachedTokenExpiresAtMs = stored.expiresAtMs;
+      }
+    }
+
     const now = Date.now();
+    const isActuallyExpired = _cachedTokenExpiresAtMs !== null && _cachedTokenExpiresAtMs <= now;
     const isExpiredOrStale = _cachedTokenExpiresAtMs !== null
       && _cachedTokenExpiresAtMs <= now + 5 * 60_000;
 
@@ -97,9 +124,12 @@ export async function getUserAccessToken(): Promise<string | null> {
         const refreshError = raceResult?.error;
         if (refreshError) {
           handleAuthError(refreshError);
-          _cachedToken = null;
-          _cachedTokenExpiresAtMs = null;
-          return null;
+          if (isActuallyExpired) {
+            _cachedToken = null;
+            _cachedTokenExpiresAtMs = null;
+            return null;
+          }
+          return _cachedToken;
         }
         if (refreshed?.access_token) {
           _cachedToken = refreshed.access_token;
@@ -108,10 +138,16 @@ export async function getUserAccessToken(): Promise<string | null> {
         }
       } catch (e) {
         handleAuthError(e);
-        _cachedToken = null;
-        _cachedTokenExpiresAtMs = null;
-        return null;
+        if (isActuallyExpired) {
+          _cachedToken = null;
+          _cachedTokenExpiresAtMs = null;
+          return null;
+        }
       }
+    }
+
+    if (isActuallyExpired) {
+      return null;
     }
 
     return _cachedToken;

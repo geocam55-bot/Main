@@ -11,14 +11,6 @@
   export default defineConfig({
     plugins: [react(), tailwindcss()],
     publicDir: 'src/public',
-    server: {
-      host: '0.0.0.0',
-      port: 3000,
-      proxy: {
-        '/api': 'http://localhost:3000',
-        '/functions': 'http://localhost:3000',
-      },
-    },
     define: {
       '__GOOGLE_MAPS_PLATFORM_KEY__': JSON.stringify(
         process.env.GOOGLE_MAPS_PLATFORM_KEY ||

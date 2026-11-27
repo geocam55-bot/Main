@@ -140,7 +140,13 @@ export async function getPlans(): Promise<Record<string, Plan>> {
 
 export async function getCurrentSubscription(): Promise<Subscription | null> {
   const headers = await getServerHeaders();
+  if (!headers['X-User-Token']) {
+    return null;
+  }
   const res = await fetch(`${BASE_URL}/subscriptions/current`, { headers });
+  if (res.status === 401) {
+    return null;
+  }
   if (!res.ok) throw new Error('Failed to fetch subscription');
   const data = await res.json();
   return data.subscription;

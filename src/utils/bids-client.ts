@@ -9,18 +9,20 @@ export async function getAllBidsClient(scope: 'personal' | 'team' = 'personal') 
   // ── Attempt 1: Server-side endpoint (bypasses RLS) ──
   try {
     const headers = await getServerHeaders();
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/bids?scope=${scope}`,
-      { headers }
-    );
+    if (headers['X-User-Token']) {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/bids?scope=${scope}`,
+        { headers }
+      );
 
-    if (response.ok) {
-      const data = await response.json();
-      // Server endpoint returned bids
-      return { bids: data.bids || [] };
+      if (response.ok) {
+        const data = await response.json();
+        // Server endpoint returned bids
+        return { bids: data.bids || [] };
+      }
     }
 
-    // Server endpoint failed, falling back to direct query
+    // Server endpoint unavailable or unauthenticated, falling back to direct query
   } catch (err: any) {
     // Server endpoint error, falling back to direct query
   }

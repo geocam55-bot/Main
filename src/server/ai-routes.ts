@@ -4,6 +4,7 @@ import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 
 const AI_MODEL = 'gemini-4-hydrogen';
 const AI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
+const AI_SECONDARY_FALLBACK_MODEL = 'gemini-2.5-flash';
 
 class AIConfigError extends Error {
   statusCode: number;
@@ -29,10 +30,12 @@ async function requireGeminiClient(
   sbClients: Array<SupabaseClient | null | undefined> = [],
   organizationId?: string | null
 ): Promise<GoogleGenAI> {
-  let key = isValidApiKeyCandidate(process.env.GEMINI_API_KEY);
+  let key = isValidApiKeyCandidate(
+    process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+  );
 
   if (!key) {
-    const targetKeys = ['GEMINI_API_KEY', 'GOOGLE_GEMINI_API_KEY'];
+    const targetKeys = ['GEMINI_API_KEY', 'GOOGLE_GEMINI_API_KEY', 'GOOGLE_API_KEY'];
     const seen = new Set<SupabaseClient>();
 
     for (const client of sbClients) {
@@ -51,6 +54,18 @@ async function requireGeminiClient(
         }
       } catch {}
 
+      try {
+        const { data: sysVars } = await client
+          .from('system_settings')
+          .select('setting_key, setting_value')
+          .in('setting_key', targetKeys);
+        const foundSys = (sysVars || []).find((row: any) => isValidApiKeyCandidate(row?.setting_value));
+        if (foundSys) {
+          key = isValidApiKeyCandidate(foundSys.setting_value);
+          break;
+        }
+      } catch {}
+
       if (organizationId && organizationId !== 'default-org') {
         try {
           const { data: tenantVars } = await client
@@ -61,6 +76,21 @@ async function requireGeminiClient(
           const foundTenant = (tenantVars || []).find((row: any) => isValidApiKeyCandidate(row?.value));
           if (foundTenant) {
             key = isValidApiKeyCandidate(foundTenant.value);
+            break;
+          }
+        } catch {}
+
+        try {
+          const { data: tenantSettings } = await client
+            .from('tenant_settings')
+            .select('setting_key, setting_value')
+            .eq('organization_id', organizationId)
+            .in('setting_key', targetKeys);
+          const foundTenantSetting = (tenantSettings || []).find((row: any) =>
+            isValidApiKeyCandidate(row?.setting_value)
+          );
+          if (foundTenantSetting) {
+            key = isValidApiKeyCandidate(foundTenantSetting.setting_value);
             break;
           }
         } catch {}
@@ -113,6 +143,11 @@ function isTransientCapacityError(err: unknown): boolean {
   return /\b(503|502|504|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|overloaded|try again/i.test(msg);
 }
 
+function isModelUnavailableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err || '');
+  return /\b404\b|not found|not supported|unknown model|invalid model/i.test(msg);
+}
+
 function parseModelJsonObject(rawText: string | undefined): Record<string, any> {
   const cleaned = String(rawText || '')
     .trim()
@@ -135,10 +170,11 @@ async function generateGeminiJSONWithRetry(
   config: Record<string, any>,
   requiredNonEmptyField?: string
 ): Promise<Record<string, any>> {
-  const attempts: Array<{ model: string; delayMs: number }> = [
+  const attempts: Array<{ model: string; delayMs: number; dropThinking?: boolean }> = [
     { model: AI_MODEL, delayMs: 0 },
     { model: AI_MODEL, delayMs: 650 },
     { model: AI_FALLBACK_MODEL, delayMs: 400 },
+    { model: AI_SECONDARY_FALLBACK_MODEL, delayMs: 250, dropThinking: true },
   ];
 
   let lastErr: unknown;
@@ -146,11 +182,15 @@ async function generateGeminiJSONWithRetry(
     if (attempt.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, attempt.delayMs));
     }
+    const effectiveConfig = { ...config };
+    if (attempt.dropThinking) {
+      delete effectiveConfig.thinkingConfig;
+    }
     try {
       const response = await client.models.generateContent({
         model: attempt.model,
         contents,
-        config,
+        config: effectiveConfig,
       });
       const parsed = parseModelJsonObject(response.text);
       if (requiredNonEmptyField && !String(parsed[requiredNonEmptyField] || '').trim()) {
@@ -159,7 +199,11 @@ async function generateGeminiJSONWithRetry(
       return parsed;
     } catch (err) {
       lastErr = err;
-      if (!isTransientCapacityError(err) && !(err instanceof Error && /empty response|missing /i.test(err.message))) {
+      if (
+        !isTransientCapacityError(err) &&
+        !isModelUnavailableError(err) &&
+        !(err instanceof Error && /empty response|missing /i.test(err.message))
+      ) {
         throw err;
       }
     }
@@ -167,9 +211,15 @@ async function generateGeminiJSONWithRetry(
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr || 'AI request failed.'));
 }
 
-function handleGeminiRouteError(res: Response, err: unknown, fallbackMessage: string) {
+function handleGeminiRouteError(res: Response, err: unknown, fallbackMessage: string, routeName?: string) {
+  res.setHeader('X-AI-Handler', 'express-server');
+  const debug = {
+    handler: 'express-server',
+    route: routeName || 'unknown',
+    timestamp: new Date().toISOString(),
+  };
   if (err instanceof AIConfigError) {
-    return res.status(err.statusCode).json({ error: err.message });
+    return res.status(err.statusCode).json({ error: err.message, debug });
   }
   const rawMsg = err instanceof Error ? err.message : String(err || fallbackMessage);
   const msg = extractReadableErrorMessage(rawMsg) || fallbackMessage;
@@ -177,21 +227,25 @@ function handleGeminiRouteError(res: Response, err: unknown, fallbackMessage: st
   const statusCode = statusMatch ? Number(statusMatch[1]) : 500;
   if (statusCode === 400 || statusCode === 403 || /api key/i.test(msg)) {
     return res.status(statusCode === 400 || statusCode === 403 ? statusCode : 400).json({
-      error: `Gemini API key error: ${msg}. Please verify GEMINI_API_KEY in Settings > Secrets.`,
+      error: `Gemini API key error: ${msg}. Please verify GEMINI_API_KEY in Super Admin > Settings > System Variables or Settings > Secrets.`,
+      debug,
     });
   }
   if (statusCode === 429) {
     return res.status(429).json({
       error: 'Gemini API rate limit reached. Please wait a moment and try again.',
+      debug,
     });
   }
   if (statusCode === 503 || /high demand|UNAVAILABLE/i.test(msg)) {
     return res.status(503).json({
       error: 'Gemini AI is temporarily busy due to high demand. Please click Ask AI again in a few seconds.',
+      debug,
     });
   }
   return res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
     error: msg || fallbackMessage,
+    debug,
   });
 }
 
@@ -453,6 +507,7 @@ export function registerAIRoutes(
 
   // ── 1. AI CUSTOMER ASSISTANT (Per-Customer Q&A + Activity Summary) ──
   app.post('/api/ai/customer-assistant', async (req: Request, res: Response) => {
+    res.setHeader('X-AI-Handler', 'express-server');
     console.log(`[AI Customer Assistant] Received POST /api/ai/customer-assistant. Body:`, JSON.stringify(req.body || {}));
     try {
       const ctx = await resolveCRMAuthContext(req);
@@ -757,12 +812,13 @@ export function registerAIRoutes(
 
       return res.json({ success: true, ...parsed });
     } catch (err) {
-      return handleGeminiRouteError(res, err, 'Customer Assistant request failed.');
+      return handleGeminiRouteError(res, err, 'Customer Assistant request failed.', '/api/ai/customer-assistant');
     }
   });
 
   // ── 2. AI EMAIL WRITER (Draft, Follow-up, Rewrite Tone, Thread Summary) ──
   app.post('/api/ai/email-writer', async (req: Request, res: Response) => {
+    res.setHeader('X-AI-Handler', 'express-server');
     try {
       const ctx = await resolveCRMAuthContext(req);
       if (!ctx) {
@@ -844,12 +900,13 @@ export function registerAIRoutes(
 
       return res.json({ success: true, ...parsed });
     } catch (err) {
-      return handleGeminiRouteError(res, err, 'Email Writer request failed.');
+      return handleGeminiRouteError(res, err, 'Email Writer request failed.', '/api/ai/email-writer');
     }
   });
 
   // ── 3. CRM INTELLIGENCE (Customer Insights, AI Follow-up Assistant, Smart Search, Sales Analysis) ──
   app.post('/api/ai/crm-intelligence', async (req: Request, res: Response) => {
+    res.setHeader('X-AI-Handler', 'express-server');
     try {
       const ctx = await resolveCRMAuthContext(req);
       if (!ctx) {
@@ -1257,12 +1314,13 @@ ${JSON.stringify(sampleAccounts)}`;
       );
       return res.json({ success: true, mode, totals, ...parsed });
     } catch (err) {
-      return handleGeminiRouteError(res, err, 'CRM Intelligence request failed.');
+      return handleGeminiRouteError(res, err, 'CRM Intelligence request failed.', '/api/ai/crm-intelligence');
     }
   });
 
   // ── 4. PROSPACES LOGISTICS AI COPILOT ──
   app.post('/api/ai/logistics-assistant', async (req: Request, res: Response) => {
+    res.setHeader('X-AI-Handler', 'express-server');
     try {
       const ctx = await resolveLogisticsAuthContext(req);
       if (!ctx) {
@@ -1436,7 +1494,7 @@ Deliveries Queue JSON: ${JSON.stringify(compactDeliveries)}`;
       );
       return res.json({ success: true, mode, ...parsed });
     } catch (err) {
-      return handleGeminiRouteError(res, err, 'Logistics AI Copilot request failed.');
+      return handleGeminiRouteError(res, err, 'Logistics AI Copilot request failed.', '/api/ai/logistics-assistant');
     }
   });
 }

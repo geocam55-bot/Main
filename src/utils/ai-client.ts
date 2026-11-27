@@ -146,6 +146,7 @@ async function postAI<T>(
   if (nextPayload.organizationId) contextHeaders['X-Organization-Id'] = String(nextPayload.organizationId);
 
   const headers = await getServerHeaders(contextHeaders);
+  headers['Accept'] = 'application/json';
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -153,9 +154,30 @@ async function postAI<T>(
     body: JSON.stringify(nextPayload),
   });
 
-  const data = await res.json().catch(() => ({}));
+  const contentType = res.headers.get('content-type') || '';
+  const handlerTag = res.headers.get('x-ai-handler') || 'unhandled-or-static';
+  const rawText = await res.text().catch(() => '');
+  let data: any = {};
+  try {
+    if (rawText) data = JSON.parse(rawText);
+  } catch {
+    data = {};
+  }
+
   if (!res.ok) {
-    throw new Error(data?.error || `AI request failed with status ${res.status}`);
+    const debugSummary = `[endpoint=${endpoint}, status=${res.status}, handler=${handlerTag}, contentType=${contentType || 'none'}]`;
+    console.error('[AI Client Error]', debugSummary, {
+      payloadKeys: Object.keys(nextPayload),
+      organizationId: nextPayload.organizationId || null,
+      responsePreview: rawText.slice(0, 300),
+      serverDebug: data?.debug || null,
+    });
+    const baseMsg =
+      data?.error ||
+      (res.status === 405
+        ? `AI endpoint returned 405 Method Not Allowed (${debugSummary}). Verify serverless API route deployment.`
+        : `AI request failed with status ${res.status} (${debugSummary})`);
+    throw new Error(baseMsg);
   }
   return data as T;
 }
