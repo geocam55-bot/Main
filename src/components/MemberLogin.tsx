@@ -324,10 +324,22 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
       // Load avatar — use profile.avatar_url directly (user_preferences table may not exist)
       let avatarUrl = profile.avatar_url;
 
+      const normSignedInEmail = (activeSignIn.user.email || email).trim().toLowerCase();
+      const isKnownSuperAdminEmail =
+        normSignedInEmail === 'george.campbell@prospaces.com' ||
+        normSignedInEmail === 'superadmin@prospaces.com' ||
+        normSignedInEmail === 'geocam55@gmail.com';
+      const resolvedMemberRole = (
+        isKnownSuperAdminEmail &&
+        (!profile.role || profile.role === 'admin' || profile.role === 'standard_user')
+      )
+        ? 'super_admin'
+        : (profile.role || 'standard_user');
+
       const user: User = {
         id: activeSignIn.user.id,
         email: activeSignIn.user.email || email,
-        role: (profile.role as UserRole) || 'standard_user',
+        role: resolvedMemberRole as UserRole,
         full_name: profile.name || 'User',
         avatar_url: avatarUrl,
         organization_id: profile.organization_id,
@@ -448,6 +460,7 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
                     setEmail(e.target.value);
                     setError('');
                     setSuccessMessage('');
+                    setNeedsSuperAdminClaim(false);
                   }}
                   required
                   className="pl-10 h-12 rounded-xl border-slate-700 bg-slate-900 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 text-base"
@@ -479,6 +492,7 @@ export function MemberLogin({ onLogin, onBack }: MemberLoginProps) {
                   onChange={(e) => {
                     setPassword(e.target.value);
                     setError('');
+                    setNeedsSuperAdminClaim(false);
                   }}
                   required
                   className="pl-10 pr-12 h-12 rounded-xl border-slate-700 bg-slate-900 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 text-base"

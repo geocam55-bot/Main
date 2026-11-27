@@ -133,6 +133,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
   const [verifyPassword, setVerifyPassword] = useState('');
   const [verifyingSession, setVerifyingSession] = useState(false);
   const [superAdminClaimed, setSuperAdminClaimed] = useState<boolean>(true);
+  const [canClaimSuperAdmin, setCanClaimSuperAdmin] = useState<boolean>(false);
   const [verifyError, setVerifyError] = useState<string>('');
 
   const orgId = organizationId || localStorage.getItem('currentOrgId') || '';
@@ -149,6 +150,11 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
         const status = await resp.json().catch(() => ({}));
         if (typeof status.superAdminClaimed === 'boolean') {
           setSuperAdminClaimed(status.superAdminClaimed);
+        }
+        if (typeof status.canClaimSuperAdmin === 'boolean') {
+          setCanClaimSuperAdmin(status.canClaimSuperAdmin);
+        } else {
+          setCanClaimSuperAdmin(Boolean(status.hasServiceRole && !status.superAdminClaimed));
         }
         return status;
       }
@@ -217,7 +223,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
       const supabase = createClient();
       let verified = false;
 
-      if (!superAdminClaimed && scope === 'system') {
+      if (canClaimSuperAdmin && !superAdminClaimed && scope === 'system') {
         const claimResp = await fetch('/api/auth/claim-superadmin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -233,6 +239,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
           setAppSessionToken(appTok);
         }
         setSuperAdminClaimed(true);
+        setCanClaimSuperAdmin(false);
         verified = true;
       }
 
@@ -271,6 +278,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
           }
         } else if (authResult?.needsClaim) {
           setSuperAdminClaimed(false);
+          setCanClaimSuperAdmin(true);
           throw new Error(authResult.error || 'No Super Admin password is set yet. Enter a password (min 8 characters) to claim access.');
         } else if (authResult?.error) {
           throw new Error(authResult.error);
@@ -632,14 +640,14 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2 text-amber-800 dark:text-amber-300">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {!superAdminClaimed && scope === 'system'
+              {canClaimSuperAdmin && scope === 'system'
                 ? 'Set Your Super Admin Password (First-Time Server Setup)'
                 : `Session Verification Required to Manage ${scope === 'system' ? 'System' : 'Tenant'} Variables`}
             </CardTitle>
             <CardDescription className="text-xs text-amber-700/90 dark:text-amber-200/80">
-              {!superAdminClaimed && scope === 'system'
+              {canClaimSuperAdmin && scope === 'system'
                 ? 'No Super Admin password has been saved on the server yet. Choose a password (at least 8 characters) to unlock managing System Variables.'
-                : 'Your browser session does not currently have an active server authentication token. Enter your password below to unlock saving.'}
+                : 'Your browser session does not currently have an active server authentication token. Enter your account password below to unlock saving.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -658,7 +666,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
               </div>
               <div className="space-y-1">
                 <Label htmlFor="verify-session-password" className="text-xs font-semibold">
-                  {!superAdminClaimed && scope === 'system' ? 'New Super Admin Password' : 'Password'}
+                  {canClaimSuperAdmin && scope === 'system' ? 'New Super Admin Password' : 'Password'}
                 </Label>
                 <Input
                   id="verify-session-password"
@@ -668,7 +676,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
                     setVerifyPassword(e.target.value);
                     setVerifyError('');
                   }}
-                  placeholder={!superAdminClaimed && scope === 'system' ? 'Min 8 characters...' : 'Enter your account password'}
+                  placeholder={canClaimSuperAdmin && scope === 'system' ? 'Min 8 characters...' : 'Enter your account password'}
                   className="text-xs bg-background"
                   required
                 />
@@ -678,12 +686,12 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
                   {verifyingSession ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      {!superAdminClaimed && scope === 'system' ? 'Saving & Unlocking...' : 'Verifying...'}
+                      {canClaimSuperAdmin && scope === 'system' ? 'Saving & Unlocking...' : 'Verifying...'}
                     </>
                   ) : (
                     <>
                       <Shield className="h-3.5 w-3.5" />
-                      {!superAdminClaimed && scope === 'system'
+                      {canClaimSuperAdmin && scope === 'system'
                         ? (key.trim() && value.trim() ? 'Set Password & Save Variable' : 'Set Password & Unlock')
                         : (key.trim() && value.trim() ? 'Verify & Save Variable' : 'Verify Session')}
                     </>

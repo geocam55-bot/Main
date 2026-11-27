@@ -2242,6 +2242,7 @@ app.use((req, res, next) => {
       ) {
         const inputPassword = (password || "").trim();
         const configuredSuperPass = String(process.env.SUPERADMIN_PASSWORD || "").trim();
+        const hasServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "").trim());
         const claimedRecord = supabase ? await getClaimedSuperAdminRecord(supabase) : null;
 
         let isValidSuperPass = false;
@@ -2253,7 +2254,7 @@ app.use((req, res, next) => {
           isValidSuperPass = Boolean(inputPassword && verifyPasswordScrypt(inputPassword, claimedRecord.hash));
         } else {
           isValidSuperPass = false;
-          needsClaim = true;
+          needsClaim = hasServiceRole;
         }
 
         if (!inputPassword || !isValidSuperPass) {
@@ -2263,7 +2264,9 @@ app.use((req, res, next) => {
             needsClaim,
             error: needsClaim
               ? "Super Admin password is not set yet or does not match. Use the setup form to claim your Super Admin password."
-              : "Invalid SuperAdmin password entry."
+              : (configuredSuperPass || claimedRecord
+                  ? "Invalid SuperAdmin password entry."
+                  : "Invalid email or password. Sign in with your Supabase Auth password (or set SUPERADMIN_PASSWORD and SUPABASE_SERVICE_ROLE_KEY).")
           });
         }
         const superUser = {

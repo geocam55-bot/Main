@@ -2810,23 +2810,29 @@ async function startServer() {
   // Auth routes (/api/auth/login and /api/auth/register) are registered in registerLogisticsServer(app)
   app.get('/api/auth/session-status', async (req, res) => {
     try {
+      const hasServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim());
       const hasConfiguredPasscode = Boolean(String(process.env.SUPERADMIN_PASSWORD || '').trim());
       const claimedRecord = await getClaimedSuperAdminRecord(supabase);
       const superAdminClaimed = hasConfiguredPasscode || Boolean(claimedRecord);
+      const canClaimSuperAdmin = Boolean(hasServiceRole && !superAdminClaimed);
       const auth = await resolveExpressSecureEnvAuth(req, 'system');
       if (auth.error) {
         return res.json({
           success: true,
           authenticated: false,
           superAdminClaimed,
+          canClaimSuperAdmin,
           hasConfiguredPasscode,
+          hasServiceRole,
         });
       }
       return res.json({
         success: true,
         authenticated: true,
         superAdminClaimed,
+        canClaimSuperAdmin,
         hasConfiguredPasscode,
+        hasServiceRole,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, authenticated: false, error: err?.message || 'Status check failed' });
@@ -2845,6 +2851,13 @@ async function startServer() {
       }
       if (String(process.env.SUPERADMIN_PASSWORD || '').trim()) {
         return res.status(409).json({ success: false, error: 'A server Super Admin passcode is already configured.' });
+      }
+      const hasServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim());
+      if (!hasServiceRole) {
+        return res.status(503).json({
+          success: false,
+          error: 'Server database role is not configured yet. Set SUPERADMIN_PASSWORD or SUPABASE_SERVICE_ROLE_KEY.',
+        });
       }
       const existing = await getClaimedSuperAdminRecord(supabase);
       if (existing) {

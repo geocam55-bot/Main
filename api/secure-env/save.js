@@ -98,6 +98,13 @@ export default async function handler(req, res) {
       }
 
       if (error) {
+        const isRls = String(error.code || '') === '42501' || /row-level security/i.test(String(error.message || ''));
+        if (isRls && !authCtx.hasServiceRole) {
+          return res.status(403).json({
+            success: false,
+            error: 'Server database role (SUPABASE_SERVICE_ROLE_KEY) is not configured for password sessions. Sign in with your Supabase Auth password or add SUPABASE_SERVICE_ROLE_KEY to your deployment environment variables.',
+          });
+        }
         return res.status(500).json({ success: false, error: error.message || 'Failed to save tenant variable.' });
       }
 
@@ -151,6 +158,13 @@ export default async function handler(req, res) {
     }
 
     if (error) {
+      const isRls = String(error.code || '') === '42501' || /row-level security/i.test(String(error.message || ''));
+      if (isRls && !authCtx.hasServiceRole) {
+        return res.status(403).json({
+          success: false,
+          error: 'Server database role (SUPABASE_SERVICE_ROLE_KEY) is not configured for password sessions. Sign in with your Supabase Auth password or add SUPABASE_SERVICE_ROLE_KEY to your deployment environment variables.',
+        });
+      }
       return res.status(500).json({ success: false, error: error.message || 'Failed to save system variable.' });
     }
 

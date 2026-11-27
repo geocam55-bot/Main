@@ -13,6 +13,7 @@ export default async function handler(req, res) {
     const hasConfiguredPasscode = Boolean(String(process.env.SUPERADMIN_PASSWORD || '').trim());
     const claimedRecord = await getClaimedSuperAdminRecord(adminClient);
     const superAdminClaimed = hasConfiguredPasscode || Boolean(claimedRecord);
+    const canClaimSuperAdmin = Boolean(hasServiceRole && !superAdminClaimed);
 
     const authCtx = await authenticateSecureEnvCaller(req);
     if (authCtx.error) {
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
         success: true,
         authenticated: false,
         superAdminClaimed,
+        canClaimSuperAdmin,
         hasConfiguredPasscode,
         hasServiceRole,
       });
@@ -29,6 +31,7 @@ export default async function handler(req, res) {
       success: true,
       authenticated: true,
       superAdminClaimed,
+      canClaimSuperAdmin,
       hasConfiguredPasscode,
       hasServiceRole,
       user: {

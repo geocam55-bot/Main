@@ -43,7 +43,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const { adminClient } = getSupabaseEnv();
+    const { adminClient, hasServiceRole } = getSupabaseEnv();
 
     // 1. Primary authentication via Supabase Auth
     try {
@@ -228,11 +228,19 @@ export default async function handler(req, res) {
     } catch {}
 
     if (SUPER_ADMIN_EMAILS.has(email) && !claimedRecord && !configuredSuperPass) {
+      if (hasServiceRole) {
+        return res.status(401).json({
+          success: false,
+          found: false,
+          needsClaim: true,
+          error: 'Super Admin password has not been set on the server yet. Set your Super Admin password to continue.',
+        });
+      }
       return res.status(401).json({
         success: false,
         found: false,
-        needsClaim: true,
-        error: 'Super Admin password has not been set on the server yet. Set your Super Admin password to continue.',
+        needsClaim: false,
+        error: 'Invalid email or password. Sign in with your Supabase Auth password (or use "Forgot password?"), or set SUPERADMIN_PASSWORD and SUPABASE_SERVICE_ROLE_KEY in your deployment settings.',
       });
     }
 
