@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { 
   ensureSecureEnvTables, 
+  getLastSecureEnvError,
   listAppEnv, 
   listTenantEnv, 
   setAppEnvResult, 
@@ -47,6 +48,7 @@ import {
   type AppEnvVar, 
   type TenantEnvVar 
 } from '../../utils/secure-env';
+import { createClient } from '../../utils/supabase/client';
 
 interface EnvironmentSettingsPanelProps {
   scope: 'tenant' | 'system';
@@ -113,6 +115,23 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
   const [itemToDelete, setItemToDelete] = useState<(AppEnvVar | TenantEnvVar) | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Inline Session Verification state (when local session lacks active server auth token)
+  const [needsSessionVerify, setNeedsSessionVerify] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState(() => {
+    try {
+      const cached = JSON.parse(
+        localStorage.getItem('prospaces_cached_user') ||
+        localStorage.getItem('prospaces_active_user') ||
+        '{}'
+      );
+      return cached?.email || '';
+    } catch {
+      return '';
+    }
+  });
+  const [verifyPassword, setVerifyPassword] = useState('');
+  const [verifyingSession, setVerifyingSession] = useState(false);
+
   const orgId = organizationId || localStorage.getItem('currentOrgId') || '';
 
   const loadVariables = async () => {
@@ -130,6 +149,11 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
         data = await listAppEnv();
       }
       setVars(data);
+      if (getLastSecureEnvError()?.toLowerCase().includes('authentication required')) {
+        setNeedsSessionVerify(true);
+      } else {
+        setNeedsSessionVerify(false);
+      }
 
       // Populate SMTP fields from existing variables
       const map = new Map(data.map(item => [item.key.toUpperCase(), item.value]));
@@ -151,6 +175,86 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
   useEffect(() => {
     loadVariables();
   }, [scope, orgId]);
+
+  const handleVerifySession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetEmail = verifyEmail.trim();
+    const targetPass = verifyPassword.trim();
+    if (!targetEmail || !targetPass) {
+      toast.error('Please enter your account email and password.');
+      return;
+    }
+
+    setVerifyingSession(true);
+    try {
+      const supabase = createClient();
+      let verified = false;
+
+      // 1. Try Supabase Auth first
+      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password: targetPass,
+      });
+      if (!signInErr && signInData?.session?.access_token) {
+        verified = true;
+      }
+
+      // 2. Fallback to /api/auth/login (issues verified Supabase session or hs1 signed token)
+      if (!verified) {
+        const resp = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: targetEmail, password: targetPass }),
+        });
+        const authResult = await resp.json().catch(() => ({}));
+        if (resp.ok && authResult.found && !authResult.error) {
+          if (authResult.session?.access_token && authResult.session?.refresh_token) {
+            await supabase.auth.setSession({
+              access_token: authResult.session.access_token,
+              refresh_token: authResult.session.refresh_token,
+            });
+            verified = true;
+          } else if (typeof authResult.token === 'string' && authResult.token.startsWith('hs1.')) {
+            sessionStorage.setItem('prospaces_app_session_token', authResult.token);
+            verified = true;
+          }
+        } else if (authResult?.error) {
+          throw new Error(authResult.error);
+        }
+      }
+
+      if (!verified) {
+        throw new Error('Could not obtain a verified server session token. Check your password and try again.');
+      }
+
+      setNeedsSessionVerify(false);
+      setVerifyPassword('');
+      toast.success('Session verified!');
+
+      // Automatically complete any pending variable save in the form
+      if (key.trim() && value.trim()) {
+        const cleanKey = key.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+        const saveRes = scope === 'tenant'
+          ? await setTenantEnvResult(orgId, cleanKey, value.trim(), description.trim())
+          : await setAppEnvResult(cleanKey, value.trim(), description.trim());
+        if (saveRes.success) {
+          toast.success(`Saved ${scope === 'tenant' ? 'Tenant' : 'System'} variable: ${cleanKey}`);
+          setKey('');
+          setValue('');
+          setDescription('');
+          setIsEditing(false);
+        } else {
+          toast.error(saveRes.error ? `Failed to save variable ${cleanKey}: ${saveRes.error}` : `Failed to save variable ${cleanKey}.`);
+        }
+      }
+
+      await loadVariables();
+    } catch (err: any) {
+      toast.error(err?.message || 'Session verification failed.');
+    } finally {
+      setVerifyingSession(false);
+    }
+  };
 
   // Handle Saving the complete SMTP Config
   const handleSaveSmtp = async (e: React.FormEvent) => {
@@ -181,6 +285,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
           ? await setTenantEnvResult(orgId, item.key, item.value, item.desc)
           : await setAppEnvResult(item.key, item.value, item.desc);
         if (!result.success) {
+          if (result.requiresAuth) setNeedsSessionVerify(true);
           throw new Error(result.error || `Failed to save ${item.key}`);
         }
       }
@@ -220,6 +325,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
         setIsEditing(false);
         await loadVariables();
       } else {
+        if (result.requiresAuth) setNeedsSessionVerify(true);
         toast.error(
           result.error
             ? `Failed to save variable ${cleanKey}: ${result.error}`
@@ -251,6 +357,7 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
         setItemToDelete(null);
         await loadVariables();
       } else {
+        if (result.requiresAuth) setNeedsSessionVerify(true);
         toast.error(
           result.error
             ? `Failed to delete variable ${targetKey}: ${result.error}`
@@ -441,6 +548,63 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
           </CardContent>
         )}
       </Card>
+
+      {needsSessionVerify && (
+        <Card className="border-amber-500/40 bg-amber-50/70 dark:bg-amber-950/20 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2 text-amber-800 dark:text-amber-300">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              Session Verification Required to Manage {scope === 'system' ? 'System' : 'Tenant'} Variables
+            </CardTitle>
+            <CardDescription className="text-xs text-amber-700/90 dark:text-amber-200/80">
+              Your current session was restored from local cache without an active server authentication token. Enter your Super Admin password below to verify and unlock saving.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleVerifySession} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+              <div className="space-y-1">
+                <Label htmlFor="verify-session-email" className="text-xs font-semibold">Email</Label>
+                <Input
+                  id="verify-session-email"
+                  type="email"
+                  value={verifyEmail}
+                  onChange={(e) => setVerifyEmail(e.target.value)}
+                  placeholder="geocam55@gmail.com"
+                  className="text-xs bg-background"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="verify-session-password" className="text-xs font-semibold">Password</Label>
+                <Input
+                  id="verify-session-password"
+                  type="password"
+                  value={verifyPassword}
+                  onChange={(e) => setVerifyPassword(e.target.value)}
+                  placeholder="Enter your account password"
+                  className="text-xs bg-background"
+                  required
+                />
+              </div>
+              <div>
+                <Button type="submit" size="sm" disabled={verifyingSession} className="w-full gap-1.5">
+                  {verifyingSession ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-3.5 w-3.5" />
+                      {key.trim() && value.trim() ? 'Verify & Save Variable' : 'Verify Session'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* DEDICATED SMTP CONFIGURATION CARD */}
       <Card className="border-border shadow-sm bg-card">

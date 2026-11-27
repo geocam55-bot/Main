@@ -7,6 +7,7 @@ import { DEFAULT_BRANCHES, DEFAULT_TRUCKS, DEFAULT_USERS, DEFAULT_DELIVERIES } f
 import { GoogleGenAI, Type } from "@google/genai";
 // dotenv removed
 import { createClient } from "@supabase/supabase-js";
+import { signAppSessionToken } from "../../api/_lib/secureEnvHelper.js";
 // dotenv config removed
 
 let aiClient: GoogleGenAI | null = null;
@@ -2208,19 +2209,27 @@ app.use((req, res, next) => {
             error: "Invalid SuperAdmin password entry."
           });
         }
+        const superUser = {
+          id: "USR-SUPER-ADMIN-01",
+          tenantId: "system-admin-tenant",
+          name: normEmail === "george.campbell@prospaces.com" ? "George Campbell" : "ProSpaces Super Admin",
+          email: normEmail,
+          role: "SUPER_ADMIN",
+          associatedStoreId: "RONA-03510",
+          phone: "(902) 476-8800",
+          status: "Active"
+        };
+        const signedToken = signAppSessionToken({
+          sub: superUser.id,
+          email: normEmail,
+          role: "super_admin",
+          organizationId: "rona_atlantic"
+        });
         return res.json({
           supabaseActive: true,
           found: true,
-          user: {
-            id: "USR-SUPER-ADMIN-01",
-            tenantId: "system-admin-tenant",
-            name: normEmail === "george.campbell@prospaces.com" ? "George Campbell" : "ProSpaces Super Admin",
-            email: normEmail,
-            role: "SUPER_ADMIN",
-            associatedStoreId: "RONA-03510",
-            phone: "(902) 476-8800",
-            status: "Active"
-          },
+          user: superUser,
+          token: signedToken || undefined,
           tenant: {
             id: "system-admin-tenant",
             name: "System Control Space",
@@ -2427,10 +2436,18 @@ app.use((req, res, next) => {
           }
         }
 
+        const signedToken = signAppSessionToken({
+          sub: String(foundUser.id || "USR-10524"),
+          email: String(foundUser.email || normEmail).toLowerCase().trim(),
+          role: String(foundUser.role || "Admin"),
+          organizationId: String(foundUser.tenantId || "rona_atlantic")
+        });
+
         return res.json({
           supabaseActive: true,
           found: true,
           user: foundUser,
+          token: signedToken || undefined,
           tenant: finalTenant
         });
       }

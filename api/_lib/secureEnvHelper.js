@@ -78,7 +78,8 @@ function getSigningSecret() {
   return cleanEnv(
     process.env.SESSION_SECRET ||
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_SECRET_KEY
+      process.env.SUPABASE_SECRET_KEY ||
+      process.env.__PROSPACES_RUNTIME_SECRET
   );
 }
 

@@ -21,6 +21,12 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { registerLogisticsServer, sendSystemEmail, getSmtpConfig, resolveTenantBranding, buildTenantDeliveryEmailHtml } from "./src/server/logistics-server";
 import { registerAIRoutes } from "./src/server/ai-routes";
 import {
+  SECURE_ENV_DDL,
+  isMissingTableError,
+  tryAutoProvisionTables,
+  verifyAppSessionToken,
+} from "./api/_lib/secureEnvHelper.js";
+import {
   extractFieldsWithCoordinatesAndHeuristics,
   groupItemsIntoLines,
   PositionedTextItem
@@ -45,6 +51,10 @@ const publicAnonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABAS
 const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || `https://${projectId}.supabase.co`).trim().replace(/^['"\s]+|['"\s]+$/g, '');
 const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || publicAnonKey).trim().replace(/^['"\s]+|['"\s]+$/g, '');
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+if (!process.env.SESSION_SECRET && !process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SECRET_KEY && !process.env.__PROSPACES_RUNTIME_SECRET) {
+  process.env.__PROSPACES_RUNTIME_SECRET = crypto.randomBytes(32).toString('hex');
+}
 
 async function saveVirtualFileServer(fileName: string, base64Content: string, target: "local" | "onedrive" = "local") {
   try {
@@ -2788,24 +2798,7 @@ async function startServer() {
     next();
   });
 
-  // Guaranteed Top-Level Auth Login & Register API Endpoints
-  app.post(["/api/auth/login", "/api/auth/register"], async (req, res) => {
-    try {
-      const { email, password, name, role } = req.body || {};
-      return res.json({
-        success: true,
-        user: {
-          id: 'user-' + Date.now(),
-          email: email || 'geocam55@gmail.com',
-          name: name || 'George',
-          role: role || 'super_admin'
-        },
-        token: 'mock-session-token-' + Date.now()
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message || "Auth error" });
-    }
-  });
+  // Auth routes (/api/auth/login and /api/auth/register) are registered in registerLogisticsServer(app)
 
   // Guaranteed Top-Level OCR API Endpoint (Performs Gemini Vision OCR or precise RONA 300908 document extraction)
   app.post("/api/ocr", async (req, res) => {
@@ -3011,6 +3004,52 @@ Return structured results in required JSON format.`;
 
   // API router / endpoints
   const resolveExpressSecureEnvAuth = async (req: express.Request, scope: 'system' | 'tenant', requestedOrgId?: string) => {
+    const superAdminEmails = new Set(['superadmin@prospaces.com', 'george.campbell@prospaces.com', 'geocam55@gmail.com']);
+    const checkRoleScope = (rawRole: string, rawEmail: string, rawOrgId: string) => {
+      const userEmail = rawEmail.toLowerCase().trim();
+      const normRole = rawRole.toLowerCase().trim().replace(/[\s-]+/g, '_');
+      const isSuper = normRole === 'super_admin' || normRole === 'superadmin' || ((normRole === 'admin' || !normRole) && (superAdminEmails.has(userEmail) || userEmail.includes('superadmin')));
+      const isAdmin = isSuper || normRole === 'admin';
+
+      if (scope === 'system' && !isSuper) {
+        return { error: 'Forbidden: Super Admin privileges are required to manage system variables.', status: 403 as const };
+      }
+      if (scope === 'tenant') {
+        if (!isAdmin) {
+          return { error: 'Forbidden: Admin privileges are required to manage tenant variables.', status: 403 as const };
+        }
+        const orgId = String(requestedOrgId || rawOrgId || '').trim();
+        if (!orgId) {
+          return { error: 'organizationId is required for tenant variables.', status: 400 as const };
+        }
+        if (!isSuper && rawOrgId && rawOrgId !== orgId) {
+          return { error: 'Forbidden: Cannot access variables for another organization.', status: 403 as const };
+        }
+        return { error: null, status: 200 as const, organizationId: orgId };
+      }
+      return { error: null, status: 200 as const, organizationId: null };
+    };
+
+    const rawAppSession = req.headers['x-app-session'];
+    const appSessionToken = Array.isArray(rawAppSession) ? rawAppSession[0] : rawAppSession;
+    if (appSessionToken && String(appSessionToken).startsWith('hs1.')) {
+      const claims = verifyAppSessionToken(String(appSessionToken).trim());
+      if (claims && claims.sub) {
+        const scopeCheck = checkRoleScope(
+          String(claims.role || 'standard_user'),
+          String(claims.email || ''),
+          String(claims.organizationId || '')
+        );
+        if (scopeCheck.error) return scopeCheck;
+        return {
+          error: null,
+          status: 200 as const,
+          dbClient: supabase,
+          organizationId: scopeCheck.organizationId,
+        };
+      }
+    }
+
     const rawUserToken = req.headers['x-user-token'];
     const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
     const rawAuth = req.headers.authorization;
@@ -3020,10 +3059,9 @@ Return structured results in required JSON format.`;
       bearerAuth && bearerAuth !== publicAnonKey ? bearerAuth : ''
     ]
       .map((t) => String(t || '').trim())
-      .filter((t) => t.split('.').length === 3 && !t.startsWith('admin-fallback-token-'));
+      .filter((t) => t.split('.').length === 3 && !t.startsWith('admin-fallback-token-') && !t.startsWith('hs1.'));
 
     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY);
-    const superAdminEmails = new Set(['superadmin@prospaces.com', 'george.campbell@prospaces.com', 'geocam55@gmail.com']);
 
     for (const token of candidateTokens) {
       const { data: authData, error: authErr } = await supabase.auth.getUser(token);
@@ -3051,27 +3089,14 @@ Return structured results in required JSON format.`;
         }
       } catch {}
 
-      const normRole = userRole.toLowerCase().trim().replace(/[\s-]+/g, '_');
-      const isSuper = normRole === 'super_admin' || normRole === 'superadmin' || ((normRole === 'admin' || !normRole) && (superAdminEmails.has(userEmail) || userEmail.includes('superadmin')));
-      const isAdmin = isSuper || normRole === 'admin';
-
-      if (scope === 'system' && !isSuper) {
-        return { error: 'Forbidden: Super Admin privileges are required to manage system variables.', status: 403 as const };
-      }
-      if (scope === 'tenant') {
-        if (!isAdmin) {
-          return { error: 'Forbidden: Admin privileges are required to manage tenant variables.', status: 403 as const };
-        }
-        const orgId = String(requestedOrgId || userOrgId || '').trim();
-        if (!orgId) {
-          return { error: 'organizationId is required for tenant variables.', status: 400 as const };
-        }
-        if (!isSuper && userOrgId && userOrgId !== orgId) {
-          return { error: 'Forbidden: Cannot access variables for another organization.', status: 403 as const };
-        }
-        return { error: null, status: 200 as const, dbClient, organizationId: orgId };
-      }
-      return { error: null, status: 200 as const, dbClient, organizationId: null };
+      const scopeCheck = checkRoleScope(userRole, userEmail, userOrgId);
+      if (scopeCheck.error) return scopeCheck;
+      return {
+        error: null,
+        status: 200 as const,
+        dbClient,
+        organizationId: scopeCheck.organizationId,
+      };
     }
 
     return { error: 'Authentication required. Please sign in again to manage environment variables.', status: 401 as const };
@@ -3098,6 +3123,16 @@ Return structured results in required JSON format.`;
           .delete()
           .eq('organization_id', orgId)
           .eq('key', cleanKey);
+        if (error && isMissingTableError(error)) {
+          const { error: settingsErr } = await auth.dbClient!
+            .from('tenant_settings')
+            .delete()
+            .eq('organization_id', orgId)
+            .eq('setting_key', cleanKey);
+          if (!settingsErr) {
+            return res.json({ success: true, message: `Deleted ${cleanKey} from tenant_settings` });
+          }
+        }
         if (error) {
           return res.status(500).json({ success: false, error: error.message });
         }
@@ -3107,6 +3142,15 @@ Return structured results in required JSON format.`;
           .from('app_env_vars')
           .delete()
           .eq('key', cleanKey);
+        if (error && isMissingTableError(error)) {
+          const { error: settingsErr } = await auth.dbClient!
+            .from('system_settings')
+            .delete()
+            .eq('setting_key', cleanKey);
+          if (!settingsErr) {
+            return res.json({ success: true, message: `Deleted ${cleanKey} from system_settings` });
+          }
+        }
         if (error) {
           return res.status(500).json({ success: false, error: error.message });
         }
@@ -3142,17 +3186,35 @@ Return structured results in required JSON format.`;
         process.env.GEMINI_API_KEY = cleanVal;
       }
 
+      const nowIso = new Date().toISOString();
+
       if (scope === 'tenant') {
         const orgId = auth.organizationId!;
-        const { error } = await auth.dbClient!
+        const upsertRow = {
+          organization_id: orgId,
+          key: cleanKey,
+          value: cleanVal,
+          description: description || null,
+          updated_at: nowIso
+        };
+        let { error } = await auth.dbClient!
           .from('tenant_env_vars')
-          .upsert({
-            organization_id: orgId,
-            key: cleanKey,
-            value: cleanVal,
-            description: description || null,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'organization_id,key' });
+          .upsert(upsertRow, { onConflict: 'organization_id,key' });
+
+        if (error && isMissingTableError(error)) {
+          const provisioned = await tryAutoProvisionTables(supabase);
+          if (provisioned) {
+            ({ error } = await auth.dbClient!.from('tenant_env_vars').upsert(upsertRow, { onConflict: 'organization_id,key' }));
+          }
+          if (error && isMissingTableError(error)) {
+            const { error: settingsErr } = await auth.dbClient!
+              .from('tenant_settings')
+              .upsert({ organization_id: orgId, setting_key: cleanKey, setting_value: cleanVal, updated_at: nowIso }, { onConflict: 'organization_id,setting_key' });
+            if (!settingsErr) {
+              return res.json({ success: true, message: `Saved ${cleanKey} to tenant_settings` });
+            }
+          }
+        }
 
         if (error) {
           console.error('[Server /api/secure-env/save] Tenant save error:', error);
@@ -3160,14 +3222,30 @@ Return structured results in required JSON format.`;
         }
         return res.json({ success: true, message: `Saved ${cleanKey} to tenant_env_vars` });
       } else {
-        const { error } = await auth.dbClient!
+        const upsertRow = {
+          key: cleanKey,
+          value: cleanVal,
+          description: description || null,
+          updated_at: nowIso
+        };
+        let { error } = await auth.dbClient!
           .from('app_env_vars')
-          .upsert({
-            key: cleanKey,
-            value: cleanVal,
-            description: description || null,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'key' });
+          .upsert(upsertRow, { onConflict: 'key' });
+
+        if (error && isMissingTableError(error)) {
+          const provisioned = await tryAutoProvisionTables(supabase);
+          if (provisioned) {
+            ({ error } = await auth.dbClient!.from('app_env_vars').upsert(upsertRow, { onConflict: 'key' }));
+          }
+          if (error && isMissingTableError(error)) {
+            const { error: settingsErr } = await auth.dbClient!
+              .from('system_settings')
+              .upsert({ setting_key: cleanKey, setting_value: cleanVal, updated_at: nowIso }, { onConflict: 'setting_key' });
+            if (!settingsErr) {
+              return res.json({ success: true, message: `Saved ${cleanKey} to system_settings` });
+            }
+          }
+        }
 
         if (error) {
           console.error('[Server /api/secure-env/save] App save error:', error);
@@ -3198,6 +3276,19 @@ Return structured results in required JSON format.`;
           .select('*')
           .eq('organization_id', orgId)
           .order('key');
+        if (error && isMissingTableError(error)) {
+          const { data: settingsData, error: settingsErr } = await auth.dbClient!
+            .from('tenant_settings')
+            .select('organization_id, setting_key, setting_value, updated_at')
+            .eq('organization_id', orgId);
+          if (!settingsErr) {
+            const mapped = (settingsData || [])
+              .filter((r: any) => r?.setting_key)
+              .map((r: any) => ({ organization_id: r.organization_id, key: r.setting_key, value: r.setting_value || '', description: null, updated_at: r.updated_at || null }))
+              .sort((a: any, b: any) => a.key.localeCompare(b.key));
+            return res.json({ success: true, vars: mapped });
+          }
+        }
         if (error) {
           return res.status(500).json({ success: false, error: error.message, vars: [] });
         }
@@ -3207,6 +3298,18 @@ Return structured results in required JSON format.`;
           .from('app_env_vars')
           .select('*')
           .order('key');
+        if (error && isMissingTableError(error)) {
+          const { data: sysData, error: sysErr } = await auth.dbClient!
+            .from('system_settings')
+            .select('setting_key, setting_value, updated_at');
+          if (!sysErr) {
+            const mapped = (sysData || [])
+              .filter((r: any) => r?.setting_key)
+              .map((r: any) => ({ key: r.setting_key, value: r.setting_value || '', description: null, updated_at: r.updated_at || null }))
+              .sort((a: any, b: any) => a.key.localeCompare(b.key));
+            return res.json({ success: true, vars: mapped });
+          }
+        }
         if (error) {
           return res.status(500).json({ success: false, error: error.message, vars: [] });
         }

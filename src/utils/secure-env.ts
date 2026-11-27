@@ -23,6 +23,7 @@ export interface TenantEnvVar {
 export interface SecureEnvActionResult {
   success: boolean;
   error?: string;
+  requiresAuth?: boolean;
 }
 
 // In-memory cache to prevent excessive database calls during a single session
@@ -149,7 +150,7 @@ export async function setAppEnvResult(
     serverError = json?.error || `Server returned status ${resp.status}`;
     if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
       lastSecureEnvError = serverError;
-      return { success: false, error: serverError };
+      return { success: false, error: serverError, requiresAuth: resp.status === 401 };
     }
   } catch (apiErr: any) {
     serverError = apiErr?.message || 'Server endpoint unreachable';
@@ -194,9 +195,10 @@ export async function setAppEnvResult(
     const combinedErr = serverError
       ? `${serverError} (${error.message})`
       : error.message;
+    const isAuthErr = String(error?.code || '') === '42501' || /row-level security|JWT|not authorized|authentication/i.test(String(error?.message || ''));
     lastSecureEnvError = combinedErr;
     console.error('[SecureEnv] Client-side app_env upsert failed:', combinedErr);
-    return { success: false, error: combinedErr };
+    return { success: false, error: combinedErr, requiresAuth: isAuthErr };
   } catch (err: any) {
     const errMsg = err?.message || serverError || 'Failed to save system variable';
     lastSecureEnvError = errMsg;
@@ -280,7 +282,7 @@ export async function setTenantEnvResult(
     serverError = json?.error || `Server returned status ${resp.status}`;
     if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
       lastSecureEnvError = serverError;
-      return { success: false, error: serverError };
+      return { success: false, error: serverError, requiresAuth: resp.status === 401 };
     }
   } catch (apiErr: any) {
     serverError = apiErr?.message || 'Server endpoint unreachable';
@@ -337,9 +339,10 @@ export async function setTenantEnvResult(
     const combinedErr = serverError
       ? `${serverError} (${error.message})`
       : error.message;
+    const isAuthErr = String(error?.code || '') === '42501' || /row-level security|JWT|not authorized|authentication/i.test(String(error?.message || ''));
     lastSecureEnvError = combinedErr;
     console.error('[SecureEnv] Client-side tenant_env upsert failed:', combinedErr);
-    return { success: false, error: combinedErr };
+    return { success: false, error: combinedErr, requiresAuth: isAuthErr };
   } catch (err: any) {
     const errMsg = err?.message || serverError || 'Failed to save tenant variable';
     lastSecureEnvError = errMsg;
@@ -360,15 +363,17 @@ export async function setTenantEnv(organizationId: string, key: string, value: s
  * Get all App-level environment variables
  */
 export async function listAppEnv(): Promise<AppEnvVar[]> {
+  lastSecureEnvError = null;
   // 1. Server API (Authoritative, enforces auth and uses service-role when configured)
   try {
     const headers = await getServerHeaders();
     const resp = await fetch('/api/secure-env/list?scope=system', { headers });
-    if (resp.ok) {
-      const json = await resp.json();
-      if (json.success && Array.isArray(json.vars)) {
-        return json.vars;
-      }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success && Array.isArray(json.vars)) {
+      return json.vars;
+    }
+    if (resp.status === 401) {
+      lastSecureEnvError = json?.error || 'Authentication required';
     }
   } catch (apiErr) {
     console.warn('[SecureEnv] Server list failed, trying client fallback:', apiErr);
@@ -406,6 +411,7 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
  */
 export async function listTenantEnv(organizationId: string): Promise<TenantEnvVar[]> {
   const targetOrgId = organizationId || 'default_org';
+  lastSecureEnvError = null;
 
   // 1. Server API (Authoritative)
   try {
@@ -413,11 +419,12 @@ export async function listTenantEnv(organizationId: string): Promise<TenantEnvVa
     const resp = await fetch(`/api/secure-env/list?scope=tenant&organizationId=${encodeURIComponent(targetOrgId)}`, {
       headers,
     });
-    if (resp.ok) {
-      const json = await resp.json();
-      if (json.success && Array.isArray(json.vars)) {
-        return json.vars;
-      }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success && Array.isArray(json.vars)) {
+      return json.vars;
+    }
+    if (resp.status === 401) {
+      lastSecureEnvError = json?.error || 'Authentication required';
     }
   } catch (apiErr) {
     console.warn('[SecureEnv] Server list failed, trying client fallback:', apiErr);
@@ -477,7 +484,7 @@ export async function deleteAppEnvResult(key: string): Promise<SecureEnvActionRe
     serverError = data?.error || `Server returned status ${resp.status}`;
     if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
       lastSecureEnvError = serverError;
-      return { success: false, error: serverError };
+      return { success: false, error: serverError, requiresAuth: resp.status === 401 };
     }
   } catch (apiErr: any) {
     serverError = apiErr?.message || 'Server endpoint unreachable';
@@ -504,8 +511,9 @@ export async function deleteAppEnvResult(key: string): Promise<SecureEnvActionRe
       }
     }
     const errMsg = serverError ? `${serverError} (${error.message})` : error.message;
+    const isAuthErr = String(error?.code || '') === '42501' || /row-level security|JWT|not authorized|authentication/i.test(String(error?.message || ''));
     lastSecureEnvError = errMsg;
-    return { success: false, error: errMsg };
+    return { success: false, error: errMsg, requiresAuth: isAuthErr };
   } catch (err: any) {
     const errMsg = err?.message || serverError || 'Failed to delete system variable';
     lastSecureEnvError = errMsg;
@@ -548,7 +556,7 @@ export async function deleteTenantEnvResult(organizationId: string, key: string)
     serverError = data?.error || `Server returned status ${resp.status}`;
     if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
       lastSecureEnvError = serverError;
-      return { success: false, error: serverError };
+      return { success: false, error: serverError, requiresAuth: resp.status === 401 };
     }
   } catch (apiErr: any) {
     serverError = apiErr?.message || 'Server endpoint unreachable';
@@ -581,8 +589,9 @@ export async function deleteTenantEnvResult(organizationId: string, key: string)
       }
     }
     const errMsg = serverError ? `${serverError} (${error.message})` : error.message;
+    const isAuthErr = String(error?.code || '') === '42501' || /row-level security|JWT|not authorized|authentication/i.test(String(error?.message || ''));
     lastSecureEnvError = errMsg;
-    return { success: false, error: errMsg };
+    return { success: false, error: errMsg, requiresAuth: isAuthErr };
   } catch (err: any) {
     const errMsg = err?.message || serverError || 'Failed to delete tenant variable';
     lastSecureEnvError = errMsg;
