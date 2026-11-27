@@ -15,6 +15,7 @@ import {
   deleteTenantDirect, 
   fetchTenantStateDirect, 
   saveTenantStateDirect, 
+  saveUserDirect,
   saveTruckDirect,
   saveDeliveryDirect,
   saveUserHeartbeatDirect,
@@ -1456,13 +1457,12 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
         const contentType = res.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
           const body = await res.json();
-          setSyncStatus('IDLE');
           if (body.supabaseActive) {
+            setSyncStatus('IDLE');
             setLastSyncTime(new Date().toLocaleTimeString());
-          } else {
-            setLastSyncTime(`${new Date().toLocaleTimeString()} (Offline Cache Saved)`);
+            return;
           }
-          return;
+          // If server did not confirm active Supabase persistence, fall through to direct client sync
         }
       }
       throw new Error(`Server returned ${res.status}`);
@@ -2500,16 +2500,47 @@ export default function App({ onLogout }: { onLogout?: () => void } = {}) {
   // User handlers
   const handleAddUser = async (newUser: User) => {
     if (!currentTenant) return;
-    const updated = [...users, newUser];
+    lastMutationTimeRef.current = Date.now();
+    const userWithTenant: User = {
+      ...newUser,
+      tenantId: currentTenant.id,
+    };
+    const updated = [...users, userWithTenant];
     setUsers(updated);
+    try {
+      localStorage.setItem(`prospaces_users_tenant_${currentTenant.id}`, JSON.stringify(updated));
+    } catch {}
+    try {
+      const directSave = await saveUserDirect(userWithTenant, currentTenant.id);
+      if (!directSave.success) {
+        console.warn("Direct saveUserDirect returned error:", directSave.error);
+      }
+    } catch (directErr) {
+      console.warn("Direct saveUserDirect notice:", directErr);
+    }
     await syncStateToSupabase(currentTenant.id, deliveries, trucks, branches, updated);
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
     if (!currentTenant) return;
-    const updated = users.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u);
+    lastMutationTimeRef.current = Date.now();
+    const userWithTenant: User = {
+      ...updatedUser,
+      tenantId: currentTenant.id,
+    };
+    const updated = users.map(u => u.id === userWithTenant.id ? { ...u, ...userWithTenant } : u);
     setUsers(updated);
-    localStorage.setItem(`prospaces_users_tenant_${currentTenant.id}`, JSON.stringify(updated));
+    try {
+      localStorage.setItem(`prospaces_users_tenant_${currentTenant.id}`, JSON.stringify(updated));
+    } catch {}
+    try {
+      const directSave = await saveUserDirect(userWithTenant, currentTenant.id);
+      if (!directSave.success) {
+        console.warn("Direct saveUserDirect update error:", directSave.error);
+      }
+    } catch (directErr) {
+      console.warn("Direct saveUserDirect update notice:", directErr);
+    }
     await syncStateToSupabase(currentTenant.id, deliveries, trucks, branches, updated);
   };
 

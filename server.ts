@@ -3010,33 +3010,107 @@ Return structured results in required JSON format.`;
   const upload = multer({ dest: uploadDir });
 
   // API router / endpoints
+  const resolveExpressSecureEnvAuth = async (req: express.Request, scope: 'system' | 'tenant', requestedOrgId?: string) => {
+    const rawUserToken = req.headers['x-user-token'];
+    const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
+    const rawAuth = req.headers.authorization;
+    const bearerAuth = typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
+    const candidateTokens = [
+      xUserToken,
+      bearerAuth && bearerAuth !== publicAnonKey ? bearerAuth : ''
+    ]
+      .map((t) => String(t || '').trim())
+      .filter((t) => t.split('.').length === 3 && !t.startsWith('admin-fallback-token-'));
+
+    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY);
+    const superAdminEmails = new Set(['superadmin@prospaces.com', 'george.campbell@prospaces.com', 'geocam55@gmail.com']);
+
+    for (const token of candidateTokens) {
+      const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+      if (authErr || !authData?.user) continue;
+
+      const dbClient = hasServiceRole
+        ? supabase
+        : createClient(supabaseUrl, publicAnonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
+
+      const userEmail = String(authData.user.email || '').toLowerCase().trim();
+      let userRole = String(authData.user.user_metadata?.role || '');
+      let userOrgId = authData.user.user_metadata?.organization_id
+        ? String(authData.user.user_metadata.organization_id)
+        : (authData.user.user_metadata?.organizationId ? String(authData.user.user_metadata.organizationId) : '');
+
+      try {
+        const { data: profile } = await dbClient
+          .from('profiles')
+          .select('role, organization_id')
+          .eq('id', authData.user.id)
+          .maybeSingle();
+        if (profile) {
+          if (profile.role) userRole = String(profile.role);
+          if (profile.organization_id) userOrgId = String(profile.organization_id);
+        }
+      } catch {}
+
+      const normRole = userRole.toLowerCase().trim().replace(/[\s-]+/g, '_');
+      const isSuper = normRole === 'super_admin' || normRole === 'superadmin' || ((normRole === 'admin' || !normRole) && (superAdminEmails.has(userEmail) || userEmail.includes('superadmin')));
+      const isAdmin = isSuper || normRole === 'admin';
+
+      if (scope === 'system' && !isSuper) {
+        return { error: 'Forbidden: Super Admin privileges are required to manage system variables.', status: 403 as const };
+      }
+      if (scope === 'tenant') {
+        if (!isAdmin) {
+          return { error: 'Forbidden: Admin privileges are required to manage tenant variables.', status: 403 as const };
+        }
+        const orgId = String(requestedOrgId || userOrgId || '').trim();
+        if (!orgId) {
+          return { error: 'organizationId is required for tenant variables.', status: 400 as const };
+        }
+        if (!isSuper && userOrgId && userOrgId !== orgId) {
+          return { error: 'Forbidden: Cannot access variables for another organization.', status: 403 as const };
+        }
+        return { error: null, status: 200 as const, dbClient, organizationId: orgId };
+      }
+      return { error: null, status: 200 as const, dbClient, organizationId: null };
+    }
+
+    return { error: 'Authentication required. Please sign in again to manage environment variables.', status: 401 as const };
+  };
+
   app.post('/api/secure-env/delete', async (req, res) => {
     try {
-      const { scope, key, organizationId } = req.body;
-      if (!key) {
-        return res.status(400).json({ success: false, error: 'Key is required' });
+      const { scope: rawScope, key, organizationId } = req.body || {};
+      const scope = String(rawScope || 'system').trim().toLowerCase() === 'tenant' ? 'tenant' : 'system';
+      const auth = await resolveExpressSecureEnvAuth(req, scope, organizationId);
+      if (auth.error) {
+        return res.status(auth.status).json({ success: false, error: auth.error });
+      }
+
+      const cleanKey = String(key || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+      if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(cleanKey)) {
+        return res.status(400).json({ success: false, error: 'A valid Key is required' });
       }
 
       if (scope === 'tenant') {
-        const orgId = organizationId || 'default_org';
-        const { error } = await supabase
+        const orgId = auth.organizationId!;
+        const { error } = await auth.dbClient!
           .from('tenant_env_vars')
           .delete()
           .eq('organization_id', orgId)
-          .eq('key', key);
+          .eq('key', cleanKey);
         if (error) {
           return res.status(500).json({ success: false, error: error.message });
         }
-        return res.json({ success: true, message: `Deleted ${key} from tenant_env_vars` });
+        return res.json({ success: true, message: `Deleted ${cleanKey} from tenant_env_vars` });
       } else {
-        const { error } = await supabase
+        const { error } = await auth.dbClient!
           .from('app_env_vars')
           .delete()
-          .eq('key', key);
+          .eq('key', cleanKey);
         if (error) {
           return res.status(500).json({ success: false, error: error.message });
         }
-        return res.json({ success: true, message: `Deleted ${key} from app_env_vars` });
+        return res.json({ success: true, message: `Deleted ${cleanKey} from app_env_vars` });
       }
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || 'Server error' });
@@ -3045,35 +3119,32 @@ Return structured results in required JSON format.`;
 
   app.post('/api/secure-env/save', async (req, res) => {
     try {
-      const { scope, organizationId, key, value, description } = req.body;
-      if (!key || value === undefined) {
-        return res.status(400).json({ success: false, error: 'Key and Value are required' });
+      const { scope: rawScope, organizationId, key, value, description } = req.body || {};
+      const scope = String(rawScope || 'system').trim().toLowerCase() === 'tenant' ? 'tenant' : 'system';
+      const auth = await resolveExpressSecureEnvAuth(req, scope, organizationId);
+      if (auth.error) {
+        return res.status(auth.status).json({ success: false, error: auth.error });
       }
 
-      const cleanKey = String(key).trim().toUpperCase();
-      const cleanVal = String(value);
+      const cleanKey = String(key || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+      if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(cleanKey) || value === undefined || String(value).trim() === '') {
+        return res.status(400).json({ success: false, error: 'Valid Key and Value are required' });
+      }
+
+      const cleanVal = String(value).trim();
 
       if (cleanKey.includes('MAPS') || cleanKey.includes('GOOGLE_MAPS')) {
         process.env.GOOGLE_MAPS_PLATFORM_KEY = cleanVal;
         process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY = cleanVal;
         process.env.GOOGLE_MAPS_API_KEY = cleanVal;
       }
-      if (cleanKey === 'GEMINI_API_KEY' || cleanKey === 'GOOGLE_GEMINI_API_KEY') {
+      if (cleanKey === 'GEMINI_API_KEY' || cleanKey === 'GOOGLE_GEMINI_API_KEY' || cleanKey === 'GOOGLE_API_KEY') {
         process.env.GEMINI_API_KEY = cleanVal;
       }
 
-      const rawUserToken = req.headers['x-user-token'];
-      const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
-      const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY);
-      const dbClient = (!hasServiceRole && xUserToken && String(xUserToken).split('.').length === 3)
-        ? createClient(supabaseUrl, publicAnonKey, {
-            global: { headers: { Authorization: `Bearer ${xUserToken}` } }
-          })
-        : supabase;
-
       if (scope === 'tenant') {
-        const orgId = organizationId || 'default_org';
-        const { error } = await dbClient
+        const orgId = auth.organizationId!;
+        const { error } = await auth.dbClient!
           .from('tenant_env_vars')
           .upsert({
             organization_id: orgId,
@@ -3089,7 +3160,7 @@ Return structured results in required JSON format.`;
         }
         return res.json({ success: true, message: `Saved ${cleanKey} to tenant_env_vars` });
       } else {
-        const { error } = await dbClient
+        const { error } = await auth.dbClient!
           .from('app_env_vars')
           .upsert({
             key: cleanKey,
@@ -3112,10 +3183,17 @@ Return structured results in required JSON format.`;
 
   app.get('/api/secure-env/list', async (req, res) => {
     try {
-      const { scope, organizationId } = req.query;
+      const rawScope = req.query?.scope;
+      const scope = String(rawScope || 'system').trim().toLowerCase() === 'tenant' ? 'tenant' : 'system';
+      const requestedOrgId = req.query?.organizationId ? String(req.query.organizationId) : undefined;
+      const auth = await resolveExpressSecureEnvAuth(req, scope, requestedOrgId);
+      if (auth.error) {
+        return res.status(auth.status).json({ success: false, error: auth.error, vars: [] });
+      }
+
       if (scope === 'tenant') {
-        const orgId = String(organizationId || 'default_org');
-        const { data, error } = await supabase
+        const orgId = auth.organizationId!;
+        const { data, error } = await auth.dbClient!
           .from('tenant_env_vars')
           .select('*')
           .eq('organization_id', orgId)
@@ -3125,7 +3203,7 @@ Return structured results in required JSON format.`;
         }
         return res.json({ success: true, vars: data || [] });
       } else {
-        const { data, error } = await supabase
+        const { data, error } = await auth.dbClient!
           .from('app_env_vars')
           .select('*')
           .order('key');

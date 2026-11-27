@@ -177,5 +177,14 @@ export async function getServerHeaders(extraHeaders?: Record<string, string>): P
     headers['X-User-Token'] = userToken;
   }
 
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage && !headers['X-App-Session']) {
+      const appSession = window.sessionStorage.getItem('prospaces_app_session_token');
+      if (appSession && appSession.startsWith('hs1.')) {
+        headers['X-App-Session'] = appSession;
+      }
+    }
+  } catch {}
+
   return headers;
 }

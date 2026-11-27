@@ -192,13 +192,24 @@ export function Login({ onLogin, onBack }: LoginProps) {
                   email: authResult.user.email || email,
                   role: uRole as UserRole,
                   full_name: authResult.user.name || email.split('@')[0],
-                  organization_id: authResult.user.tenantId || 'rona_atlantic',
-                  organizationId: authResult.user.tenantId || 'rona_atlantic',
+                  organization_id: authResult.user.tenantId || authResult.user.organization_id || 'rona_atlantic',
+                  organizationId: authResult.user.tenantId || authResult.user.organization_id || 'rona_atlantic',
                 };
+                if (authResult.session?.access_token && authResult.session?.refresh_token) {
+                  try {
+                    await supabase.auth.setSession({
+                      access_token: authResult.session.access_token,
+                      refresh_token: authResult.session.refresh_token,
+                    });
+                  } catch {}
+                }
+                if (typeof authResult.token === 'string' && authResult.token.startsWith('hs1.')) {
+                  sessionStorage.setItem('prospaces_app_session_token', authResult.token);
+                }
                 localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
                 sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
                 sessionStorage.setItem('prospaces_session_active', 'true');
-                onLogin(loggedUser, 'authenticated-token', null);
+                onLogin(loggedUser, authResult.token || 'authenticated-token', authResult.session || null);
                 return;
               }
             }

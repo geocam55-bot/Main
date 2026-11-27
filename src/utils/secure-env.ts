@@ -20,9 +20,30 @@ export interface TenantEnvVar {
   updated_at?: string;
 }
 
+export interface SecureEnvActionResult {
+  success: boolean;
+  error?: string;
+}
+
 // In-memory cache to prevent excessive database calls during a single session
 const appEnvCache = new Map<string, string>();
 const tenantEnvCache = new Map<string, Map<string, string>>();
+let lastSecureEnvError: string | null = null;
+
+export function getLastSecureEnvError(): string | null {
+  return lastSecureEnvError;
+}
+
+function normalizeEnvKeyClient(key: string): string {
+  return String(key || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+}
+
+function isMissingTableErr(error: any): boolean {
+  if (!error) return false;
+  const code = String(error.code || '');
+  const msg = String(error.message || '');
+  return code === 'PGRST205' || code === '42P01' || /does not exist|Could not find the table/i.test(msg);
+}
 
 /**
  * Ensure secure env tables exist in Supabase
@@ -39,6 +60,11 @@ export async function ensureSecureEnvTables(): Promise<boolean> {
       );
       ALTER TABLE public.app_env_vars ENABLE ROW LEVEL SECURITY;
 
+      DROP POLICY IF EXISTS "Allow authenticated or service role to manage app_env_vars" ON public.app_env_vars;
+      CREATE POLICY "Allow authenticated or service role to manage app_env_vars" ON public.app_env_vars
+          FOR ALL USING (auth.role() = 'service_role' OR auth.role() = 'authenticated')
+          WITH CHECK (auth.role() = 'service_role' OR auth.role() = 'authenticated');
+
       CREATE TABLE IF NOT EXISTS public.tenant_env_vars (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           organization_id TEXT NOT NULL,
@@ -49,6 +75,11 @@ export async function ensureSecureEnvTables(): Promise<boolean> {
           CONSTRAINT tenant_env_vars_org_key_unique UNIQUE (organization_id, key)
       );
       ALTER TABLE public.tenant_env_vars ENABLE ROW LEVEL SECURITY;
+
+      DROP POLICY IF EXISTS "Allow authenticated or service role to manage tenant_env_vars" ON public.tenant_env_vars;
+      CREATE POLICY "Allow authenticated or service role to manage tenant_env_vars" ON public.tenant_env_vars
+          FOR ALL USING (auth.role() = 'service_role' OR auth.role() = 'authenticated')
+          WITH CHECK (auth.role() = 'service_role' OR auth.role() = 'authenticated');
     `;
     const { error } = await supabase.rpc('exec_sql', { sql });
     return !error;
@@ -78,11 +109,8 @@ export async function getAppEnv(key: string, fallback: string = ''): Promise<str
       appEnvCache.set(key, val);
       return val;
     }
-  } catch (err) {
-    // Database table might not be created yet or network error
-  }
+  } catch {}
 
-  // Fallback to process.env equivalents
   const envVal = (
     process.env[key] ||
     process.env[`VITE_${key}`] ||
@@ -94,49 +122,95 @@ export async function getAppEnv(key: string, fallback: string = ''): Promise<str
 }
 
 /**
- * Set App-level Environment Variable
+ * Set App-level Environment Variable with detailed result
  */
-export async function setAppEnv(key: string, value: string, description?: string): Promise<boolean> {
-  // 1. Prioritize server endpoint (bypasses RLS issues via service role key)
+export async function setAppEnvResult(
+  key: string,
+  value: string,
+  description?: string
+): Promise<SecureEnvActionResult> {
+  const cleanKey = normalizeEnvKeyClient(key);
+  let serverError = '';
+  lastSecureEnvError = null;
+
+  // 1. Prioritize server endpoint (enforces auth + bypasses RLS when service role is configured)
   try {
     const headers = await getServerHeaders();
     const resp = await fetch('/api/secure-env/save', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ scope: 'system', key, value, description })
+      body: JSON.stringify({ scope: 'system', key: cleanKey, value, description }),
     });
-    if (resp.ok) {
-      const json = await resp.json();
-      if (json.success) {
-        appEnvCache.set(key, value);
-        return true;
-      }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success) {
+      appEnvCache.set(cleanKey, value);
+      return { success: true };
     }
-  } catch (apiErr) {
+    serverError = json?.error || `Server returned status ${resp.status}`;
+    if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
+      lastSecureEnvError = serverError;
+      return { success: false, error: serverError };
+    }
+  } catch (apiErr: any) {
+    serverError = apiErr?.message || 'Server endpoint unreachable';
     console.warn('[SecureEnv] Server save app_env failed, falling back to client:', apiErr);
   }
 
-  // 2. Fallback to direct Supabase client
+  // 2. Fallback to direct Supabase client (works when user holds a valid Supabase JWT)
   try {
-    const { error } = await supabase
+    const nowIso = new Date().toISOString();
+    const row = {
+      key: cleanKey,
+      value,
+      description: description || null,
+      updated_at: nowIso,
+    };
+
+    let { error } = await supabase
       .from('app_env_vars')
-      .upsert({
-        key,
-        value,
-        description: description || null,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'key' });
+      .upsert(row, { onConflict: 'key' });
+
+    if (error && isMissingTableErr(error)) {
+      const created = await ensureSecureEnvTables();
+      if (created) {
+        ({ error } = await supabase.from('app_env_vars').upsert(row, { onConflict: 'key' }));
+      }
+      if (error && isMissingTableErr(error)) {
+        const { error: sysErr } = await supabase
+          .from('system_settings')
+          .upsert({ setting_key: cleanKey, setting_value: value, updated_at: nowIso }, { onConflict: 'setting_key' });
+        if (!sysErr) {
+          appEnvCache.set(cleanKey, value);
+          return { success: true };
+        }
+      }
+    }
 
     if (!error) {
-      appEnvCache.set(key, value);
-      return true;
+      appEnvCache.set(cleanKey, value);
+      return { success: true };
     }
-    console.error('[SecureEnv] Client-side app_env upsert failed:', error.message);
-  } catch (err) {
-    console.error('[SecureEnv] Client-side app_env upsert exception:', err);
-  }
 
-  return false;
+    const combinedErr = serverError
+      ? `${serverError} (${error.message})`
+      : error.message;
+    lastSecureEnvError = combinedErr;
+    console.error('[SecureEnv] Client-side app_env upsert failed:', combinedErr);
+    return { success: false, error: combinedErr };
+  } catch (err: any) {
+    const errMsg = err?.message || serverError || 'Failed to save system variable';
+    lastSecureEnvError = errMsg;
+    console.error('[SecureEnv] Client-side app_env upsert exception:', err);
+    return { success: false, error: errMsg };
+  }
+}
+
+/**
+ * Set App-level Environment Variable
+ */
+export async function setAppEnv(key: string, value: string, description?: string): Promise<boolean> {
+  const res = await setAppEnvResult(key, value, description);
+  return res.success;
 }
 
 /**
@@ -168,76 +242,128 @@ export async function getTenantEnv(organizationId: string, key: string, fallback
       tenantEnvCache.get(organizationId)!.set(key, val);
       return val;
     }
-  } catch (err) {
-    // Table might not exist yet
+  } catch {}
+
+  return getAppEnv(key, fallback);
+}
+
+/**
+ * Set Tenant-level Environment Variable with detailed result
+ */
+export async function setTenantEnvResult(
+  organizationId: string,
+  key: string,
+  value: string,
+  description?: string
+): Promise<SecureEnvActionResult> {
+  const targetOrgId = organizationId || 'default_org';
+  const cleanKey = normalizeEnvKeyClient(key);
+  let serverError = '';
+  lastSecureEnvError = null;
+
+  // 1. Prioritize server endpoint
+  try {
+    const headers = await getServerHeaders();
+    const resp = await fetch('/api/secure-env/save', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ scope: 'tenant', organizationId: targetOrgId, key: cleanKey, value, description }),
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success) {
+      if (!tenantEnvCache.has(targetOrgId)) {
+        tenantEnvCache.set(targetOrgId, new Map());
+      }
+      tenantEnvCache.get(targetOrgId)!.set(cleanKey, value);
+      return { success: true };
+    }
+    serverError = json?.error || `Server returned status ${resp.status}`;
+    if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
+      lastSecureEnvError = serverError;
+      return { success: false, error: serverError };
+    }
+  } catch (apiErr: any) {
+    serverError = apiErr?.message || 'Server endpoint unreachable';
+    console.warn('[SecureEnv] Server save tenant_env failed, falling back to client:', apiErr);
   }
 
-  // Fallback to app-level / process.env
-  return getAppEnv(key, fallback);
+  // 2. Direct Supabase client fallback
+  try {
+    const nowIso = new Date().toISOString();
+    const row = {
+      organization_id: targetOrgId,
+      key: cleanKey,
+      value,
+      description: description || null,
+      updated_at: nowIso,
+    };
+
+    let { error } = await supabase
+      .from('tenant_env_vars')
+      .upsert(row, { onConflict: 'organization_id,key' });
+
+    if (error && isMissingTableErr(error)) {
+      const created = await ensureSecureEnvTables();
+      if (created) {
+        ({ error } = await supabase
+          .from('tenant_env_vars')
+          .upsert(row, { onConflict: 'organization_id,key' }));
+      }
+      if (error && isMissingTableErr(error)) {
+        const { error: settingsErr } = await supabase
+          .from('tenant_settings')
+          .upsert(
+            { organization_id: targetOrgId, setting_key: cleanKey, setting_value: value, updated_at: nowIso },
+            { onConflict: 'organization_id,setting_key' }
+          );
+        if (!settingsErr) {
+          if (!tenantEnvCache.has(targetOrgId)) {
+            tenantEnvCache.set(targetOrgId, new Map());
+          }
+          tenantEnvCache.get(targetOrgId)!.set(cleanKey, value);
+          return { success: true };
+        }
+      }
+    }
+
+    if (!error) {
+      if (!tenantEnvCache.has(targetOrgId)) {
+        tenantEnvCache.set(targetOrgId, new Map());
+      }
+      tenantEnvCache.get(targetOrgId)!.set(cleanKey, value);
+      return { success: true };
+    }
+
+    const combinedErr = serverError
+      ? `${serverError} (${error.message})`
+      : error.message;
+    lastSecureEnvError = combinedErr;
+    console.error('[SecureEnv] Client-side tenant_env upsert failed:', combinedErr);
+    return { success: false, error: combinedErr };
+  } catch (err: any) {
+    const errMsg = err?.message || serverError || 'Failed to save tenant variable';
+    lastSecureEnvError = errMsg;
+    console.error('[SecureEnv] Client-side tenant_env upsert exception:', err);
+    return { success: false, error: errMsg };
+  }
 }
 
 /**
  * Set Tenant-level Environment Variable
  */
 export async function setTenantEnv(organizationId: string, key: string, value: string, description?: string): Promise<boolean> {
-  const targetOrgId = organizationId || 'default_org';
-
-  // 1. Prioritize server endpoint (bypasses RLS via service role)
-  try {
-    const headers = await getServerHeaders();
-    const resp = await fetch('/api/secure-env/save', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ scope: 'tenant', organizationId: targetOrgId, key, value, description })
-    });
-    if (resp.ok) {
-      const json = await resp.json();
-      if (json.success) {
-        if (!tenantEnvCache.has(targetOrgId)) {
-          tenantEnvCache.set(targetOrgId, new Map());
-        }
-        tenantEnvCache.get(targetOrgId)!.set(key, value);
-        return true;
-      }
-    }
-  } catch (apiErr) {
-    console.warn('[SecureEnv] Server save tenant_env failed, falling back to client:', apiErr);
-  }
-
-  // 2. Direct Supabase client fallback
-  try {
-    const { error } = await supabase
-      .from('tenant_env_vars')
-      .upsert({
-        organization_id: targetOrgId,
-        key,
-        value,
-        description: description || null,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'organization_id,key' });
-
-    if (!error) {
-      if (!tenantEnvCache.has(targetOrgId)) {
-        tenantEnvCache.set(targetOrgId, new Map());
-      }
-      tenantEnvCache.get(targetOrgId)!.set(key, value);
-      return true;
-    }
-    console.error('[SecureEnv] Client-side tenant_env upsert failed:', error.message);
-  } catch (err) {
-    console.error('[SecureEnv] Client-side tenant_env upsert exception:', err);
-  }
-
-  return false;
+  const res = await setTenantEnvResult(organizationId, key, value, description);
+  return res.success;
 }
 
 /**
  * Get all App-level environment variables
  */
 export async function listAppEnv(): Promise<AppEnvVar[]> {
-  // 1. Server API (Authoritative, uses service-role to bypass RLS)
+  // 1. Server API (Authoritative, enforces auth and uses service-role when configured)
   try {
-    const resp = await fetch('/api/secure-env/list?scope=system');
+    const headers = await getServerHeaders();
+    const resp = await fetch('/api/secure-env/list?scope=system', { headers });
     if (resp.ok) {
       const json = await resp.json();
       if (json.success && Array.isArray(json.vars)) {
@@ -255,7 +381,22 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
       .select('*')
       .order('key');
     if (!error && data && data.length > 0) return data;
-  } catch (err) {}
+    if (error && isMissingTableErr(error)) {
+      const { data: sysData, error: sysErr } = await supabase
+        .from('system_settings')
+        .select('setting_key, setting_value, updated_at');
+      if (!sysErr && Array.isArray(sysData)) {
+        return sysData
+          .filter((r: any) => r?.setting_key)
+          .map((r: any) => ({
+            key: r.setting_key,
+            value: r.setting_value || '',
+            updated_at: r.updated_at || undefined,
+          }))
+          .sort((a: AppEnvVar, b: AppEnvVar) => a.key.localeCompare(b.key));
+      }
+    }
+  } catch {}
 
   return [];
 }
@@ -266,9 +407,12 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
 export async function listTenantEnv(organizationId: string): Promise<TenantEnvVar[]> {
   const targetOrgId = organizationId || 'default_org';
 
-  // 1. Server API (Authoritative, uses service-role to bypass RLS)
+  // 1. Server API (Authoritative)
   try {
-    const resp = await fetch(`/api/secure-env/list?scope=tenant&organizationId=${encodeURIComponent(targetOrgId)}`);
+    const headers = await getServerHeaders();
+    const resp = await fetch(`/api/secure-env/list?scope=tenant&organizationId=${encodeURIComponent(targetOrgId)}`, {
+      headers,
+    });
     if (resp.ok) {
       const json = await resp.json();
       if (json.success && Array.isArray(json.vars)) {
@@ -287,95 +431,169 @@ export async function listTenantEnv(organizationId: string): Promise<TenantEnvVa
       .eq('organization_id', targetOrgId)
       .order('key');
     if (!error && data && data.length > 0) return data;
-  } catch (err) {}
+    if (error && isMissingTableErr(error)) {
+      const { data: tData, error: tErr } = await supabase
+        .from('tenant_settings')
+        .select('organization_id, setting_key, setting_value, updated_at')
+        .eq('organization_id', targetOrgId);
+      if (!tErr && Array.isArray(tData)) {
+        return tData
+          .filter((r: any) => r?.setting_key)
+          .map((r: any) => ({
+            organization_id: r.organization_id,
+            key: r.setting_key,
+            value: r.setting_value || '',
+            updated_at: r.updated_at || undefined,
+          }))
+          .sort((a: TenantEnvVar, b: TenantEnvVar) => a.key.localeCompare(b.key));
+      }
+    }
+  } catch {}
 
   return [];
+}
+
+/**
+ * Delete an App-level environment variable with detailed result
+ */
+export async function deleteAppEnvResult(key: string): Promise<SecureEnvActionResult> {
+  const cleanKey = normalizeEnvKeyClient(key);
+  let serverError = '';
+  lastSecureEnvError = null;
+
+  // 1. Server API first
+  try {
+    const headers = await getServerHeaders();
+    const resp = await fetch('/api/secure-env/delete', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ scope: 'system', key: cleanKey }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.success) {
+      appEnvCache.delete(cleanKey);
+      return { success: true };
+    }
+    serverError = data?.error || `Server returned status ${resp.status}`;
+    if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
+      lastSecureEnvError = serverError;
+      return { success: false, error: serverError };
+    }
+  } catch (apiErr: any) {
+    serverError = apiErr?.message || 'Server endpoint unreachable';
+  }
+
+  // 2. Fallback to direct Supabase client
+  try {
+    const { error } = await supabase
+      .from('app_env_vars')
+      .delete()
+      .eq('key', cleanKey);
+    if (!error) {
+      appEnvCache.delete(cleanKey);
+      return { success: true };
+    }
+    if (isMissingTableErr(error)) {
+      const { error: sysErr } = await supabase
+        .from('system_settings')
+        .delete()
+        .eq('setting_key', cleanKey);
+      if (!sysErr) {
+        appEnvCache.delete(cleanKey);
+        return { success: true };
+      }
+    }
+    const errMsg = serverError ? `${serverError} (${error.message})` : error.message;
+    lastSecureEnvError = errMsg;
+    return { success: false, error: errMsg };
+  } catch (err: any) {
+    const errMsg = err?.message || serverError || 'Failed to delete system variable';
+    lastSecureEnvError = errMsg;
+    return { success: false, error: errMsg };
+  }
 }
 
 /**
  * Delete an App-level environment variable
  */
 export async function deleteAppEnv(key: string): Promise<boolean> {
-  // 1. Try direct Supabase client
-  try {
-    const { error } = await supabase
-      .from('app_env_vars')
-      .delete()
-      .eq('key', key);
-    if (!error) {
-      appEnvCache.delete(key);
-      return true;
-    }
-    console.warn('[SecureEnv] Client-side app_env delete failed, trying server API:', error.message);
-  } catch (err) {
-    console.warn('[SecureEnv] Client-side app_env delete error, trying server API:', err);
-  }
+  const res = await deleteAppEnvResult(key);
+  return res.success;
+}
 
-  // 2. Fallback to server endpoint
+/**
+ * Delete a Tenant-level environment variable with detailed result
+ */
+export async function deleteTenantEnvResult(organizationId: string, key: string): Promise<SecureEnvActionResult> {
+  if (!organizationId) return { success: false, error: 'Organization ID is required' };
+  const cleanKey = normalizeEnvKeyClient(key);
+  let serverError = '';
+  lastSecureEnvError = null;
+
+  // 1. Server API first
   try {
+    const headers = await getServerHeaders();
     const resp = await fetch('/api/secure-env/delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'system', key })
+      headers,
+      body: JSON.stringify({ scope: 'tenant', organizationId, key: cleanKey }),
     });
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.success) {
-        appEnvCache.delete(key);
-        return true;
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.success) {
+      if (tenantEnvCache.has(organizationId)) {
+        tenantEnvCache.get(organizationId)!.delete(cleanKey);
       }
+      return { success: true };
     }
-  } catch (apiErr) {
-    console.error('[SecureEnv] Server delete failed:', apiErr);
+    serverError = data?.error || `Server returned status ${resp.status}`;
+    if (resp.status === 401 || resp.status === 403 || resp.status === 400) {
+      lastSecureEnvError = serverError;
+      return { success: false, error: serverError };
+    }
+  } catch (apiErr: any) {
+    serverError = apiErr?.message || 'Server endpoint unreachable';
   }
 
-  return false;
+  // 2. Fallback to direct Supabase client
+  try {
+    const { error } = await supabase
+      .from('tenant_env_vars')
+      .delete()
+      .eq('organization_id', organizationId)
+      .eq('key', cleanKey);
+    if (!error) {
+      if (tenantEnvCache.has(organizationId)) {
+        tenantEnvCache.get(organizationId)!.delete(cleanKey);
+      }
+      return { success: true };
+    }
+    if (isMissingTableErr(error)) {
+      const { error: tErr } = await supabase
+        .from('tenant_settings')
+        .delete()
+        .eq('organization_id', organizationId)
+        .eq('setting_key', cleanKey);
+      if (!tErr) {
+        if (tenantEnvCache.has(organizationId)) {
+          tenantEnvCache.get(organizationId)!.delete(cleanKey);
+        }
+        return { success: true };
+      }
+    }
+    const errMsg = serverError ? `${serverError} (${error.message})` : error.message;
+    lastSecureEnvError = errMsg;
+    return { success: false, error: errMsg };
+  } catch (err: any) {
+    const errMsg = err?.message || serverError || 'Failed to delete tenant variable';
+    lastSecureEnvError = errMsg;
+    return { success: false, error: errMsg };
+  }
 }
 
 /**
  * Delete a Tenant-level environment variable
  */
 export async function deleteTenantEnv(organizationId: string, key: string): Promise<boolean> {
-  if (!organizationId) return false;
-
-  // 1. Try direct Supabase client
-  try {
-    const { error } = await supabase
-      .from('tenant_env_vars')
-      .delete()
-      .eq('organization_id', organizationId)
-      .eq('key', key);
-    if (!error) {
-      if (tenantEnvCache.has(organizationId)) {
-        tenantEnvCache.get(organizationId)!.delete(key);
-      }
-      return true;
-    }
-    console.warn('[SecureEnv] Client-side tenant_env delete failed, trying server API:', error.message);
-  } catch (err) {
-    console.warn('[SecureEnv] Client-side tenant_env delete error, trying server API:', err);
-  }
-
-  // 2. Fallback to server endpoint
-  try {
-    const resp = await fetch('/api/secure-env/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'tenant', organizationId, key })
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.success) {
-        if (tenantEnvCache.has(organizationId)) {
-          tenantEnvCache.get(organizationId)!.delete(key);
-        }
-        return true;
-      }
-    }
-  } catch (apiErr) {
-    console.error('[SecureEnv] Server delete failed:', apiErr);
-  }
-
-  return false;
+  const res = await deleteTenantEnvResult(organizationId, key);
+  return res.success;
 }
-

@@ -904,16 +904,31 @@ export async function saveTenantStateDirect(
   const uniqueDeliveries = Array.from(uniqueDeliveriesMap.values());
 
   // Prepare and serialize
-  const serializedUsers = uniqueUsers.map(u => ({
-    id: u.id,
-    tenantId,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-    roles: u.roles || [u.role],
-    phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl, u.roles),
-    associatedStoreId: u.associatedStoreId
-  }));
+  const serializedUsers = uniqueUsers.map(u => {
+    const cleanPhone = serializeToPhone(
+      u.phone,
+      u.password,
+      u.status,
+      u.driverLicenseExpire,
+      u.lastActive,
+      u.resetRequest,
+      u.avatarUrl,
+      u.roles
+    );
+    return {
+      id: String(u.id),
+      tenantId,
+      name: String(u.name || '').trim() || 'User',
+      email: String(u.email || '').trim(),
+      role: String(u.role || 'User'),
+      roles: u.roles || [u.role || 'User'],
+      phone: cleanPhone,
+      associatedStoreId: u.associatedStoreId || null,
+      password: u.password || null,
+      status: u.status || 'Active',
+      driverLicenseExpire: u.driverLicenseExpire || null,
+    };
+  });
 
   const serializedTrucks = uniqueTrucks.map(t => {
     const driverVal = t.driver || t.driver_name || t.assigned_driver_id || 'No Driver';
@@ -1120,15 +1135,70 @@ export async function saveTenantStateDirect(
     };
   });
 
-  const safeBulkUpsert = async (table: string, records: any[]) => {
-    if (!records || records.length === 0) return;
+  const upsertRowsResilient = async (
+    table: string,
+    records: any[],
+    fallbackMinimalMapper?: (row: any) => any
+  ): Promise<{ error: any | null }> => {
+    if (!records || records.length === 0) return { error: null };
     const client = getFrontendSupabase();
-    if (!client) return;
-    try {
-      await client.from(table).upsert(records);
-    } catch (err) {
-      console.warn(`safeBulkUpsert warning for ${table}:`, err);
+    if (!client) return { error: new Error('Supabase client not initialized') };
+
+    let payload = records.map((r: any) => ({ ...r }));
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        const { error } = await client.from(table).upsert(payload);
+        if (!error) {
+          return { error: null };
+        }
+        lastError = error;
+        const errMsg = error.message || String(error);
+        const isMissingColumnError =
+          (error.code === '42703' ||
+            error.code === 'PGRST204' ||
+            (errMsg.includes('column') &&
+              (errMsg.includes('does not exist') || errMsg.includes('Could not find')))) &&
+          !errMsg.includes('violates not-null constraint') &&
+          error.code !== '23502';
+
+        if (!isMissingColumnError) {
+          console.error(`[upsertRowsResilient] Failed to upsert ${table}:`, errMsg, error);
+          return { error };
+        }
+
+        const colMatch =
+          errMsg.match(/'([^']+)' column/i) ||
+          errMsg.match(/column '([^']+)'/i) ||
+          errMsg.match(/column "([^"]+)"/i) ||
+          errMsg.match(/Could not find the '([^']+)' column/i);
+        const colToStrip = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3] || colMatch[4]) : null;
+
+        if (colToStrip && payload.some((row: any) => row[colToStrip] !== undefined)) {
+          payload = payload.map((row: any) => {
+            const copy = { ...row };
+            delete copy[colToStrip];
+            return copy;
+          });
+          continue;
+        }
+
+        if (fallbackMinimalMapper) {
+          payload = payload.map(fallbackMinimalMapper);
+          fallbackMinimalMapper = undefined;
+          continue;
+        }
+
+        console.error(`[upsertRowsResilient] Unrecoverable schema mismatch on ${table}:`, errMsg);
+        return { error };
+      } catch (err) {
+        console.warn(`upsertRowsResilient warning for ${table}:`, err);
+        return { error: err };
+      }
     }
+
+    return { error: lastError };
   };
 
   // CRITICAL: Supabase Database Authority Check
@@ -1145,19 +1215,144 @@ export async function saveTenantStateDirect(
     console.debug("[saveTenantStateDirect] Existing trucks verification notice:", err);
   }
 
-  await Promise.allSettled([
-    safeBulkUpsert("branches", mappedBranches),
-    safeBulkUpsert("trucks", safeTrucksToUpsert),
-    safeBulkUpsert("users", serializedUsers),
-    safeBulkUpsert("deliveries", mappedDeliveries),
-    safeBulkUpsert("order_cargo_manifests", manifestItemsToUpsert),
-    safeBulkUpsert("gps_units_setup", gpsUnitsToUpsert),
-    safeBulkUpsert("gps_unit_setup", gpsUnitsToUpsert),
-    safeBulkUpsert("gps_tracking_history", historyPointsToInsert),
-    safeBulkUpsert("geofences", geofencesToUpsert)
+  const results = await Promise.allSettled([
+    upsertRowsResilient("branches", mappedBranches, (b: any) => ({
+      id: b.id,
+      tenantId: b.tenantId,
+      name: b.name,
+      type: b.type,
+      address: b.address,
+    })),
+    upsertRowsResilient("trucks", safeTrucksToUpsert, (t: any) => ({
+      id: t.id,
+      tenantId: t.tenantId,
+      name: t.name,
+      type: t.type,
+      driver: t.driver,
+      branchId: t.branchId,
+    })),
+    upsertRowsResilient("users", serializedUsers, (u: any) => ({
+      id: u.id,
+      tenantId: u.tenantId,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      phone: u.phone,
+    })),
+    upsertRowsResilient("deliveries", mappedDeliveries),
+    upsertRowsResilient("order_cargo_manifests", manifestItemsToUpsert),
+    upsertRowsResilient("gps_units_setup", gpsUnitsToUpsert),
+    upsertRowsResilient("gps_unit_setup", gpsUnitsToUpsert),
+    upsertRowsResilient("gps_tracking_history", historyPointsToInsert),
+    upsertRowsResilient("geofences", geofencesToUpsert)
   ]);
 
+  const usersResult = results[2];
+  const usersError =
+    usersResult.status === 'rejected'
+      ? usersResult.reason
+      : usersResult.value?.error || null;
+
+  if (usersError) {
+    return {
+      supabaseActive: false,
+      error: usersError.message || String(usersError),
+    };
+  }
+
   return { supabaseActive: true };
+}
+
+// Save or update an individual user directly in Supabase
+export async function saveUserDirect(user: any, rawTenantId: string) {
+  const supabase = getFrontendSupabase();
+  if (!supabase || !user || !user.id) {
+    return { success: false, error: 'Missing Supabase client or user record' };
+  }
+  const tid = normalizeTenantId(rawTenantId);
+
+  const phoneVal = serializeToPhone(
+    user.phone,
+    user.password,
+    user.status,
+    user.driverLicenseExpire,
+    user.lastActive,
+    user.resetRequest,
+    user.avatarUrl,
+    user.roles
+  );
+
+  const payload: any = {
+    id: String(user.id),
+    tenantId: tid,
+    name: String(user.name || '').trim() || 'User',
+    email: String(user.email || '').trim(),
+    role: String(user.role || 'User'),
+    roles: Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : [user.role || 'User'],
+    phone: phoneVal,
+    associatedStoreId: user.associatedStoreId || null,
+    password: user.password || null,
+    status: user.status || 'Active',
+    driverLicenseExpire: user.driverLicenseExpire || null,
+    employee_number: user.employeeNumber || null,
+    username: user.username || null,
+    mobile_phone: user.mobilePhone || null,
+    department: user.department || null,
+    job_title: user.jobTitle || null,
+    driver_license_number: user.driverLicenseNumber || null,
+    driver_license_class: user.driverLicenseClass || null,
+    driver_license_expiry: sanitizeDateForDb(user.driverLicenseExpiry || user.driverLicenseExpire),
+    hire_date: sanitizeDateForDb(user.hireDate),
+    emergency_contact_name: user.emergencyContactName || null,
+    emergency_contact_phone: user.emergencyContactPhone || null,
+  };
+
+  let obj = { ...payload };
+  let lastError: any = null;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const { error } = await supabase.from("users").upsert(obj);
+    if (!error) {
+      console.log(`[saveUserDirect] Successfully persisted user ${user.id} (${user.email})`);
+      return { success: true };
+    }
+    lastError = error;
+    const errMsg = error.message || String(error);
+    console.warn(`[saveUserDirect] Upsert notice (attempt ${attempt + 1}):`, errMsg);
+
+    const isMissingColumnError =
+      (error.code === '42703' ||
+        error.code === 'PGRST204' ||
+        (errMsg.includes('column') &&
+          (errMsg.includes('does not exist') || errMsg.includes('Could not find')))) &&
+      !errMsg.includes('violates not-null constraint') &&
+      error.code !== '23502';
+
+    if (!isMissingColumnError) {
+      break;
+    }
+
+    const colMatch =
+      errMsg.match(/'([^']+)' column/i) ||
+      errMsg.match(/column '([^']+)'/i) ||
+      errMsg.match(/column "([^"]+)"/i) ||
+      errMsg.match(/Could not find the '([^']+)' column/i);
+    const colToStrip = colMatch ? (colMatch[1] || colMatch[2] || colMatch[3] || colMatch[4]) : null;
+
+    if (colToStrip && obj[colToStrip] !== undefined) {
+      delete obj[colToStrip];
+    } else {
+      obj = {
+        id: String(user.id),
+        tenantId: tid,
+        name: String(user.name || '').trim() || 'User',
+        email: String(user.email || '').trim(),
+        role: String(user.role || 'User'),
+        phone: phoneVal,
+      };
+    }
+  }
+
+  return { success: false, error: lastError?.message || String(lastError || 'Failed to save user') };
 }
 
 // Save or update an individual truck directly in Supabase

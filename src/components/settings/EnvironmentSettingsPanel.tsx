@@ -40,10 +40,10 @@ import {
   ensureSecureEnvTables, 
   listAppEnv, 
   listTenantEnv, 
-  setAppEnv, 
-  setTenantEnv, 
-  deleteAppEnv,
-  deleteTenantEnv,
+  setAppEnvResult, 
+  setTenantEnvResult, 
+  deleteAppEnvResult,
+  deleteTenantEnvResult,
   type AppEnvVar, 
   type TenantEnvVar 
 } from '../../utils/secure-env';
@@ -177,10 +177,11 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
       ];
 
       for (const item of itemsToSave) {
-        if (scope === 'tenant') {
-          await setTenantEnv(orgId, item.key, item.value, item.desc);
-        } else {
-          await setAppEnv(item.key, item.value, item.desc);
+        const result = scope === 'tenant'
+          ? await setTenantEnvResult(orgId, item.key, item.value, item.desc)
+          : await setAppEnvResult(item.key, item.value, item.desc);
+        if (!result.success) {
+          throw new Error(result.error || `Failed to save ${item.key}`);
         }
       }
 
@@ -207,15 +208,11 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
     setLoading(true);
     try {
       const cleanKey = key.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-      let success = false;
+      const result = scope === 'tenant'
+        ? await setTenantEnvResult(orgId, cleanKey, value.trim(), description.trim())
+        : await setAppEnvResult(cleanKey, value.trim(), description.trim());
 
-      if (scope === 'tenant') {
-        success = await setTenantEnv(orgId, cleanKey, value.trim(), description.trim());
-      } else {
-        success = await setAppEnv(cleanKey, value.trim(), description.trim());
-      }
-
-      if (success) {
+      if (result.success) {
         toast.success(`Saved ${scope === 'tenant' ? 'Tenant' : 'System'} variable: ${cleanKey}`);
         setKey('');
         setValue('');
@@ -223,7 +220,11 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
         setIsEditing(false);
         await loadVariables();
       } else {
-        toast.error(`Failed to save variable ${cleanKey}.`);
+        toast.error(
+          result.error
+            ? `Failed to save variable ${cleanKey}: ${result.error}`
+            : `Failed to save variable ${cleanKey}.`
+        );
       }
     } catch (err: any) {
       toast.error(`Error saving variable: ${err.message || err}`);
@@ -240,20 +241,21 @@ export function EnvironmentSettingsPanel({ scope, organizationId }: EnvironmentS
     setIsDeleting(true);
 
     try {
-      let success = false;
-      if (scope === 'tenant') {
-        success = await deleteTenantEnv(orgId, targetKey);
-      } else {
-        success = await deleteAppEnv(targetKey);
-      }
+      const result = scope === 'tenant'
+        ? await deleteTenantEnvResult(orgId, targetKey)
+        : await deleteAppEnvResult(targetKey);
 
-      if (success) {
+      if (result.success) {
         toast.success(`Deleted variable: ${targetKey}`);
         setVars(prev => prev.filter(v => v.key !== targetKey));
         setItemToDelete(null);
         await loadVariables();
       } else {
-        toast.error(`Failed to delete variable ${targetKey}.`);
+        toast.error(
+          result.error
+            ? `Failed to delete variable ${targetKey}: ${result.error}`
+            : `Failed to delete variable ${targetKey}.`
+        );
       }
     } catch (err: any) {
       toast.error(`Error: ${err.message || err}`);

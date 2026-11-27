@@ -3740,13 +3740,16 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
               role: u.role,
               roles: u.roles || [u.role],
               phone: serializeToPhone(u.phone, u.password, u.status, u.driverLicenseExpire, u.lastActive, u.resetRequest, u.avatarUrl, u.roles),
-              associatedStoreId: u.associatedStoreId || null
+              associatedStoreId: u.associatedStoreId || null,
+              password: u.password || null,
+              status: u.status || 'Active',
+              driverLicenseExpire: u.driverLicenseExpire || null,
             };
           });
 
           let currentUserPayload = usersToUpsert;
           let userAttempts = 0;
-          while (userAttempts < 10) {
+          while (userAttempts < 15) {
             userAttempts++;
             const { error: dbErr } = await supabase.from("users").upsert(currentUserPayload);
             if (!dbErr) break;
@@ -3996,7 +3999,7 @@ CREATE POLICY "Allow all delete on trucks" ON public.trucks FOR DELETE TO public
         deliveries: uniqueDeliveries
       };
 
-      res.json({ success: true });
+      res.json({ success: true, supabaseActive: true });
     } catch (err: any) {
       console.error("Supabase Save State Error:", err);
       res.status(500).json({ error: formatDatabaseError(err) });
