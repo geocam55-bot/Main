@@ -312,14 +312,37 @@ export const tenantsAPI = {
     return { tenants: tenantsWithCounts };
   },
   getById: async (id: string) => {
+    const trimmed = String(id || '').trim();
+    const normId = (!trimmed || trimmed === 'rona_atlantic' || trimmed === 'org_001' || trimmed === 'default-org' || trimmed === 'default_org')
+      ? '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+      : trimmed;
+
     const { data, error } = await supabase
       .from('organizations')
       .select('*')
-      .eq('id', id)
-      .single();
-    
+      .eq('id', normId)
+      .maybeSingle();
+
+    if (!error && data) {
+      return { tenant: data };
+    }
+
+    try {
+      const hdrs = await getServerHeaders();
+      const resp = await fetch(`/api/settings/organization-details?organization_id=${encodeURIComponent(normId)}`, {
+        headers: hdrs,
+        credentials: 'same-origin',
+      });
+      if (resp.ok) {
+        const json = await resp.json().catch(() => ({}));
+        if (json?.tenant) {
+          return { tenant: json.tenant };
+        }
+      }
+    } catch {}
+
     if (error) throw error;
-    return { tenant: data };
+    return { tenant: null };
   },
   getCurrent: async () => {
     const { data: { user } } = await supabase.auth.getUser();

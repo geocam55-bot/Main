@@ -19,9 +19,20 @@ import {
 } from 'lucide-react';
 import { createClient, getSupabaseUrl } from '../../utils/supabase/client';
 import { publicAnonKey } from '../../utils/supabase/info';
+import { setAppSessionToken } from '../../utils/server-headers';
 import { ChangePasswordDialog } from '../ChangePasswordDialog';
-import { canAccessSpace, initializePermissions } from '../../utils/permissions';
+import { canAccessSpace, initializePermissions, getNormalizedRole } from '../../utils/permissions';
 import type { User, UserRole } from '../../App';
+
+const PRIMARY_ORG_UUID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+
+function normalizeITOrgId(orgId?: string | null): string {
+  const trimmed = String(orgId || '').trim();
+  if (!trimmed || trimmed === 'rona_atlantic' || trimmed === 'org_001' || trimmed === 'default-org' || trimmed === 'default_org') {
+    return PRIMARY_ORG_UUID;
+  }
+  return trimmed;
+}
 
 type LoginDestination = 'it' | 'crm';
 
@@ -120,6 +131,73 @@ export function ITLogin({ onLogin }: ITLoginProps) {
         }
 
         if (activeError) {
+          // Secondary fallback to server-side /api/auth/login (returns real DB profile + Supabase session + hs1 token/cookie)
+          let serverErrorMsg = '';
+          try {
+            const authResp = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+            });
+            const authResult = await authResp.json().catch(() => ({}));
+            if (authResp.ok && authResult.found && authResult.user && !authResult.error) {
+              const normOrgId = normalizeITOrgId(authResult.user.tenantId || authResult.user.organization_id);
+              const normalizedRole = getNormalizedRole(authResult.user.role, authResult.user.email || email);
+              await initializePermissions(normalizedRole);
+
+              if (destination === 'it' && !canAccessSpace('it', normalizedRole, 'view')) {
+                throw new Error('You do not have access to IT Space. Contact your administrator.');
+              }
+
+              if (authResult.session?.access_token && authResult.session?.refresh_token) {
+                try {
+                  await supabase.auth.setSession({
+                    access_token: authResult.session.access_token,
+                    refresh_token: authResult.session.refresh_token,
+                  });
+                } catch {}
+              }
+
+              const appTok = authResult.appToken || (typeof authResult.token === 'string' && authResult.token.startsWith('hs1.') ? authResult.token : null);
+              if (appTok) {
+                setAppSessionToken(appTok);
+              }
+
+              const loggedUser: User = {
+                id: authResult.user.id,
+                email: authResult.user.email || email.trim(),
+                role: normalizedRole,
+                full_name: authResult.user.name || email.split('@')[0],
+                organization_id: normOrgId,
+                organizationId: normOrgId,
+              };
+
+              localStorage.setItem('currentOrgId', normOrgId);
+              localStorage.setItem('prospaces_cached_user', JSON.stringify(loggedUser));
+              localStorage.setItem('prospaces_active_user', JSON.stringify({ ...loggedUser, name: loggedUser.full_name }));
+              localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+              sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+              sessionStorage.setItem('prospaces_session_active', 'true');
+
+              if (destination === 'crm') {
+                window.location.href = '/';
+                return;
+              }
+
+              onLogin(loggedUser, authResult.token || appTok || 'authenticated-token');
+              return;
+            }
+            if (authResult?.error) {
+              serverErrorMsg = authResult.error;
+            }
+          } catch (serverErr: any) {
+            if (serverErr?.message?.includes('IT Space')) throw serverErr;
+          }
+
+          if (serverErrorMsg) {
+            throw new Error(serverErrorMsg);
+          }
           if (activeError.message.toLowerCase().includes('email not confirmed')) {
             throw new Error('Your email is not confirmed yet. Check your inbox.');
           }
@@ -171,13 +249,13 @@ export function ITLogin({ onLogin }: ITLoginProps) {
         throw new Error('Could not load your user profile.');
       }
 
-      if (profile.organization_id) {
-        localStorage.setItem('currentOrgId', profile.organization_id);
-      }
+      const normOrgId = normalizeITOrgId(profile.organization_id);
+      localStorage.setItem('currentOrgId', normOrgId);
 
-      await initializePermissions(profile.role as UserRole);
+      const normalizedRole = getNormalizedRole(profile.role, activeSignIn.user.email || email);
+      await initializePermissions(normalizedRole);
 
-      if (destination === 'it' && !canAccessSpace('it', profile.role as UserRole, 'view')) {
+      if (destination === 'it' && !canAccessSpace('it', normalizedRole, 'view')) {
         throw new Error('You do not have access to IT Space. Contact your administrator.');
       }
 
@@ -186,10 +264,10 @@ export function ITLogin({ onLogin }: ITLoginProps) {
         const user: User = {
           id: activeSignIn.user.id,
           email: activeSignIn.user.email || email,
-          role: profile.role as UserRole,
+          role: normalizedRole,
           full_name: profile.name || 'User',
-          organization_id: profile.organization_id,
-          organizationId: profile.organization_id,
+          organization_id: normOrgId,
+          organizationId: normOrgId,
         };
         setPendingUser({ user, token: activeSignIn.session.access_token });
         setShowChangePassword(true);
@@ -200,11 +278,11 @@ export function ITLogin({ onLogin }: ITLoginProps) {
       const user: User = {
         id: activeSignIn.user.id,
         email: activeSignIn.user.email || email,
-        role: profile.role as UserRole,
+        role: normalizedRole,
         full_name: profile.name || 'User',
         avatar_url: profile.avatar_url,
-        organization_id: profile.organization_id,
-        organizationId: profile.organization_id,
+        organization_id: normOrgId,
+        organizationId: normOrgId,
       };
 
       // Update last_login
@@ -216,15 +294,17 @@ export function ITLogin({ onLogin }: ITLoginProps) {
         // non-critical
       }
 
+      localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
+      localStorage.setItem('prospaces_active_user', JSON.stringify({ ...user, name: user.full_name }));
+      localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
+      sessionStorage.setItem('prospaces_session_active', 'true');
+
       // Route to destination
       if (destination === 'crm') {
         window.location.href = '/';
         return;
       }
-
-      localStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-      sessionStorage.setItem('prospaces_keep_logged_in', keepLoggedIn ? 'true' : 'false');
-      sessionStorage.setItem('prospaces_session_active', 'true');
 
       onLogin(user, activeSignIn.session.access_token);
     } catch (err: any) {

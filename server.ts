@@ -18,7 +18,7 @@ import os from 'os';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { GoogleGenAI, Type } from "@google/genai";
-import { registerLogisticsServer, sendSystemEmail, getSmtpConfig, resolveTenantBranding, buildTenantDeliveryEmailHtml } from "./src/server/logistics-server";
+import { registerLogisticsServer, getSupabase, sendSystemEmail, getSmtpConfig, resolveTenantBranding, buildTenantDeliveryEmailHtml } from "./src/server/logistics-server";
 import { registerAIRoutes } from "./src/server/ai-routes";
 import {
   APP_SESSION_COOKIE_NAME,
@@ -60,6 +60,14 @@ const publicAnonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABAS
 const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || `https://${projectId}.supabase.co`).trim().replace(/^['"\s]+|['"\s]+$/g, '');
 const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || publicAnonKey).trim().replace(/^['"\s]+|['"\s]+$/g, '');
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+const DEFAULT_ORG_UUID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+const normalizeExpressOrgId = (rawOrg: any): string => {
+  const s = String(rawOrg || '').trim();
+  if (!s || s === 'rona_atlantic' || s === 'org_001') return DEFAULT_ORG_UUID;
+  return s;
+};
+const getPrivilegedDb = (req?: express.Request) => getSupabase(req) || supabase;
 
 if (!process.env.__PROSPACES_RUNTIME_SECRET) {
   process.env.__PROSPACES_RUNTIME_SECRET = 'prospaces-stable-fallback-secret-2026';
@@ -2810,12 +2818,13 @@ async function startServer() {
   // Auth routes (/api/auth/login and /api/auth/register) are registered in registerLogisticsServer(app)
   app.get('/api/auth/session-status', async (req, res) => {
     try {
-      const hasServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim());
+      const adminSb = getPrivilegedDb(req);
+      const hasServiceRole = Boolean(getSupabase(req));
       const hasConfiguredPasscode = Boolean(String(process.env.SUPERADMIN_PASSWORD || '').trim());
-      const claimedRecord = await getClaimedSuperAdminRecord(supabase);
+      const claimedRecord = await getClaimedSuperAdminRecord(adminSb);
       const superAdminClaimed = hasConfiguredPasscode || Boolean(claimedRecord);
       const canClaimSuperAdmin = Boolean(hasServiceRole && !superAdminClaimed);
-      const auth = await resolveExpressSecureEnvAuth(req, 'system');
+      const auth = await resolveExpressCaller(req);
       if (auth.error) {
         return res.json({
           success: true,
@@ -2839,8 +2848,77 @@ async function startServer() {
     }
   });
 
+  app.get('/api/auth/session-profile', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) {
+        return res.status(caller.status).json({ success: false, error: caller.error });
+      }
+      const adminSb = caller.dbClient;
+      let profile: any = null;
+      if (caller.userEmail) {
+        const { data: profByEmail } = await adminSb
+          .from('profiles')
+          .select('*')
+          .ilike('email', caller.userEmail)
+          .limit(1)
+          .maybeSingle();
+        if (profByEmail) profile = profByEmail;
+      }
+      if (!profile && caller.userId) {
+        const { data: profById } = await adminSb
+          .from('profiles')
+          .select('*')
+          .eq('id', caller.userId)
+          .maybeSingle();
+        if (profById) profile = profById;
+      }
+
+      const resolvedId = profile?.id || caller.userId;
+      const resolvedEmail = profile?.email || caller.userEmail;
+      const resolvedRole = profile?.role || caller.userRole || 'standard_user';
+      const resolvedOrgId = normalizeExpressOrgId(profile?.organization_id || caller.organizationId);
+      const resolvedName = profile?.name || resolvedEmail?.split('@')[0] || 'User';
+
+      // If caller doesn't already have a Supabase JWT, mint one so client RLS + Edge Function calls work seamlessly
+      let mintedSession: any = null;
+      const hasJwt = Boolean(req.headers['x-user-token'] && String(req.headers['x-user-token']).split('.').length === 3 && !String(req.headers['x-user-token']).startsWith('hs1.'));
+      if (!hasJwt && resolvedEmail) {
+        try {
+          const { data: linkData } = await adminSb.auth.admin.generateLink({ type: 'magiclink', email: resolvedEmail });
+          const hashedToken = linkData?.properties?.hashed_token;
+          if (hashedToken) {
+            const ephem = createClient(supabaseUrl, publicAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+            const { data: otpData } = await ephem.auth.verifyOtp({ token_hash: hashedToken, type: 'magiclink' });
+            if (otpData?.session?.access_token && otpData?.session?.refresh_token) {
+              mintedSession = otpData.session;
+            }
+          }
+        } catch {}
+      }
+
+      return res.json({
+        success: true,
+        user: {
+          id: resolvedId,
+          email: resolvedEmail,
+          role: resolvedRole,
+          full_name: resolvedName,
+          name: resolvedName,
+          avatar_url: profile?.avatar_url,
+          organization_id: resolvedOrgId,
+          organizationId: resolvedOrgId,
+        },
+        session: mintedSession || undefined,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Session profile lookup failed' });
+    }
+  });
+
   app.post('/api/auth/claim-superadmin', async (req, res) => {
     try {
+      const adminSb = getPrivilegedDb(req);
       const email = String(req.body?.email || '').trim().toLowerCase();
       const password = String(req.body?.password || '').trim();
       if (!email || !SUPER_ADMIN_EMAILS.has(email)) {
@@ -2852,39 +2930,43 @@ async function startServer() {
       if (String(process.env.SUPERADMIN_PASSWORD || '').trim()) {
         return res.status(409).json({ success: false, error: 'A server Super Admin passcode is already configured.' });
       }
-      const hasServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim());
+      const hasServiceRole = Boolean(getSupabase(req));
       if (!hasServiceRole) {
         return res.status(503).json({
           success: false,
           error: 'Server database role is not configured yet. Set SUPERADMIN_PASSWORD or SUPABASE_SERVICE_ROLE_KEY.',
         });
       }
-      const existing = await getClaimedSuperAdminRecord(supabase);
+      const existing = await getClaimedSuperAdminRecord(adminSb);
       if (existing) {
         return res.status(409).json({ success: false, error: 'Super Admin access has already been claimed. Please sign in with your password.' });
       }
-      const saved = await saveClaimedSuperAdminRecord(supabase, email, password);
+      const saved = await saveClaimedSuperAdminRecord(adminSb, email, password);
       if (!saved.success) {
         return res.status(500).json({ success: false, error: saved.error || 'Failed to save Super Admin credential.' });
       }
+      const { data: realProfile } = await adminSb.from('profiles').select('*').ilike('email', email).limit(1).maybeSingle();
+      const resolvedId = realProfile?.id || 'USR-SUPER-ADMIN-01';
+      const resolvedOrgId = normalizeExpressOrgId(realProfile?.organization_id);
       const userObj = {
-        id: 'USR-SUPER-ADMIN-01',
+        id: resolvedId,
         email,
-        name: email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell',
-        role: 'super_admin',
-        tenantId: 'rona_atlantic',
-        organization_id: 'rona_atlantic',
+        name: realProfile?.name || (email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell'),
+        full_name: realProfile?.name || (email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell'),
+        role: realProfile?.role || 'super_admin',
+        tenantId: resolvedOrgId,
+        organization_id: resolvedOrgId,
       };
       const signedToken = signAppSessionToken({
         sub: userObj.id,
         email,
-        role: 'super_admin',
-        organizationId: 'rona_atlantic',
+        role: String(userObj.role),
+        organizationId: resolvedOrgId,
       });
       if (signedToken) {
         setAppSessionCookie(res, signedToken, req);
       }
-      return res.json({ success: true, found: true, user: userObj, token: signedToken || undefined });
+      return res.json({ success: true, found: true, user: userObj, token: signedToken || undefined, appToken: signedToken || undefined });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message || 'Claim failed' });
     }
@@ -3098,31 +3180,32 @@ Return structured results in required JSON format.`;
   const upload = multer({ dest: uploadDir });
 
   // API router / endpoints
-  const resolveExpressSecureEnvAuth = async (req: express.Request, scope: 'system' | 'tenant', requestedOrgId?: string) => {
+  const resolveExpressCaller = async (req: express.Request): Promise<{
+    error: string | null;
+    status: 200 | 401;
+    userId: string;
+    userEmail: string;
+    userRole: string;
+    organizationId: string;
+    isSuperAdmin: boolean;
+    isAdmin: boolean;
+    dbClient: any;
+  }> => {
+    const adminSb = getPrivilegedDb(req);
     const superAdminEmails = new Set(['superadmin@prospaces.com', 'george.campbell@prospaces.com', 'geocam55@gmail.com']);
-    const checkRoleScope = (rawRole: string, rawEmail: string, rawOrgId: string) => {
+
+    const computeFlags = (rawRole: string, rawEmail: string, rawOrgId: string) => {
       const userEmail = rawEmail.toLowerCase().trim();
       const normRole = rawRole.toLowerCase().trim().replace(/[\s-]+/g, '_');
-      const isSuper = superAdminEmails.has(userEmail) || userEmail.includes('superadmin') || normRole === 'super_admin' || normRole === 'superadmin' || normRole === 'admin';
+      const isSuper = superAdminEmails.has(userEmail) || userEmail.includes('superadmin') || normRole === 'super_admin' || normRole === 'superadmin';
       const isAdmin = isSuper || normRole === 'admin';
-
-      if (scope === 'system' && !isSuper) {
-        return { error: 'Forbidden: Super Admin privileges are required to manage system variables.', status: 403 as const };
-      }
-      if (scope === 'tenant') {
-        if (!isAdmin) {
-          return { error: 'Forbidden: Admin privileges are required to manage tenant variables.', status: 403 as const };
-        }
-        const orgId = String(requestedOrgId || rawOrgId || '').trim();
-        if (!orgId) {
-          return { error: 'organizationId is required for tenant variables.', status: 400 as const };
-        }
-        if (!isSuper && rawOrgId && rawOrgId !== orgId) {
-          return { error: 'Forbidden: Cannot access variables for another organization.', status: 403 as const };
-        }
-        return { error: null, status: 200 as const, organizationId: orgId };
-      }
-      return { error: null, status: 200 as const, organizationId: null };
+      return {
+        userEmail,
+        userRole: rawRole || (isSuper ? 'super_admin' : 'standard_user'),
+        organizationId: normalizeExpressOrgId(rawOrgId),
+        isSuperAdmin: isSuper,
+        isAdmin,
+      };
     };
 
     const getHeader = (name: string) => {
@@ -3150,34 +3233,24 @@ Return structured results in required JSON format.`;
       .map((t) => String(t || '').trim())
       .filter((t) => t.startsWith('hs1.'));
 
-    console.log('[DEBUG_AUTH] appTokensToCheck length:', appTokensToCheck.length, 'cookie:', cookieSession ? 'present' : 'none');
-
     if (cookieSession.startsWith('hs1.') && isCookieCsrfSafe(req)) {
       appTokensToCheck.push(cookieSession);
     }
 
     for (const candidateAppToken of appTokensToCheck) {
-      let claims = verifyAppSessionToken(candidateAppToken);
-      if (!claims && candidateAppToken.startsWith('hs1.')) {
-        try {
-          const parts = candidateAppToken.split('.');
-          if (parts.length === 3) {
-            claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-          }
-        } catch {}
-      }
+      const claims = verifyAppSessionToken(candidateAppToken);
       if (claims && claims.sub) {
-        const scopeCheck = checkRoleScope(
+        const flags = computeFlags(
           String(claims.role || 'standard_user'),
           String(claims.email || ''),
           String(claims.organizationId || '')
         );
-        if (scopeCheck.error) return scopeCheck;
         return {
           error: null,
-          status: 200 as const,
-          dbClient: supabase,
-          organizationId: scopeCheck.organizationId,
+          status: 200,
+          userId: String(claims.sub),
+          ...flags,
+          dbClient: adminSb,
         };
       }
     }
@@ -3189,15 +3262,9 @@ Return structured results in required JSON format.`;
       .map((t) => String(t || '').trim())
       .filter((t) => t.split('.').length === 3 && !t.startsWith('admin-fallback-token-') && !t.startsWith('hs1.'));
 
-    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY);
-
     for (const token of candidateTokens) {
-      const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+      const { data: authData, error: authErr } = await adminSb.auth.getUser(token);
       if (authErr || !authData?.user) continue;
-
-      const dbClient = hasServiceRole
-        ? supabase
-        : createClient(supabaseUrl, publicAnonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
 
       const userEmail = String(authData.user.email || '').toLowerCase().trim();
       let userRole = String(authData.user.user_metadata?.role || '');
@@ -3206,7 +3273,7 @@ Return structured results in required JSON format.`;
         : (authData.user.user_metadata?.organizationId ? String(authData.user.user_metadata.organizationId) : '');
 
       try {
-        const { data: profile } = await dbClient
+        const { data: profile } = await adminSb
           .from('profiles')
           .select('role, organization_id')
           .eq('id', authData.user.id)
@@ -3217,17 +3284,51 @@ Return structured results in required JSON format.`;
         }
       } catch {}
 
-      const scopeCheck = checkRoleScope(userRole, userEmail, userOrgId);
-      if (scopeCheck.error) return scopeCheck;
+      const flags = computeFlags(userRole, userEmail, userOrgId);
       return {
         error: null,
-        status: 200 as const,
-        dbClient,
-        organizationId: scopeCheck.organizationId,
+        status: 200,
+        userId: authData.user.id,
+        ...flags,
+        dbClient: adminSb,
       };
     }
 
-    return { error: 'Authentication required. Please sign in again to manage environment variables.', status: 401 as const };
+    return {
+      error: 'Authentication required. Please sign in again.',
+      status: 401,
+      userId: '',
+      userEmail: '',
+      userRole: '',
+      organizationId: '',
+      isSuperAdmin: false,
+      isAdmin: false,
+      dbClient: adminSb,
+    };
+  };
+
+  const resolveExpressSecureEnvAuth = async (req: express.Request, scope: 'system' | 'tenant', requestedOrgId?: string) => {
+    const caller = await resolveExpressCaller(req);
+    if (caller.error) {
+      return { error: 'Authentication required. Please sign in again to manage environment variables.', status: 401 as const };
+    }
+    if (scope === 'system' && !caller.isSuperAdmin) {
+      return { error: 'Forbidden: Super Admin privileges are required to manage system variables.', status: 403 as const };
+    }
+    if (scope === 'tenant') {
+      if (!caller.isAdmin) {
+        return { error: 'Forbidden: Admin privileges are required to manage tenant variables.', status: 403 as const };
+      }
+      const orgId = normalizeExpressOrgId(requestedOrgId || caller.organizationId);
+      if (!orgId) {
+        return { error: 'organizationId is required for tenant variables.', status: 400 as const };
+      }
+      if (!caller.isSuperAdmin && caller.organizationId && caller.organizationId !== orgId) {
+        return { error: 'Forbidden: Cannot access variables for another organization.', status: 403 as const };
+      }
+      return { error: null, status: 200 as const, dbClient: caller.dbClient, organizationId: orgId };
+    }
+    return { error: null, status: 200 as const, dbClient: caller.dbClient, organizationId: null };
   };
 
   app.post('/api/secure-env/delete', async (req, res) => {
@@ -3450,12 +3551,14 @@ Return structured results in required JSON format.`;
     }
   });
 
-  // General-purpose KV Store routes with service_role auth for RLS resilience
+  // General-purpose KV Store routes with authenticated server-side DB access
   app.get('/api/kv/get', async (req, res) => {
     try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ error: caller.error });
       const key = String(req.query.key || '').trim();
       if (!key) return res.status(400).json({ error: 'Key is required' });
-      const { data, error } = await supabase
+      const { data, error } = await caller.dbClient
         .from('kv_store_8405be07')
         .select('value')
         .eq('key', key)
@@ -3469,9 +3572,11 @@ Return structured results in required JSON format.`;
 
   app.post('/api/kv/set', async (req, res) => {
     try {
-      const { key, value } = req.body;
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ error: caller.error });
+      const { key, value } = req.body || {};
       if (!key) return res.status(400).json({ error: 'Key is required' });
-      const { error } = await supabase
+      const { error } = await caller.dbClient
         .from('kv_store_8405be07')
         .upsert({ key, value });
       if (error) return res.status(500).json({ error: error.message });
@@ -3483,9 +3588,11 @@ Return structured results in required JSON format.`;
 
   app.post('/api/kv/delete', async (req, res) => {
     try {
-      const { key } = req.body;
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ error: caller.error });
+      const { key } = req.body || {};
       if (!key) return res.status(400).json({ error: 'Key is required' });
-      const { error } = await supabase
+      const { error } = await caller.dbClient
         .from('kv_store_8405be07')
         .delete()
         .eq('key', key);
@@ -4496,18 +4603,19 @@ Return JSON matching this schema:
     }
   });
 
-  // Auto-harden RLS on server startup
+  // Ensure Row-Level Security remains strictly enabled on all public schema tables on startup
   setTimeout(async () => {
     try {
-      await supabase.rpc('exec_sql', {
+      const adminSb = getPrivilegedDb();
+      await adminSb.rpc('exec_sql', {
         sql: `
           DO $$
           DECLARE
             t text;
           BEGIN
-            FOR t IN 
-              SELECT table_name 
-              FROM information_schema.tables 
+            FOR t IN
+              SELECT table_name
+              FROM information_schema.tables
               WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
             LOOP
               EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t);
@@ -4515,7 +4623,6 @@ Return JSON matching this schema:
           END $$;
         `
       });
-      console.log('[RLS Hardening] Row-Level Security enabled on all public schema tables.');
     } catch (e) {}
   }, 3000);
 
@@ -6247,6 +6354,388 @@ self.addEventListener('activate', (event) => {
   });
 
   registerAIRoutes(app, { supabase, supabaseUrl, publicAnonKey });
+
+  // --- Express Settings API Endpoints (Authenticated & RLS-compliant) ---
+  const OPTIONAL_NON_DB_ORG_FIELDS = ['price_tier_labels', 'audience_segments', 'user_invite_method'];
+
+  app.get('/api/settings/organization', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      const rawOrgId = req.query.organization_id || req.query.organizationId || caller.organizationId;
+      const orgId = normalizeExpressOrgId(rawOrgId);
+      if (!orgId) {
+        return res.status(400).json({ success: false, error: 'Missing organization_id' });
+      }
+      if (!caller.isSuperAdmin && caller.organizationId && caller.organizationId !== orgId) {
+        return res.status(403).json({ success: false, error: 'Forbidden: cannot access another organization settings' });
+      }
+
+      const [settingsRes, kvRes, orgRowRes] = await Promise.all([
+        caller.dbClient.from('organization_settings').select('*').eq('organization_id', orgId).maybeSingle(),
+        caller.dbClient.from('kv_store_8405be07').select('value').eq('key', `org_settings_extra:${orgId}`).maybeSingle(),
+        caller.dbClient.from('organizations').select('name').eq('id', orgId).maybeSingle(),
+      ]);
+
+      const dbData = settingsRes?.data || {};
+      const kvExtra = (kvRes?.data?.value && typeof kvRes.data.value === 'object') ? kvRes.data.value : {};
+      const merged = {
+        ...dbData,
+        ...kvExtra,
+        organization_id: orgId,
+        ...(orgRowRes?.data?.name && !dbData.organization_name ? { organization_name: orgRowRes.data.name } : {}),
+      };
+
+      const hasAny = Boolean(settingsRes?.data || kvRes?.data?.value || orgRowRes?.data?.name);
+      res.json({ success: true, settings: hasAny ? merged : null });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
+  app.put('/api/settings/organization', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      if (!caller.isAdmin) {
+        return res.status(403).json({ success: false, error: 'Only admin or super_admin can update organization settings' });
+      }
+
+      const settings = req.body || {};
+      const orgId = normalizeExpressOrgId(settings.organization_id || settings.organizationId || caller.organizationId);
+      if (!orgId) {
+        return res.status(400).json({ success: false, error: 'Missing organization_id' });
+      }
+      if (!caller.isSuperAdmin && caller.organizationId && caller.organizationId !== orgId) {
+        return res.status(403).json({ success: false, error: 'Cannot update settings for a different organization' });
+      }
+
+      const dbSettings: any = { ...settings, organization_id: orgId, updated_at: new Date().toISOString() };
+      delete dbSettings.organizationId;
+
+      const { data: existingKvRow } = await caller.dbClient
+        .from('kv_store_8405be07')
+        .select('value')
+        .eq('key', `org_settings_extra:${orgId}`)
+        .maybeSingle();
+      const kvSettings: any = { ...(existingKvRow?.value && typeof existingKvRow.value === 'object' ? existingKvRow.value : {}) };
+
+      for (const field of OPTIONAL_NON_DB_ORG_FIELDS) {
+        if (field in dbSettings) {
+          kvSettings[field] = dbSettings[field];
+          delete dbSettings[field];
+        }
+      }
+
+      await caller.dbClient
+        .from('kv_store_8405be07')
+        .upsert({ key: `org_settings_extra:${orgId}`, value: kvSettings });
+
+      const { data, error } = await caller.dbClient
+        .from('organization_settings')
+        .upsert(dbSettings, { onConflict: 'organization_id' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Server /api/settings/organization] UPSERT error:', error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      res.json({ success: true, settings: { ...data, ...kvSettings } });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
+  app.get('/api/settings/organization-details', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      const orgId = normalizeExpressOrgId(req.query.organization_id || req.query.organizationId || caller.organizationId);
+      if (!orgId) return res.status(400).json({ success: false, error: 'Missing organization_id' });
+      if (!caller.isSuperAdmin && caller.organizationId && caller.organizationId !== orgId) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+      }
+      const { data, error } = await caller.dbClient
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .maybeSingle();
+      if (error) return res.status(500).json({ success: false, error: error.message });
+      return res.json({ success: true, tenant: data || null });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
+  app.get('/api/settings/user-preferences', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+
+      const userId = String(req.query.user_id || caller.userId || '').trim();
+      const orgId = normalizeExpressOrgId(req.query.organization_id || caller.organizationId);
+      if (!userId) {
+        return res.json({ success: true, preferences: null });
+      }
+      if (!caller.isSuperAdmin && caller.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Forbidden: cannot read another user preferences' });
+      }
+
+      let data: any = null;
+      if (orgId) {
+        const resExact = await caller.dbClient
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('organization_id', orgId)
+          .maybeSingle();
+        data = resExact?.data || null;
+      }
+
+      // Fallback by user_id (handles legacy 'default-org' preference rows)
+      if (!data) {
+        const resByUser = await caller.dbClient
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+        data = resByUser?.data || null;
+      }
+
+      res.json({ success: true, preferences: data || null });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Server error', preferences: null });
+    }
+  });
+
+  app.put('/api/settings/user-preferences', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+
+      const prefs = req.body || {};
+      const userId = String(prefs.user_id || caller.userId || '').trim();
+      const orgId = normalizeExpressOrgId(prefs.organization_id || caller.organizationId);
+      if (!userId || !orgId) {
+        return res.status(400).json({ success: false, error: 'Missing user_id or organization_id' });
+      }
+      if (!caller.isSuperAdmin && caller.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Cannot update preferences for another user' });
+      }
+
+      const { data, error } = await caller.dbClient
+        .from('user_preferences')
+        .upsert({ ...prefs, user_id: userId, organization_id: orgId, updated_at: new Date().toISOString() }, { onConflict: 'user_id,organization_id' })
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      res.json({ success: true, preferences: data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Server error' });
+    }
+  });
+
+  app.get('/api/settings/environment', async (req, res) => {
+    try {
+      const scope = String(req.query.scope || 'system').trim().toLowerCase() === 'tenant' ? 'tenant' : 'system';
+      const requestedOrgId = req.query.organization_id ? String(req.query.organization_id) : undefined;
+      const auth = await resolveExpressSecureEnvAuth(req, scope, requestedOrgId);
+      if (auth.error) {
+        return res.status(auth.status).json({ success: false, values: {}, configuredSecrets: [], error: auth.error });
+      }
+
+      const values: Record<string, string> = {};
+      const configuredSecrets: string[] = [];
+      const SECRET_KEY_NAMES = new Set([
+        'SYSTEM_SMTP_PASSWORD', 'SMTP_PASS', 'GEMINI_API_KEY', 'GOOGLE_MAPS_PLATFORM_KEY',
+        'AZURE_CLIENT_SECRET', 'GOOGLE_CLIENT_SECRET', 'FLEET_COMPLETE_PASSWORD', 'FLEET_COMPLETE_API_KEY'
+      ]);
+
+      if (scope === 'system') {
+        const { data: envData } = await auth.dbClient!.from('app_env_vars').select('key, value');
+        if (Array.isArray(envData)) {
+          for (const row of envData) {
+            if (row.key && !String(row.key).startsWith('__')) {
+              if (SECRET_KEY_NAMES.has(row.key)) {
+                if (row.value) configuredSecrets.push(row.key);
+              } else {
+                values[row.key] = row.value || '';
+              }
+            }
+          }
+        }
+      } else {
+        const orgId = auth.organizationId!;
+        const { data: envData } = await auth.dbClient!.from('tenant_env_vars').select('key, value').eq('organization_id', orgId);
+        if (Array.isArray(envData)) {
+          for (const row of envData) {
+            if (row.key) {
+              if (SECRET_KEY_NAMES.has(row.key)) {
+                if (row.value) configuredSecrets.push(row.key);
+              } else {
+                values[row.key] = row.value || '';
+              }
+            }
+          }
+        }
+      }
+      res.json({ success: true, values, configuredSecrets });
+    } catch (err: any) {
+      res.status(500).json({ success: false, values: {}, configuredSecrets: [], error: err.message });
+    }
+  });
+
+  app.post('/api/settings/environment', async (req, res) => {
+    try {
+      const { scope: rawScope, values, clearKeys, organizationId } = req.body || {};
+      const scope = String(rawScope || 'system').trim().toLowerCase() === 'tenant' ? 'tenant' : 'system';
+      const auth = await resolveExpressSecureEnvAuth(req, scope, organizationId);
+      if (auth.error) {
+        return res.status(auth.status).json({ success: false, error: auth.error });
+      }
+
+      const nowIso = new Date().toISOString();
+      if (scope === 'system') {
+        if (Array.isArray(clearKeys)) {
+          for (const key of clearKeys) {
+            await auth.dbClient!.from('app_env_vars').delete().eq('key', key);
+          }
+        }
+        if (values && typeof values === 'object') {
+          for (const [key, val] of Object.entries(values)) {
+            if (val) {
+              await auth.dbClient!.from('app_env_vars').upsert({ key, value: String(val), updated_at: nowIso }, { onConflict: 'key' });
+            }
+          }
+        }
+        return res.json({ success: true });
+      } else {
+        const orgId = auth.organizationId!;
+        if (Array.isArray(clearKeys)) {
+          for (const key of clearKeys) {
+            await auth.dbClient!.from('tenant_env_vars').delete().eq('organization_id', orgId).eq('key', key);
+          }
+        }
+        if (values && typeof values === 'object') {
+          for (const [key, val] of Object.entries(values)) {
+            if (val) {
+              await auth.dbClient!.from('tenant_env_vars').upsert({ organization_id: orgId, key, value: String(val), updated_at: nowIso }, { onConflict: 'organization_id,key' });
+            }
+          }
+        }
+        return res.json({ success: true });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/settings/org-mode', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      const orgId = normalizeExpressOrgId(req.query.organization_id || caller.organizationId);
+      const { data } = await caller.dbClient.from('kv_store_8405be07').select('value').eq('key', `org_mode:${orgId}`).maybeSingle();
+      res.json({ success: true, orgMode: data?.value || { user_mode: 'single', organization_id: orgId } });
+    } catch (err: any) {
+      res.json({ success: true, orgMode: { user_mode: 'single' } });
+    }
+  });
+
+  app.put('/api/settings/org-mode', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      if (!caller.isAdmin) return res.status(403).json({ success: false, error: 'Only admin or super_admin can change organization user mode' });
+      const { organization_id, user_mode } = req.body || {};
+      const orgId = normalizeExpressOrgId(organization_id || caller.organizationId);
+      if (!caller.isSuperAdmin && caller.organizationId && caller.organizationId !== orgId) {
+        return res.status(403).json({ success: false, error: 'Cannot update settings for a different organization' });
+      }
+      const modeData = { user_mode: user_mode || 'single', organization_id: orgId, updated_at: new Date().toISOString() };
+      await caller.dbClient.from('kv_store_8405be07').upsert({ key: `org_mode:${orgId}`, value: modeData });
+      res.json({ success: true, orgMode: modeData });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  const handleProfileUpdate = async (req: express.Request, res: express.Response) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      const { user_id, name, avatar_url } = req.body || {};
+      const targetUserId = String(user_id || caller.userId || '').trim();
+      if (!targetUserId) return res.status(400).json({ success: false, error: 'Missing user_id' });
+      if (!caller.isSuperAdmin && caller.userId !== targetUserId) {
+        return res.status(403).json({ success: false, error: 'Cannot update another user profile' });
+      }
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+      if (Object.keys(updates).length === 0) return res.json({ success: true });
+      const { data, error } = await caller.dbClient.from('profiles').update(updates).eq('id', targetUserId).select().maybeSingle();
+      if (error) return res.status(500).json({ success: false, error: error.message });
+      res.json({ success: true, profile: data || null });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  };
+  app.patch('/api/settings/profile', handleProfileUpdate);
+  app.put('/api/settings/profile', handleProfileUpdate);
+
+  app.put('/api/settings/organization-name', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      if (!caller.isAdmin) return res.status(403).json({ success: false, error: 'Only admin or super_admin can update organization name' });
+      const { organization_id, name } = req.body || {};
+      const orgId = normalizeExpressOrgId(organization_id || caller.organizationId);
+      if (!orgId || !name) return res.status(400).json({ success: false, error: 'Missing organization_id or name' });
+      if (!caller.isSuperAdmin && caller.organizationId && caller.organizationId !== orgId) {
+        return res.status(403).json({ success: false, error: 'Cannot update a different organization' });
+      }
+      const { error } = await caller.dbClient.from('organizations').update({ name }).eq('id', orgId);
+      if (error) return res.status(500).json({ success: false, error: error.message });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/settings/theme', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      const [themeRes, modeRes] = await Promise.all([
+        caller.dbClient.from('kv_store_8405be07').select('value').eq('key', `user_theme:${caller.userId}`).maybeSingle(),
+        caller.dbClient.from('kv_store_8405be07').select('value').eq('key', `user_theme_mode:${caller.userId}`).maybeSingle(),
+      ]);
+      res.json({ theme: themeRes?.data?.value || null, themeMode: modeRes?.data?.value || null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Server error' });
+    }
+  });
+
+  app.put('/api/settings/theme', async (req, res) => {
+    try {
+      const caller = await resolveExpressCaller(req);
+      if (caller.error) return res.status(caller.status).json({ success: false, error: caller.error });
+      const { theme, themeMode } = req.body || {};
+      if (!theme && !themeMode) return res.status(400).json({ error: 'Missing theme' });
+      if (theme) await caller.dbClient.from('kv_store_8405be07').upsert({ key: `user_theme:${caller.userId}`, value: theme });
+      if (themeMode) await caller.dbClient.from('kv_store_8405be07').upsert({ key: `user_theme_mode:${caller.userId}`, value: themeMode });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Server error' });
+    }
+  });
 
   // --- FALLBACK CATCH-ALL FOR ALL UNHANDLED API ROUTES ---
   app.all('/api/*all', (req, res) => {

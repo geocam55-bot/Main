@@ -34,6 +34,7 @@ import {
 } from '../ui/dropdown-menu';
 import { createClient } from '../../utils/supabase/client';
 import { canView, onPermissionsChanged, getNormalizedRole } from '../../utils/permissions';
+import { tenantsAPI } from '../../utils/api';
 import type { User } from '../../App';
 import { useTheme } from '../ThemeProvider';
 import { ProfileThemeSwitch } from '../ProfileThemeSwitch';
@@ -175,19 +176,34 @@ export function ITShell({ user, accessToken, onLogout }: ITShellProps) {
 
   // Load organization on mount
   useEffect(() => {
-    const orgId = user?.organization_id || user?.organizationId;
-    if (!orgId) return;
+    const rawOrgId = user?.organization_id || user?.organizationId;
+    if (!rawOrgId) return;
+    const orgId = (rawOrgId === 'rona_atlantic' || rawOrgId === 'org_001' || rawOrgId === 'default-org' || rawOrgId === 'default_org')
+      ? '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+      : rawOrgId;
     const supabase = createClient();
     supabase
       .from('organizations')
       .select('*')
       .eq('id', orgId)
-      .single()
+      .maybeSingle()
       .then(
-        ({ data }) => {
-          if (data) setOrganization(data);
+        async ({ data }) => {
+          if (data) {
+            setOrganization(data);
+          } else {
+            try {
+              const { tenant } = await tenantsAPI.getById(orgId);
+              if (tenant) setOrganization(tenant);
+            } catch {}
+          }
         },
-        () => {}
+        async () => {
+          try {
+            const { tenant } = await tenantsAPI.getById(orgId);
+            if (tenant) setOrganization(tenant);
+          } catch {}
+        }
       );
   }, [user?.organization_id, user?.organizationId]);
 

@@ -134,56 +134,48 @@ export default async function handler(req, res) {
       }
 
       if (isSuperValid) {
-        const userId = 'USR-SUPER-ADMIN-01';
-        const userObj = {
-          id: userId,
-          email,
-          name: email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell',
-          role: 'super_admin',
-          tenantId: 'rona_atlantic',
-          organization_id: 'rona_atlantic',
-        };
-        const signedToken = signAppSessionToken({
-          sub: userId,
-          email,
-          role: 'super_admin',
-          organizationId: 'rona_atlantic',
-        });
-        if (signedToken) {
-          setAppSessionCookie(res, signedToken, req);
+        let resolvedProfile = null;
+        let mintedSession = null;
+        if (hasServiceRole) {
+          try {
+            const { data: profRows } = await adminClient.from('profiles').select('*').ilike('email', email).limit(1);
+            if (profRows?.[0]) resolvedProfile = profRows[0];
+          } catch {}
+          try {
+            const { data: linkData } = await adminClient.auth.admin.generateLink({ type: 'magiclink', email });
+            const hashedToken = linkData?.properties?.hashed_token;
+            if (hashedToken) {
+              const { supabaseUrl, publicAnonKey } = getSupabaseEnv();
+              const { createClient: createSbClient } = await import('@supabase/supabase-js');
+              const ephem = createSbClient(supabaseUrl, publicAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+              const { data: otpData } = await ephem.auth.verifyOtp({ token_hash: hashedToken, type: 'magiclink' });
+              if (otpData?.session?.access_token && otpData?.session?.refresh_token) {
+                mintedSession = otpData.session;
+              }
+            }
+          } catch {}
         }
-        return res.status(200).json({
-          success: true,
-          found: true,
-          user: userObj,
-          token: signedToken || undefined,
-        });
-      }
-      return res.status(401).json({
-        success: false,
-        found: true,
-        error: 'Invalid email or password.',
-      });
-    }
 
-    // 3. Claimed Super Admin scrypt-hashed password verification
-    const claimedRecord = await getClaimedSuperAdminRecord(adminClient);
-    if (claimedRecord && SUPER_ADMIN_EMAILS.has(email)) {
-      if (verifyPasswordScrypt(password, claimedRecord.hash)) {
-        const userId = 'USR-SUPER-ADMIN-01';
+        const rawOrgId = resolvedProfile?.organization_id || mintedSession?.user?.user_metadata?.organization_id || '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+        const orgId = rawOrgId === 'rona_atlantic' ? '34638283-7b3d-47e2-bec8-a9e600e28c4a' : rawOrgId;
+        const userId = resolvedProfile?.id || mintedSession?.user?.id || 'USR-SUPER-ADMIN-01';
+        const userName = resolvedProfile?.name || (email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell');
+        const userRole = resolvedProfile?.role || 'super_admin';
+
         const userObj = {
           id: userId,
-          email,
-          name: email === 'superadmin@prospaces.com' ? 'ProSpaces Super Admin' : 'George Campbell',
-          role: 'super_admin',
-          tenantId: 'rona_atlantic',
-          organization_id: 'rona_atlantic',
+          email: resolvedProfile?.email || email,
+          name: userName,
+          full_name: userName,
+          role: userRole,
+          tenantId: orgId,
+          organization_id: orgId,
         };
         const signedToken = signAppSessionToken({
           sub: userId,
-          email,
-          role: 'super_admin',
-          organizationId: 'rona_atlantic',
+          email: userObj.email,
+          role: userRole,
+          organizationId: orgId,
         });
         if (signedToken) {
           setAppSessionCookie(res, signedToken, req);
@@ -192,7 +184,9 @@ export default async function handler(req, res) {
           success: true,
           found: true,
           user: userObj,
-          token: signedToken || undefined,
+          token: mintedSession?.access_token || signedToken || undefined,
+          appToken: signedToken || undefined,
+          session: mintedSession || undefined,
         });
       }
       return res.status(401).json({

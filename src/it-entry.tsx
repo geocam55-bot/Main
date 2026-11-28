@@ -11,7 +11,18 @@ import type { User, UserRole } from './App';
 import type { Session } from '@supabase/supabase-js';
 import { unregisterServiceWorker } from './utils/pwa';
 import { ITLogin } from './components/it-app/ITLogin';
+import { getServerHeaders, clearAppSessionToken } from './utils/server-headers';
 import './index.css';
+
+const PRIMARY_ORG_UUID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+
+function normalizeITOrgId(orgId?: string | null): string {
+  const trimmed = String(orgId || '').trim();
+  if (!trimmed || trimmed === 'rona_atlantic' || trimmed === 'org_001' || trimmed === 'default-org' || trimmed === 'default_org') {
+    return PRIMARY_ORG_UUID;
+  }
+  return trimmed;
+}
 
 function ITApp() {
   const [session, setSession] = useState<Session | null>(null);
@@ -20,30 +31,24 @@ function ITApp() {
       const cached = localStorage.getItem('prospaces_active_user') || localStorage.getItem('prospaces_cached_user');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed && typeof parsed === 'object') {
-          const orgId = parsed.organizationId || parsed.organization_id || localStorage.getItem('currentOrgId') || 'rona_atlantic';
+        if (parsed && typeof parsed === 'object' && (parsed.email || parsed.id)) {
+          const orgId = normalizeITOrgId(parsed.organizationId || parsed.organization_id || localStorage.getItem('currentOrgId'));
+          const normRole = getNormalizedRole(parsed.role || 'admin', parsed.email);
           return {
             ...parsed,
-            role: parsed.role || ('admin' as UserRole),
+            role: normRole,
+            full_name: parsed.full_name || parsed.name || parsed.email?.split('@')[0] || 'User',
             organization_id: orgId,
             organizationId: orgId,
           };
         }
       }
     } catch {}
-    return {
-      id: "USR-57008",
-      name: "George Campbell",
-      email: "george.campbell@ronaatlantic.ca",
-      role: "admin" as UserRole,
-      full_name: "George Campbell",
-      organization_id: "rona_atlantic",
-      organizationId: "rona_atlantic"
-    };
+    return null;
   });
   const [accessToken, setAccessToken] = useState<string | undefined>();
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(() => !user);
 
   const supabase = createClient();
 
@@ -65,9 +70,60 @@ function ITApp() {
       setLoading(false);
     }, 3000);
 
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    const hydrateFromServerSession = async () => {
+      try {
+        const headers = await getServerHeaders();
+        const resp = await fetch('/api/auth/session-profile', {
+          method: 'GET',
+          headers,
+          credentials: 'same-origin',
+        });
+        if (resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          if (data?.success && data?.user) {
+            const normOrgId = normalizeITOrgId(data.user.organization_id || data.user.organizationId);
+            const normRole = getNormalizedRole(data.user.role, data.user.email);
+            const hydratedUser: User = {
+              id: data.user.id,
+              email: data.user.email,
+              role: normRole,
+              full_name: data.user.full_name || data.user.name || data.user.email?.split('@')[0] || 'User',
+              avatar_url: data.user.avatar_url,
+              organization_id: normOrgId,
+              organizationId: normOrgId,
+            };
+            if (data.session?.access_token && data.session?.refresh_token) {
+              try {
+                const { data: setSessData } = await supabase.auth.setSession({
+                  access_token: data.session.access_token,
+                  refresh_token: data.session.refresh_token,
+                });
+                if (setSessData?.session) {
+                  setSession(setSessData.session);
+                  setAccessToken(setSessData.session.access_token);
+                }
+              } catch {}
+            }
+            localStorage.setItem('currentOrgId', normOrgId);
+            localStorage.setItem('prospaces_cached_user', JSON.stringify(hydratedUser));
+            localStorage.setItem('prospaces_active_user', JSON.stringify({ ...hydratedUser, name: hydratedUser.full_name }));
+            await initializePermissions(normRole);
+            setUser(hydratedUser);
+            return;
+          }
+        }
+        if (resp.status === 401) {
+          setUser(null);
+          localStorage.removeItem('prospaces_cached_user');
+          localStorage.removeItem('prospaces_active_user');
+        }
+      } catch {}
+    };
+
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (error) {
         handleAuthError(error);
+        await hydrateFromServerSession();
         setLoading(false);
         clearTimeout(loadSafetyTimer);
         return;
@@ -75,15 +131,16 @@ function ITApp() {
       setSession(session);
       setAccessToken(session?.access_token);
       if (session?.user) {
-        loadProfile(session).finally(() => {
-          clearTimeout(loadSafetyTimer);
-        });
+        await loadProfile(session);
+        clearTimeout(loadSafetyTimer);
       } else {
+        await hydrateFromServerSession();
         setLoading(false);
         clearTimeout(loadSafetyTimer);
       }
-    }).catch((err) => {
+    }).catch(async (err) => {
       handleAuthError(err);
+      await hydrateFromServerSession();
       setLoading(false);
       clearTimeout(loadSafetyTimer);
     });
@@ -119,16 +176,36 @@ function ITApp() {
   const loadProfile = async (session: Session) => {
     const safetyTimer = setTimeout(() => setLoading(false), 8000);
     try {
-      let profile = null;
+      let profile: any = null;
       try {
         const { data } = await supabase
           .from('profiles')
           .select('id, email, role, organization_id, name, avatar_url')
           .eq('id', session.user.id)
-          .single() as { data: any };
+          .maybeSingle() as { data: any };
         profile = data;
       } catch (err) {
-        console.warn('Profile fetch failed, using fallback from session or cache:', err);
+        console.warn('Profile fetch failed, trying session-profile fallback:', err);
+      }
+
+      if (!profile) {
+        try {
+          const headers = await getServerHeaders();
+          const resp = await fetch('/api/auth/session-profile', { headers, credentials: 'same-origin' });
+          if (resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            if (data?.user) {
+              profile = {
+                id: data.user.id,
+                email: data.user.email,
+                role: data.user.role,
+                name: data.user.full_name || data.user.name,
+                avatar_url: data.user.avatar_url,
+                organization_id: data.user.organization_id,
+              };
+            }
+          }
+        } catch {}
       }
 
       if (!profile) {
@@ -138,14 +215,13 @@ function ITApp() {
           role: session.user.user_metadata?.role || user?.role || 'admin',
           name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || user?.full_name || session.user.email?.split('@')[0],
           avatar_url: session.user.user_metadata?.avatar_url || user?.avatar_url,
-          organization_id: session.user.user_metadata?.organization_id || user?.organization_id || 'org_001',
+          organization_id: session.user.user_metadata?.organization_id || user?.organization_id || PRIMARY_ORG_UUID,
         };
       }
 
       if (profile) {
-        if (profile.organization_id) {
-          localStorage.setItem('currentOrgId', profile.organization_id);
-        }
+        const normOrgId = normalizeITOrgId(profile.organization_id);
+        localStorage.setItem('currentOrgId', normOrgId);
 
         const normalizedRole = getNormalizedRole(profile.role, profile.email);
         await initializePermissions(normalizedRole);
@@ -157,8 +233,8 @@ function ITApp() {
           role: normalizedRole,
           full_name: profile.name,
           avatar_url: profile.avatar_url,
-          organization_id: profile.organization_id,
-          organizationId: profile.organization_id,
+          organization_id: normOrgId,
+          organizationId: normOrgId,
         });
       }
     } catch {
@@ -170,19 +246,29 @@ function ITApp() {
   };
 
   const handleLogin = async (loggedInUser: User, token: string) => {
-    if (loggedInUser.organizationId || loggedInUser.organization_id) {
-      const orgId = loggedInUser.organizationId || loggedInUser.organization_id;
-      if (orgId) localStorage.setItem('currentOrgId', orgId);
-    }
-    await initializePermissions(loggedInUser.role);
-    setUser(loggedInUser);
+    const orgId = normalizeITOrgId(loggedInUser.organizationId || loggedInUser.organization_id);
+    localStorage.setItem('currentOrgId', orgId);
+    const normalizedUser = { ...loggedInUser, organization_id: orgId, organizationId: orgId };
+    await initializePermissions(normalizedUser.role);
+    setUser(normalizedUser);
     setAccessToken(token);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setUser(null);
     setSession(null);
     setAccessToken(undefined);
+    try {
+      clearAppSessionToken();
+      localStorage.removeItem('prospaces_cached_user');
+      localStorage.removeItem('prospaces_active_user');
+      localStorage.removeItem('currentOrgId');
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      }).catch(() => {});
+    } catch {}
     window.location.href = '/';
   };
 

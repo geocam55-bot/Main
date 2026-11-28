@@ -35,6 +35,16 @@ export function getLastSecureEnvError(): string | null {
   return lastSecureEnvError;
 }
 
+const PRIMARY_ORG_UUID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+
+function normalizeClientOrgId(orgId?: string): string {
+  const trimmed = String(orgId || '').trim();
+  if (!trimmed || trimmed === 'rona_atlantic' || trimmed === 'org_001' || trimmed === 'default-org' || trimmed === 'default_org') {
+    return PRIMARY_ORG_UUID;
+  }
+  return trimmed;
+}
+
 function normalizeEnvKeyClient(key: string): string {
   return String(key || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
 }
@@ -223,8 +233,9 @@ export async function getTenantEnv(organizationId: string, key: string, fallback
   if (!organizationId) {
     return getAppEnv(key, fallback);
   }
+  const targetOrgId = normalizeClientOrgId(organizationId);
 
-  let orgCache = tenantEnvCache.get(organizationId);
+  let orgCache = tenantEnvCache.get(targetOrgId);
   if (orgCache && orgCache.has(key)) {
     return orgCache.get(key)!;
   }
@@ -233,16 +244,16 @@ export async function getTenantEnv(organizationId: string, key: string, fallback
     const { data, error } = await supabase
       .from('tenant_env_vars')
       .select('value')
-      .eq('organization_id', organizationId)
+      .eq('organization_id', targetOrgId)
       .eq('key', key)
       .maybeSingle();
 
     if (!error && data && data.value != null) {
       const val = String(data.value);
-      if (!tenantEnvCache.has(organizationId)) {
-        tenantEnvCache.set(organizationId, new Map());
+      if (!tenantEnvCache.has(targetOrgId)) {
+        tenantEnvCache.set(targetOrgId, new Map());
       }
-      tenantEnvCache.get(organizationId)!.set(key, val);
+      tenantEnvCache.get(targetOrgId)!.set(key, val);
       return val;
     }
   } catch {}
@@ -259,7 +270,7 @@ export async function setTenantEnvResult(
   value: string,
   description?: string
 ): Promise<SecureEnvActionResult> {
-  const targetOrgId = organizationId || 'default_org';
+  const targetOrgId = normalizeClientOrgId(organizationId);
   const cleanKey = normalizeEnvKeyClient(key);
   let serverError = '';
   lastSecureEnvError = null;
@@ -367,7 +378,22 @@ export async function setTenantEnv(organizationId: string, key: string, value: s
 export async function listAppEnv(): Promise<AppEnvVar[]> {
   lastSecureEnvError = null;
 
-  // 1. Direct client-side Supabase query first (guaranteed to bypass any server session token mismatches across live/dev domains)
+  // 1. Server API (Authoritative — handles RLS via service role & supports both Supabase JWT and HttpOnly/hs1 sessions)
+  try {
+    const headers = await getServerHeaders();
+    const resp = await fetch('/api/secure-env/list?scope=system', { headers, credentials: 'same-origin' });
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success && Array.isArray(json.vars)) {
+      return json.vars.filter((v: any) => !String(v?.key || '').startsWith('__'));
+    }
+    if (resp.status === 401 || resp.status === 403) {
+      lastSecureEnvError = json?.error || (resp.status === 401 ? 'Authentication required' : 'Permission denied');
+    }
+  } catch (apiErr) {
+    console.warn('[SecureEnv] Server listAppEnv failed, trying client fallback:', apiErr);
+  }
+
+  // 2. Fallback to direct client-side Supabase query (works when user holds a valid authenticated Supabase JWT)
   try {
     const { data, error } = await supabase
       .from('app_env_vars')
@@ -397,17 +423,8 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
     } catch {}
 
     if (results.length > 0) {
+      lastSecureEnvError = null;
       return results.sort((a, b) => a.key.localeCompare(b.key));
-    }
-  } catch {}
-
-  // 2. Fallback to Server API
-  try {
-    const headers = await getServerHeaders();
-    const resp = await fetch('/api/secure-env/list?scope=system', { headers, credentials: 'same-origin' });
-    const json = await resp.json().catch(() => ({}));
-    if (resp.ok && json.success && Array.isArray(json.vars)) {
-      return json.vars.filter((v: any) => !String(v?.key || '').startsWith('__'));
     }
   } catch {}
 
@@ -418,7 +435,7 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
  * Get all Tenant-level environment variables for an organization
  */
 export async function listTenantEnv(organizationId: string): Promise<TenantEnvVar[]> {
-  const targetOrgId = organizationId || 'default_org';
+  const targetOrgId = normalizeClientOrgId(organizationId);
   lastSecureEnvError = null;
 
   // 1. Server API (Authoritative)
@@ -432,8 +449,8 @@ export async function listTenantEnv(organizationId: string): Promise<TenantEnvVa
     if (resp.ok && json.success && Array.isArray(json.vars)) {
       return json.vars;
     }
-    if (resp.status === 401) {
-      lastSecureEnvError = json?.error || 'Authentication required';
+    if (resp.status === 401 || resp.status === 403) {
+      lastSecureEnvError = json?.error || (resp.status === 401 ? 'Authentication required' : 'Permission denied');
     }
   } catch (apiErr) {
     console.warn('[SecureEnv] Server list failed, trying client fallback:', apiErr);
@@ -446,13 +463,17 @@ export async function listTenantEnv(organizationId: string): Promise<TenantEnvVa
       .select('*')
       .eq('organization_id', targetOrgId)
       .order('key');
-    if (!error && data && data.length > 0) return data;
+    if (!error && data && data.length > 0) {
+      lastSecureEnvError = null;
+      return data;
+    }
     if (error && isMissingTableErr(error)) {
       const { data: tData, error: tErr } = await supabase
         .from('tenant_settings')
         .select('organization_id, setting_key, setting_value, updated_at')
         .eq('organization_id', targetOrgId);
       if (!tErr && Array.isArray(tData)) {
+        lastSecureEnvError = null;
         return tData
           .filter((r: any) => r?.setting_key)
           .map((r: any) => ({
@@ -544,6 +565,7 @@ export async function deleteAppEnv(key: string): Promise<boolean> {
  */
 export async function deleteTenantEnvResult(organizationId: string, key: string): Promise<SecureEnvActionResult> {
   if (!organizationId) return { success: false, error: 'Organization ID is required' };
+  const targetOrgId = normalizeClientOrgId(organizationId);
   const cleanKey = normalizeEnvKeyClient(key);
   let serverError = '';
   lastSecureEnvError = null;
@@ -555,12 +577,12 @@ export async function deleteTenantEnvResult(organizationId: string, key: string)
       method: 'POST',
       headers,
       credentials: 'same-origin',
-      body: JSON.stringify({ scope: 'tenant', organizationId, key: cleanKey }),
+      body: JSON.stringify({ scope: 'tenant', organizationId: targetOrgId, key: cleanKey }),
     });
     const data = await resp.json().catch(() => ({}));
     if (resp.ok && data.success) {
-      if (tenantEnvCache.has(organizationId)) {
-        tenantEnvCache.get(organizationId)!.delete(cleanKey);
+      if (tenantEnvCache.has(targetOrgId)) {
+        tenantEnvCache.get(targetOrgId)!.delete(cleanKey);
       }
       return { success: true };
     }
@@ -578,11 +600,11 @@ export async function deleteTenantEnvResult(organizationId: string, key: string)
     const { error } = await supabase
       .from('tenant_env_vars')
       .delete()
-      .eq('organization_id', organizationId)
+      .eq('organization_id', targetOrgId)
       .eq('key', cleanKey);
     if (!error) {
-      if (tenantEnvCache.has(organizationId)) {
-        tenantEnvCache.get(organizationId)!.delete(cleanKey);
+      if (tenantEnvCache.has(targetOrgId)) {
+        tenantEnvCache.get(targetOrgId)!.delete(cleanKey);
       }
       return { success: true };
     }
@@ -590,11 +612,11 @@ export async function deleteTenantEnvResult(organizationId: string, key: string)
       const { error: tErr } = await supabase
         .from('tenant_settings')
         .delete()
-        .eq('organization_id', organizationId)
+        .eq('organization_id', targetOrgId)
         .eq('setting_key', cleanKey);
       if (!tErr) {
-        if (tenantEnvCache.has(organizationId)) {
-          tenantEnvCache.get(organizationId)!.delete(cleanKey);
+        if (tenantEnvCache.has(targetOrgId)) {
+          tenantEnvCache.get(targetOrgId)!.delete(cleanKey);
         }
         return { success: true };
       }

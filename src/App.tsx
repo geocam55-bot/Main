@@ -14,8 +14,9 @@ import { Toaster } from './components/ui/sonner';
 import ErrorBoundary, { ErrorBoundaryFallback } from './components/ErrorBoundary';
 import { toast } from 'sonner';
 import { createClient, clearStaleAuthTokens, handleAuthError } from './utils/supabase/client';
-import { clearAppSessionToken } from './utils/server-headers';
-import { canAccessSpace, initializePermissions } from './utils/permissions';
+import { clearAppSessionToken, getServerHeaders } from './utils/server-headers';
+import { tenantsAPI } from './utils/api';
+import { canAccessSpace, initializePermissions, getNormalizedRole } from './utils/permissions';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 // ── Eagerly loaded entry & authentication views (guaranteed instant render with no chunk fetch errors) ──
@@ -465,8 +466,78 @@ export function AppContent() {
 
     sessionStorage.setItem('prospaces_session_active', 'true');
 
+    const hydrateServerSessionIfMissing = async () => {
+      try {
+        const headers = await getServerHeaders();
+        const resp = await fetch('/api/auth/session-profile', {
+          method: 'GET',
+          headers,
+          credentials: 'same-origin',
+        });
+        if (resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          if (data?.success && data?.user) {
+            const rawOrgId = data.user.organization_id || data.user.organizationId || '';
+            const normOrgId = (!rawOrgId || rawOrgId === 'rona_atlantic' || rawOrgId === 'org_001' || rawOrgId === 'default-org' || rawOrgId === 'default_org')
+              ? '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+              : rawOrgId;
+            const normRole = getNormalizedRole(data.user.role, data.user.email);
+            const hydratedUser: User = {
+              id: data.user.id,
+              email: data.user.email,
+              role: normRole,
+              full_name: data.user.full_name || data.user.name || data.user.email?.split('@')[0] || 'User',
+              avatar_url: data.user.avatar_url,
+              organization_id: normOrgId,
+              organizationId: normOrgId,
+            };
+            if (data.session?.access_token && data.session?.refresh_token) {
+              try {
+                const { data: setSessData } = await supabase.auth.setSession({
+                  access_token: data.session.access_token,
+                  refresh_token: data.session.refresh_token,
+                });
+                if (setSessData?.session) {
+                  setSession(setSessData.session);
+                }
+              } catch {}
+            }
+            localStorage.setItem('currentOrgId', normOrgId);
+            localStorage.setItem('prospaces_cached_user', JSON.stringify(hydratedUser));
+            localStorage.setItem('prospaces_active_user', JSON.stringify({ ...hydratedUser, name: hydratedUser.full_name }));
+            await initializePermissions(normRole).catch(() => {});
+            setUser(hydratedUser);
+            try {
+              const { tenant } = await tenantsAPI.getById(normOrgId);
+              if (tenant) setOrganization(tenant);
+            } catch {}
+            setCurrentView((prev) => {
+              if (!prev || prev === 'landing' || prev === 'login' || prev === 'member-login') {
+                const savedView = sessionStorage.getItem('prospaces_current_view');
+                return (savedView && savedView !== 'landing' && savedView !== 'login' && savedView !== 'member-login')
+                  ? savedView
+                  : 'space-chooser';
+              }
+              return prev;
+            });
+            return;
+          }
+        }
+        if (resp.status === 401) {
+          // Only clear stale unauthenticated cache if there is no active session
+          setUser((prevUser) => {
+            if (prevUser) {
+              localStorage.removeItem('prospaces_cached_user');
+              localStorage.removeItem('prospaces_active_user');
+            }
+            return null;
+          });
+        }
+      } catch {}
+    };
+
     // Check active session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (error) {
         handleAuthError(error);
         handleLogout();
@@ -481,6 +552,7 @@ export function AppContent() {
           clearTimeout(loadSafetyTimer);
         });
       } else {
+        await hydrateServerSessionIfMissing();
         setLoading(false);
         clearTimeout(loadSafetyTimer);
       }
@@ -827,16 +899,27 @@ export function AppContent() {
   }
 
   const handleMemberLogin = async (user: User, token: string, passedSession?: Session | null) => {
-    const orgId = user.organizationId || user.organization_id || 'rona_atlantic';
+    const rawOrgId = user.organizationId || user.organization_id || '';
+    const orgId = (!rawOrgId || rawOrgId === 'rona_atlantic' || rawOrgId === 'org_001' || rawOrgId === 'default-org' || rawOrgId === 'default_org')
+      ? '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+      : rawOrgId;
     if (orgId) {
       localStorage.setItem('currentOrgId', orgId);
     }
 
+    const normalizedUser: User = {
+      ...user,
+      organization_id: orgId,
+      organizationId: orgId,
+    };
+
+    const resolvedName = normalizedUser.full_name || normalizedUser.email?.split('@')[0] || 'User';
     const logisticsUserObj = {
-      id: user.id || 'USR-57008',
-      name: user.full_name || user.email?.split('@')[0] || 'George Campbell',
-      email: user.email || 'george.campbell@ronaatlantic.ca',
-      role: user.role || 'Admin',
+      id: normalizedUser.id,
+      name: resolvedName,
+      full_name: resolvedName,
+      email: normalizedUser.email,
+      role: normalizedUser.role || 'Admin',
       phone: '(902) 555-0199',
       status: 'Active',
       associatedStoreId: 'DC-WINAMILL',
@@ -845,7 +928,7 @@ export function AppContent() {
     };
 
     try {
-      localStorage.setItem('prospaces_cached_user', JSON.stringify(logisticsUserObj));
+      localStorage.setItem('prospaces_cached_user', JSON.stringify(normalizedUser));
       localStorage.setItem('prospaces_active_user', JSON.stringify(logisticsUserObj));
       if (!localStorage.getItem('prospaces_active_tenant')) {
         localStorage.setItem('prospaces_active_tenant', JSON.stringify({
@@ -876,22 +959,22 @@ export function AppContent() {
         expires_at: Math.floor(Date.now() / 1000) + 3600,
         refresh_token: 'refresh-token',
         user: {
-          id: user.id,
+          id: normalizedUser.id,
           app_metadata: {},
-          user_metadata: { name: user.full_name, role: user.role, organization_id: user.organization_id },
+          user_metadata: { name: normalizedUser.full_name, role: normalizedUser.role, organization_id: orgId },
           aud: 'authenticated',
           created_at: new Date().toISOString(),
-          email: user.email,
+          email: normalizedUser.email,
         } as any
       } as Session);
     }
 
     // Set user and view synchronously
-    setUser(user);
+    setUser(normalizedUser);
     setCurrentView('space-chooser');
 
     // Background asynchronous initialization
-    initializePermissions(user.role).catch((permErr) => {
+    initializePermissions(normalizedUser.role).catch((permErr) => {
       console.warn('Permissions init fallback:', permErr);
     });
 
@@ -901,11 +984,21 @@ export function AppContent() {
         .select('*')
         .eq('id', orgId)
         .maybeSingle()
-        .then(({ data: org }) => {
-          if (org) setOrganization(org);
+        .then(async ({ data: org }) => {
+          if (org) {
+            setOrganization(org);
+          } else {
+            try {
+              const { tenant } = await tenantsAPI.getById(orgId);
+              if (tenant) setOrganization(tenant);
+            } catch {}
+          }
         })
-        .catch((orgErr) => {
-          console.warn('Organization lookup fallback:', orgErr);
+        .catch(async () => {
+          try {
+            const { tenant } = await tenantsAPI.getById(orgId);
+            if (tenant) setOrganization(tenant);
+          } catch {}
         });
     }
   };
@@ -1014,7 +1107,7 @@ export function AppContent() {
                 try {
                   localStorage.setItem('prospaces_cached_user', JSON.stringify(user));
                   const activeTenant = {
-                    id: user.organization_id || 'rona_atlantic',
+                    id: (user.organization_id && user.organization_id !== 'rona_atlantic' && user.organization_id !== 'org_001') ? user.organization_id : '34638283-7b3d-47e2-bec8-a9e600e28c4a',
                     name: 'RONA Atlantic Logistics',
                     code: 'RONA',
                     description: 'Corporate logistics tracking for RONA distributor and dealer stores in Atlantic Canada.',

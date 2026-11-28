@@ -899,54 +899,60 @@ export const saveThemeToDatabase = async (themeId: string, userId: string, theme
     if (themeMode) {
       localStorage.setItem('prospace-theme-mode', themeMode);
     }
-    
-    // Save to database via server API
+
+    const payload: Record<string, string> = { theme: themeId };
+    if (themeMode) {
+      payload.themeMode = themeMode;
+    }
+
     const { projectId, publicAnonKey } = await import('./supabase/info');
     const { createClient } = await import('./supabase/client');
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    
+
+    let savedViaEdge = false;
     if (session?.access_token) {
-      const payload: Record<string, string> = { theme: themeId };
-      if (themeMode) {
-        payload.themeMode = themeMode;
-      }
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/settings/theme`, {
-        method: 'PUT',
-        keepalive: true,
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'X-User-Token': session.access_token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      if (response.ok) {
-        // Theme saved to database
-      } else {
-        await response.text();
-        // Failed to save theme to database
-      }
-    } else {
-      // No session available, theme saved to localStorage only
+      try {
+        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/settings/theme`, {
+          method: 'PUT',
+          keepalive: true,
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'X-User-Token': session.access_token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+        savedViaEdge = response.ok;
+      } catch {}
+    }
+
+    if (!savedViaEdge) {
+      try {
+        const { getServerHeaders } = await import('./server-headers');
+        const headers = await getServerHeaders();
+        await fetch('/api/settings/theme', {
+          method: 'PUT',
+          keepalive: true,
+          headers,
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
+      } catch {}
     }
   } catch (error) {
-    // Error saving theme to database - non-fatal since localStorage still has it
+    // Non-fatal since localStorage still has it
   }
 };
 
 // Load theme from database for current user
-// NOTE: Uses localStorage as primary source; KV store as optional fallback
 export const loadThemeFromDatabase = async (userId: string): Promise<{ theme: string | null, themeMode: string | null }> => {
   try {
-    // When user is logged in, prioritize database over localStorage
-    // This ensures theme persists across logout/login cycles
     const { projectId, publicAnonKey } = await import('./supabase/info');
     const { createClient } = await import('./supabase/client');
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    
+
     if (session?.access_token) {
       try {
         const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-8405be07/settings/theme`, {
@@ -958,7 +964,6 @@ export const loadThemeFromDatabase = async (userId: string): Promise<{ theme: st
         if (res.ok) {
           const data = await res.json();
           if (data?.theme) {
-            // Sync database theme to localStorage
             localStorage.setItem('prospace-theme', data.theme);
           }
           if (data?.themeMode) {
@@ -968,19 +973,39 @@ export const loadThemeFromDatabase = async (userId: string): Promise<{ theme: st
             return { theme: data.theme || null, themeMode: data.themeMode || null };
           }
         }
-      } catch (err) {
-        // Could not load theme from server, falling back to localStorage
-      }
+      } catch {}
     }
-    
+
+    // Fallback to Express /api/settings/theme (supports hs1/cookie sessions & Supabase JWT)
+    try {
+      const { getServerHeaders } = await import('./server-headers');
+      const headers = await getServerHeaders();
+      const apiRes = await fetch('/api/settings/theme', {
+        headers,
+        credentials: 'same-origin',
+      });
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data?.theme) {
+          localStorage.setItem('prospace-theme', data.theme);
+        }
+        if (data?.themeMode) {
+          localStorage.setItem('prospace-theme-mode', data.themeMode);
+        }
+        if (data?.theme || data?.themeMode) {
+          return { theme: data.theme || null, themeMode: data.themeMode || null };
+        }
+      }
+    } catch {}
+
     // Fallback to localStorage if database load fails or no session
     const localTheme = localStorage.getItem('prospace-theme');
     const localMode = localStorage.getItem('prospace-theme-mode');
-    
+
     if (localTheme || localMode) {
       return { theme: localTheme, themeMode: localMode };
     }
-    
+
     return { theme: null, themeMode: null };
   } catch (error) {
     return { theme: null, themeMode: null };

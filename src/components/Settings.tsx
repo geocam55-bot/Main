@@ -262,12 +262,21 @@ function ThemeModeCard() {
 }
 
 export function Settings({ user, organization, onUserUpdate, onOrganizationUpdate }: SettingsProps) {
-  const resolvedOrganizationId =
+  const rawResolvedOrgId =
     user.organizationId ||
     user.organization_id ||
     organization?.id ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('currentOrgId') : null) ||
     '';
+  const resolvedOrganizationId = (
+    !rawResolvedOrgId ||
+    rawResolvedOrgId === 'rona_atlantic' ||
+    rawResolvedOrgId === 'org_001' ||
+    rawResolvedOrgId === 'default-org' ||
+    rawResolvedOrgId === 'default_org'
+  )
+    ? '34638283-7b3d-47e2-bec8-a9e600e28c4a'
+    : rawResolvedOrgId;
   const [activeTab, setActiveTab] = useState('profile');
   const [orgName, setOrgName] = useState('ProSpaces Organization');
   const [profileData, setProfileData] = useState({

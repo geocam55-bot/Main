@@ -160,11 +160,32 @@ export async function getUserAccessToken(): Promise<string | null> {
   }
 }
 
-let _inMemoryAppSessionToken: string | null = null;
+const APP_SESSION_STORAGE_KEY = 'prospaces_app_session_token';
+
+function readStoredAppSessionToken(): string | null {
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const tok = window.sessionStorage.getItem(APP_SESSION_STORAGE_KEY);
+      if (typeof tok === 'string' && tok.startsWith('hs1.')) {
+        return tok;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+let _inMemoryAppSessionToken: string | null = readStoredAppSessionToken();
 
 export function setAppSessionToken(token: string | null) {
   if (typeof token === 'string' && token.startsWith('hs1.')) {
     _inMemoryAppSessionToken = token;
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem(APP_SESSION_STORAGE_KEY, token);
+      }
+    } catch {}
+  } else if (token === null) {
+    clearAppSessionToken();
   }
 }
 
@@ -172,7 +193,7 @@ export function clearAppSessionToken() {
   _inMemoryAppSessionToken = null;
   try {
     if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.removeItem('prospaces_app_session_token');
+      window.sessionStorage.removeItem(APP_SESSION_STORAGE_KEY);
     }
   } catch {}
 }
@@ -195,8 +216,14 @@ export async function getServerHeaders(extraHeaders?: Record<string, string>): P
     headers['X-User-Token'] = userToken;
   }
 
-  if (!headers['X-App-Session'] && _inMemoryAppSessionToken && _inMemoryAppSessionToken.startsWith('hs1.')) {
-    headers['X-App-Session'] = _inMemoryAppSessionToken;
+  const appTok = (_inMemoryAppSessionToken && _inMemoryAppSessionToken.startsWith('hs1.'))
+    ? _inMemoryAppSessionToken
+    : readStoredAppSessionToken();
+  if (appTok && !_inMemoryAppSessionToken) {
+    _inMemoryAppSessionToken = appTok;
+  }
+  if (!headers['X-App-Session'] && appTok) {
+    headers['X-App-Session'] = appTok;
   }
 
   return headers;

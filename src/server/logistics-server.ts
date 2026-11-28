@@ -71,7 +71,7 @@ let supabaseConsecutiveFailures = 0;
 let supabaseTemporarilyDisabled = false;
 let supabaseDisabledUntil = 0;
 
-function getSupabase(reqOrBypass?: any, bypassCircuitBreaker: boolean = false) {
+export function getSupabase(reqOrBypass?: any, bypassCircuitBreaker: boolean = false) {
   let req: any = null;
   let bypass = bypassCircuitBreaker;
 
@@ -2194,6 +2194,48 @@ app.use((req, res, next) => {
 
       const supabase = getSupabase(req);
 
+      const DEFAULT_ORG_UUID = "34638283-7b3d-47e2-bec8-a9e600e28c4a";
+      const normalizeOrgId = (rawOrg: any): string => {
+        const s = String(rawOrg || "").trim();
+        if (!s || s === "rona_atlantic" || s === "org_001") return DEFAULT_ORG_UUID;
+        return s;
+      };
+
+      const mintSupabaseSessionForEmail = async (adminSb: any, targetEmail: string) => {
+        if (!adminSb || !targetEmail) return null;
+        try {
+          const { data: linkData, error: linkErr } = await withTimeout(
+            adminSb.auth.admin.generateLink({ type: "magiclink", email: targetEmail }),
+            2500
+          ).catch(() => ({ data: null, error: true } as any));
+          const hashedToken = linkData?.properties?.hashed_token;
+          if (linkErr || !hashedToken) return null;
+          const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL).trim();
+          const anon = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY).trim();
+          const ephem = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+          const { data: otpData, error: otpErr } = await ephem.auth.verifyOtp({
+            token_hash: hashedToken,
+            type: "magiclink",
+          });
+          if (!otpErr && otpData?.session?.access_token && otpData?.session?.refresh_token) {
+            return otpData.session;
+          }
+        } catch {}
+        return null;
+      };
+
+      const resolveRealProfileByEmail = async (adminSb: any, targetEmail: string) => {
+        if (!adminSb || !targetEmail) return null;
+        try {
+          const { data: profRows } = await withTimeout(
+            adminSb.from("profiles").select("*").ilike("email", targetEmail).limit(1),
+            1500
+          ).catch(() => ({ data: null } as any));
+          if (profRows && profRows[0]) return profRows[0];
+        } catch {}
+        return null;
+      };
+
       // 0. Check Supabase Auth directly when email & password are provided
       if (supabase && password) {
         try {
@@ -2202,9 +2244,20 @@ app.use((req, res, next) => {
             2500
           ).catch(() => ({ data: null, error: true } as any));
           if (!sbErr && sbAuth?.session?.access_token && sbAuth?.user) {
+            let dbProf: any = null;
+            try {
+              const { data: profData } = await withTimeout(
+                supabase.from("profiles").select("*").eq("id", sbAuth.user.id).maybeSingle(),
+                1500
+              ).catch(() => ({ data: null } as any));
+              dbProf = profData;
+            } catch {}
             const isSuper = SUPER_ADMIN_EMAILS.has(normEmail);
-            const resolvedRole = isSuper ? "super_admin" : (sbAuth.user.user_metadata?.role || "Admin");
-            const orgId = sbAuth.user.user_metadata?.organization_id || sbAuth.user.user_metadata?.organizationId || "rona_atlantic";
+            const resolvedRole = dbProf?.role || (isSuper ? "super_admin" : (sbAuth.user.user_metadata?.role || "Admin"));
+            const orgId = normalizeOrgId(
+              dbProf?.organization_id || sbAuth.user.user_metadata?.organization_id || sbAuth.user.user_metadata?.organizationId
+            );
+            const displayName = dbProf?.name || sbAuth.user.user_metadata?.name || sbAuth.user.user_metadata?.full_name || "George Campbell";
             const signedToken = signAppSessionToken({
               sub: sbAuth.user.id,
               email: normEmail,
@@ -2221,7 +2274,9 @@ app.use((req, res, next) => {
                 id: sbAuth.user.id,
                 tenantId: orgId,
                 organization_id: orgId,
-                name: sbAuth.user.user_metadata?.name || sbAuth.user.user_metadata?.full_name || "George Campbell",
+                name: displayName,
+                full_name: displayName,
+                avatar_url: dbProf?.avatar_url,
                 email: sbAuth.user.email || normEmail,
                 role: resolvedRole,
                 status: "Active",
@@ -2242,7 +2297,6 @@ app.use((req, res, next) => {
       ) {
         const inputPassword = (password || "").trim();
         const configuredSuperPass = String(process.env.SUPERADMIN_PASSWORD || "").trim();
-        const hasServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "").trim());
         const claimedRecord = supabase ? await getClaimedSuperAdminRecord(supabase) : null;
 
         let isValidSuperPass = false;
@@ -2276,13 +2330,29 @@ app.use((req, res, next) => {
               : "Invalid SuperAdmin password entry."
           });
         }
+
+        const targetEmail = normEmail === "superadmin" ? "superadmin@prospaces.com" : normEmail;
+        const realProfile = await resolveRealProfileByEmail(supabase, targetEmail);
+        const mintedSession = await mintSupabaseSessionForEmail(supabase, targetEmail);
+
+        const resolvedId = realProfile?.id || mintedSession?.user?.id || "USR-SUPER-ADMIN-01";
+        const resolvedOrgId = normalizeOrgId(
+          realProfile?.organization_id ||
+          mintedSession?.user?.user_metadata?.organization_id ||
+          mintedSession?.user?.user_metadata?.organizationId
+        );
+        const resolvedName = realProfile?.name || (targetEmail === "superadmin@prospaces.com" ? "ProSpaces Super Admin" : "George Campbell");
+        const resolvedRole = realProfile?.role || "super_admin";
+
         const superUser = {
-          id: "USR-SUPER-ADMIN-01",
-          tenantId: "rona_atlantic",
-          organization_id: "rona_atlantic",
-          name: normEmail === "superadmin@prospaces.com" ? "ProSpaces Super Admin" : "George Campbell",
-          email: normEmail === "superadmin" ? "superadmin@prospaces.com" : normEmail,
-          role: "super_admin",
+          id: resolvedId,
+          tenantId: resolvedOrgId,
+          organization_id: resolvedOrgId,
+          name: resolvedName,
+          full_name: resolvedName,
+          avatar_url: realProfile?.avatar_url,
+          email: realProfile?.email || targetEmail,
+          role: resolvedRole,
           associatedStoreId: "RONA-03510",
           phone: "(902) 476-8800",
           status: "Active"
@@ -2290,8 +2360,8 @@ app.use((req, res, next) => {
         const signedToken = signAppSessionToken({
           sub: superUser.id,
           email: superUser.email,
-          role: "super_admin",
-          organizationId: "rona_atlantic"
+          role: String(superUser.role),
+          organizationId: resolvedOrgId
         });
         if (signedToken) {
           setAppSessionCookie(res, signedToken, req);
@@ -2300,15 +2370,17 @@ app.use((req, res, next) => {
           supabaseActive: true,
           found: true,
           user: superUser,
-          token: signedToken || undefined,
+          token: mintedSession?.access_token || signedToken || undefined,
+          appToken: signedToken || undefined,
+          session: mintedSession || undefined,
           tenant: {
-            id: "system-admin-tenant",
-            name: "System Control Space",
-            code: "SYS",
-            description: "Global Administration Management Space",
-            logoBadge: "⚙️",
-            regionalFocus: "Global Administration Management",
-            primaryColor: "slate"
+            id: resolvedOrgId,
+            name: "RONA Atlantic",
+            code: "RONA",
+            description: "Organization workspace",
+            logoBadge: "🏢",
+            regionalFocus: "Atlantic Canada",
+            primaryColor: "blue"
           }
         });
       }
@@ -2433,14 +2505,15 @@ app.use((req, res, next) => {
       }
 
       if (foundUser) {
-        // Enforce proper Admin role for George Campbell
+        const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(foundUser.id || ""));
+        // Enforce proper Admin role for George Campbell only if not already resolved from profiles UUID
         if (normEmail === "superadmin@prospaces.com") {
           foundUser.role = "SUPER_ADMIN";
-        } else if (normEmail.includes("geocam") || normEmail.includes("george") || normEmail.includes("campbell") || normEmail === "george.campbell@prospaces.com") {
-          foundUser.role = "Admin";
-          foundUser.id = "USR-10524";
-          foundUser.tenantId = "rona_atlantic";
+        } else if (!isUuidId && (normEmail.includes("geocam") || normEmail.includes("george") || normEmail.includes("campbell") || normEmail === "george.campbell@prospaces.com")) {
+          foundUser.role = foundUser.role || "Admin";
+          foundUser.tenantId = normalizeOrgId(foundUser.tenantId);
         }
+        foundUser.tenantId = normalizeOrgId(foundUser.tenantId);
 
         // Validate Status
         const uStatus = foundUser.status || "Active";
@@ -2506,11 +2579,21 @@ app.use((req, res, next) => {
           }
         }
 
+        const mintedSession = await mintSupabaseSessionForEmail(
+          supabase,
+          String(foundUser.email || normEmail).toLowerCase().trim()
+        );
+        const resolvedSub = String(mintedSession?.user?.id || foundUser.id || "USR-10524");
+        const resolvedOrg = normalizeOrgId(foundUser.tenantId || mintedSession?.user?.user_metadata?.organization_id);
+        foundUser.id = resolvedSub;
+        foundUser.tenantId = resolvedOrg;
+        foundUser.organization_id = resolvedOrg;
+
         const signedToken = signAppSessionToken({
-          sub: String(foundUser.id || "USR-10524"),
+          sub: resolvedSub,
           email: String(foundUser.email || normEmail).toLowerCase().trim(),
           role: String(foundUser.role || "Admin"),
-          organizationId: String(foundUser.tenantId || "rona_atlantic")
+          organizationId: resolvedOrg
         });
         if (signedToken) {
           setAppSessionCookie(res, signedToken, req);
@@ -2520,7 +2603,9 @@ app.use((req, res, next) => {
           supabaseActive: true,
           found: true,
           user: foundUser,
-          token: signedToken || undefined,
+          token: mintedSession?.access_token || signedToken || undefined,
+          appToken: signedToken || undefined,
+          session: mintedSession || undefined,
           tenant: finalTenant
         });
       }

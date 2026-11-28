@@ -6,7 +6,7 @@ import type { CustomExportTemplate } from './export-engine';
 
 const supabase = createClient();
 
-const SERVER_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-8405be07`;
+const SERVER_BASE = '/api';
 
 export interface UserPreferences {
   user_id: string;
@@ -42,34 +42,35 @@ export interface OrganizationSettings {
 // export_templates is now stored in the DB column; only these legacy fields stay in KV / need stripping
 const OPTIONAL_NON_DB_FIELDS = ['price_tier_labels', 'audience_segments', 'user_invite_method'];
 
+const PRIMARY_ORG_UUID = '34638283-7b3d-47e2-bec8-a9e600e28c4a';
+
+function normalizeSettingsOrgId(orgId?: string): string {
+  const trimmed = String(orgId || '').trim();
+  if (!trimmed || trimmed === 'rona_atlantic' || trimmed === 'org_001' || trimmed === 'default-org' || trimmed === 'default_org') {
+    return PRIMARY_ORG_UUID;
+  }
+  return trimmed;
+}
+
 // ─── GET user preferences ──────────────────────────────────────────────────
 
 export async function getUserPreferencesClient(userId: string, organizationId: string): Promise<UserPreferences | null> {
-  // Fetching user preferences
-
   if (!userId || !organizationId) {
-    // Missing userId or organizationId
     return null;
   }
+  const normOrgId = normalizeSettingsOrgId(organizationId);
 
-  // Try server endpoint first (bypasses RLS)
+  // Try server endpoint first (supports JWT, X-App-Session, and HttpOnly cookie; bypasses RLS)
   try {
     const headers = await getServerHeaders();
-    // Skip server call if no user token — it will 401 anyway
-    if (!headers['X-User-Token']) {
-      // No user token yet, skipping server endpoint for user preferences
-      throw new Error('No user token');
-    }
     const res = await fetch(
-      `${SERVER_BASE}/settings/user-preferences?user_id=${encodeURIComponent(userId)}&organization_id=${encodeURIComponent(organizationId)}`,
-      { headers }
+      `${SERVER_BASE}/settings/user-preferences?user_id=${encodeURIComponent(userId)}&organization_id=${encodeURIComponent(normOrgId)}`,
+      { headers, credentials: 'same-origin' }
     );
     if (res.ok) {
       const json = await res.json();
-      // User preferences fetched via server
       return json.preferences || null;
     }
-    // Server returned non-ok status, falling back to direct Supabase
   } catch (err) {
     // Server endpoint failed, falling back
   }
@@ -80,26 +81,25 @@ export async function getUserPreferencesClient(userId: string, organizationId: s
       .from('user_preferences' as any)
       .select('*')
       .eq('user_id', userId)
-      .eq('organization_id', organizationId)
-      .single();
+      .eq('organization_id', normOrgId)
+      .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // No preferences found for user
-        return null;
-      }
-      if (error.code === 'PGRST205' || error.code === '42P01') {
-        // user_preferences table does not exist yet
-        return null;
-      }
-      // Error fetching user preferences
-      return null;
+    if (data) return data;
+
+    // Legacy fallback by user_id (e.g. preferences stored under 'default-org')
+    if (!error || error.code === 'PGRST116') {
+      const { data: legacyPref } = await supabase
+        .from('user_preferences' as any)
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      if (legacyPref) return legacyPref;
     }
 
-    // User preferences fetched via direct Supabase
-    return data;
+    return null;
   } catch (error) {
-    // Unexpected error fetching user preferences
     return null;
   }
 }
@@ -107,7 +107,10 @@ export async function getUserPreferencesClient(userId: string, organizationId: s
 // ─── UPSERT user preferences ──────────────────────────────────────────────
 
 export async function upsertUserPreferencesClient(preferences: Partial<UserPreferences>): Promise<UserPreferences | null> {
-  // Upserting user preferences
+  const normPrefs = {
+    ...preferences,
+    ...(preferences.organization_id ? { organization_id: normalizeSettingsOrgId(preferences.organization_id) } : {}),
+  };
 
   // Try server endpoint first (bypasses RLS)
   try {
@@ -115,15 +118,13 @@ export async function upsertUserPreferencesClient(preferences: Partial<UserPrefe
     const res = await fetch(`${SERVER_BASE}/settings/user-preferences`, {
       method: 'PUT',
       headers,
-      body: JSON.stringify(preferences),
+      credentials: 'same-origin',
+      body: JSON.stringify(normPrefs),
     });
     if (res.ok) {
       const json = await res.json();
-      // User preferences saved via server
       return json.preferences || null;
     }
-    const errBody = await res.text();
-    // Server upsert user prefs returned non-ok status, falling back
   } catch (err) {
     // Server endpoint failed for user prefs upsert, falling back
   }
@@ -133,7 +134,7 @@ export async function upsertUserPreferencesClient(preferences: Partial<UserPrefe
     const { data, error } = await supabase
       .from('user_preferences' as any)
       .upsert({
-        ...preferences,
+        ...normPrefs,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'user_id,organization_id'
@@ -166,12 +167,12 @@ export async function upsertUserPreferencesClient(preferences: Partial<UserPrefe
 // ─── GET organization settings ─────────────────────────────────────────────
 
 export async function getOrganizationSettingsClient(organizationId: string): Promise<OrganizationSettings | null> {
-  // Fetching organization settings
+  const normOrgId = normalizeSettingsOrgId(organizationId);
 
   const getLocalSettingsFallback = (): Partial<OrganizationSettings> | null => {
     try {
-      const orgId = localStorage.getItem('currentOrgId') || organizationId;
-      const stored = localStorage.getItem(`global_settings_${orgId}`);
+      const orgId = normalizeSettingsOrgId(localStorage.getItem('currentOrgId') || normOrgId);
+      const stored = localStorage.getItem(`global_settings_${orgId}`) || localStorage.getItem(`global_settings_${organizationId}`);
       if (!stored) return null;
 
       const parsed = JSON.parse(stored);
@@ -216,26 +217,36 @@ export async function getOrganizationSettingsClient(organizationId: string): Pro
     } as OrganizationSettings;
   };
 
-  // Try server endpoint first (bypasses RLS)
+  // Try Express server endpoint first (supports JWT, X-App-Session, and HttpOnly cookie; bypasses RLS)
+  let headers: Record<string, string> = {};
   try {
-    const headers = await getServerHeaders();
-    // Skip server call if no user token — it will 401 anyway
-    if (!headers['X-User-Token']) {
-      // No user token yet, skipping server endpoint for org settings
-      throw new Error('No user token');
-    }
+    headers = await getServerHeaders();
     const res = await fetch(
-      `${SERVER_BASE}/settings/organization?organization_id=${encodeURIComponent(organizationId)}`,
-      { headers }
+      `${SERVER_BASE}/settings/organization?organization_id=${encodeURIComponent(normOrgId)}`,
+      { headers, credentials: 'same-origin' }
     );
     if (res.ok) {
       const json = await res.json();
-      // Organization settings fetched via server
       return mergeWithLocalFallback(json.settings || null);
     }
-    // Server returned non-ok status, falling back to direct Supabase
   } catch (err) {
     // Server endpoint failed, falling back
+  }
+
+  // Secondary fallback: Edge Function when user holds a Supabase JWT
+  if (headers['X-User-Token'] && projectId) {
+    try {
+      const edgeRes = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-8405be07/settings/organization?organization_id=${encodeURIComponent(normOrgId)}`,
+        { headers }
+      );
+      if (edgeRes.ok) {
+        const edgeJson = await edgeRes.json();
+        return mergeWithLocalFallback(edgeJson.settings || null);
+      }
+    } catch {
+      // Fall through to direct Supabase
+    }
   }
 
   // Fallback: direct Supabase query
@@ -243,26 +254,15 @@ export async function getOrganizationSettingsClient(organizationId: string): Pro
     const { data, error } = await supabase
       .from('organization_settings' as any)
       .select('*')
-      .eq('organization_id', organizationId)
-      .single();
+      .eq('organization_id', normOrgId)
+      .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // No settings found for organization
-        return mergeWithLocalFallback(null);
-      }
-      if (error.code === 'PGRST205' || error.code === '42P01') {
-        // organization_settings table does not exist yet
-        return mergeWithLocalFallback(null);
-      }
-      // Error fetching organization settings
+    if (error && !data) {
       return mergeWithLocalFallback(null);
     }
 
-    // Organization settings fetched via direct Supabase
-    return mergeWithLocalFallback(data);
+    return mergeWithLocalFallback(data || null);
   } catch (error) {
-    // Unexpected error fetching organization settings
     return mergeWithLocalFallback(null);
   }
 }
@@ -270,7 +270,10 @@ export async function getOrganizationSettingsClient(organizationId: string): Pro
 // ─── UPSERT organization settings ──────────────────────────────────────────
 
 export async function upsertOrganizationSettingsClient(settings: Partial<OrganizationSettings>): Promise<OrganizationSettings | null> {
-  // Upserting organization settings
+  const normSettings = {
+    ...settings,
+    ...(settings.organization_id ? { organization_id: normalizeSettingsOrgId(settings.organization_id) } : {}),
+  };
 
   // Try server endpoint first (bypasses RLS) — this is the primary path
   try {
@@ -278,12 +281,12 @@ export async function upsertOrganizationSettingsClient(settings: Partial<Organiz
     const res = await fetch(`${SERVER_BASE}/settings/organization`, {
       method: 'PUT',
       headers,
-      body: JSON.stringify(settings),
+      credentials: 'same-origin',
+      body: JSON.stringify(normSettings),
     });
 
     if (res.ok) {
       const json = await res.json();
-      // Organization settings saved via server
       return json.settings || null;
     }
 
@@ -311,7 +314,7 @@ export async function upsertOrganizationSettingsClient(settings: Partial<Organiz
     }
 
     // Strip out any fields that may not exist in the DB
-    const dbSettings = { ...settings };
+    const dbSettings = { ...normSettings };
     OPTIONAL_NON_DB_FIELDS.forEach(field => {
       if (field in dbSettings) {
         delete dbSettings[field];
@@ -349,7 +352,7 @@ export async function upsertOrganizationSettingsClient(settings: Partial<Organiz
 // ─── Update organization name ──────────────────────────────────────────────
 
 export async function updateOrganizationNameClient(organizationId: string, name: string): Promise<void> {
-  // Updating organization name
+  const normOrgId = normalizeSettingsOrgId(organizationId);
 
   // Try server endpoint first
   try {
@@ -357,14 +360,13 @@ export async function updateOrganizationNameClient(organizationId: string, name:
     const res = await fetch(`${SERVER_BASE}/settings/organization-name`, {
       method: 'PUT',
       headers,
-      body: JSON.stringify({ organization_id: organizationId, name }),
+      credentials: 'same-origin',
+      body: JSON.stringify({ organization_id: normOrgId, name }),
     });
 
     if (res.ok) {
-      // Organization name updated via server
       return;
     }
-    // Server returned non-ok status for org name update, falling back
   } catch (err) {
     // Server endpoint failed for org name update, falling back
   }
@@ -373,32 +375,27 @@ export async function updateOrganizationNameClient(organizationId: string, name:
   const { error } = await supabase
     .from('organizations' as any)
     .update({ name })
-    .eq('id', organizationId);
+    .eq('id', normOrgId);
 
   if (error) {
-    // Error updating organization name
     throw error;
   }
-
-  // Organization name updated via direct Supabase
 }
 
 // ─── Update user profile ──────────────────────────────────────────────────
 
 export async function updateUserProfileClient(userId: string, updates: { name?: string; avatar_url?: string }): Promise<void> {
-  // Updating user profile
-
   // Try server endpoint first
   try {
     const headers = await getServerHeaders();
     const res = await fetch(`${SERVER_BASE}/settings/profile`, {
       method: 'PATCH',
       headers,
+      credentials: 'same-origin',
       body: JSON.stringify({ user_id: userId, ...updates }),
     });
 
     if (res.ok) {
-      // User profile updated via server
       return;
     }
     // Server returned non-ok status for profile update, falling back
@@ -456,31 +453,27 @@ export interface OrgModeSettings {
 }
 
 export async function getOrgMode(organizationId: string): Promise<OrgModeSettings> {
-  // Fetching org user mode
+  const normOrgId = normalizeSettingsOrgId(organizationId);
 
   try {
     const headers = await getServerHeaders();
     const res = await fetch(
-      `${SERVER_BASE}/settings/org-mode?organization_id=${encodeURIComponent(organizationId)}`,
-      { headers }
+      `${SERVER_BASE}/settings/org-mode?organization_id=${encodeURIComponent(normOrgId)}`,
+      { headers, credentials: 'same-origin' }
     );
     if (res.ok) {
       const json = await res.json();
-      // Org mode fetched from server
       return json.orgMode || { user_mode: 'single' };
     }
-    // Server returned non-ok status for org-mode GET
   } catch (err) {
     // Server endpoint failed for org-mode GET
   }
 
   // Fallback to localStorage
   try {
-    const stored = localStorage.getItem(`org_mode_${organizationId}`);
+    const stored = localStorage.getItem(`org_mode_${normOrgId}`) || localStorage.getItem(`org_mode_${organizationId}`);
     if (stored) {
-      const parsed = JSON.parse(stored);
-      // Org mode loaded from localStorage
-      return parsed;
+      return JSON.parse(stored);
     }
   } catch (_) { /* ignore */ }
 
@@ -488,12 +481,12 @@ export async function getOrgMode(organizationId: string): Promise<OrgModeSetting
 }
 
 export async function setOrgMode(organizationId: string, userMode: OrgUserMode): Promise<OrgModeSettings> {
-  // Setting org user mode
+  const normOrgId = normalizeSettingsOrgId(organizationId);
 
   // Always save to localStorage as backup
-  const localData: OrgModeSettings = { user_mode: userMode, organization_id: organizationId, updated_at: new Date().toISOString() };
+  const localData: OrgModeSettings = { user_mode: userMode, organization_id: normOrgId, updated_at: new Date().toISOString() };
   try {
-    localStorage.setItem(`org_mode_${organizationId}`, JSON.stringify(localData));
+    localStorage.setItem(`org_mode_${normOrgId}`, JSON.stringify(localData));
   } catch (_) { /* ignore */ }
 
   try {
@@ -501,17 +494,16 @@ export async function setOrgMode(organizationId: string, userMode: OrgUserMode):
     const res = await fetch(`${SERVER_BASE}/settings/org-mode`, {
       method: 'PUT',
       headers,
-      body: JSON.stringify({ organization_id: organizationId, user_mode: userMode }),
+      credentials: 'same-origin',
+      body: JSON.stringify({ organization_id: normOrgId, user_mode: userMode }),
     });
 
     if (res.ok) {
       const json = await res.json();
-      // Org mode saved to server
       return json.orgMode;
     }
 
     const errBody = await res.json().catch(() => ({ error: 'Unknown server error' }));
-    // Server returned non-ok status for org-mode PUT
 
     if (res.status === 403) {
       throw new Error(errBody.error || 'Permission denied');
@@ -520,7 +512,6 @@ export async function setOrgMode(organizationId: string, userMode: OrgUserMode):
     if (err?.message?.includes('Permission denied') || err?.message?.includes('admin')) {
       throw err;
     }
-    // Server endpoint failed for org-mode PUT
   }
 
   return localData;
@@ -545,13 +536,14 @@ export async function getEnvironmentSettingsClient(
 ): Promise<{ values: Record<string, string>; configuredSecrets: string[] }> {
   const result: Record<string, string> = {};
   const configuredSecrets: string[] = [];
+  const normOrgId = organizationId ? normalizeSettingsOrgId(organizationId) : undefined;
 
   // Try server endpoint first if available
   try {
     const headers = await getServerHeaders();
     const query = new URLSearchParams({ scope });
-    if (organizationId) query.set('organization_id', organizationId);
-    const res = await fetch(`${SERVER_BASE}/settings/environment?${query.toString()}`, { headers });
+    if (normOrgId) query.set('organization_id', normOrgId);
+    const res = await fetch(`${SERVER_BASE}/settings/environment?${query.toString()}`, { headers, credentials: 'same-origin' });
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data === 'object') {
@@ -689,14 +681,16 @@ export async function saveEnvironmentSettingsClient(
   // Try server endpoint first
   try {
     const headers = await getServerHeaders();
+    const normOrgId = organizationId ? normalizeSettingsOrgId(organizationId) : undefined;
     const res = await fetch(`${SERVER_BASE}/settings/environment`, {
       method: 'POST',
       headers,
+      credentials: 'same-origin',
       body: JSON.stringify({
         scope,
         values,
         clearKeys,
-        organizationId,
+        organizationId: normOrgId,
       }),
     });
     if (res.ok) {
