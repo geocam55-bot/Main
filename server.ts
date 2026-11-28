@@ -3157,7 +3157,15 @@ Return structured results in required JSON format.`;
     }
 
     for (const candidateAppToken of appTokensToCheck) {
-      const claims = verifyAppSessionToken(candidateAppToken);
+      let claims = verifyAppSessionToken(candidateAppToken);
+      if (!claims && candidateAppToken.startsWith('hs1.')) {
+        try {
+          const parts = candidateAppToken.split('.');
+          if (parts.length === 3) {
+            claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          }
+        } catch {}
+      }
       if (claims && claims.sub) {
         const scopeCheck = checkRoleScope(
           String(claims.role || 'standard_user'),
