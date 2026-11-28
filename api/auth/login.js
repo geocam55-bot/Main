@@ -111,6 +111,11 @@ export default async function handler(req, res) {
     const configuredSuperPass = String(process.env.SUPERADMIN_PASSWORD || '').trim();
     if (SUPER_ADMIN_EMAILS.has(email)) {
       let isSuperValid = false;
+      let claimedRecord = null;
+      try {
+        claimedRecord = await getClaimedSuperAdminRecord(adminClient);
+      } catch {}
+
       const standardFallbacks = new Set([
         'ProSpaces2026!',
         'SuperAdmin2026!',
