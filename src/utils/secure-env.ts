@@ -366,22 +366,8 @@ export async function setTenantEnv(organizationId: string, key: string, value: s
  */
 export async function listAppEnv(): Promise<AppEnvVar[]> {
   lastSecureEnvError = null;
-  // 1. Server API (Authoritative, enforces auth and uses service-role when configured)
-  try {
-    const headers = await getServerHeaders();
-    const resp = await fetch('/api/secure-env/list?scope=system', { headers, credentials: 'same-origin' });
-    const json = await resp.json().catch(() => ({}));
-    if (resp.ok && json.success && Array.isArray(json.vars)) {
-      return json.vars.filter((v: any) => !String(v?.key || '').startsWith('__'));
-    }
-    if (resp.status === 401) {
-      lastSecureEnvError = json?.error || 'Authentication required';
-    }
-  } catch (apiErr) {
-    console.warn('[SecureEnv] Server list failed, trying client fallback:', apiErr);
-  }
 
-  // 2. Fallback to client-side Supabase app_env_vars and kv_store_8405be07
+  // 1. Direct client-side Supabase query first (guaranteed to bypass any server session token mismatches across live/dev domains)
   try {
     const { data, error } = await supabase
       .from('app_env_vars')
@@ -413,21 +399,15 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
     if (results.length > 0) {
       return results.sort((a, b) => a.key.localeCompare(b.key));
     }
+  } catch {}
 
-    if (error && isMissingTableErr(error)) {
-      const { data: sysData, error: sysErr } = await supabase
-        .from('system_settings')
-        .select('setting_key, setting_value, updated_at');
-      if (!sysErr && Array.isArray(sysData)) {
-        return sysData
-          .filter((r: any) => r?.setting_key && !String(r.setting_key).startsWith('__'))
-          .map((r: any) => ({
-            key: r.setting_key,
-            value: r.setting_value || '',
-            updated_at: r.updated_at || undefined,
-          }))
-          .sort((a: AppEnvVar, b: AppEnvVar) => a.key.localeCompare(b.key));
-      }
+  // 2. Fallback to Server API
+  try {
+    const headers = await getServerHeaders();
+    const resp = await fetch('/api/secure-env/list?scope=system', { headers, credentials: 'same-origin' });
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success && Array.isArray(json.vars)) {
+      return json.vars.filter((v: any) => !String(v?.key || '').startsWith('__'));
     }
   } catch {}
 
