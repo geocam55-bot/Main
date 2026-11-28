@@ -102,10 +102,48 @@ export default async function handler(req, res) {
       }
     }
 
+    if (error || !data || data.length === 0) {
+      try {
+        const { data: kvData } = await client
+          .from('kv_store_8405be07')
+          .select('key, value')
+          .like('key', 'system_env_var:%');
+        if (Array.isArray(kvData) && kvData.length > 0) {
+          const mappedKv = kvData
+            .map((row) => row?.value)
+            .filter((v) => v && typeof v === 'object' && v.key && !String(v.key).startsWith('__'))
+            .sort((a, b) => String(a.key).localeCompare(String(b.key)));
+          if (mappedKv.length > 0) {
+            return res.status(200).json({ success: true, vars: mappedKv, source: 'kv_store_8405be07' });
+          }
+        }
+      } catch {}
+    }
+
     if (error) {
       return res.status(500).json({ success: false, error: error.message, vars: [] });
     }
     const visibleVars = (data || []).filter((row) => !String(row?.key || '').startsWith('__'));
+    
+    // Merge any kv_store items if missing from app_env_vars
+    try {
+      const { data: kvData } = await client
+        .from('kv_store_8405be07')
+        .select('key, value')
+        .like('key', 'system_env_var:%');
+      if (Array.isArray(kvData) && kvData.length > 0) {
+        const existingKeys = new Set(visibleVars.map((v) => v.key));
+        for (const row of kvData) {
+          const v = row?.value;
+          if (v && typeof v === 'object' && v.key && !existingKeys.has(v.key) && !String(v.key).startsWith('__')) {
+            visibleVars.push(v);
+            existingKeys.add(v.key);
+          }
+        }
+        visibleVars.sort((a, b) => String(a.key).localeCompare(String(b.key)));
+      }
+    } catch {}
+
     return res.status(200).json({ success: true, vars: visibleVars });
   } catch (err) {
     return res.status(500).json({

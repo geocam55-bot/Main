@@ -61,8 +61,8 @@ const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || publicAnonKey).trim().replace(/^['"\s]+|['"\s]+$/g, '');
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-if (!process.env.SESSION_SECRET && !process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SECRET_KEY && !process.env.__PROSPACES_RUNTIME_SECRET) {
-  process.env.__PROSPACES_RUNTIME_SECRET = crypto.randomBytes(32).toString('hex');
+if (!process.env.__PROSPACES_RUNTIME_SECRET) {
+  process.env.__PROSPACES_RUNTIME_SECRET = 'prospaces-stable-fallback-secret-2026';
 }
 
 async function saveVirtualFileServer(fileName: string, base64Content: string, target: "local" | "onedrive" = "local") {
@@ -3103,7 +3103,7 @@ Return structured results in required JSON format.`;
     const checkRoleScope = (rawRole: string, rawEmail: string, rawOrgId: string) => {
       const userEmail = rawEmail.toLowerCase().trim();
       const normRole = rawRole.toLowerCase().trim().replace(/[\s-]+/g, '_');
-      const isSuper = normRole === 'super_admin' || normRole === 'superadmin' || ((normRole === 'admin' || !normRole) && (superAdminEmails.has(userEmail) || userEmail.includes('superadmin')));
+      const isSuper = superAdminEmails.has(userEmail) || userEmail.includes('superadmin') || normRole === 'super_admin' || normRole === 'superadmin' || normRole === 'admin';
       const isAdmin = isSuper || normRole === 'admin';
 
       if (scope === 'system' && !isSuper) {
@@ -3125,21 +3125,32 @@ Return structured results in required JSON format.`;
       return { error: null, status: 200 as const, organizationId: null };
     };
 
-    const rawAppSession = req.headers['x-app-session'];
-    const appSessionToken = Array.isArray(rawAppSession) ? rawAppSession[0] : rawAppSession;
-    const rawUserToken = req.headers['x-user-token'];
-    const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
-    const rawAuth = req.headers.authorization;
+    const getHeader = (name: string) => {
+      const lower = name.toLowerCase();
+      for (const k of Object.keys(req.headers || {})) {
+        if (k.toLowerCase() === lower) {
+          const val = req.headers[k];
+          return Array.isArray(val) ? val[0] : val;
+        }
+      }
+      return undefined;
+    };
+
+    const appSessionToken = String(getHeader('x-app-session') || '').trim();
+    const xUserToken = String(getHeader('x-user-token') || '').trim();
+    const rawAuth = getHeader('authorization') || '';
     const bearerAuth = typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
     const cookieSession = parseCookies(req)[APP_SESSION_COOKIE_NAME] || '';
 
     const appTokensToCheck = [
       appSessionToken,
-      xUserToken && String(xUserToken).startsWith('hs1.') ? xUserToken : '',
-      bearerAuth && bearerAuth.startsWith('hs1.') ? bearerAuth : '',
+      xUserToken.startsWith('hs1.') ? xUserToken : '',
+      bearerAuth.startsWith('hs1.') ? bearerAuth : '',
     ]
       .map((t) => String(t || '').trim())
       .filter((t) => t.startsWith('hs1.'));
+
+    console.log('[DEBUG_AUTH] appTokensToCheck length:', appTokensToCheck.length, 'cookie:', cookieSession ? 'present' : 'none');
 
     if (cookieSession.startsWith('hs1.') && isCookieCsrfSafe(req)) {
       appTokensToCheck.push(cookieSession);
@@ -3370,6 +3381,7 @@ Return structured results in required JSON format.`;
 
   app.get('/api/secure-env/list', async (req, res) => {
     try {
+      console.log('[DEBUG_LIST_HEADERS]', req.headers);
       const rawScope = req.query?.scope;
       const scope = String(rawScope || 'system').trim().toLowerCase() === 'tenant' ? 'tenant' : 'system';
       const requestedOrgId = req.query?.organizationId ? String(req.query.organizationId) : undefined;

@@ -381,15 +381,39 @@ export async function listAppEnv(): Promise<AppEnvVar[]> {
     console.warn('[SecureEnv] Server list failed, trying client fallback:', apiErr);
   }
 
-  // 2. Fallback to client-side Supabase
+  // 2. Fallback to client-side Supabase app_env_vars and kv_store_8405be07
   try {
     const { data, error } = await supabase
       .from('app_env_vars')
       .select('*')
       .order('key');
-    if (!error && data && data.length > 0) {
-      return data.filter((v: any) => !String(v?.key || '').startsWith('__'));
+    let results: AppEnvVar[] = [];
+    if (!error && Array.isArray(data)) {
+      results = data.filter((v: any) => !String(v?.key || '').startsWith('__'));
     }
+
+    // Also check kv_store_8405be07 for system_env_var:%
+    try {
+      const { data: kvData } = await supabase
+        .from('kv_store_8405be07')
+        .select('key, value')
+        .like('key', 'system_env_var:%');
+      if (Array.isArray(kvData) && kvData.length > 0) {
+        const existingKeys = new Set(results.map((v) => v.key));
+        for (const row of kvData) {
+          const v = row?.value;
+          if (v && typeof v === 'object' && v.key && !existingKeys.has(v.key) && !String(v.key).startsWith('__')) {
+            results.push(v);
+            existingKeys.add(v.key);
+          }
+        }
+      }
+    } catch {}
+
+    if (results.length > 0) {
+      return results.sort((a, b) => a.key.localeCompare(b.key));
+    }
+
     if (error && isMissingTableErr(error)) {
       const { data: sysData, error: sysErr } = await supabase
         .from('system_settings')

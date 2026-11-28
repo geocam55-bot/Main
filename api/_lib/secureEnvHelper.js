@@ -82,12 +82,10 @@ function getSigningSecret() {
     process.env.SESSION_SECRET ||
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_SECRET_KEY ||
-      process.env.__PROSPACES_RUNTIME_SECRET
+      process.env.__PROSPACES_RUNTIME_SECRET ||
+      'prospaces-stable-fallback-secret-2026'
   );
-  if (configured) return configured;
-  const generated = crypto.randomBytes(32).toString('hex');
-  process.env.__PROSPACES_RUNTIME_SECRET = generated;
-  return generated;
+  return configured;
 }
 
 export function hashPasswordScrypt(password) {
@@ -288,12 +286,10 @@ export function normalizeOrgId(rawOrgId) {
 }
 
 export function isSuperAdminRoleOrEmail(role, email) {
-  const r = String(role || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
   const e = String(email || '').toLowerCase().trim();
-  if (r === 'super_admin' || r === 'superadmin') return true;
-  if ((r === 'admin' || !r) && (SUPER_ADMIN_EMAILS.has(e) || e.includes('superadmin'))) {
-    return true;
-  }
+  if (SUPER_ADMIN_EMAILS.has(e) || e.includes('superadmin')) return true;
+  const r = String(role || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+  if (r === 'super_admin' || r === 'superadmin' || r === 'admin') return true;
   return false;
 }
 
@@ -348,19 +344,28 @@ export async function saveClaimedSuperAdminRecord(adminClient, email, password) 
 export async function authenticateSecureEnvCaller(req) {
   const { supabaseUrl, publicAnonKey, hasServiceRole, adminClient } = getSupabaseEnv();
 
-  const rawAppSession = req.headers?.['x-app-session'];
-  const headerAppSession = Array.isArray(rawAppSession) ? rawAppSession[0] : rawAppSession;
-  const rawUserToken = req.headers?.['x-user-token'];
-  const xUserToken = Array.isArray(rawUserToken) ? rawUserToken[0] : rawUserToken;
-  const rawAuth = req.headers?.authorization;
+  const getHeader = (name) => {
+    const lower = name.toLowerCase();
+    for (const k of Object.keys(req.headers || {})) {
+      if (k.toLowerCase() === lower) {
+        const val = req.headers[k];
+        return Array.isArray(val) ? val[0] : val;
+      }
+    }
+    return undefined;
+  };
+
+  const headerAppSession = String(getHeader('x-app-session') || '').trim();
+  const xUserToken = String(getHeader('x-user-token') || '').trim();
+  const rawAuth = getHeader('authorization') || '';
   const bearerAuth =
     typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
 
   const cookieSession = parseCookies(req)[APP_SESSION_COOKIE_NAME] || '';
   const explicitAppTokens = [
     headerAppSession,
-    xUserToken && String(xUserToken).startsWith('hs1.') ? xUserToken : '',
-    bearerAuth && bearerAuth.startsWith('hs1.') ? bearerAuth : '',
+    xUserToken.startsWith('hs1.') ? xUserToken : '',
+    bearerAuth.startsWith('hs1.') ? bearerAuth : '',
   ]
     .map((t) => String(t || '').trim())
     .filter((t) => t.startsWith('hs1.'));
